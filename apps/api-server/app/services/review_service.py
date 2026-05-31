@@ -12,6 +12,7 @@ from app.models import (
     SkuParamNormalized,
     SkuTaskScore,
 )
+from app.services.audit_service import create_audit_event
 from app.services.utils import unique_list
 
 
@@ -229,6 +230,21 @@ def apply_review_decision(
     item.reviewer = reviewer
     item.decision_payload = decision_payload or {}
     _apply_decision_to_target(db, item, decision=decision, decision_payload=decision_payload or {})
+    create_audit_event(
+        db,
+        action=f"asset_review_{decision}",
+        object_type="review_queue",
+        object_id=item.review_id,
+        project_id=item.project_id,
+        actor_id=reviewer,
+        after={
+            "review_id": item.review_id,
+            "item_type": item.item_type,
+            "item_key": item.item_key,
+            "decision": decision,
+        },
+        metadata={"decision_payload": decision_payload or {}},
+    )
     db.commit()
     db.refresh(item)
     return item

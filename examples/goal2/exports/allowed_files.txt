@@ -1,0 +1,15 @@
+asset_manifest.json
+release_note.md
+std_param_def.csv
+std_claim_def.csv
+comment_topic_def.csv
+user_task_def.csv
+target_group_def.csv
+battlefield_def.csv
+mapping_rules.csv
+scoring_rules.yaml
+competitor_runtime_rules.yaml
+sku_analysis_results.parquet
+sku_analysis_results.csv
+evidence_cards.jsonl
+quality_report.json

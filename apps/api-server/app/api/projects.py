@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import CategoryProject
 from app.schemas.api import ProjectCreate, ProjectOut
+from app.services.audit_service import create_audit_event
 
 router = APIRouter(tags=["projects"])
 
@@ -17,6 +18,20 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)) -> Cat
         description=payload.description,
     )
     db.add(project)
+    db.flush()
+    create_audit_event(
+        db,
+        action="project_created",
+        object_type="project",
+        object_id=project.project_id,
+        project_id=project.project_id,
+        actor_id="api",
+        after={
+            "project_id": project.project_id,
+            "name": project.name,
+            "category_code": project.category_code,
+        },
+    )
     db.commit()
     db.refresh(project)
     return project
@@ -33,4 +48,3 @@ def get_project(project_id: str, db: Session = Depends(get_db)) -> CategoryProje
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     return project
-

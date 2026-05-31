@@ -32,6 +32,7 @@ from app.services.goal1_rule_engine import (
     parse_rule_documents,
     validate_rule_documents,
 )
+from app.services.audit_service import create_audit_event
 
 router = APIRouter(prefix="/api", tags=["goal1-core-engine"])
 
@@ -69,6 +70,16 @@ def create_rule_sets(payload: Any = Body(...), db: Session = Depends(get_db)) ->
         )
         db.add(row)
         db.flush()
+        create_audit_event(
+            db,
+            action="rule_edit",
+            object_type="rule_set",
+            object_id=row.rule_set_id,
+            project_id=None,
+            actor_id="api",
+            after=_rule_set_to_dict(row),
+            metadata={"version": row.version, "rule_type": row.rule_type},
+        )
         created.append(_rule_set_to_dict(row))
     db.commit()
     return {"status": "created", "rule_sets": created}
@@ -96,6 +107,16 @@ def activate_rule_set(rule_set_id: str, db: Session = Depends(get_db)) -> dict[s
     for row in rows:
         row.status = "draft"
     active.status = "active"
+    create_audit_event(
+        db,
+        action="rule_activated",
+        object_type="rule_set",
+        object_id=active.rule_set_id,
+        project_id=None,
+        actor_id="api",
+        after=_rule_set_to_dict(active),
+        metadata={"version": active.version},
+    )
     db.commit()
     db.refresh(active)
     return {"status": "active", "rule_set": _rule_set_to_dict(active)}
@@ -204,7 +225,18 @@ def import_gold_labels(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     try:
-        return import_goal1_gold_labels(db, project_id, file_path=(payload or {}).get("file_path"))
+        result = import_goal1_gold_labels(db, project_id, file_path=(payload or {}).get("file_path"))
+        create_audit_event(
+            db,
+            action="gold_labels_imported",
+            object_type="gold_label",
+            object_id=project_id,
+            project_id=project_id,
+            actor_id="api",
+            after=result,
+            commit=True,
+        )
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -212,7 +244,18 @@ def import_gold_labels(
 @router.post("/projects/{project_id}/evaluation/run")
 def run_evaluation(project_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
-        return evaluation_to_dict(run_goal1_evaluation(db, project_id))
+        result = evaluation_to_dict(run_goal1_evaluation(db, project_id))
+        create_audit_event(
+            db,
+            action="evaluation_run",
+            object_type="evaluation_run",
+            object_id=result["evaluation_id"],
+            project_id=project_id,
+            actor_id="api",
+            after=result,
+            commit=True,
+        )
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -233,7 +276,18 @@ def get_evaluation(project_id: str, evaluation_id: str, db: Session = Depends(ge
 @router.post("/projects/{project_id}/calibration/run")
 def run_calibration(project_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
-        return calibration_to_dict(run_goal1_calibration(db, project_id))
+        result = calibration_to_dict(run_goal1_calibration(db, project_id))
+        create_audit_event(
+            db,
+            action="calibration_run",
+            object_type="calibration_run",
+            object_id=result["calibration_id"],
+            project_id=project_id,
+            actor_id="api",
+            after=result,
+            commit=True,
+        )
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

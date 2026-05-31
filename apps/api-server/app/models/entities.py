@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -472,6 +472,110 @@ class CalibrationRun(Base, AuditMixin):
     candidate_rule_patch: Mapped[dict] = mapped_column(JSON, default=dict)
     rule_versions: Mapped[dict] = mapped_column(JSON, default=dict)
     asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+
+
+class JobRun(Base, AuditMixin):
+    __tablename__ = "job_run"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "job_type",
+            "idempotency_key",
+            "input_fingerprint",
+            name="uq_job_run_idempotency",
+        ),
+    )
+
+    job_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    job_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="queued", index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    checkpoint_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_ref: Mapped[dict | None] = mapped_column(JSON)
+    diagnostics_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    lock_key: Mapped[str | None] = mapped_column(String(240), index=True)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, default="system")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class JobAttempt(Base, AuditMixin):
+    __tablename__ = "job_attempt"
+
+    attempt_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    job_id: Mapped[str] = mapped_column(ForeignKey("job_run.job_id"), index=True)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(120), nullable=False, default="local-sync")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="running")
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    retry_after_seconds: Mapped[int | None] = mapped_column(Integer)
+    diagnostics_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AssetVersion(Base, AuditMixin):
+    __tablename__ = "asset_version"
+
+    asset_version_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    asset_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    lifecycle_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    content_hash: Mapped[str] = mapped_column(String(120), nullable=False)
+    manifest_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, default="system")
+    approved_by: Mapped[str | None] = mapped_column(String(120))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime)
+    rollback_from_version_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    rollback_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class AssetDiff(Base, AuditMixin):
+    __tablename__ = "asset_diff"
+
+    diff_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    from_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    to_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    diff_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_event"
+
+    audit_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor_id: Mapped[str] = mapped_column(String(120), nullable=False, default="system")
+    action: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    object_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    object_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    before_hash: Mapped[str | None] = mapped_column(String(120))
+    after_hash: Mapped[str | None] = mapped_column(String(120))
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
+class RuntimeExport(Base, AuditMixin):
+    __tablename__ = "runtime_export"
+
+    export_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    asset_version_id: Mapped[str] = mapped_column(ForeignKey("asset_version.asset_version_id"), index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="completed")
+    manifest_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    file_path: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, default="system")
 
 
 class ClaimValueLayerResult(Base, AuditMixin):

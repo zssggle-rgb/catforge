@@ -1,0 +1,27 @@
+{
+  "asset_version": "tv_assets_2026_05_v1",
+  "category": "TV",
+  "rule_versions": {
+    "claim_activation": "1.0.0",
+    "task_battlefield": "1.0.0",
+    "competitor": "1.0.0"
+  },
+  "input_dataset_fingerprint": "sha256:example",
+  "evaluation_report_id": "eval_tv_001",
+  "quality_gates": {
+    "claim_f1": 0.85,
+    "competitor_top3_hit_rate": 0.78
+  },
+  "files": [
+    {
+      "path": "std_param_def.csv",
+      "sha256": "..."
+    },
+    {
+      "path": "competitor_runtime_rules.yaml",
+      "sha256": "..."
+    }
+  ],
+  "content_hash": "sha256:manifest",
+  "released_at": "2026-05-31T00:00:00Z"
+}
