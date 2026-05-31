@@ -161,7 +161,22 @@ class EvidenceItem(Base, AuditMixin):
     field_name: Mapped[str | None] = mapped_column(String(160))
     raw_value: Mapped[str | None] = mapped_column(Text)
     normalized_value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON)
+    source_ref: Mapped[dict | list | None] = mapped_column(JSON)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+
+class RuleSet(Base, AuditMixin):
+    __tablename__ = "rule_set"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    rule_set_id: Mapped[str] = mapped_column(String(160), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    rule_type: Mapped[str | None] = mapped_column(String(80), index=True)
+    version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft")
+    source_format: Mapped[str] = mapped_column(String(40), nullable=False, default="yaml")
+    content: Mapped[dict] = mapped_column(JSON, default=dict)
+    validation_errors: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class StdParamDef(Base, AuditMixin):
@@ -291,6 +306,8 @@ class SkuParamNormalized(Base, AuditMixin):
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
     version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
 
 
@@ -302,12 +319,15 @@ class SkuClaimResult(Base, AuditMixin):
     category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
     sku_code: Mapped[str] = mapped_column(String(120), index=True)
     claim_code: Mapped[str] = mapped_column(String(140), index=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
     activation_source: Mapped[str] = mapped_column(String(80), nullable=False, default="rule")
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     extracted_values: Mapped[dict] = mapped_column(JSON, default=dict)
     review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
     version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
 
 
@@ -323,7 +343,10 @@ class SkuCommentTopicResult(Base, AuditMixin):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.75)
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     activates_product_claim: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="auto_pass")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
     version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
 
 
@@ -340,7 +363,10 @@ class SkuTaskScore(Base, AuditMixin):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.75)
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     reason: Mapped[str | None] = mapped_column(Text)
+    review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
     version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
 
 
@@ -357,8 +383,95 @@ class SkuBattlefieldScore(Base, AuditMixin):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.75)
     evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
     reason: Mapped[str | None] = mapped_column(Text)
+    review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
     version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+
+
+class AnalysisRun(Base, AuditMixin):
+    __tablename__ = "analysis_run"
+
+    analysis_run_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="completed")
+    target_sku_code: Mapped[str | None] = mapped_column(String(120), index=True)
+    fixture_path: Mapped[str | None] = mapped_column(Text)
+    rule_versions: Mapped[dict] = mapped_column(JSON, default=dict)
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+    counts: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class SkuCompetitorResult(Base, AuditMixin):
+    __tablename__ = "sku_competitor_result"
+
+    result_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    target_sku_code: Mapped[str] = mapped_column(String(120), index=True)
+    competitor_sku_code: Mapped[str] = mapped_column(String(120), index=True)
+    battlefield_code: Mapped[str | None] = mapped_column(String(140), index=True)
+    competitor_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    component_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
+    evidence_card: Mapped[dict] = mapped_column(JSON, default=dict)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.7)
+    rule_version: Mapped[str] = mapped_column(String(40), nullable=False, default="1.0.0")
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+    review_status: Mapped[str] = mapped_column(String(40), nullable=False, default="auto_pass")
+    insufficient_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="candidate")
+
+
+class GoldLabel(Base, AuditMixin):
+    __tablename__ = "gold_label"
+
+    label_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    label_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    target_sku_code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    candidate_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    expected_label: Mapped[str] = mapped_column(String(80), nullable=False)
+    expected_score_class: Mapped[str | None] = mapped_column(String(60))
+    expert_id: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+    raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+
+
+class EvaluationRun(Base, AuditMixin):
+    __tablename__ = "evaluation_run"
+
+    evaluation_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="completed")
+    gold_label_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    report: Mapped[dict] = mapped_column(JSON, default=dict)
+    rule_versions: Mapped[dict] = mapped_column(JSON, default=dict)
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
+
+
+class CalibrationRun(Base, AuditMixin):
+    __tablename__ = "calibration_run"
+
+    calibration_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft_candidate")
+    target_metric: Mapped[str] = mapped_column(String(80), nullable=False, default="macro_f1")
+    before_metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    after_metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    candidate_rule_patch: Mapped[dict] = mapped_column(JSON, default=dict)
+    rule_versions: Mapped[dict] = mapped_column(JSON, default=dict)
+    asset_version: Mapped[str] = mapped_column(String(40), nullable=False, default="0.1.0")
 
 
 class ClaimValueLayerResult(Base, AuditMixin):
@@ -409,4 +522,3 @@ class AssetPackage(Base, AuditMixin):
     file_list: Mapped[list] = mapped_column(JSON, default=list)
     package_path: Mapped[str] = mapped_column(Text, nullable=False)
     package_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
-

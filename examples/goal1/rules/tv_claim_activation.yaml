@@ -1,0 +1,133 @@
+rule_set_id: tv_claim_activation_v1
+category: TV
+rule_type: claim_activation
+version: 1.0.0
+status: draft
+rules:
+  - rule_id: CLAIM_MINI_LED
+    output_code: CLAIM_MINI_LED_BACKLIGHT
+    description: Activate Mini LED high-end backlight claim.
+    conditions:
+      any:
+        - feature: param.mini_led_flag
+          op: eq
+          value: true
+        - feature: claim_text
+          op: regex
+          value: "(?i)mini\\s*led|miniled|u\\+mini"
+    score:
+      weights:
+        - feature: param.mini_led_flag
+          op: eq
+          value: true
+          points: 70
+        - feature: claim_text
+          op: regex
+          value: "(?i)mini\\s*led|miniled|u\\+mini"
+          points: 30
+    thresholds:
+      activated: 60
+      high_confidence: 85
+      review: 45
+
+  - rule_id: CLAIM_HIGH_BRIGHTNESS
+    output_code: CLAIM_HIGH_BRIGHTNESS_HDR
+    description: Activate high brightness HDR claim.
+    conditions:
+      any:
+        - feature: param.peak_brightness_nits
+          op: gte
+          value: 1000
+        - feature: claim_text
+          op: regex
+          value: "(?i)([1-9][0-9]{3,})\\s*nits|xdr|hdr"
+    score:
+      weights:
+        - feature: param.peak_brightness_nits
+          op: gte
+          value: 1000
+          points: 65
+        - feature: claim_text
+          op: regex
+          value: "(?i)([1-9][0-9]{3,})\\s*nits|xdr|hdr"
+          points: 35
+    thresholds:
+      activated: 60
+      high_confidence: 85
+      review: 45
+
+  - rule_id: CLAIM_DIMMING_ZONES
+    output_code: CLAIM_FINE_LOCAL_DIMMING
+    description: Activate fine local dimming claim.
+    conditions:
+      any:
+        - feature: param.dimming_zones
+          op: gte
+          value: 300
+        - feature: claim_text
+          op: regex
+          value: "分区|控光|local dimming"
+    score:
+      weights:
+        - feature: param.dimming_zones
+          op: gte
+          value: 300
+          points: 70
+        - feature: claim_text
+          op: regex
+          value: "分区|控光|local dimming"
+          points: 30
+    thresholds:
+      activated: 60
+      high_confidence: 85
+      review: 45
+
+  - rule_id: CLAIM_HIGH_REFRESH
+    output_code: CLAIM_HIGH_REFRESH_RATE
+    conditions:
+      any:
+        - feature: param.refresh_rate_hz
+          op: gte
+          value: 120
+        - feature: claim_text
+          op: regex
+          value: "(?i)(120|144|165|170|240|300)\\s*hz|高刷|刷新率"
+    score:
+      weights:
+        - feature: param.refresh_rate_hz
+          op: gte
+          value: 120
+          points: 70
+        - feature: claim_text
+          op: regex
+          value: "(?i)(120|144|165|170|240|300)\\s*hz|高刷|刷新率"
+          points: 30
+    thresholds:
+      activated: 60
+      high_confidence: 85
+      review: 45
+
+  - rule_id: CLAIM_HDMI_21
+    output_code: CLAIM_HDMI_21_GAMING
+    conditions:
+      any:
+        - feature: param.hdmi_2_1_ports
+          op: gte
+          value: 1
+        - feature: claim_text
+          op: regex
+          value: "(?i)hdmi\\s*2\\.1|vrr|allm|满血接口"
+    score:
+      weights:
+        - feature: param.hdmi_2_1_ports
+          op: gte
+          value: 1
+          points: 75
+        - feature: claim_text
+          op: regex
+          value: "(?i)hdmi\\s*2\\.1|vrr|allm|满血接口"
+          points: 25
+    thresholds:
+      activated: 60
+      high_confidence: 85
+      review: 45

@@ -2,6 +2,8 @@
 
 CatForge 是内部品类资产生产工具。当前仓库实现了彩电 TV 品类的第一个可运行 MVP 垂直切片：样例数据导入、数据质量报告、规则化参数归一、卖点映射、评论主题识别、用户任务与价值战场评分、市场指标、复核队列和运行态资产包导出。
 
+Goal1 核心分析引擎已加入后端：规则从 YAML/JSON DSL 读取和校验，不再只依赖硬编码启发式；分析结果包含证据、置信度、规则版本、资产版本和复核状态；竞品引擎会输出 direct、benchmark、substitute 等类型及组件分；Gold Set 支持导入、评测和生成不自动发布的校准草案。
+
 运行态导出严格使用白名单，不导出提示词、评测集构建器、跨品类迁移模板、规则生成器等工厂能力。
 
 ## 目录
@@ -11,7 +13,10 @@ apps/api-server      FastAPI + SQLAlchemy 后端
 apps/factory-web     React + TypeScript + Ant Design 中文工作台
 contracts            输入数据 JSON Schema
 docs                 需求、契约、架构和导出边界
+docs/goal1           Goal1 规则引擎、竞品、评测、API 和迁移规范
 examples             彩电样例 CSV 和期望结果
+examples/goal1       Goal1 规则、fixture、Gold Set 和最小验收期望
+schemas/goal1        Goal1 JSON Schema
 infra                部署扩展预留
 scripts              辅助脚本预留
 ```
@@ -85,6 +90,8 @@ npm run build
 - 复核队列生成
 - 运行态导出白名单边界
 - 缺失 `sku_code` 的质量问题
+- Goal1 规则 DSL 校验、阈值变更生效、TV fixture 端到端分析
+- Goal1 竞品 direct/benchmark/substitute 输出、证据卡、Gold Set 评测和校准草案
 
 ## 关键 API
 
@@ -101,6 +108,22 @@ npm run build
 - `GET /projects/{project_id}/review-queue`
 - `POST /review-queue/{review_id}/decision`
 - `POST /projects/{project_id}/export-runtime`
+
+Goal1 后端 API 使用 `/api` 前缀：
+
+- `POST /api/rule-sets/validate`
+- `POST /api/rule-sets`
+- `GET /api/rule-sets/{rule_set_id}`
+- `POST /api/rule-sets/{rule_set_id}/activate`
+- `POST /api/projects/{project_id}/run-analysis`
+- `GET /api/projects/{project_id}/analysis-runs/{run_id}`
+- `GET /api/projects/{project_id}/sku/{sku_code}/analysis`
+- `GET /api/projects/{project_id}/sku/{sku_code}/competitors`
+- `GET /api/projects/{project_id}/evidence/{evidence_id}`
+- `POST /api/projects/{project_id}/gold-labels/import`
+- `POST /api/projects/{project_id}/evaluation/run`
+- `GET /api/projects/{project_id}/evaluation/{evaluation_id}`
+- `POST /api/projects/{project_id}/calibration/run`
 
 ## 运行态导出边界
 
@@ -119,4 +142,3 @@ npm run build
 - `sample_evidence_cards.jsonl`
 - `asset_readme.md`
 - `release_note.md`
-

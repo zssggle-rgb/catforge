@@ -1,0 +1,44 @@
+rule_set_id: tv_competitor_v1
+category: TV
+version: 1.0.0
+candidate_filters:
+  same_category: true
+  exclude_same_sku: true
+  channel_overlap_required: false
+  price_window_pct: 0.25
+  screen_size_window_inch: 15
+  min_sales_volume: 1
+  max_candidates: 200
+component_weights:
+  price_similarity: 0.20
+  channel_overlap: 0.10
+  core_param_similarity: 0.15
+  standard_claim_similarity: 0.20
+  task_similarity: 0.15
+  battlefield_similarity: 0.15
+  sales_strength: 0.05
+type_rules:
+  - competitor_type: direct
+    min_score: 0.72
+    requirements:
+      battlefield_similarity: 0.70
+      price_similarity: 0.65
+      standard_claim_similarity: 0.60
+  - competitor_type: benchmark
+    min_score: 0.65
+    requirements:
+      battlefield_similarity: 0.60
+      stronger_than_target_any:
+        - peak_brightness_nits
+        - dimming_zones
+        - sales_volume
+        - avg_price
+  - competitor_type: substitute
+    min_score: 0.55
+    requirements:
+      task_similarity: 0.65
+      standard_claim_similarity_max: 0.75
+  - competitor_type: potential
+    min_score: 0.50
+    requirements:
+      price_trend_risk: 0.60

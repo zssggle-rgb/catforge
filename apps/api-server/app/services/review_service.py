@@ -7,10 +7,32 @@ from app.models import (
     DataQualityIssue,
     RawMarketFact,
     ReviewQueue,
+    SkuBattlefieldScore,
     SkuClaimResult,
     SkuParamNormalized,
+    SkuTaskScore,
 )
 from app.services.utils import unique_list
+
+
+OBJECT_LABELS = {
+    "data_quality": "数据质量问题",
+    "claim": "SKU 卖点结果",
+    "param": "SKU 参数归一结果",
+    "sku": "高价值 SKU 标记",
+    "market_metric": "卖点市场分层结果",
+    "task": "用户任务评分",
+    "battlefield": "价值战场评分",
+}
+
+REASON_LABELS = {
+    "missing_required_field": "必填字段缺失",
+    "low_confidence": "置信度偏低",
+    "unknown_field": "字段无法确定",
+    "param_conflict": "参数来源冲突",
+    "high_value_sku": "高价值 SKU 需要人工确认",
+    "insufficient_sample": "样本不足",
+}
 
 
 def build_review_queue(db: Session, project_id: str) -> dict:
@@ -50,6 +72,50 @@ def build_review_queue(db: Session, project_id: str) -> dict:
                 evidence_ids=claim.evidence_ids,
                 candidate_payload={"sku_code": claim.sku_code, "claim_code": claim.claim_code},
                 confidence=claim.confidence,
+                priority="medium",
+            )
+            created += 1
+
+    for task in db.execute(
+        select(SkuTaskScore).where(SkuTaskScore.project_id == project_id)
+    ).scalars():
+        if task.review_status == "needs_review" or task.confidence < 0.65:
+            _add_review(
+                db,
+                project,
+                item_type="task",
+                item_key=f"{task.sku_code}:{task.task_code}",
+                reason_code="low_confidence",
+                evidence_ids=task.evidence_ids,
+                candidate_payload={
+                    "sku_code": task.sku_code,
+                    "task_code": task.task_code,
+                    "score": task.score,
+                    "relation_level": task.relation_level,
+                },
+                confidence=task.confidence,
+                priority="medium",
+            )
+            created += 1
+
+    for battlefield in db.execute(
+        select(SkuBattlefieldScore).where(SkuBattlefieldScore.project_id == project_id)
+    ).scalars():
+        if battlefield.review_status == "needs_review" or battlefield.confidence < 0.65:
+            _add_review(
+                db,
+                project,
+                item_type="battlefield",
+                item_key=f"{battlefield.sku_code}:{battlefield.battlefield_code}",
+                reason_code="low_confidence",
+                evidence_ids=battlefield.evidence_ids,
+                candidate_payload={
+                    "sku_code": battlefield.sku_code,
+                    "battlefield_code": battlefield.battlefield_code,
+                    "score": battlefield.score,
+                    "relation_level": battlefield.relation_level,
+                },
+                confidence=battlefield.confidence,
                 priority="medium",
             )
             created += 1
@@ -162,6 +228,7 @@ def apply_review_decision(
     item.status = decision
     item.reviewer = reviewer
     item.decision_payload = decision_payload or {}
+    _apply_decision_to_target(db, item, decision=decision, decision_payload=decision_payload or {})
     db.commit()
     db.refresh(item)
     return item
@@ -179,6 +246,16 @@ def _add_review(
     confidence: float,
     priority: str,
 ) -> None:
+    enriched_payload = {
+        **candidate_payload,
+        "review_context": {
+            "object_type": item_type,
+            "object_type_label": OBJECT_LABELS.get(item_type, item_type),
+            "reason_label": REASON_LABELS.get(reason_code, reason_code),
+            "decision_target": _decision_target(item_type, candidate_payload),
+            "result_feedback": _result_feedback_hint(item_type),
+        },
+    }
     db.add(
         ReviewQueue(
             project_id=project.project_id,
@@ -187,10 +264,133 @@ def _add_review(
             item_key=item_key,
             reason_code=reason_code,
             evidence_ids=unique_list(evidence_ids),
-            candidate_payload=candidate_payload,
+            candidate_payload=enriched_payload,
             confidence=confidence,
             priority=priority,
             status="pending",
         )
     )
 
+
+def _apply_decision_to_target(
+    db: Session, item: ReviewQueue, *, decision: str, decision_payload: dict
+) -> None:
+    target_status = {
+        "approved": "accepted",
+        "rejected": "rejected",
+        "edited": "accepted",
+    }[decision]
+    review_status = {
+        "approved": "approved",
+        "rejected": "rejected",
+        "edited": "edited",
+    }[decision]
+    if item.item_type == "claim":
+        sku_code, claim_code = _split_item_key(item.item_key)
+        row = db.execute(
+            select(SkuClaimResult).where(
+                SkuClaimResult.project_id == item.project_id,
+                SkuClaimResult.sku_code == sku_code,
+                SkuClaimResult.claim_code == claim_code,
+            )
+        ).scalar_one_or_none()
+        if row:
+            row.review_status = review_status
+            row.status = target_status
+            if decision == "edited":
+                if "score" in decision_payload:
+                    row.score = float(decision_payload["score"])
+                if "confidence" in decision_payload:
+                    row.confidence = float(decision_payload["confidence"])
+                if "extracted_values" in decision_payload:
+                    row.extracted_values = decision_payload["extracted_values"]
+        return
+    if item.item_type == "param":
+        sku_code, param_code = _split_item_key(item.item_key)
+        rows = []
+        if param_code == "refresh_rate":
+            rows = db.execute(
+                select(SkuParamNormalized).where(
+                    SkuParamNormalized.project_id == item.project_id,
+                    SkuParamNormalized.sku_code == sku_code,
+                    SkuParamNormalized.param_code.in_(["native_refresh_rate_hz", "system_refresh_rate_hz"]),
+                )
+            ).scalars().all()
+        else:
+            row = db.execute(
+                select(SkuParamNormalized).where(
+                    SkuParamNormalized.project_id == item.project_id,
+                    SkuParamNormalized.sku_code == sku_code,
+                    SkuParamNormalized.param_code == param_code,
+                )
+            ).scalar_one_or_none()
+            rows = [row] if row else []
+        for row in rows:
+            row.review_status = review_status
+            row.status = target_status
+            if decision == "edited" and "normalized_value" in decision_payload:
+                row.normalized_value = str(decision_payload["normalized_value"])
+                row.raw_value = str(decision_payload["normalized_value"])
+        return
+    if item.item_type == "task":
+        sku_code, task_code = _split_item_key(item.item_key)
+        row = db.execute(
+            select(SkuTaskScore).where(
+                SkuTaskScore.project_id == item.project_id,
+                SkuTaskScore.sku_code == sku_code,
+                SkuTaskScore.task_code == task_code,
+            )
+        ).scalar_one_or_none()
+        if row:
+            row.review_status = review_status
+            row.status = target_status
+        return
+    if item.item_type == "battlefield":
+        sku_code, battlefield_code = _split_item_key(item.item_key)
+        row = db.execute(
+            select(SkuBattlefieldScore).where(
+                SkuBattlefieldScore.project_id == item.project_id,
+                SkuBattlefieldScore.sku_code == sku_code,
+                SkuBattlefieldScore.battlefield_code == battlefield_code,
+            )
+        ).scalar_one_or_none()
+        if row:
+            row.review_status = review_status
+            row.status = target_status
+        return
+    if item.item_type == "market_metric":
+        row = db.execute(
+            select(ClaimValueLayerResult).where(
+                ClaimValueLayerResult.project_id == item.project_id,
+                ClaimValueLayerResult.claim_code == item.item_key,
+            )
+        ).scalar_one_or_none()
+        if row:
+            row.status = target_status
+
+
+def _decision_target(item_type: str, payload: dict) -> str:
+    if item_type == "claim":
+        return f"{payload.get('sku_code')} 的卖点 {payload.get('claim_code')}"
+    if item_type == "param":
+        return f"{payload.get('sku_code')} 的参数 {payload.get('param_code', 'refresh_rate')}"
+    if item_type == "task":
+        return f"{payload.get('sku_code')} 的用户任务 {payload.get('task_code')}"
+    if item_type == "battlefield":
+        return f"{payload.get('sku_code')} 的价值战场 {payload.get('battlefield_code')}"
+    if item_type == "market_metric":
+        return f"卖点 {payload.get('claim_code')} 的市场分层"
+    if item_type == "sku":
+        return f"SKU {payload.get('sku_code')}"
+    return payload.get("message") or item_type
+
+
+def _result_feedback_hint(item_type: str) -> str:
+    if item_type in {"claim", "param", "task", "battlefield", "market_metric"}:
+        return "复核决定会同步写回对应分析结果的 review_status/status。"
+    return "复核决定保留在队列记录中，用于问题闭环追踪。"
+
+
+def _split_item_key(item_key: str) -> tuple[str, str]:
+    left, _, right = item_key.partition(":")
+    return left, right

@@ -1,0 +1,8 @@
+label_type,target_sku_code,candidate_code,expected_label,expected_score_class,expert_id,notes
+claim,TV00029115,CLAIM_MINI_LED_BACKLIGHT,positive,high,expert_a,Mini LED is explicit.
+claim,TV00029115,CLAIM_HIGH_REFRESH_RATE,positive,high,expert_a,170Hz plus sports comment.
+task,TV00029115,TASK_PREMIUM_PICTURE_VIEWING,positive,high,expert_a,Strong picture signals.
+battlefield,TV00029115,BF_PREMIUM_PICTURE,main,high,expert_a,Main battlefield.
+competitor,TV00029115,TV00030001,direct,high,expert_a,Similar size price Mini LED and battlefield.
+competitor,TV00029115,TV00030004,benchmark,medium,expert_a,OLED high-end alternative benchmark.
+competitor,TV00029115,TV00030005,substitute,medium,expert_a,Low-price large-screen substitute.

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CompetitorRuleSet",
+  "type": "object",
+  "required": [
+    "rule_set_id",
+    "category",
+    "version",
+    "candidate_filters",
+    "component_weights",
+    "type_rules"
+  ],
+  "properties": {
+    "rule_set_id": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "candidate_filters": {
+      "type": "object"
+    },
+    "component_weights": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "type_rules": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

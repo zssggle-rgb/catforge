@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GoldLabel",
+  "type": "object",
+  "required": [
+    "label_type",
+    "target_sku_code",
+    "expected_label"
+  ],
+  "properties": {
+    "label_type": {
+      "type": "string",
+      "enum": [
+        "claim",
+        "task",
+        "battlefield",
+        "competitor"
+      ]
+    },
+    "target_sku_code": {
+      "type": "string"
+    },
+    "candidate_code": {
+      "type": "string"
+    },
+    "expected_label": {
+      "type": "string"
+    },
+    "expected_score_class": {
+      "type": "string"
+    },
+    "expert_id": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

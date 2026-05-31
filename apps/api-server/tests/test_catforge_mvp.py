@@ -111,6 +111,21 @@ def test_import_quality_pipeline_and_runtime_export(client, repo_root):
     reason_codes = {item["reason_code"] for item in review["items"]}
     assert "param_conflict" in reason_codes
     assert "high_value_sku" in reason_codes
+    claim_review = next(item for item in review["items"] if item["item_type"] == "claim")
+    assert claim_review["candidate_payload"]["review_context"]["object_type_label"] == "SKU 卖点结果"
+    decision_response = client.post(
+        f"/review-queue/{claim_review['review_id']}/decision",
+        json={"decision": "approved", "reviewer": "pytest"},
+    )
+    assert decision_response.status_code == 200, decision_response.text
+    sku_code, claim_code = claim_review["item_key"].split(":")
+    reviewed_claim = next(
+        item
+        for item in _items(client, project_id, "claims")
+        if item["sku_code"] == sku_code and item["claim_code"] == claim_code
+    )
+    assert reviewed_claim["review_status"] == "approved"
+    assert reviewed_claim["status"] == "accepted"
 
     export_response = client.post(
         f"/projects/{project_id}/export-runtime", json={"version": "0.1.0"}
@@ -190,4 +205,3 @@ def _items(client, project_id: str, asset_type: str) -> list[dict]:
     response = client.get(f"/projects/{project_id}/assets/{asset_type}")
     assert response.status_code == 200, response.text
     return response.json()["items"]
-
