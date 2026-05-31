@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: catforge
+      POSTGRES_USER: catforge
+      POSTGRES_PASSWORD: catforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catforge -d catforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api-server/Dockerfile
+    environment:
+      CATFORGE_DATABASE_URL: postgresql+psycopg://catforge:catforge@postgres:5432/catforge
+      CATFORGE_REDIS_URL: redis://redis:6379/0
+      CATFORGE_UPLOAD_DIR: /data/uploads
+      CATFORGE_EXPORT_DIR: /data/exports
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    build:
+      context: apps/factory-web
+      dockerfile: Dockerfile
+    environment:
+      VITE_PROXY_TARGET: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+

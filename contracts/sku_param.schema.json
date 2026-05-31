@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkuParamRow",
+  "type": "object",
+  "required": ["sku_code", "raw_param_name"],
+  "properties": {
+    "sku_code": {"type": "string", "minLength": 1},
+    "raw_param_name": {"type": "string", "minLength": 1},
+    "raw_param_value": {"type": ["string", "number", "boolean", "null"]},
+    "raw_unit": {"type": ["string", "null"]},
+    "source_channel": {"type": ["string", "null"]},
+    "observed_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

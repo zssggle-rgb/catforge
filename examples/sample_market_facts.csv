@@ -1,0 +1,6 @@
+sku_code,period,period_type,channel_group,channel_type,channel_name,sales_volume,sales_amount,avg_price,promotion_flag
+TV00029115,2026W21,week,线上,专业电商,JD,3267,31725538,9710.91,false
+TV00010001,2026W21,week,线上,专业电商,JD,2800,26320000,9400,false
+TV00010002,2026W21,week,线上,专业电商,JD,5200,25948000,4990,true
+TV00010003,2026W21,week,线上,专业电商,JD,900,13491000,14990,false
+TV00010004,2026W21,week,线上,专业电商,JD,1200,17988000,14990,false

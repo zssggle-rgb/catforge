@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkuMasterRow",
+  "type": "object",
+  "required": ["sku_code", "brand", "model_name", "category_code", "category_name"],
+  "properties": {
+    "sku_code": {"type": "string", "minLength": 1},
+    "brand": {"type": "string", "minLength": 1},
+    "model_name": {"type": "string", "minLength": 1},
+    "series": {"type": ["string", "null"]},
+    "category_code": {"type": "string", "minLength": 1},
+    "category_name": {"type": "string", "minLength": 1},
+    "launch_date": {"type": ["string", "null"], "format": "date"},
+    "product_url": {"type": ["string", "null"]}
+  }
+}
