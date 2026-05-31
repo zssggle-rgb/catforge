@@ -4,8 +4,12 @@ import type {
   ExportResponse,
   PipelineResult,
   Project,
+  RuntimeExportResponse,
   ReviewQueueResponse,
-  SourceFile
+  SourceFile,
+  WorkbenchCollectionResponse,
+  WorkbenchExportPreview,
+  WorkbenchOverviewResponse
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -50,6 +54,63 @@ export const api = {
     request<ExportResponse>(`/projects/${projectId}/export-runtime`, {
       method: "POST",
       body: JSON.stringify({ version })
+    }),
+  useWorkbenchFixture: (projectId: string) =>
+    request<Record<string, unknown>>(`/api/projects/${projectId}/workbench/use-fixture`, {
+      method: "POST",
+      body: JSON.stringify({ target_sku_code: "TV00029115" })
+    }),
+  workbenchOverview: (projectId: string) =>
+    request<WorkbenchOverviewResponse>(`/api/projects/${projectId}/workbench/data-overview`),
+  workbenchLibrary: (projectId: string, libraryType: string) =>
+    request<WorkbenchCollectionResponse>(`/api/projects/${projectId}/assets/${libraryType}`),
+  workbenchMappings: (projectId: string) =>
+    request<WorkbenchCollectionResponse>(`/api/projects/${projectId}/assets/mappings`),
+  reviewWorkbenchAsset: (
+    projectId: string,
+    assetType: string,
+    assetId: string,
+    decision: "approved" | "rejected" | "needs_split" | "needs_merge" | "deprecated" | "pending"
+  ) =>
+    request<Record<string, unknown>>(`/api/projects/${projectId}/assets/${assetType}/${assetId}/review`, {
+      method: "PATCH",
+      body: JSON.stringify({ decision, reviewer: "factory-web" })
+    }),
+  workbenchSkuResults: (projectId: string) =>
+    request<WorkbenchCollectionResponse>(`/api/projects/${projectId}/sku-results`),
+  workbenchSkuDetail: (projectId: string, skuCode: string) =>
+    request<Record<string, unknown>>(`/api/projects/${projectId}/sku-results/${skuCode}`),
+  workbenchCompetitors: (projectId: string, skuCode?: string) =>
+    request<WorkbenchCollectionResponse>(
+      `/api/projects/${projectId}/competitors${skuCode ? `?sku_code=${encodeURIComponent(skuCode)}` : ""}`
+    ),
+  workbenchCalibration: (projectId: string) =>
+    request<Record<string, unknown>>(`/api/projects/${projectId}/calibration/summary`),
+  workbenchExportPreview: (projectId: string) =>
+    request<WorkbenchExportPreview>(`/api/projects/${projectId}/runtime-export/preview`),
+  createAssetVersion: (payload: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/assets/versions", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  submitAssetReview: (assetId: string) =>
+    request<Record<string, unknown>>(`/api/assets/${assetId}/submit-review`, {
+      method: "POST",
+      body: JSON.stringify({ actor_id: "factory-web" })
+    }),
+  approveAssetVersion: (assetId: string) =>
+    request<Record<string, unknown>>(`/api/assets/${assetId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ actor_id: "factory-web" })
+    }),
+  releaseAssetVersion: (assetId: string) =>
+    request<Record<string, unknown>>(`/api/assets/${assetId}/release`, {
+      method: "POST",
+      body: JSON.stringify({ actor_id: "factory-web", approved_by: "factory-web" })
+    }),
+  exportReleasedRuntime: (projectId: string, assetVersionId?: string) =>
+    request<RuntimeExportResponse>(`/api/projects/${projectId}/runtime-export`, {
+      method: "POST",
+      body: JSON.stringify({ asset_version_id: assetVersionId, created_by: "factory-web" })
     })
 };
-

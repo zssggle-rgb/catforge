@@ -48,3 +48,40 @@ export interface ExportResponse {
   message: string;
 }
 
+export interface WorkbenchCollectionResponse {
+  count: number;
+  items: Record<string, unknown>[];
+  library_type?: string;
+}
+
+export interface WorkbenchOverviewResponse extends Record<string, unknown> {
+  project_id: string;
+  sku_count: number;
+  brand_count: number;
+  channel_count: number;
+  raw_parameter_row_count: number;
+  raw_claim_row_count: number;
+  raw_comment_row_count: number;
+  market_fact_row_count: number;
+}
+
+export interface WorkbenchExportPreview extends Record<string, unknown> {
+  project_id: string;
+  category_code: string;
+  file_list: Record<string, unknown>[];
+  approved_deliverables: string[];
+  release_gate: Record<string, unknown>;
+  released_asset_version?: Record<string, unknown> | null;
+  asset_versions: Record<string, unknown>[];
+}
+
+export interface RuntimeExportResponse {
+  export_id: string;
+  project_id: string;
+  asset_version_id: string;
+  status: string;
+  manifest_json: Record<string, unknown>;
+  file_path: string;
+  content_hash: string;
+  created_by: string;
+}

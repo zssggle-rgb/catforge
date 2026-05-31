@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import assets, export, files, goal1, goal2, health, imports, pipeline, profiling, projects
+from app.api import assets, export, files, goal1, goal2, health, imports, pipeline, profiling, projects, workbench
 from app.core.config import get_settings
 from app.core.database import init_db
 
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(pipeline.router)
     app.include_router(goal1.router)
     app.include_router(goal2.router)
+    app.include_router(workbench.router)
     app.include_router(assets.router)
     app.include_router(export.router)
     return app

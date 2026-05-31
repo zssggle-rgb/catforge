@@ -1,0 +1,35 @@
+{
+  "must_have_pages": [
+    "Data Overview",
+    "Parameter Library",
+    "Claim Library",
+    "Comment Topic Library",
+    "User Task Library",
+    "Target Group Library",
+    "Battlefield Library",
+    "Mapping Workbench",
+    "SKU Results",
+    "SKU Detail",
+    "Competitor Results",
+    "Calibration Report",
+    "Runtime Export Preview"
+  ],
+  "tv00029115_min_expected": {
+    "activated_claims": [
+      "CLAIM_MINI_LED_BACKLIGHT",
+      "CLAIM_HIGH_BRIGHTNESS_HDR",
+      "CLAIM_FINE_LOCAL_DIMMING",
+      "CLAIM_HIGH_REFRESH_RATE",
+      "CLAIM_HDMI_21_GAMING"
+    ],
+    "tasks": [
+      "TASK_PREMIUM_PICTURE_VIEWING",
+      "TASK_FAMILY_IMMERSIVE_VIEWING"
+    ],
+    "battlefields": [
+      "BF_PREMIUM_PICTURE",
+      "BF_FAMILY_VIEWING"
+    ],
+    "requires_evidence_ids": true
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RuntimeAssetManifest",
+  "type": "object",
+  "required": [
+    "asset_version",
+    "category",
+    "files",
+    "created_at"
+  ],
+  "properties": {
+    "asset_version": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "forbidden_patterns_checked": {
+      "type": "boolean"
+    }
+  }
+}

@@ -1,5 +1,7 @@
 import {
   AppstoreOutlined,
+  BarChartOutlined,
+  BranchesOutlined,
   CheckCircleOutlined,
   CloudUploadOutlined,
   DatabaseOutlined,
@@ -32,13 +34,15 @@ import {
 import type { UploadProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api/client";
+import { WorkbenchPage } from "./pages/Workbench";
 import { pipelineSteps, sampleFiles } from "./pages/pipelineSteps";
+import { isWorkbenchPageKey, workbenchPages, type WorkbenchPageKey } from "./pages/workbenchPages";
 import type { AssetResponse, DataQualityResponse, ExportResponse, PipelineResult, Project, ReviewQueueResponse } from "./types";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
-type PageKey = "projects" | "dashboard" | "import" | "quality" | "assets" | "review" | "export";
+type PageKey = "projects" | "dashboard" | "import" | "quality" | "assets" | "review" | "export" | WorkbenchPageKey;
 
 const menuItems = [
   { key: "projects", icon: <ProjectOutlined />, label: "项目" },
@@ -47,7 +51,17 @@ const menuItems = [
   { key: "quality", icon: <FileSearchOutlined />, label: "质量报告" },
   { key: "assets", icon: <DatabaseOutlined />, label: "资产列表" },
   { key: "review", icon: <SafetyCertificateOutlined />, label: "复核队列" },
-  { key: "export", icon: <ExportOutlined />, label: "运行态导出" }
+  { key: "export", icon: <ExportOutlined />, label: "运行态导出" },
+  {
+    key: "goal3-workbench",
+    icon: <BarChartOutlined />,
+    label: "Goal3 工作台",
+    children: workbenchPages.map((page) => ({
+      key: page.key,
+      icon: page.group === "library" ? <DatabaseOutlined /> : page.group === "result" ? <BranchesOutlined /> : <FileSearchOutlined />,
+      label: page.label
+    }))
+  }
 ];
 
 function App() {
@@ -88,6 +102,7 @@ function App() {
           theme="dark"
           mode="inline"
           selectedKeys={[guardedPage]}
+          defaultOpenKeys={["goal3-workbench"]}
           items={menuItems}
           onClick={({ key }) => setPage(key as PageKey)}
         />
@@ -146,6 +161,7 @@ function App() {
           {guardedPage === "assets" && selectedProject && <AssetsPage project={selectedProject} />}
           {guardedPage === "review" && selectedProject && <ReviewQueuePage project={selectedProject} />}
           {guardedPage === "export" && selectedProject && <RuntimeExportPage project={selectedProject} />}
+          {selectedProject && isWorkbenchPageKey(guardedPage) && <WorkbenchPage project={selectedProject} pageKey={guardedPage} />}
         </Content>
       </Layout>
     </Layout>

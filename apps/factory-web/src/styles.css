@@ -163,6 +163,22 @@ body {
   margin-top: 16px;
 }
 
+.sku-search {
+  width: 320px;
+}
+
+.detail-panel {
+  margin-top: 18px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e5e9ef;
+  border-radius: 6px;
+}
+
+.compact-detail {
+  margin-top: 14px;
+}
+
 @media (max-width: 860px) {
   .app-sider {
     display: none;

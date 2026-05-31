@@ -29,6 +29,19 @@
       "evidence_weight": 0.9
     },
     {
+      "param_code": "refresh_rate_hz",
+      "param_name": "刷新率",
+      "param_group": "display",
+      "data_type": "number",
+      "unit": "Hz",
+      "raw_aliases": ["刷新率", "高刷", "refresh_rate_hz"],
+      "normalize_rule": {"parser": "hz"},
+      "level_rule": {"high_refresh": 120, "premium_refresh": 144},
+      "business_meaning": "兼容 1000-SKU 夹具中的刷新率口径，进入游戏和体育观看信号。",
+      "mapped_claim_codes": ["CLAIM_HIGH_REFRESH_RATE"],
+      "evidence_weight": 0.88
+    },
+    {
       "param_code": "system_refresh_rate_hz",
       "param_name": "系统刷新率",
       "param_group": "display",
@@ -513,4 +526,3 @@
     }
   ]
 }
-

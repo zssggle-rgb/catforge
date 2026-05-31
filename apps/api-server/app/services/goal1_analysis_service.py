@@ -17,6 +17,7 @@ from app.models import (
     RawSkuClaim,
     RawSkuComment,
     RawSkuMaster,
+    RawSkuParam,
     RuleSet,
     SourceFile,
     SkuBattlefieldScore,
@@ -33,6 +34,7 @@ from app.services.goal1_rule_engine import (
     load_rule_documents,
     validate_rule_documents,
 )
+from app.services.factory_utils import ensure_seed_assets
 
 ASSET_VERSION = "goal1.0.0"
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -90,6 +92,7 @@ def run_goal1_analysis(
         raise ValueError("项目不存在")
 
     claim_rule, task_rule, battlefield_rule, competitor_rule = load_default_rule_sets()
+    ensure_seed_assets(db, project_id, project.category_code)
     _persist_rule_sets(db, [claim_rule, task_rule, battlefield_rule, competitor_rule])
     _reset_goal1_project_data(db, project_id)
     bundles = load_goal1_fixture(
@@ -264,6 +267,21 @@ def load_goal1_fixture(
         evidence_by_feature: dict[str, list[str]] = {}
         params = _extract_params(row)
         for param_code, value in params.items():
+            db.add(
+                RawSkuParam(
+                    project_id=project.project_id,
+                    category_code=category,
+                    source_file_id=source.source_file_id,
+                    import_batch_id=batch.import_batch_id,
+                    raw_row_id=f"{raw_row_id}:{param_code}",
+                    sku_code=sku_code,
+                    raw_param_name=param_code,
+                    raw_param_value=row.get(param_code),
+                    raw_unit=_param_unit(param_code),
+                    source_channel=row.get("channel"),
+                    observed_at=row.get("week"),
+                )
+            )
             evidence = _add_goal1_evidence(
                 db,
                 project=project,
@@ -479,6 +497,7 @@ def _reset_goal1_project_data(db: Session, project_id: str) -> None:
         RawSkuComment,
         RawSkuClaim,
         RawSkuMaster,
+        RawSkuParam,
         ImportBatch,
         SourceFile,
     ]:
