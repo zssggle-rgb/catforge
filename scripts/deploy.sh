@@ -66,8 +66,18 @@ if [[ "${sync_strategy}" == "github" ]]; then
     "APP_DIR='${app_dir}' GIT_REPO='${git_repo}' GIT_REF='${git_ref}' GIT_DEPTH='${git_depth}' GIT_TIMEOUT='${git_timeout}' bash -s" <<'REMOTE_SYNC'
 set -euo pipefail
 
-tmp_dir="${APP_DIR}.git-sync-tmp"
+tmp_dir=""
 env_backup=""
+
+cleanup() {
+  if [[ -n "${tmp_dir}" ]]; then
+    rm -rf "${tmp_dir}"
+  fi
+  if [[ -n "${env_backup}" ]]; then
+    rm -f "${env_backup}"
+  fi
+}
+trap cleanup EXIT
 
 if [[ -f "${APP_DIR}/.env" ]]; then
   env_backup="$(mktemp)"
@@ -82,18 +92,17 @@ if [[ -d "${APP_DIR}/.git" ]]; then
   git reset --hard FETCH_HEAD
   git clean -fdx -e .env
 else
-  rm -rf "${tmp_dir}"
+  mkdir -p "${APP_DIR}"
+  tmp_dir="$(mktemp -d /tmp/catforge-git-sync.XXXXXX)"
   timeout "${GIT_TIMEOUT}" git clone --depth "${GIT_DEPTH}" --branch "${GIT_REF}" "${GIT_REPO}" "${tmp_dir}"
   if [[ -n "${env_backup}" ]]; then
-    cp "${env_backup}" "${tmp_dir}/.env"
+    cp "${env_backup}" "${APP_DIR}/.env"
   fi
-  if [[ -d "${APP_DIR}" ]]; then
-    mv "${APP_DIR}" "${APP_DIR}.previous-$(date +%Y%m%d%H%M%S)"
-  fi
-  mv "${tmp_dir}" "${APP_DIR}"
+  find "${APP_DIR}" -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +
+  shopt -s dotglob nullglob
+  mv "${tmp_dir}"/* "${APP_DIR}/"
+  shopt -u dotglob nullglob
 fi
-
-rm -f "${env_backup}"
 REMOTE_SYNC
 else
   ssh "${ssh_opts[@]}" "${remote}" "mkdir -p '${app_dir}'"
