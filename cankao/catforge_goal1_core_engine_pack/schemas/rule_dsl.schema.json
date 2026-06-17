@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CatForgeRuleSet",
+  "type": "object",
+  "required": [
+    "rule_set_id",
+    "category",
+    "rule_type",
+    "version",
+    "rules"
+  ],
+  "properties": {
+    "rule_set_id": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "rule_type": {
+      "type": "string",
+      "enum": [
+        "claim_activation",
+        "task_score",
+        "battlefield_score",
+        "competitor_score",
+        "review_trigger"
+      ]
+    },
+    "version": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "deprecated"
+      ],
+      "default": "draft"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "output_code"
+        ],
+        "properties": {
+          "rule_id": {
+            "type": "string"
+          },
+          "output_code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "conditions": {
+            "type": "object"
+          },
+          "score": {
+            "type": "object"
+          },
+          "thresholds": {
+            "type": "object"
+          },
+          "review_triggers": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

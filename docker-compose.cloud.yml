@@ -1,0 +1,63 @@
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api-server/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${CATFORGE_CONTAINER_ENV_FILE:-.env}
+    environment:
+      CATFORGE_DATABASE_URL: ${CATFORGE_DATABASE_URL:?CATFORGE_DATABASE_URL is required}
+      CATFORGE_REDIS_URL: ${CATFORGE_REDIS_URL:-redis://redis:6379/0}
+      CATFORGE_UPLOAD_DIR: ${CATFORGE_UPLOAD_DIR:-/data/uploads}
+      CATFORGE_EXPORT_DIR: ${CATFORGE_EXPORT_DIR:-/data/exports}
+      CATFORGE_SYNC_JOBS: ${CATFORGE_SYNC_JOBS:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${CATFORGE_API_PORT:-8000}:8000"
+    volumes:
+      - catforge_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: apps/factory-web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${CATFORGE_CONTAINER_ENV_FILE:-.env}
+    environment:
+      VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://api:8000}
+    ports:
+      - "${CATFORGE_WEB_PORT:-5173}:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  catforge_data:
+  redis_data:

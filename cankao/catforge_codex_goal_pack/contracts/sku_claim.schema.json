@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkuClaimRow",
+  "type": "object",
+  "required": ["sku_code", "claim_text"],
+  "properties": {
+    "sku_code": {"type": "string", "minLength": 1},
+    "claim_title": {"type": ["string", "null"]},
+    "claim_text": {"type": "string", "minLength": 1},
+    "claim_order": {"type": ["integer", "null"]},
+    "source_channel": {"type": ["string", "null"]},
+    "observed_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

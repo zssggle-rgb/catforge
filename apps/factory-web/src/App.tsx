@@ -34,6 +34,13 @@ import {
 import type { UploadProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api/client";
+import { Core3StandaloneApp } from "./pages/core3/Core3StandaloneApp";
+import { Core3RealDataApp } from "./pages/core3RealData/Core3RealDataApp";
+import {
+  core3RealDataPages,
+  isCore3RealDataPageKey,
+  type Core3RealDataPageKey
+} from "./pages/core3RealData/core3RealDataPages";
 import { WorkbenchPage } from "./pages/Workbench";
 import { pipelineSteps, sampleFiles } from "./pages/pipelineSteps";
 import { isWorkbenchPageKey, workbenchPages, type WorkbenchPageKey } from "./pages/workbenchPages";
@@ -42,7 +49,16 @@ import type { AssetResponse, DataQualityResponse, ExportResponse, PipelineResult
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
-type PageKey = "projects" | "dashboard" | "import" | "quality" | "assets" | "review" | "export" | WorkbenchPageKey;
+type PageKey =
+  | "projects"
+  | "dashboard"
+  | "import"
+  | "quality"
+  | "assets"
+  | "review"
+  | "export"
+  | WorkbenchPageKey
+  | Core3RealDataPageKey;
 
 const menuItems = [
   { key: "projects", icon: <ProjectOutlined />, label: "项目" },
@@ -61,10 +77,69 @@ const menuItems = [
       icon: page.group === "library" ? <DatabaseOutlined /> : page.group === "result" ? <BranchesOutlined /> : <FileSearchOutlined />,
       label: page.label
     }))
+  },
+  {
+    key: "core3-real-data",
+    icon: <FileSearchOutlined />,
+    label: "彩电三竞品",
+    children: core3RealDataPages.map((page) => ({
+      key: page.key,
+      icon:
+        page.key === "core3-real-data-initialization"
+          ? <PlayCircleOutlined />
+          : page.key === "core3-real-data-report"
+          ? <BarChartOutlined />
+          : page.key === "core3-real-data-pipeline"
+            ? <BranchesOutlined />
+            : page.key === "core3-real-data-evidence"
+              ? <FileSearchOutlined />
+              : <DatabaseOutlined />,
+      label: page.label
+    }))
   }
 ];
 
+const mobileMenuItems = [
+  { key: "projects", icon: <ProjectOutlined />, label: "项目" },
+  { key: "dashboard", icon: <AppstoreOutlined />, label: "项目看板" },
+  { key: "import", icon: <CloudUploadOutlined />, label: "数据导入" },
+  { key: "quality", icon: <FileSearchOutlined />, label: "质量报告" },
+  { key: "assets", icon: <DatabaseOutlined />, label: "资产列表" },
+  { key: "review", icon: <SafetyCertificateOutlined />, label: "复核队列" },
+  { key: "export", icon: <ExportOutlined />, label: "运行态导出" },
+  ...workbenchPages.map((page) => ({
+    key: page.key,
+    icon: page.group === "library" ? <DatabaseOutlined /> : page.group === "result" ? <BranchesOutlined /> : <FileSearchOutlined />,
+    label: page.label
+  })),
+  ...core3RealDataPages.map((page) => ({
+    key: page.key,
+    icon:
+      page.key === "core3-real-data-initialization"
+        ? <PlayCircleOutlined />
+        : page.key === "core3-real-data-report"
+        ? <BarChartOutlined />
+        : page.key === "core3-real-data-pipeline"
+          ? <BranchesOutlined />
+          : page.key === "core3-real-data-evidence"
+            ? <FileSearchOutlined />
+            : <DatabaseOutlined />,
+    label: page.label
+  }))
+];
+
 function App() {
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/core3-real-data")) {
+    return <Core3RealDataApp />;
+  }
+  if (!pathname.startsWith("/factory")) {
+    return <Core3StandaloneApp />;
+  }
+  return <FactoryApp />;
+}
+
+function FactoryApp() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>();
   const [page, setPage] = useState<PageKey>("projects");
@@ -98,11 +173,11 @@ function App() {
             <div className="brand-subtitle">品类资产生产工作台</div>
           </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[guardedPage]}
-          defaultOpenKeys={["goal3-workbench"]}
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[guardedPage]}
+          defaultOpenKeys={["goal3-workbench", "core3-real-data"]}
           items={menuItems}
           onClick={({ key }) => setPage(key as PageKey)}
         />
@@ -126,13 +201,20 @@ function App() {
             />
           </Space>
         </Header>
-        <div className="mobile-nav">
-          <Menu
-            mode="horizontal"
-            selectedKeys={[guardedPage]}
-            items={menuItems}
-            onClick={({ key }) => setPage(key as PageKey)}
-          />
+        <div className="mobile-nav" role="navigation" aria-label="移动页面导航">
+          <div className="mobile-nav-scroll">
+            {mobileMenuItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`mobile-nav-button${guardedPage === item.key ? " is-active" : ""}`}
+                onClick={() => setPage(item.key as PageKey)}
+              >
+                <span className="mobile-nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
         <Content className="app-content">
           {guardedPage === "projects" && (
@@ -162,6 +244,9 @@ function App() {
           {guardedPage === "review" && selectedProject && <ReviewQueuePage project={selectedProject} />}
           {guardedPage === "export" && selectedProject && <RuntimeExportPage project={selectedProject} />}
           {selectedProject && isWorkbenchPageKey(guardedPage) && <WorkbenchPage project={selectedProject} pageKey={guardedPage} />}
+          {selectedProject && isCore3RealDataPageKey(guardedPage) && (
+            <Core3RealDataApp project={selectedProject} pageKey={guardedPage} embedded />
+          )}
         </Content>
       </Layout>
     </Layout>

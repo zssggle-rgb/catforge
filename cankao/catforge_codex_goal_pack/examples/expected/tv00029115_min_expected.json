@@ -1,0 +1,52 @@
+{
+  "sku_code": "TV00029115",
+  "expected_normalized_params": {
+    "screen_size_inch": 85,
+    "system_refresh_rate_hz": 300,
+    "native_refresh_rate_hz": 170,
+    "mini_led_flag": true,
+    "ram_gb": 4,
+    "storage_gb": 64,
+    "instant_peak_brightness_nits": 5200,
+    "sustained_peak_brightness_nits": 3800,
+    "dimming_zones": 3500,
+    "eye_dimming_freq_hz": 20000,
+    "hdmi_2_1_ports": 4
+  },
+  "expected_claims": [
+    "CLAIM_LARGE_SCREEN_IMMERSION",
+    "CLAIM_MINI_LED_BACKLIGHT",
+    "CLAIM_HIGH_BRIGHTNESS_HDR",
+    "CLAIM_FINE_LOCAL_DIMMING",
+    "CLAIM_HIGH_REFRESH_RATE",
+    "CLAIM_HDMI_2_1_GAMING",
+    "CLAIM_EYE_CARE_COMFORT",
+    "CLAIM_SMART_VOICE_EASE"
+  ],
+  "expected_comment_topics": [
+    "TOPIC_PICTURE_QUALITY",
+    "TOPIC_SPORTS_WATCHING",
+    "TOPIC_INTERFACE_CONNECTIVITY",
+    "TOPIC_EASE_OF_USE",
+    "TOPIC_SENIOR_FRIENDLY",
+    "TOPIC_INSTALLATION_SERVICE"
+  ],
+  "expected_tasks": [
+    "TASK_LIVING_ROOM_CINEMA",
+    "TASK_PREMIUM_PICTURE_AV",
+    "TASK_GAMING_ENTERTAINMENT",
+    "TASK_SPORTS_WATCHING",
+    "TASK_SENIOR_EASY_USE"
+  ],
+  "expected_battlefields": [
+    "BF_PREMIUM_PICTURE",
+    "BF_FAMILY_VIEWING_UPGRADE",
+    "BF_GAMING_SPORTS",
+    "BF_SENIOR_EASE_OF_USE"
+  ],
+  "notes": [
+    "Installation service topic must not activate product claims.",
+    "Eye-care battlefield should be lower confidence unless parameter and comment evidence both exist.",
+    "Refresh-rate conflict should either be split into system/native refresh or sent to review queue."
+  ]
+}

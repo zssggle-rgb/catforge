@@ -1,0 +1,65 @@
+[
+  {
+    "id": 101,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "屏幕尺寸",
+    "attribute_value": "85",
+    "unit": "英寸"
+  },
+  {
+    "id": 102,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "刷新率",
+    "attribute_value": "144",
+    "unit": "Hz"
+  },
+  {
+    "id": 103,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "背光分区",
+    "attribute_value": "unknown",
+    "unit": null
+  },
+  {
+    "id": 104,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "HDMI2.1接口",
+    "attribute_value": "",
+    "unit": null
+  },
+  {
+    "id": 105,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "摄像头",
+    "attribute_value": "-",
+    "unit": null
+  },
+  {
+    "id": 106,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "attribute_name": "能效等级",
+    "attribute_value": null,
+    "unit": null
+  },
+  {
+    "id": 107,
+    "model_code": "TV00010001",
+    "brand": "海信",
+    "model_name": "85E7K",
+    "attribute_name": "屏幕尺寸",
+    "attribute_value": "85",
+    "unit": "英寸"
+  }
+]

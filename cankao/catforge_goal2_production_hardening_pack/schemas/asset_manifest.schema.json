@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AssetManifest",
+  "type": "object",
+  "required": [
+    "asset_version",
+    "category",
+    "rule_versions",
+    "files",
+    "content_hash",
+    "released_at"
+  ],
+  "properties": {
+    "asset_version": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "rule_versions": {
+      "type": "object"
+    },
+    "input_dataset_fingerprint": {
+      "type": "string"
+    },
+    "evaluation_report_id": {
+      "type": "string"
+    },
+    "quality_gates": {
+      "type": "object"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "content_hash": {
+      "type": "string"
+    },
+    "released_at": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "id": 201,
+    "model_code": "TV00010001",
+    "brand": "海信",
+    "model_name": "85E7K",
+    "selling_point": "144Hz高刷适合体育和游戏场景"
+  },
+  {
+    "id": 202,
+    "model_code": "TV00010001",
+    "brand": "海信",
+    "model_name": "85E7K",
+    "selling_point": "大屏沉浸观赛体验"
+  },
+  {
+    "id": 203,
+    "model_code": "TV00010002",
+    "brand": "海信",
+    "model_name": "85U7N",
+    "selling_point": "Mini LED高亮画质"
+  }
+]
+

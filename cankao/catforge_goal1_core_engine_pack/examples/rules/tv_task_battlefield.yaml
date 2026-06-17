@@ -1,0 +1,119 @@
+rule_set_id: tv_task_battlefield_v1
+category: TV
+rule_type: task_score
+version: 1.0.0
+status: draft
+rules:
+  - rule_id: TASK_PREMIUM_PICTURE
+    output_code: TASK_PREMIUM_PICTURE_VIEWING
+    score:
+      weights:
+        - feature: claim.CLAIM_MINI_LED_BACKLIGHT
+          points: 25
+        - feature: claim.CLAIM_HIGH_BRIGHTNESS_HDR
+          points: 20
+        - feature: claim.CLAIM_FINE_LOCAL_DIMMING
+          points: 20
+        - feature: comment_topic.picture_quality_positive
+          points: 20
+        - feature: market.avg_price
+          op: gte
+          value: 6000
+          points: 15
+    thresholds:
+      high: 75
+      medium: 55
+      review: 40
+
+  - rule_id: TASK_FAMILY_VIEWING
+    output_code: TASK_FAMILY_IMMERSIVE_VIEWING
+    score:
+      weights:
+        - feature: param.screen_size_inch
+          op: gte
+          value: 75
+          points: 30
+        - feature: claim.CLAIM_MINI_LED_BACKLIGHT
+          points: 20
+        - feature: claim.CLAIM_HIGH_BRIGHTNESS_HDR
+          points: 15
+        - feature: comment_topic.viewing_experience_positive
+          points: 20
+        - feature: comment_topic.sound_positive
+          points: 15
+    thresholds:
+      high: 75
+      medium: 55
+      review: 40
+
+  - rule_id: TASK_GAMING_SPORTS
+    output_code: TASK_GAMING_SPORTS
+    score:
+      weights:
+        - feature: claim.CLAIM_HIGH_REFRESH_RATE
+          points: 35
+        - feature: claim.CLAIM_HDMI_21_GAMING
+          points: 30
+        - feature: comment_topic.sports_smoothness_positive
+          points: 20
+        - feature: comment_topic.interface_positive
+          points: 15
+    thresholds:
+      high: 75
+      medium: 55
+      review: 40
+---
+rule_set_id: tv_battlefield_v1
+category: TV
+rule_type: battlefield_score
+version: 1.0.0
+status: draft
+rules:
+  - rule_id: BF_PREMIUM_PICTURE
+    output_code: BF_PREMIUM_PICTURE
+    score:
+      weights:
+        - feature: task.TASK_PREMIUM_PICTURE_VIEWING
+          points: 50
+        - feature: claim.CLAIM_MINI_LED_BACKLIGHT
+          points: 20
+        - feature: claim.CLAIM_HIGH_BRIGHTNESS_HDR
+          points: 15
+        - feature: claim.CLAIM_FINE_LOCAL_DIMMING
+          points: 15
+    thresholds:
+      main: 75
+      secondary: 60
+      weak: 45
+
+  - rule_id: BF_FAMILY_VIEWING
+    output_code: BF_FAMILY_VIEWING
+    score:
+      weights:
+        - feature: task.TASK_FAMILY_IMMERSIVE_VIEWING
+          points: 55
+        - feature: param.screen_size_inch
+          op: gte
+          value: 75
+          points: 20
+        - feature: comment_topic.viewing_experience_positive
+          points: 25
+    thresholds:
+      main: 75
+      secondary: 60
+      weak: 45
+
+  - rule_id: BF_GAMING_TV
+    output_code: BF_GAMING_TV
+    score:
+      weights:
+        - feature: task.TASK_GAMING_SPORTS
+          points: 60
+        - feature: claim.CLAIM_HIGH_REFRESH_RATE
+          points: 20
+        - feature: claim.CLAIM_HDMI_21_GAMING
+          points: 20
+    thresholds:
+      main: 75
+      secondary: 60
+      weak: 45

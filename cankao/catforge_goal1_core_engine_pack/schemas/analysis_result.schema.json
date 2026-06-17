@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnalysisResultMinimum",
+  "type": "object",
+  "required": [
+    "sku_code",
+    "claim_results",
+    "task_scores",
+    "battlefield_scores",
+    "competitors"
+  ],
+  "properties": {
+    "sku_code": {
+      "type": "string"
+    },
+    "claim_results": {
+      "type": "array"
+    },
+    "task_scores": {
+      "type": "array"
+    },
+    "battlefield_scores": {
+      "type": "array"
+    },
+    "competitors": {
+      "type": "array"
+    }
+  }
+}

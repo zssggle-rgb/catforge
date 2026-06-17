@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkuCommentRow",
+  "type": "object",
+  "required": ["sku_code", "comment_text"],
+  "properties": {
+    "sku_code": {"type": "string", "minLength": 1},
+    "platform": {"type": ["string", "null"]},
+    "comment_id": {"type": ["string", "null"]},
+    "comment_text": {"type": "string", "minLength": 1},
+    "rating": {"type": ["number", "null"]},
+    "comment_time": {"type": ["string", "null"], "format": "date-time"},
+    "dimension_1": {"type": ["string", "null"]},
+    "dimension_2": {"type": ["string", "null"]},
+    "dimension_3": {"type": ["string", "null"]}
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "target_sku_code": "TV00029115",
+  "target_model": "85E7Q",
+  "target_brand": "海信",
+  "category_code": "TV",
+  "market_has_target": true,
+  "attribute_has_target": true,
+  "comment_has_target": true,
+  "selling_points_has_target": false,
+  "same_brand_candidate_min_count": 1,
+  "channels": ["线上"],
+  "platform_types": ["专业电商", "平台电商"],
+  "weeks": ["26W01", "26W23"],
+  "missing_like_values": [null, "", "unknown", "-"],
+  "known_data_limits": [
+    "样例数据为线上渠道",
+    "样例候选包含同品牌海信 SKU",
+    "85E7Q 无结构化宣传卖点数据",
+    "服务体验评论不能替代产品核心竞争证明"
+  ],
+  "not_expected": {
+    "final_competitor_codes": [],
+    "business_conclusion": null
+  }
+}
+

@@ -1,0 +1,283 @@
+{
+  "fixture_id": "core3_local_validation_fixture_v1",
+  "category_code": "TV",
+  "target_sku_code": "TV900001",
+  "target_model": "85E8Q Pro",
+  "target_brand": "海信",
+  "fixture_purpose": [
+    "支撑 M06-M16 本地模块验证",
+    "覆盖海信目标 SKU、正面对打竞品、同品牌竞品、弱相关候选和负样本",
+    "验证用户任务、目标客群、价值战场、候选召回和核心三竞品推导"
+  ],
+  "weeks": ["26W01", "26W02", "26W03", "26W04", "26W05", "26W06"],
+  "sku_scenarios": [
+    {
+      "sku_code": "TV900001",
+      "brand": "海信",
+      "model_name": "85E8Q Pro",
+      "role_expected": "target",
+      "size_inches": 85,
+      "price_band": "6000-7500",
+      "battlefield_expected": ["GAME_SPORTS", "FAMILY_IMMERSIVE"],
+      "task_expected": ["console_gaming", "sports_watch", "family_movie"],
+      "target_group_expected": ["game_sports_family"],
+      "market": {"base_price": 6999, "weekly_sales": [120, 132, 140, 156, 168, 176], "channel": "线上", "platform_type": "专业电商"},
+      "attributes": {
+        "屏幕尺寸": "85英寸",
+        "刷新率": "144Hz",
+        "背光技术": "Mini LED",
+        "背光分区": "512分区",
+        "峰值亮度": "1600尼特",
+        "色域": "95% DCI-P3",
+        "HDMI2.1接口": "4个",
+        "VRR": "支持",
+        "MEMC运动补偿": "支持",
+        "音响功率": "60W"
+      },
+      "claims": [
+        "85英寸 Mini LED 大屏，适合客厅观赛和家庭影院",
+        "144Hz 高刷新率配合 VRR，游戏主机低延迟响应",
+        "运动补偿优化体育比赛，足球篮球画面更流畅",
+        "512分区控光提升暗场层次，夜景电影更清楚",
+        "4个 HDMI2.1 接口方便连接游戏主机和音响",
+        "高亮广色域，白天客厅观看也有通透画面"
+      ],
+      "comment_theme_counts": {
+        "game_positive": 8,
+        "sports_positive": 7,
+        "family_movie_positive": 6,
+        "picture_positive": 5,
+        "install_service_positive": 2,
+        "price_sensitive": 2
+      }
+    },
+    {
+      "sku_code": "TV900002",
+      "brand": "TCL",
+      "model_name": "85Q10L",
+      "role_expected": "front_attack_competitor",
+      "size_inches": 85,
+      "price_band": "6000-7500",
+      "battlefield_expected": ["GAME_SPORTS", "FAMILY_IMMERSIVE"],
+      "task_expected": ["console_gaming", "sports_watch", "family_movie"],
+      "target_group_expected": ["game_sports_family"],
+      "market": {"base_price": 7199, "weekly_sales": [116, 128, 146, 158, 170, 180], "channel": "线上", "platform_type": "专业电商"},
+      "attributes": {
+        "屏幕尺寸": "85英寸",
+        "刷新率": "144Hz",
+        "背光技术": "Mini LED",
+        "背光分区": "720分区",
+        "峰值亮度": "1800尼特",
+        "色域": "98% DCI-P3",
+        "HDMI2.1接口": "4个",
+        "VRR": "支持",
+        "MEMC运动补偿": "支持",
+        "音响功率": "70W"
+      },
+      "claims": [
+        "85英寸 Mini LED 强控光，主打客厅大屏影院",
+        "144Hz VRR 游戏模式，连接主机响应快",
+        "体育赛事运动画面优化，减少拖影",
+        "720分区和高亮度提升暗场和高光细节",
+        "满血 HDMI2.1 接口覆盖游戏外设",
+        "广色域和高亮屏适合白天客厅观看"
+      ],
+      "comment_theme_counts": {
+        "game_positive": 9,
+        "sports_positive": 7,
+        "family_movie_positive": 5,
+        "picture_positive": 5,
+        "install_service_positive": 1,
+        "price_sensitive": 3
+      }
+    },
+    {
+      "sku_code": "TV900003",
+      "brand": "红米",
+      "model_name": "MAX 85 2026",
+      "role_expected": "price_value_competitor",
+      "size_inches": 85,
+      "price_band": "4500-5500",
+      "battlefield_expected": ["PRICE_VALUE", "FAMILY_IMMERSIVE"],
+      "task_expected": ["family_movie", "large_screen_value"],
+      "target_group_expected": ["price_sensitive_family"],
+      "market": {"base_price": 4999, "weekly_sales": [180, 196, 210, 224, 230, 238], "channel": "线上", "platform_type": "平台电商"},
+      "attributes": {
+        "屏幕尺寸": "85英寸",
+        "刷新率": "120Hz",
+        "背光技术": "直下式背光",
+        "背光分区": "无分区",
+        "峰值亮度": "700尼特",
+        "色域": "90% DCI-P3",
+        "HDMI2.1接口": "2个",
+        "VRR": "支持",
+        "MEMC运动补偿": "支持",
+        "音响功率": "40W"
+      },
+      "claims": [
+        "85英寸大屏高性价比，适合换大尺寸电视",
+        "120Hz 刷新率满足日常游戏和观影",
+        "大屏客厅观影沉浸感强",
+        "平台补贴价格有优势",
+        "支持主流游戏主机接入",
+        "家庭追剧和体育观看成本更低"
+      ],
+      "comment_theme_counts": {
+        "game_neutral": 4,
+        "sports_positive": 5,
+        "family_movie_positive": 8,
+        "picture_neutral": 4,
+        "install_service_positive": 2,
+        "price_positive": 7
+      }
+    },
+    {
+      "sku_code": "TV900004",
+      "brand": "海信",
+      "model_name": "85U7N",
+      "role_expected": "same_brand_upgrade_competitor",
+      "size_inches": 85,
+      "price_band": "8500-9500",
+      "battlefield_expected": ["PICTURE_QUALITY_UPGRADE", "GAME_SPORTS"],
+      "task_expected": ["premium_movie", "sports_watch", "console_gaming"],
+      "target_group_expected": ["quality_upgrade_family"],
+      "market": {"base_price": 8999, "weekly_sales": [70, 74, 80, 86, 92, 96], "channel": "线上", "platform_type": "专业电商"},
+      "attributes": {
+        "屏幕尺寸": "85英寸",
+        "刷新率": "144Hz",
+        "背光技术": "Mini LED",
+        "背光分区": "1024分区",
+        "峰值亮度": "2200尼特",
+        "色域": "98% DCI-P3",
+        "HDMI2.1接口": "4个",
+        "VRR": "支持",
+        "MEMC运动补偿": "支持",
+        "音响功率": "80W"
+      },
+      "claims": [
+        "ULED Mini LED 高分区控光，主打高端画质升级",
+        "144Hz 游戏和体育场景兼顾",
+        "更高峰值亮度提升 HDR 电影效果",
+        "大屏家庭影院体验更强",
+        "海信画质芯片增强运动和暗场",
+        "适合预算更高的品质升级家庭"
+      ],
+      "comment_theme_counts": {
+        "game_positive": 5,
+        "sports_positive": 5,
+        "family_movie_positive": 5,
+        "picture_positive": 10,
+        "install_service_positive": 2,
+        "price_negative": 3
+      }
+    },
+    {
+      "sku_code": "TV900005",
+      "brand": "VIDDA",
+      "model_name": "75V5K",
+      "role_expected": "weak_related_candidate",
+      "size_inches": 75,
+      "price_band": "3500-4500",
+      "battlefield_expected": ["PRICE_VALUE"],
+      "task_expected": ["bedroom_movie", "large_screen_value"],
+      "target_group_expected": ["price_sensitive_young_family"],
+      "market": {"base_price": 3999, "weekly_sales": [160, 168, 176, 182, 190, 196], "channel": "线上", "platform_type": "平台电商"},
+      "attributes": {
+        "屏幕尺寸": "75英寸",
+        "刷新率": "120Hz",
+        "背光技术": "直下式背光",
+        "背光分区": "无分区",
+        "峰值亮度": "600尼特",
+        "色域": "90% DCI-P3",
+        "HDMI2.1接口": "2个",
+        "VRR": "支持",
+        "MEMC运动补偿": "支持",
+        "音响功率": "36W"
+      },
+      "claims": [
+        "75英寸高性价比大屏，适合卧室和小客厅",
+        "120Hz 满足日常游戏和追剧",
+        "价格友好，适合预算敏感用户",
+        "轻量游戏和家庭追剧够用",
+        "平台活动价格优势明显",
+        "年轻家庭入门大屏选择"
+      ],
+      "comment_theme_counts": {
+        "game_neutral": 3,
+        "sports_neutral": 3,
+        "family_movie_positive": 7,
+        "picture_neutral": 4,
+        "install_service_positive": 2,
+        "price_positive": 11
+      }
+    },
+    {
+      "sku_code": "TV900006",
+      "brand": "创维",
+      "model_name": "65A5D",
+      "role_expected": "negative_sample",
+      "size_inches": 65,
+      "price_band": "2000-3000",
+      "battlefield_expected": ["ENTRY_BASIC"],
+      "task_expected": ["basic_tv_watch"],
+      "target_group_expected": ["entry_budget"],
+      "market": {"base_price": 2499, "weekly_sales": [210, 218, 225, 230, 236, 240], "channel": "线上", "platform_type": "平台电商"},
+      "attributes": {
+        "屏幕尺寸": "65英寸",
+        "刷新率": "60Hz",
+        "背光技术": "直下式背光",
+        "背光分区": "无分区",
+        "峰值亮度": "400尼特",
+        "色域": "80% DCI-P3",
+        "HDMI2.1接口": "0个",
+        "VRR": "不支持",
+        "MEMC运动补偿": "不支持",
+        "音响功率": "24W"
+      },
+      "claims": [
+        "65英寸入门电视，满足基础观看",
+        "价格低，适合预算有限用户",
+        "日常新闻和电视剧够用",
+        "基础清晰度和音响配置",
+        "安装简单，占用空间小",
+        "不主打游戏和体育高速画面"
+      ],
+      "comment_theme_counts": {
+        "basic_watch_positive": 10,
+        "game_negative": 4,
+        "sports_negative": 4,
+        "family_movie_neutral": 3,
+        "picture_neutral": 3,
+        "price_positive": 6
+      }
+    }
+  ],
+  "comment_templates": {
+    "game_positive": ["接游戏主机延迟低，动作响应很快。", "玩赛车和足球游戏画面顺，没有明显拖影。"],
+    "game_neutral": ["普通游戏够用，但不是特别高端的游戏体验。", "轻度游戏可以，追求极致低延迟还要看高端款。"],
+    "game_negative": ["玩游戏拖影明显，刷新率不够。", "接主机体验一般，不适合重度游戏。"],
+    "sports_positive": ["看足球和篮球很流畅，大屏观赛很有沉浸感。", "运动补偿效果明显，快速画面不糊。"],
+    "sports_neutral": ["看体育比赛还可以，但高速画面偶尔有拖影。", "大屏看球不错，运动画面表现中规中矩。"],
+    "sports_negative": ["看球拖影比较明显，快速镜头不舒服。", "体育比赛画面不够流畅。"],
+    "family_movie_positive": ["客厅看电影很震撼，全家一起看很合适。", "85寸大屏观影沉浸感强，老人孩子都喜欢。"],
+    "family_movie_neutral": ["日常追剧够用，电影效果一般。", "家庭看电视没问题，但影院感不强。"],
+    "picture_positive": ["画质通透，暗场细节和亮度都不错。", "白天客厅观看也清楚，色彩比较稳。"],
+    "picture_neutral": ["画质对得起价格，但高光和暗场一般。", "日常看够用，和高端 Mini LED 有差距。"],
+    "install_service_positive": ["安装师傅上门快，挂架收费提前说明。", "送装服务比较顺，沟通清楚。"],
+    "price_positive": ["这个尺寸这个价格很划算。", "平台补贴后性价比高。"],
+    "price_sensitive": ["价格不算低，但配置比较完整。", "活动价合适，原价会犹豫。"],
+    "price_negative": ["价格偏高，适合预算充足再考虑。", "画质好但贵，和中端款要仔细比较。"],
+    "basic_watch_positive": ["给老人看电视够用，操作简单。", "基础观看没问题，价格也低。"]
+  },
+  "expected_competitor_set": {
+    "core3": ["TV900002", "TV900003", "TV900004"],
+    "exclude": ["TV900005", "TV900006"],
+    "reasoning_checks": [
+      "TCL 85Q10L 与目标 SKU 在尺寸、价格带、游戏体育卖点和评论任务上高度重合，是正面对打竞品。",
+      "红米 MAX 85 2026 与目标 SKU 同为 85 寸高销量，但主打价格价值，适合作为价格战场竞品。",
+      "海信 85U7N 是同品牌高端替代选择，验证海信也可以成为海信竞品。",
+      "VIDDA 75V5K 尺寸和价格带偏离，只能作为弱相关候选。",
+      "创维 65A5D 尺寸、刷新率、任务和战场均不匹配，应作为负样本排除。"
+    ]
+  }
+}

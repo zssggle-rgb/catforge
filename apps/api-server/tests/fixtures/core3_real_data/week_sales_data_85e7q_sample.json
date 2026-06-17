@@ -1,0 +1,63 @@
+[
+  {
+    "id": 1,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "week": "26W01",
+    "channel": "线上",
+    "platform_type": "专业电商",
+    "sales_volume": 120,
+    "sales_amount": 719880,
+    "average_price": 5999
+  },
+  {
+    "id": 2,
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "week": "26W23",
+    "channel": "线上",
+    "platform_type": "平台电商",
+    "sales_volume": 168,
+    "sales_amount": 956928,
+    "average_price": 5696
+  },
+  {
+    "id": 3,
+    "model_code": "TV00010001",
+    "brand": "海信",
+    "model_name": "85E7K",
+    "week": "26W23",
+    "channel": "线上",
+    "platform_type": "专业电商",
+    "sales_volume": 132,
+    "sales_amount": 764280,
+    "average_price": 5790
+  },
+  {
+    "id": 4,
+    "model_code": "TV00010002",
+    "brand": "海信",
+    "model_name": "85U7N",
+    "week": "26W23",
+    "channel": "线上",
+    "platform_type": "平台电商",
+    "sales_volume": 86,
+    "sales_amount": 774000,
+    "average_price": 9000
+  },
+  {
+    "id": 5,
+    "model_code": "TV00010003",
+    "brand": "海信",
+    "model_name": "75E7Q",
+    "week": "26W23",
+    "channel": "线上",
+    "platform_type": "平台电商",
+    "sales_volume": 210,
+    "sales_amount": 839790,
+    "average_price": 3999
+  }
+]
+

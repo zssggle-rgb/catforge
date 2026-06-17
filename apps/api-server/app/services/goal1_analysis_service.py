@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models import (
     AnalysisRun,
     CategoryProject,
@@ -37,7 +38,7 @@ from app.services.goal1_rule_engine import (
 from app.services.factory_utils import ensure_seed_assets
 
 ASSET_VERSION = "goal1.0.0"
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = get_settings().repo_root
 DEFAULT_RULE_DIR = REPO_ROOT / "examples" / "goal1" / "rules"
 DEFAULT_FIXTURE_PATH = REPO_ROOT / "examples" / "goal1" / "fixtures" / "tv_market_fixture.csv"
 

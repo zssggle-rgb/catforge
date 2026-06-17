@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JobRun",
+  "type": "object",
+  "required": [
+    "job_id",
+    "job_type",
+    "project_id",
+    "idempotency_key",
+    "input_fingerprint",
+    "status"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "job_type": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "input_fingerprint": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "retrying",
+        "succeeded",
+        "failed",
+        "cancel_requested",
+        "cancelled",
+        "blocked"
+      ]
+    },
+    "attempt_count": {
+      "type": "integer"
+    },
+    "checkpoint_json": {
+      "type": "object"
+    },
+    "error_code": {
+      "type": "string"
+    },
+    "error_message": {
+      "type": "string"
+    }
+  }
+}

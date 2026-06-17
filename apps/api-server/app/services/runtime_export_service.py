@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import zipfile
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -24,7 +23,7 @@ from app.services.audit_service import create_audit_event
 from app.services.hardening_utils import sha256_bytes, sha256_json
 from app.services.version_governance_service import latest_released_asset_version
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = get_settings().repo_root
 ALLOWED_FILES_PATH = REPO_ROOT / "examples" / "goal2" / "exports" / "allowed_files.txt"
 FORBIDDEN_PATTERNS_PATH = REPO_ROOT / "examples" / "goal2" / "exports" / "forbidden_patterns.txt"
 

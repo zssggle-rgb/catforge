@@ -16,3 +16,7 @@ data/*.db
 data/*.sqlite
 data/*.png
 *.log
+.catforge/
+.env
+.env.*
+!.env.example

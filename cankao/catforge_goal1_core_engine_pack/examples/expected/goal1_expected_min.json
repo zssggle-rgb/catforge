@@ -1,0 +1,27 @@
+{
+  "target_sku_code": "TV00029115",
+  "must_activate_claims": [
+    "CLAIM_MINI_LED_BACKLIGHT",
+    "CLAIM_HIGH_BRIGHTNESS_HDR",
+    "CLAIM_FINE_LOCAL_DIMMING",
+    "CLAIM_HIGH_REFRESH_RATE",
+    "CLAIM_HDMI_21_GAMING"
+  ],
+  "must_enter_battlefields": [
+    "BF_PREMIUM_PICTURE",
+    "BF_FAMILY_VIEWING",
+    "BF_GAMING_TV"
+  ],
+  "must_have_competitor_types": [
+    "direct",
+    "benchmark",
+    "substitute"
+  ],
+  "output_requirements": [
+    "evidence_ids",
+    "confidence",
+    "rule_version",
+    "asset_version",
+    "component_scores"
+  ]
+}

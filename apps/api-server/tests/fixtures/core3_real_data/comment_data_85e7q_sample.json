@@ -1,0 +1,58 @@
+[
+  {
+    "id": 301,
+    "comment_id": "CMT-85E7Q-001",
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "comments_segments": "85寸看球很爽，运动画面比较顺。",
+    "comment_dimension": "产品体验",
+    "sentiment": "positive",
+    "write_time": "2026-06-11 18:39:10"
+  },
+  {
+    "id": 302,
+    "comment_id": "CMT-85E7Q-002",
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "comments_segments": "接游戏主机延迟感不明显，刷新率够用。",
+    "comment_dimension": "产品体验",
+    "sentiment": "positive",
+    "write_time": "2026-06-11 18:40:10"
+  },
+  {
+    "id": 303,
+    "comment_id": "CMT-85E7Q-003",
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "comments_segments": "安装师傅上门很快，挂架收费提前说清楚。",
+    "comment_dimension": "服务体验",
+    "sentiment": "positive",
+    "write_time": "2026-06-11 18:41:10"
+  },
+  {
+    "id": 304,
+    "comment_id": "CMT-85E7Q-003",
+    "model_code": "TV00029115",
+    "brand": "海信",
+    "model_name": "85E7Q",
+    "comments_segments": "安装师傅上门很快，挂架收费提前说清楚。",
+    "comment_dimension": "服务体验",
+    "sentiment": "positive",
+    "write_time": "2026-06-11 18:41:10"
+  },
+  {
+    "id": 305,
+    "comment_id": "CMT-85E7K-001",
+    "model_code": "TV00010001",
+    "brand": "海信",
+    "model_name": "85E7K",
+    "comments_segments": "大屏看体育比赛不错，价格比高端款友好。",
+    "comment_dimension": "产品体验",
+    "sentiment": "positive",
+    "write_time": "2026-06-11 18:42:10"
+  }
+]
+
