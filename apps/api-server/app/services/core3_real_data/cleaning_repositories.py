@@ -21,6 +21,7 @@ from app.models.entities import (
     Core3SourceImpactedSku,
     Core3SourceRowRegistry,
 )
+from app.services.core3_real_data.cleaning_quality_service import build_preliminary_cleaning_summary
 from app.services.core3_real_data.constants import (
     Core3ReviewStatus,
     Core3SourceBatchStatus,
@@ -86,6 +87,8 @@ class SourceRowRegistryReader(Core3BaseRepository):
         *,
         include_no_change: bool = False,
         operation_types: Sequence[Core3SourceOperationType | str] | None = None,
+        source_tables: Sequence[str] | None = None,
+        sku_codes: Sequence[str] | None = None,
     ) -> list[Core3SourceRowRegistry]:
         normalized_operations = _operation_values(operation_types)
         if include_no_change and operation_types is None:
@@ -99,6 +102,10 @@ class SourceRowRegistryReader(Core3BaseRepository):
             .where(Core3SourceRowRegistry.operation_type.in_(normalized_operations))
             .order_by(Core3SourceRowRegistry.source_table, Core3SourceRowRegistry.source_pk)
         )
+        if source_tables:
+            stmt = stmt.where(Core3SourceRowRegistry.source_table.in_(tuple(source_tables)))
+        if sku_codes:
+            stmt = stmt.where(Core3SourceRowRegistry.sku_code_candidate.in_(tuple(sku_codes)))
         return list(self.db.execute(stmt).scalars())
 
 
@@ -304,6 +311,8 @@ class DataQualityIssueRepository(_CleanFactRepository):
 
 class CleaningQueryRepository(Core3BaseRepository):
     def get_clean_summary(self, batch_id: str) -> dict[str, Any]:
+        clean_skus = self._list_all_clean_skus(batch_id)
+        preliminary_summary = build_preliminary_cleaning_summary(clean_skus)
         clean_counts = {
             "sku": self._count(Core3CleanSku, batch_id),
             "market": self._count(Core3CleanMarketWeekly, batch_id),
@@ -328,6 +337,7 @@ class CleaningQueryRepository(Core3BaseRepository):
             "clean_counts": clean_counts,
             "issue_counts": issue_counts,
             "review_required": issue_counts["review_required"] > 0,
+            "preliminary_summary": preliminary_summary,
         }
 
     def list_clean_skus(self, batch_id: str, **filters: Any) -> list[Core3CleanSku]:
@@ -356,6 +366,16 @@ class CleaningQueryRepository(Core3BaseRepository):
             .where(model_cls.batch_id == batch_id)
         )
         return int(self.db.execute(stmt).scalar_one())
+
+    def _list_all_clean_skus(self, batch_id: str) -> list[Core3CleanSku]:
+        stmt = (
+            select(Core3CleanSku)
+            .where(Core3CleanSku.project_id == self.project_id)
+            .where(Core3CleanSku.category_code == self.category_code.value)
+            .where(Core3CleanSku.batch_id == batch_id)
+            .order_by(Core3CleanSku.sku_code)
+        )
+        return list(self.db.execute(stmt).scalars())
 
     def _list_by_sku(self, model_cls: Any, batch_id: str, sku_code: str) -> list[Any]:
         stmt = (

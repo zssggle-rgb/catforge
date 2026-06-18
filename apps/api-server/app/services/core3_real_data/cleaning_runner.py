@@ -15,9 +15,11 @@ from app.services.core3_real_data.cleaning_quality_service import (
     CleaningSourceContext,
     CleanSkuBuilder,
     CommentCleaner,
+    build_market_batch_scope,
     MarketCleaner,
     QualityIssueBuilder,
 )
+from app.services.core3_real_data.cleaning_normalizers import PeriodParser, TextNormalizer
 from app.services.core3_real_data.cleaning_repositories import (
     CleanAttributeRepository,
     CleanClaimRepository,
@@ -129,8 +131,18 @@ class CleaningQualityRunner:
         processable_rows = source_row_reader.list_processable_rows(
             batch_id,
             include_no_change=include_no_change,
+            sku_codes=target_sku_codes or None,
         )
-        processable_rows = _filter_target_rows(processable_rows, target_sku_codes)
+        batch_market_scope = (
+            self._build_batch_market_scope(
+                source_row_reader=source_row_reader,
+                raw_source_repository=raw_source_repository,
+                batch_id=batch_id,
+                include_no_change=include_no_change,
+            )
+            if target_sku_codes
+            else None
+        )
 
         markets: list[dict[str, Any]] = []
         attributes: list[dict[str, Any]] = []
@@ -237,6 +249,8 @@ class CleaningQualityRunner:
                     attributes=attributes,
                     claims=claims,
                     comments=comments,
+                    comment_dimensions=comment_dimensions,
+                    market_scope=batch_market_scope or build_market_batch_scope(markets),
                 ).skus
                 quality_issues = self.quality_issue_builder.build(
                     project_id=project_id,
@@ -278,6 +292,7 @@ class CleaningQualityRunner:
         summary = CleaningQueryRepository(repository_context).get_clean_summary(batch_id)
         clean_counts = dict(summary["clean_counts"])
         issue_counts = dict(summary["issue_counts"])
+        preliminary_summary = dict(summary.get("preliminary_summary") or {})
         warnings = sorted(issue_counts.get("by_type", {}).keys())
         status = Core3RunStatus.WARNING if warnings or summary["review_required"] else Core3RunStatus.SUCCESS
         summary_json = {
@@ -291,6 +306,8 @@ class CleaningQualityRunner:
             "review_required": summary["review_required"],
             "input_row_count": len(processable_rows),
             "target_sku_codes": list(target_sku_codes),
+            "market_coverage_summary": preliminary_summary.get("market_coverage_summary", {}),
+            "comment_preliminary_summary": preliminary_summary.get("comment_preliminary_summary", {}),
         }
         output_hash = stable_hash(summary_json, version="m01_cleaning_summary_v1")
         finished_at = datetime.now(timezone.utc)
@@ -395,13 +412,37 @@ class CleaningQualityRunner:
         for payload in quality_issues:
             issue_repository.save_issue(payload)
 
-
-def _filter_target_rows(rows: list[Any], target_sku_codes: tuple[str, ...]) -> list[Any]:
-    if not target_sku_codes:
-        return rows
-    target_set = set(target_sku_codes)
-    return [row for row in rows if row.sku_code_candidate in target_set]
-
+    def _build_batch_market_scope(
+        self,
+        *,
+        source_row_reader: SourceRowRegistryReader,
+        raw_source_repository: RawSourceRepository,
+        batch_id: str,
+        include_no_change: bool,
+    ) -> dict[str, Any]:
+        market_rows = source_row_reader.list_processable_rows(
+            batch_id,
+            include_no_change=include_no_change,
+            source_tables=("week_sales_data",),
+        )
+        scope_records: list[dict[str, Any]] = []
+        for source_row in market_rows:
+            if not source_row.source_pk:
+                continue
+            raw_row = raw_source_repository.get_row_by_source_ref(source_row.source_table, source_row.source_pk)
+            if raw_row is None:
+                continue
+            period = PeriodParser.parse(raw_row.get("date_value"))
+            if period.period_week_index is None:
+                continue
+            scope_records.append(
+                {
+                    "period_raw": TextNormalizer.normalize(raw_row.get("date_value")),
+                    "period_week_index": period.period_week_index,
+                    "period_year_hint": period.period_year_hint,
+                }
+            )
+        return build_market_batch_scope(scope_records)
 
 def _source_row_issue(
     source_row: Any,

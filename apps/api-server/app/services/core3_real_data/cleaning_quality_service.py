@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Mapping
@@ -361,6 +362,8 @@ class CleanSkuBuilder:
         attributes: list[Mapping[str, Any]] | None = None,
         claims: list[Mapping[str, Any]] | None = None,
         comments: list[Mapping[str, Any]] | None = None,
+        comment_dimensions: list[Mapping[str, Any]] | None = None,
+        market_scope: Mapping[str, Any] | None = None,
         category_code: Core3CategoryCode | str = Core3CategoryCode.TV,
         run_id: str | None = None,
         module_run_id: str | None = None,
@@ -373,6 +376,8 @@ class CleanSkuBuilder:
             "claim": list(claims or []),
             "comment": list(comments or []),
         }
+        comment_dimension_records = list(comment_dimensions or [])
+        market_scope_json = dict(market_scope or build_market_batch_scope(records_by_domain["market"]))
         sku_codes = sorted(
             {
                 str(record["sku_code"])
@@ -388,6 +393,9 @@ class CleanSkuBuilder:
                 domain: [record for record in records if record.get("sku_code") == sku_code]
                 for domain, records in records_by_domain.items()
             }
+            sku_comment_dimensions = [
+                record for record in comment_dimension_records if record.get("sku_code") == sku_code
+            ]
             source_tables = sorted(
                 {
                     str(record["source_table"])
@@ -396,7 +404,11 @@ class CleanSkuBuilder:
                     if record.get("source_table")
                 }
             )
-            coverage_json = _coverage_json(domain_records)
+            coverage_json = _coverage_json(
+                domain_records,
+                market_scope=market_scope_json,
+                comment_dimensions=sku_comment_dimensions,
+            )
             field_conflicts_json = _field_conflicts_json(domain_records)
             missing_signals_json = _missing_signals_json(coverage_json)
             quality_flags = _sku_quality_flags(field_conflicts_json, missing_signals_json)
@@ -580,6 +592,8 @@ class QualityIssueBuilder:
         issues: list[dict[str, Any]] = []
         for issue_type in payload.get("quality_flags") or []:
             issue_type = str(issue_type)
+            if clean_table == "core3_clean_comment" and issue_type == Core3QualityIssueType.LOW_VALUE_COMMENT.value:
+                continue
             issues.append(
                 _quality_issue(
                     common,
@@ -606,6 +620,8 @@ class QualityIssueBuilder:
     ) -> list[dict[str, Any]]:
         by_hash: dict[str, list[Mapping[str, Any]]] = {}
         for comment in comments:
+            if comment.get("low_value_flag"):
+                continue
             comment_hash = comment.get("comment_text_hash")
             if comment_hash:
                 by_hash.setdefault(str(comment_hash), []).append(comment)
@@ -675,13 +691,167 @@ def _quality_status(quality_flags: list[str]) -> str:
     return Core3CleanQualityStatus.WARNING.value if quality_flags else Core3CleanQualityStatus.OK.value
 
 
-def _coverage_json(domain_records: Mapping[str, list[Mapping[str, Any]]]) -> dict[str, Any]:
+SERVICE_COMMENT_TERMS: tuple[str, ...] = (
+    "客服",
+    "服务",
+    "物流",
+    "配送",
+    "快递",
+    "安装",
+    "售后",
+    "退货",
+    "退款",
+    "发货",
+    "送货",
+    "维修",
+    "保修",
+    "包装",
+    "上门",
+    "师傅",
+    "店家",
+    "商家",
+)
+
+
+def build_market_batch_scope(markets: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...]) -> dict[str, Any]:
+    week_records = [
+        {
+            "period_week_index": int(row["period_week_index"]),
+            "period_raw": row.get("period_raw"),
+            "period_year_hint": row.get("period_year_hint"),
+        }
+        for row in markets
+        if row.get("period_week_index") is not None
+    ]
+    if not week_records:
+        return {
+            "batch_first_week_index": None,
+            "batch_last_week_index": None,
+            "batch_expected_week_count": 0,
+            "batch_weeks": [],
+        }
+
+    first_week = min(row["period_week_index"] for row in week_records)
+    last_week = max(row["period_week_index"] for row in week_records)
+    labels_by_week = {
+        row["period_week_index"]: str(row["period_raw"])
+        for row in week_records
+        if row.get("period_raw")
+    }
+    year_hints = [int(row["period_year_hint"]) for row in week_records if row.get("period_year_hint")]
+    default_year_hint = year_hints[0] if year_hints else None
+    return {
+        "batch_first_week_index": first_week,
+        "batch_last_week_index": last_week,
+        "batch_first_week": _week_label(first_week, labels_by_week, default_year_hint),
+        "batch_last_week": _week_label(last_week, labels_by_week, default_year_hint),
+        "batch_expected_week_count": last_week - first_week + 1,
+        "batch_weeks": [
+            _week_label(week_index, labels_by_week, default_year_hint)
+            for week_index in range(first_week, last_week + 1)
+        ],
+    }
+
+
+def build_preliminary_cleaning_summary(
+    clean_skus: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
+) -> dict[str, Any]:
+    market_summaries = []
+    comment_summaries = []
+    for sku in clean_skus:
+        coverage_json = _record_value(sku, "coverage_json") or {}
+        market = coverage_json.get("market") or {}
+        comment = coverage_json.get("comment") or {}
+        if market:
+            market_summaries.append(market.get("weekly_coverage") or {})
+        if comment:
+            comment_summaries.append(comment.get("preliminary_filter") or {})
+
+    market_summary = {
+        "sku_count": len(clean_skus),
+        "market_covered_sku_count": sum(1 for item in market_summaries if item.get("covered")),
+        "full_week_coverage_sku_count": sum(
+            1 for item in market_summaries if item.get("covered") and item.get("missing_week_count", 0) == 0
+        ),
+        "sku_with_leading_absence_count": sum(
+            1 for item in market_summaries if item.get("leading_absence_week_count", 0) > 0
+        ),
+        "sku_with_trailing_absence_count": sum(
+            1 for item in market_summaries if item.get("trailing_absence_week_count", 0) > 0
+        ),
+        "sku_with_internal_gap_count": sum(
+            1 for item in market_summaries if item.get("internal_gap_week_count", 0) > 0
+        ),
+        "sku_with_single_platform_week_count": sum(
+            1 for item in market_summaries if item.get("single_platform_week_count", 0) > 0
+        ),
+        "missing_sku_week_count": sum(int(item.get("missing_week_count") or 0) for item in market_summaries),
+        "leading_absence_sku_week_count": sum(
+            int(item.get("leading_absence_week_count") or 0) for item in market_summaries
+        ),
+        "trailing_absence_sku_week_count": sum(
+            int(item.get("trailing_absence_week_count") or 0) for item in market_summaries
+        ),
+        "internal_gap_sku_week_count": sum(int(item.get("internal_gap_week_count") or 0) for item in market_summaries),
+        "explanation_cn": [
+            "SKU+周只要任一平台有量价行，即视为该 SKU 该周有覆盖。",
+            "同一周单平台有数据正常，通常表示单平台销售或平台特供。",
+            "首周前缺失按新品/后入样本解释，末周后缺失按退市/离样本解释，不直接判为质量问题。",
+            "首末观察周之间的缺失才记为内部断档软提示，供下游趋势分析谨慎使用。",
+        ],
+    }
+
+    raw_comment_count = sum(int(item.get("raw_row_count") or 0) for item in comment_summaries)
+    low_value_count = sum(int(item.get("low_value_comment_count") or 0) for item in comment_summaries)
+    service_candidate_count = sum(int(item.get("service_candidate_count") or 0) for item in comment_summaries)
+    service_after_low_value_count = sum(
+        int(item.get("service_candidate_after_low_value_count") or 0) for item in comment_summaries
+    )
+    comment_summary = {
+        "sku_with_comment_count": sum(1 for item in comment_summaries if item.get("raw_row_count", 0) > 0),
+        "raw_comment_count": raw_comment_count,
+        "low_value_comment_count": low_value_count,
+        "low_value_comment_rate": _rate(low_value_count, raw_comment_count),
+        "candidate_after_low_value_count": sum(
+            int(item.get("candidate_after_low_value_count") or 0) for item in comment_summaries
+        ),
+        "duplicate_text_group_count": sum(
+            int(item.get("duplicate_text_group_count") or 0) for item in comment_summaries
+        ),
+        "duplicate_text_row_count": sum(int(item.get("duplicate_text_row_count") or 0) for item in comment_summaries),
+        "service_candidate_count": service_candidate_count,
+        "service_candidate_rate": _rate(service_candidate_count, raw_comment_count),
+        "service_candidate_after_low_value_count": service_after_low_value_count,
+        "service_candidate_after_low_value_rate": _rate(
+            service_after_low_value_count,
+            max(raw_comment_count - low_value_count, 0),
+        ),
+        "service_candidate_not_blocked": True,
+        "explanation_cn": [
+            "本阶段只快速过滤空、默认、明显低质评论。",
+            "服务类评论仅做候选计数，不提前拦截；后续根据占比再判断是否前置拦截。",
+        ],
+    }
+    return {
+        "market_coverage_summary": market_summary,
+        "comment_preliminary_summary": comment_summary,
+    }
+
+
+def _coverage_json(
+    domain_records: Mapping[str, list[Mapping[str, Any]]],
+    *,
+    market_scope: Mapping[str, Any] | None = None,
+    comment_dimensions: list[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     attributes = domain_records["attribute"]
     comments = domain_records["comment"]
+    markets = domain_records["market"]
     return {
         "market": {
-            "row_count": len(domain_records["market"]),
-            "covered": bool(domain_records["market"]),
+            "row_count": len(markets),
+            "covered": bool(markets),
+            "weekly_coverage": _market_weekly_coverage_json(markets, market_scope or {}),
         },
         "attribute": {
             "row_count": len(attributes),
@@ -696,7 +866,173 @@ def _coverage_json(domain_records: Mapping[str, list[Mapping[str, Any]]]) -> dic
             "row_count": len(comments),
             "covered": bool(comments),
             "distinct_comment_id_count": len({row.get("comment_id") for row in comments if row.get("comment_id")}),
+            "preliminary_filter": _comment_preliminary_filter_json(comments, comment_dimensions or []),
         },
+    }
+
+
+def _market_weekly_coverage_json(
+    markets: list[Mapping[str, Any]],
+    market_scope: Mapping[str, Any],
+) -> dict[str, Any]:
+    first_batch_week = market_scope.get("batch_first_week_index")
+    last_batch_week = market_scope.get("batch_last_week_index")
+    if first_batch_week is None or last_batch_week is None:
+        return {
+            "covered": False,
+            "batch_expected_week_count": 0,
+            "active_week_count": 0,
+            "missing_week_count": 0,
+            "single_platform_week_count": 0,
+            "business_interpretation_cn": [
+                "本批未形成可解析的周度量价范围，不能据此判断 SKU 是否缺周。",
+            ],
+        }
+
+    labels_by_week = _labels_by_week(markets, market_scope)
+    default_year_hint = _default_year_hint(markets)
+    expected_weeks = list(range(int(first_batch_week), int(last_batch_week) + 1))
+    by_week: dict[int, list[Mapping[str, Any]]] = {}
+    for row in markets:
+        if row.get("period_week_index") is None:
+            continue
+        by_week.setdefault(int(row["period_week_index"]), []).append(row)
+
+    observed_weeks = sorted(set(by_week))
+    if not observed_weeks:
+        missing_weeks = [_week_label(week, labels_by_week, default_year_hint) for week in expected_weeks]
+        return {
+            "covered": False,
+            "batch_first_week": market_scope.get("batch_first_week"),
+            "batch_last_week": market_scope.get("batch_last_week"),
+            "batch_expected_week_count": len(expected_weeks),
+            "active_week_count": 0,
+            "missing_week_count": len(missing_weeks),
+            "missing_weeks": missing_weeks,
+            "single_platform_week_count": 0,
+            "business_interpretation_cn": [
+                "本批未观察到该 SKU 的量价周度行，只能解释为本批市场数据未覆盖该 SKU。",
+            ],
+        }
+
+    first_seen = observed_weeks[0]
+    last_seen = observed_weeks[-1]
+    observed_set = set(observed_weeks)
+    leading_absence_weeks = [week for week in expected_weeks if week < first_seen and week not in observed_set]
+    trailing_absence_weeks = [week for week in expected_weeks if week > last_seen and week not in observed_set]
+    internal_gap_weeks = [
+        week for week in expected_weeks if first_seen < week < last_seen and week not in observed_set
+    ]
+    missing_weeks = leading_absence_weeks + internal_gap_weeks + trailing_absence_weeks
+    platform_counts_by_week = {
+        week: len(
+            {
+                str(row.get("platform_type") or row.get("platform_raw"))
+                for row in rows
+                if row.get("platform_type") or row.get("platform_raw")
+            }
+        )
+        for week, rows in by_week.items()
+    }
+    platform_distribution = Counter(str(count) for count in platform_counts_by_week.values())
+    return {
+        "covered": True,
+        "batch_first_week": market_scope.get("batch_first_week"),
+        "batch_last_week": market_scope.get("batch_last_week"),
+        "batch_expected_week_count": len(expected_weeks),
+        "first_seen_week": _week_label(first_seen, labels_by_week, default_year_hint),
+        "last_seen_week": _week_label(last_seen, labels_by_week, default_year_hint),
+        "active_week_count": len(observed_weeks),
+        "active_weeks": [_week_label(week, labels_by_week, default_year_hint) for week in observed_weeks],
+        "covered_week_rate": _rate(len(observed_weeks), len(expected_weeks)),
+        "missing_week_count": len(missing_weeks),
+        "missing_weeks": [_week_label(week, labels_by_week, default_year_hint) for week in missing_weeks],
+        "leading_absence_week_count": len(leading_absence_weeks),
+        "leading_absence_weeks": [
+            _week_label(week, labels_by_week, default_year_hint) for week in leading_absence_weeks
+        ],
+        "trailing_absence_week_count": len(trailing_absence_weeks),
+        "trailing_absence_weeks": [
+            _week_label(week, labels_by_week, default_year_hint) for week in trailing_absence_weeks
+        ],
+        "internal_gap_week_count": len(internal_gap_weeks),
+        "internal_gap_weeks": [_week_label(week, labels_by_week, default_year_hint) for week in internal_gap_weeks],
+        "single_platform_week_count": sum(1 for count in platform_counts_by_week.values() if count == 1),
+        "multi_platform_week_count": sum(1 for count in platform_counts_by_week.values() if count > 1),
+        "platform_count_distribution": dict(sorted(platform_distribution.items())),
+        "single_platform_is_normal": True,
+        "normal_missing_patterns": [
+            "leading_absence_as_new_or_late_entry",
+            "trailing_absence_as_delisted_or_out_of_sample",
+            "single_platform_week_as_single_channel_or_platform_special",
+        ],
+        "soft_warning_codes": ["market_internal_gap"] if internal_gap_weeks else [],
+        "business_interpretation_cn": [
+            "SKU+周只要任一平台有量价行，即视为该 SKU 该周有覆盖。",
+            "同一周单平台有数据正常，通常表示单平台销售或平台特供。",
+            "首周前缺失按新品/后入样本解释，末周后缺失按退市/离样本解释，不直接判为质量问题。",
+            "首末观察周之间缺失才作为内部断档软提示。",
+        ],
+    }
+
+
+def _comment_preliminary_filter_json(
+    comments: list[Mapping[str, Any]],
+    comment_dimensions: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    raw_row_count = len(comments)
+    low_value_count = sum(1 for row in comments if bool(row.get("low_value_flag")))
+    text_hash_counts = Counter(
+        str(row.get("comment_text_hash"))
+        for row in comments
+        if row.get("comment_text_hash") and not bool(row.get("low_value_flag"))
+    )
+    duplicate_text_group_count = sum(1 for count in text_hash_counts.values() if count > 1)
+    duplicate_text_row_count = sum(count for count in text_hash_counts.values() if count > 1)
+    dimension_text_by_source_row_id = {
+        str(row.get("source_row_id")): " ".join(
+            str(part)
+            for part in (
+                row.get("primary_dim_raw"),
+                row.get("secondary_dim_raw"),
+                row.get("third_dim_raw"),
+                row.get("dimension_path_raw"),
+            )
+            if part
+        )
+        for row in comment_dimensions
+        if row.get("source_row_id")
+    }
+    service_candidate_count = 0
+    service_after_low_value_count = 0
+    for row in comments:
+        source_row_id = str(row.get("source_row_id") or "")
+        dimension_text = dimension_text_by_source_row_id.get(source_row_id, "")
+        is_service_candidate = _is_service_comment_candidate(row.get("clean_comment_text"), dimension_text)
+        if is_service_candidate:
+            service_candidate_count += 1
+            if not bool(row.get("low_value_flag")):
+                service_after_low_value_count += 1
+
+    return {
+        "raw_row_count": raw_row_count,
+        "low_value_comment_count": low_value_count,
+        "low_value_comment_rate": _rate(low_value_count, raw_row_count),
+        "empty_or_default_comment_count": low_value_count,
+        "candidate_after_low_value_count": raw_row_count - low_value_count,
+        "distinct_comment_id_count": len({row.get("comment_id") for row in comments if row.get("comment_id")}),
+        "distinct_comment_text_hash_count": len(text_hash_counts),
+        "duplicate_text_group_count": duplicate_text_group_count,
+        "duplicate_text_row_count": duplicate_text_row_count,
+        "service_candidate_count": service_candidate_count,
+        "service_candidate_rate": _rate(service_candidate_count, raw_row_count),
+        "service_candidate_after_low_value_count": service_after_low_value_count,
+        "service_candidate_after_low_value_rate": _rate(
+            service_after_low_value_count,
+            max(raw_row_count - low_value_count, 0),
+        ),
+        "service_candidate_not_blocked": True,
+        "policy_cn": "本阶段仅过滤空/默认/低质评论；服务类只计数，不提前拦截。",
     }
 
 
@@ -750,6 +1086,51 @@ def _unique_non_empty(values: Any) -> list[str]:
         if string_value not in unique_values:
             unique_values.append(string_value)
     return unique_values
+
+
+def _labels_by_week(markets: list[Mapping[str, Any]], market_scope: Mapping[str, Any]) -> dict[int, str]:
+    labels: dict[int, str] = {}
+    batch_weeks = market_scope.get("batch_weeks") or []
+    first_week = market_scope.get("batch_first_week_index")
+    if first_week is not None:
+        for offset, label in enumerate(batch_weeks):
+            labels[int(first_week) + offset] = str(label)
+    for row in markets:
+        if row.get("period_week_index") is not None and row.get("period_raw"):
+            labels[int(row["period_week_index"])] = str(row["period_raw"])
+    return labels
+
+
+def _week_label(week_index: int, labels_by_week: Mapping[int, str], default_year_hint: int | None) -> str:
+    if labels_by_week.get(week_index):
+        return str(labels_by_week[week_index])
+    if default_year_hint is not None:
+        return f"{default_year_hint % 100:02d}W{week_index:02d}"
+    return f"W{week_index:02d}"
+
+
+def _default_year_hint(markets: list[Mapping[str, Any]]) -> int | None:
+    for row in markets:
+        if row.get("period_year_hint"):
+            return int(row["period_year_hint"])
+    return None
+
+
+def _rate(part: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round(part / total, 4)
+
+
+def _record_value(record: Any, field_name: str) -> Any:
+    if isinstance(record, Mapping):
+        return record.get(field_name)
+    return getattr(record, field_name, None)
+
+
+def _is_service_comment_candidate(comment_text: Any, dimension_text: Any = None) -> bool:
+    combined_text = f"{comment_text or ''} {dimension_text or ''}"
+    return any(term in combined_text for term in SERVICE_COMMENT_TERMS)
 
 
 def _quality_issue(

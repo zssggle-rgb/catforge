@@ -230,6 +230,8 @@ def test_m01_cleaning_api_runs_and_queries_cleaning_outputs():
     summary_payload = summary_response.json()
     assert summary_payload["clean_counts"]["sku"] == 1
     assert summary_payload["issue_counts"]["warning"] == 1
+    assert summary_payload["market_coverage_summary"]["sku_count"] == 1
+    assert summary_payload["comment_preliminary_summary"]["raw_comment_count"] == 1
     assert summary_payload["review_required"] is True
     assert "需要业务或数据复核" in summary_payload["quality_summary_cn"]
 

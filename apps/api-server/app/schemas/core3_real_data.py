@@ -746,6 +746,8 @@ class Core3CleanSummaryOut(Core3RealDataBaseModel):
     batch_id: str = Field(min_length=1)
     clean_counts: CleaningCounts = Field(default_factory=CleaningCounts)
     issue_counts: QualityIssueCounts = Field(default_factory=QualityIssueCounts)
+    market_coverage_summary: dict[str, Any] = Field(default_factory=dict)
+    comment_preliminary_summary: dict[str, Any] = Field(default_factory=dict)
     review_required: bool = False
     quality_summary_cn: str = Field(min_length=1)
 

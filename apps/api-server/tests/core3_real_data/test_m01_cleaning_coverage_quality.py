@@ -36,8 +36,26 @@ def base_payload(domain: str, source_table: str, source_pk: str, **overrides):
 
 def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_signal():
     markets = [
-        base_payload("market", "week_sales_data", "1", category_name_raw="彩电"),
-        base_payload("market", "week_sales_data", "2", category_name_raw="彩电"),
+        base_payload(
+            "market",
+            "week_sales_data",
+            "1",
+            category_name_raw="彩电",
+            period_raw="26W01",
+            period_year_hint=2026,
+            period_week_index=1,
+            platform_type="京东",
+        ),
+        base_payload(
+            "market",
+            "week_sales_data",
+            "2",
+            category_name_raw="彩电",
+            period_raw="26W03",
+            period_year_hint=2026,
+            period_week_index=3,
+            platform_type="京东",
+        ),
     ]
     attributes = [
         base_payload(
@@ -64,21 +82,39 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
             "20",
             comment_id="c-1",
             clean_comment_text="画质很好",
+            comment_text_hash="hash-picture",
+            low_value_flag=False,
         ),
         base_payload(
             "comment",
             "comment_data",
             "21",
             comment_id="c-2",
-            clean_comment_text="游戏低延迟",
+            clean_comment_text="物流很快，客服响应快",
+            comment_text_hash="hash-service",
+            low_value_flag=False,
         ),
         base_payload(
             "comment",
             "comment_data",
             "22",
-            comment_id="c-2",
-            clean_comment_text="重复 comment_id 也保留事实",
+            comment_id="c-3",
+            clean_comment_text="默认好评",
+            comment_text_hash="hash-low",
+            low_value_flag=True,
         ),
+    ]
+    comment_dimensions = [
+        base_payload(
+            "comment_dimension",
+            "comment_data",
+            "21",
+            source_row_id="comment_data:21",
+            primary_dim_raw="服务体验",
+            secondary_dim_raw="物流配送",
+            third_dim_raw=None,
+            dimension_path_raw="服务体验/物流配送",
+        )
     ]
 
     result = CleanSkuBuilder().build(
@@ -90,6 +126,7 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
         attributes=attributes,
         claims=[],
         comments=comments,
+        comment_dimensions=comment_dimensions,
     )
 
     assert len(result.skus) == 1
@@ -97,12 +134,28 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
     assert sku["sku_code"] == SKU_CODE
     assert sku["model_name"] == "85E7Q"
     assert sku["brand_name"] == "海信"
-    assert sku["coverage_json"] == {
-        "market": {"row_count": 2, "covered": True},
-        "attribute": {"row_count": 2, "covered": True, "unknown_count": 1},
-        "claim": {"row_count": 0, "covered": False},
-        "comment": {"row_count": 3, "covered": True, "distinct_comment_id_count": 2},
-    }
+    coverage = sku["coverage_json"]
+    assert coverage["market"]["row_count"] == 2
+    assert coverage["market"]["covered"] is True
+    weekly_coverage = coverage["market"]["weekly_coverage"]
+    assert weekly_coverage["batch_first_week"] == "26W01"
+    assert weekly_coverage["batch_last_week"] == "26W03"
+    assert weekly_coverage["batch_expected_week_count"] == 3
+    assert weekly_coverage["active_week_count"] == 2
+    assert weekly_coverage["internal_gap_weeks"] == ["26W02"]
+    assert weekly_coverage["single_platform_week_count"] == 2
+    assert weekly_coverage["single_platform_is_normal"] is True
+    assert weekly_coverage["soft_warning_codes"] == ["market_internal_gap"]
+    assert coverage["attribute"] == {"row_count": 2, "covered": True, "unknown_count": 1}
+    assert coverage["claim"] == {"row_count": 0, "covered": False}
+    assert coverage["comment"]["row_count"] == 3
+    assert coverage["comment"]["covered"] is True
+    assert coverage["comment"]["distinct_comment_id_count"] == 3
+    preliminary_filter = coverage["comment"]["preliminary_filter"]
+    assert preliminary_filter["low_value_comment_count"] == 1
+    assert preliminary_filter["candidate_after_low_value_count"] == 2
+    assert preliminary_filter["service_candidate_count"] == 1
+    assert preliminary_filter["service_candidate_not_blocked"] is True
     assert sku["missing_signals_json"]["claim_structured"] == {
         "missing": True,
         "reason": "本批 selling_points_data 未覆盖该 SKU",
@@ -120,7 +173,15 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
 def test_clean_sku_builder_detects_cross_table_brand_conflict_without_business_conclusion():
     markets = [base_payload("market", "week_sales_data", "1", brand_name="海信")]
     attributes = [base_payload("attribute", "attribute_data", "10", brand_name="Vidda", value_presence="present")]
-    claims = [base_payload("claim", "selling_points_data", "30", brand_name="海信", clean_claim_text="游戏低延迟")]
+    claims = [
+        base_payload(
+            "claim",
+            "selling_points_data",
+            "30",
+            brand_name="海信",
+            clean_claim_text="游戏低延迟",
+        )
+    ]
 
     sku = CleanSkuBuilder().build(
         project_id=PROJECT_ID,
@@ -237,6 +298,39 @@ def test_quality_issue_builder_detects_duplicate_comments_and_dimension_missing(
     assert issues[0]["suggested_downstream_action"] == "M05/M06 不得把缺失维度解释为无对应主题"
     assert issues[1]["issue_payload_json"] == {"comment_text_hash": "same-hash", "duplicate_count": 2}
     assert all("task_code" not in issue for issue in issues)
+
+
+def test_quality_issue_builder_keeps_low_value_comments_out_of_row_issue_volume():
+    comment_a = base_payload(
+        "comment",
+        "comment_data",
+        "20",
+        comment_id="c-20",
+        clean_comment_text="默认好评",
+        comment_text_hash="same-low-hash",
+        low_value_flag=True,
+        quality_status="warning",
+        quality_flags=["low_value_comment"],
+    )
+    comment_b = base_payload(
+        "comment",
+        "comment_data",
+        "21",
+        comment_id="c-21",
+        clean_comment_text="默认好评",
+        comment_text_hash="same-low-hash",
+        low_value_flag=True,
+        quality_status="warning",
+        quality_flags=["low_value_comment"],
+    )
+
+    issues = QualityIssueBuilder().build(
+        project_id=PROJECT_ID,
+        batch_id=BATCH_ID,
+        comments=[comment_a, comment_b],
+    ).issues
+
+    assert issues == []
 
 
 def test_quality_issue_builder_dedupes_same_quality_issue_key():

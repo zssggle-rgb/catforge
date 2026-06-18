@@ -305,6 +305,11 @@ def test_cleaning_quality_runner_consumes_m00_scope_and_writes_clean_outputs():
     assert result.summary_json["clean_counts"]["comment_dimension"] == 1
     assert result.summary_json["clean_counts"]["quality_issue"] == 2
     assert result.summary_json["issue_counts"]["by_type"] == {"missing_required_field": 2}
+    assert result.summary_json["market_coverage_summary"]["full_week_coverage_sku_count"] == 1
+    assert result.summary_json["market_coverage_summary"]["sku_with_single_platform_week_count"] == 1
+    assert result.summary_json["comment_preliminary_summary"]["raw_comment_count"] == 1
+    assert result.summary_json["comment_preliminary_summary"]["low_value_comment_count"] == 0
+    assert result.summary_json["comment_preliminary_summary"]["service_candidate_not_blocked"] is True
     assert result.summary_json["review_required"] is True
     assert result.downstream_impacts[0]["module_code"] == "M02"
 
@@ -312,6 +317,7 @@ def test_cleaning_quality_runner_consumes_m00_scope_and_writes_clean_outputs():
     assert [attribute.source_row_id for attribute in attributes] == ["attribute_data:2"]
     clean_sku = session.execute(select(entities.Core3CleanSku)).scalar_one()
     assert clean_sku.coverage_json["claim"]["covered"] is True
+    assert clean_sku.coverage_json["market"]["weekly_coverage"]["single_platform_is_normal"] is True
     assert clean_sku.missing_signals_json == {}
 
 

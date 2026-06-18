@@ -565,12 +565,15 @@ def get_cleaning_summary(
     batch = _get_batch_or_404(db, project_id, batch_id)
     query = CleaningQueryRepository(_repository_context(db, project_id, batch.category_code))
     summary = query.get_clean_summary(batch_id)
+    preliminary_summary = summary.get("preliminary_summary") or {}
     return Core3CleanSummaryOut(
         project_id=project_id,
         category_code=batch.category_code,
         batch_id=batch_id,
         clean_counts=summary["clean_counts"],
         issue_counts=summary["issue_counts"],
+        market_coverage_summary=preliminary_summary.get("market_coverage_summary", {}),
+        comment_preliminary_summary=preliminary_summary.get("comment_preliminary_summary", {}),
         review_required=summary["review_required"],
         quality_summary_cn=_quality_summary_cn(summary["issue_counts"], summary["review_required"]),
     )
