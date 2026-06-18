@@ -3,6 +3,9 @@
   "name": "catforge-data",
   "version": "0.1.0",
   "description": "CatForge data preparation and preliminary quality inspection commands.",
+  "author": {
+    "name": "CatForge"
+  },
   "skills": [
     "./"
   ]
