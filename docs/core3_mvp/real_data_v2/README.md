@@ -22,6 +22,7 @@ v2 的核心修正：
 8. [SKU 画像反推、任务客群战场与竞品推导](05_sku_profile_reverse_inference.md)
 9. [用户任务独立模块详细设计](05a_user_task_module_design.md)
 10. [页面、API、任务编排与实施验收](06_ui_api_execution_plan.md)
+11. [彩电真实数据结果链路解释](07_result_chain_explainer_tv_example.md)
 
 ## 与旧设计的关系
 
