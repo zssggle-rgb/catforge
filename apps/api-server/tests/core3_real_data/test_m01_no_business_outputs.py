@@ -242,17 +242,16 @@ def test_m01_fixture_acceptance_keeps_cleaning_boundary_for_85e7q():
     assert run_payload["summary_json"]["clean_counts"] == {
         "sku": 1,
         "market": 2,
-        "attribute": 6,
-        "claim": 0,
-        "claim_sentence": 0,
-        "comment": 4,
-        "comment_sentence": 8,
-        "comment_dimension": 4,
-        "quality_issue": 7,
-    }
+            "attribute": 6,
+            "claim": 0,
+            "claim_sentence": 0,
+            "comment": 4,
+            "comment_sentence": 4,
+            "comment_dimension": 4,
+            "quality_issue": 5,
+        }
     assert run_payload["summary_json"]["issue_counts"]["by_type"] == {
         "claim_coverage_missing": 1,
-        "duplicate_comment_text": 2,
         "unknown_value": 4,
     }
     assert_no_business_fields(run_payload)
@@ -261,18 +260,20 @@ def test_m01_fixture_acceptance_keeps_cleaning_boundary_for_85e7q():
         f"/api/mvp/core3/v2/projects/core3_mvp/batches/{batch_id}/cleaning/skus",
         params={"sku_code": CORE3_TARGET_SKU_85E7Q},
     ).json()["items"][0]
-    assert sku_payload["coverage"]["market"] == {"row_count": 2, "covered": True}
+    assert sku_payload["coverage"]["market"]["row_count"] == 2
+    assert sku_payload["coverage"]["market"]["covered"] is True
+    assert sku_payload["coverage"]["market"]["weekly_coverage"]["single_platform_is_normal"] is True
     assert sku_payload["coverage"]["attribute"] == {
         "row_count": 6,
         "covered": True,
         "unknown_count": 4,
     }
     assert sku_payload["coverage"]["claim"] == {"row_count": 0, "covered": False}
-    assert sku_payload["coverage"]["comment"] == {
-        "row_count": 4,
-        "covered": True,
-        "distinct_comment_id_count": 3,
-    }
+    assert sku_payload["coverage"]["comment"]["row_count"] == 4
+    assert sku_payload["coverage"]["comment"]["covered"] is True
+    assert sku_payload["coverage"]["comment"]["distinct_comment_id_count"] == 3
+    assert sku_payload["coverage"]["comment"]["preliminary_filter"]["low_value_comment_count"] == 2
+    assert sku_payload["coverage"]["comment"]["preliminary_filter"]["service_candidate_not_blocked"] is False
     missing_claim = sku_payload["coverage"]["missing_signals"]["claim_structured"]
     assert missing_claim == {
         "missing": True,
@@ -303,7 +304,7 @@ def test_m01_fixture_acceptance_keeps_cleaning_boundary_for_85e7q():
         "dash",
         "null",
     }
-    assert duplicate_issues["total"] == 2
+    assert duplicate_issues["total"] == 0
     assert_no_business_fields(claim_issue)
     assert_no_business_fields(unknown_issues)
     assert_no_business_fields(duplicate_issues)

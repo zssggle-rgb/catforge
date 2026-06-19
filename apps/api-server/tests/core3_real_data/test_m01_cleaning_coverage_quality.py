@@ -92,7 +92,8 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
             comment_id="c-2",
             clean_comment_text="物流很快，客服响应快",
             comment_text_hash="hash-service",
-            low_value_flag=False,
+            low_value_flag=True,
+            low_value_reason="服务履约评价",
         ),
         base_payload(
             "comment",
@@ -152,10 +153,11 @@ def test_clean_sku_builder_aggregates_four_domain_coverage_and_missing_claim_sig
     assert coverage["comment"]["covered"] is True
     assert coverage["comment"]["distinct_comment_id_count"] == 3
     preliminary_filter = coverage["comment"]["preliminary_filter"]
-    assert preliminary_filter["low_value_comment_count"] == 1
-    assert preliminary_filter["candidate_after_low_value_count"] == 2
+    assert preliminary_filter["low_value_comment_count"] == 2
+    assert preliminary_filter["candidate_after_low_value_count"] == 1
     assert preliminary_filter["service_candidate_count"] == 1
-    assert preliminary_filter["service_candidate_not_blocked"] is True
+    assert preliminary_filter["service_candidate_after_low_value_count"] == 0
+    assert preliminary_filter["service_candidate_not_blocked"] is False
     assert sku["missing_signals_json"]["claim_structured"] == {
         "missing": True,
         "reason": "本批 selling_points_data 未覆盖该 SKU",

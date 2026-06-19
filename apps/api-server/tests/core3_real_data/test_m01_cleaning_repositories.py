@@ -190,12 +190,21 @@ def test_m01_source_readers_consume_m00_scope_without_direct_raw_scan():
     context = make_context(session)
 
     batch = SourceBatchReader(context).get_consumable_batch(BATCH_ID)
-    rows = SourceRowRegistryReader(context).list_processable_rows(BATCH_ID)
-    rows_with_no_change = SourceRowRegistryReader(context).list_processable_rows(BATCH_ID, include_no_change=True)
+    reader = SourceRowRegistryReader(context)
+    rows = reader.list_processable_rows(BATCH_ID)
+    rows_with_no_change = reader.list_processable_rows(BATCH_ID, include_no_change=True)
+    chunked_rows = [
+        row
+        for chunk in reader.iter_processable_row_chunks(BATCH_ID, chunk_size=2)
+        for row in chunk
+    ]
     impacted = SourceImpactedSkuReader(context).list_impacted_skus(BATCH_ID, needs_recompute=True)
 
     assert batch.batch_id == BATCH_ID
+    assert reader.count_processable_rows(BATCH_ID) == 4
+    assert reader.count_processable_rows(BATCH_ID, include_no_change=True) == 5
     assert [row.operation_type for row in rows] == ["insert", "update", "not_seen_in_current_scan", "skipped"]
+    assert {row.row_registry_id for row in chunked_rows} == {row.row_registry_id for row in rows}
     assert [row.operation_type for row in rows_with_no_change] == [
         "insert",
         "update",

@@ -261,6 +261,34 @@ def test_comment_cleaner_marks_default_comment_low_value_but_keeps_fact():
     assert "battlefield_code" not in payload
 
 
+def test_comment_cleaner_blocks_service_fulfillment_comment_as_low_value():
+    result = CommentCleaner().clean(
+        {
+            "id": 42,
+            "model_code": "TV00029115",
+            "brand": "海信",
+            "model": "85E7Q",
+            "comment_id": "c-42",
+            "comment_content": "物流很快，客服回复也很及时",
+            "comments_segments": "物流很快；客服回复及时",
+            "sentiment": "正面",
+            "primary_dim": "服务体验",
+            "secondary_dim": "物流配送",
+            "third_dim": "",
+        },
+        source_context("comment_data", "42"),
+    )
+
+    payload = result.comment
+    assert payload["low_value_flag"] is True
+    assert payload["low_value_reason"] == "服务履约评价"
+    assert "low_value_comment" in payload["quality_flags"]
+    assert payload["_service_candidate"] is True
+    assert result.sentences == []
+    assert result.dimension is not None
+    assert result.dimension["dimension_path_raw"] == "服务体验/物流配送"
+
+
 def test_common_context_versions_are_applied_to_all_domain_payloads():
     result = MarketCleaner().clean(
         {

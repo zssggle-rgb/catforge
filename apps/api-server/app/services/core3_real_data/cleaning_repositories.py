@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import func, select
 
@@ -90,23 +90,128 @@ class SourceRowRegistryReader(Core3BaseRepository):
         source_tables: Sequence[str] | None = None,
         sku_codes: Sequence[str] | None = None,
     ) -> list[Core3SourceRowRegistry]:
+        stmt = self._processable_rows_stmt(
+            batch_id,
+            include_no_change=include_no_change,
+            operation_types=operation_types,
+            source_tables=source_tables,
+            sku_codes=sku_codes,
+        ).order_by(Core3SourceRowRegistry.source_table, Core3SourceRowRegistry.source_pk)
+        return list(self.db.execute(stmt).scalars())
+
+    def count_processable_rows(
+        self,
+        batch_id: str,
+        *,
+        include_no_change: bool = False,
+        operation_types: Sequence[Core3SourceOperationType | str] | None = None,
+        source_tables: Sequence[str] | None = None,
+        sku_codes: Sequence[str] | None = None,
+    ) -> int:
+        stmt = self._processable_count_stmt(
+            batch_id,
+            include_no_change=include_no_change,
+            operation_types=operation_types,
+            source_tables=source_tables,
+            sku_codes=sku_codes,
+        )
+        return int(self.db.execute(stmt).scalar_one())
+
+    def iter_processable_row_chunks(
+        self,
+        batch_id: str,
+        *,
+        chunk_size: int,
+        include_no_change: bool = False,
+        operation_types: Sequence[Core3SourceOperationType | str] | None = None,
+        source_tables: Sequence[str] | None = None,
+        sku_codes: Sequence[str] | None = None,
+    ) -> Iterable[list[Core3SourceRowRegistry]]:
+        normalized_chunk_size = max(int(chunk_size), 1)
+        last_row_registry_id: str | None = None
+        while True:
+            stmt = self._processable_rows_stmt(
+                batch_id,
+                include_no_change=include_no_change,
+                operation_types=operation_types,
+                source_tables=source_tables,
+                sku_codes=sku_codes,
+            )
+            if last_row_registry_id is not None:
+                stmt = stmt.where(Core3SourceRowRegistry.row_registry_id > last_row_registry_id)
+            stmt = stmt.order_by(Core3SourceRowRegistry.row_registry_id).limit(normalized_chunk_size)
+            rows = list(self.db.execute(stmt).scalars())
+            if not rows:
+                break
+            next_last_row_registry_id = rows[-1].row_registry_id
+            yield rows
+            last_row_registry_id = next_last_row_registry_id
+            if len(rows) < normalized_chunk_size:
+                break
+
+    def _processable_rows_stmt(
+        self,
+        batch_id: str,
+        *,
+        include_no_change: bool,
+        operation_types: Sequence[Core3SourceOperationType | str] | None,
+        source_tables: Sequence[str] | None,
+        sku_codes: Sequence[str] | None,
+    ):
+        stmt = select(Core3SourceRowRegistry)
+        return self._apply_processable_filters(
+            stmt,
+            batch_id,
+            include_no_change=include_no_change,
+            operation_types=operation_types,
+            source_tables=source_tables,
+            sku_codes=sku_codes,
+        )
+
+    def _processable_count_stmt(
+        self,
+        batch_id: str,
+        *,
+        include_no_change: bool,
+        operation_types: Sequence[Core3SourceOperationType | str] | None,
+        source_tables: Sequence[str] | None,
+        sku_codes: Sequence[str] | None,
+    ):
+        stmt = select(func.count()).select_from(Core3SourceRowRegistry)
+        return self._apply_processable_filters(
+            stmt,
+            batch_id,
+            include_no_change=include_no_change,
+            operation_types=operation_types,
+            source_tables=source_tables,
+            sku_codes=sku_codes,
+        )
+
+    def _apply_processable_filters(
+        self,
+        stmt: Any,
+        batch_id: str,
+        *,
+        include_no_change: bool,
+        operation_types: Sequence[Core3SourceOperationType | str] | None,
+        source_tables: Sequence[str] | None,
+        sku_codes: Sequence[str] | None,
+    ) -> Any:
         normalized_operations = _operation_values(operation_types)
         if include_no_change and operation_types is None:
             normalized_operations = (*normalized_operations, Core3SourceOperationType.NO_CHANGE.value)
 
         stmt = (
-            select(Core3SourceRowRegistry)
-            .where(Core3SourceRowRegistry.project_id == self.project_id)
+            stmt.where(Core3SourceRowRegistry.project_id == self.project_id)
             .where(Core3SourceRowRegistry.category_code == self.category_code.value)
             .where(Core3SourceRowRegistry.batch_id == batch_id)
             .where(Core3SourceRowRegistry.operation_type.in_(normalized_operations))
-            .order_by(Core3SourceRowRegistry.source_table, Core3SourceRowRegistry.source_pk)
         )
         if source_tables:
             stmt = stmt.where(Core3SourceRowRegistry.source_table.in_(tuple(source_tables)))
         if sku_codes:
             stmt = stmt.where(Core3SourceRowRegistry.sku_code_candidate.in_(tuple(sku_codes)))
-        return list(self.db.execute(stmt).scalars())
+        return stmt
 
 
 class SourceImpactedSkuReader(Core3BaseRepository):
@@ -132,7 +237,7 @@ class _CleanFactRepository(Core3BaseRepository):
     model_cls: Any
     unique_fields: tuple[str, ...]
 
-    def _save_clean_fact(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def _save_clean_fact(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         normalized_payload = self._model_payload(self.model_cls, self._with_project_defaults(payload))
         lookup = {field: normalized_payload.get(field) for field in self.unique_fields}
         existing = self._find_by_lookup(self.model_cls, lookup)
@@ -140,12 +245,13 @@ class _CleanFactRepository(Core3BaseRepository):
             existing_hash = getattr(existing, "clean_hash", None)
             incoming_hash = normalized_payload.get("clean_hash")
             if existing_hash != incoming_hash:
-                self._update_existing(existing, normalized_payload)
+                self._update_existing(existing, normalized_payload, flush=flush)
             return CleanWriteResult(record=existing, created=False)
 
         record = self.model_cls(**_jsonable(normalized_payload))
         self.db.add(record)
-        self.db.flush()
+        if flush:
+            self.db.flush()
         return CleanWriteResult(record=record, created=True)
 
     def _with_project_defaults(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -164,24 +270,26 @@ class _CleanFactRepository(Core3BaseRepository):
         for field, value in lookup.items():
             column = getattr(model_cls, field)
             stmt = stmt.where(column.is_(None) if value is None else column == value)
-        return self.db.execute(stmt).scalars().first()
+        with self.db.no_autoflush:
+            return self.db.execute(stmt).scalars().first()
 
-    def _update_existing(self, existing: Any, payload: Mapping[str, Any]) -> None:
+    def _update_existing(self, existing: Any, payload: Mapping[str, Any], *, flush: bool = True) -> None:
         jsonable_payload = _jsonable(payload)
         for column in existing.__table__.columns:
             if column.primary_key or column.name == "created_at":
                 continue
             if column.name in jsonable_payload:
                 setattr(existing, column.name, jsonable_payload[column.name])
-        self.db.flush()
+        if flush:
+            self.db.flush()
 
 
 class CleanSkuRepository(_CleanFactRepository):
     model_cls = Core3CleanSku
     unique_fields = ("batch_id", "sku_code")
 
-    def save_sku(self, payload: Mapping[str, Any]) -> CleanWriteResult:
-        return self._save_clean_fact(payload)
+    def save_sku(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
+        return self._save_clean_fact(payload, flush=flush)
 
     def list_clean_skus(
         self,
@@ -216,62 +324,63 @@ class CleanMarketRepository(_CleanFactRepository):
     model_cls = Core3CleanMarketWeekly
     unique_fields = ("batch_id", "source_row_id")
 
-    def save_market(self, payload: Mapping[str, Any]) -> CleanWriteResult:
-        return self._save_clean_fact(payload)
+    def save_market(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
+        return self._save_clean_fact(payload, flush=flush)
 
 
 class CleanAttributeRepository(_CleanFactRepository):
     model_cls = Core3CleanAttribute
     unique_fields = ("batch_id", "source_row_id")
 
-    def save_attribute(self, payload: Mapping[str, Any]) -> CleanWriteResult:
-        return self._save_clean_fact(payload)
+    def save_attribute(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
+        return self._save_clean_fact(payload, flush=flush)
 
 
 class CleanClaimRepository(_CleanFactRepository):
-    def save_claim(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_claim(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         self.model_cls = Core3CleanClaim
         self.unique_fields = ("batch_id", "source_row_id")
-        return self._save_clean_fact(payload)
+        return self._save_clean_fact(payload, flush=flush)
 
-    def save_claim_sentence(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_claim_sentence(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         self.model_cls = Core3CleanClaimSentence
         self.unique_fields = ("batch_id", "source_row_id", "sentence_seq")
-        return self._save_clean_fact(payload)
+        return self._save_clean_fact(payload, flush=flush)
 
 
 class CleanCommentRepository(_CleanFactRepository):
-    def save_comment(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_comment(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         self.model_cls = Core3CleanComment
         self.unique_fields = ("batch_id", "source_row_id")
-        return self._save_clean_fact(payload)
+        return self._save_clean_fact(payload, flush=flush)
 
-    def save_comment_sentence(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_comment_sentence(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         self.model_cls = Core3CleanCommentSentence
         self.unique_fields = ("batch_id", "source_row_id", "sentence_source", "sentence_seq")
-        return self._save_clean_fact(payload)
+        return self._save_clean_fact(payload, flush=flush)
 
-    def save_comment_dimension(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_comment_dimension(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         self.model_cls = Core3CleanCommentDimension
         self.unique_fields = ("batch_id", "source_row_id")
-        return self._save_clean_fact(payload)
+        return self._save_clean_fact(payload, flush=flush)
 
 
 class DataQualityIssueRepository(_CleanFactRepository):
     model_cls = Core3DataQualityIssue
     unique_fields = ("batch_id", "domain", "issue_type", "source_row_id", "clean_record_key", "sku_code")
 
-    def save_issue(self, payload: Mapping[str, Any]) -> CleanWriteResult:
+    def save_issue(self, payload: Mapping[str, Any], *, flush: bool = True) -> CleanWriteResult:
         normalized_payload = self._model_payload(Core3DataQualityIssue, self._with_project_defaults(payload))
         lookup = {field: normalized_payload.get(field) for field in self.unique_fields}
         existing = self._find_by_lookup(Core3DataQualityIssue, lookup)
         if existing is not None:
-            self._update_existing(existing, normalized_payload)
+            self._update_existing(existing, normalized_payload, flush=flush)
             return CleanWriteResult(record=existing, created=False)
 
         issue = Core3DataQualityIssue(**_jsonable(normalized_payload))
         self.db.add(issue)
-        self.db.flush()
+        if flush:
+            self.db.flush()
         return CleanWriteResult(record=issue, created=True)
 
     def list_quality_issues(

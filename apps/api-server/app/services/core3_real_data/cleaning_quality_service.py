@@ -245,8 +245,25 @@ class CommentCleaner:
         segment_raw = _field(row, "comments_segments")
         segment_clean = _clean_text(segment_raw)
         sentiment_clean = _clean_sentiment(_field(row, "sentiment"))
-        low_value = is_low_value_comment(clean_comment_text)
         dimension_payload = self._dimension(row, context)
+        dimension_text = " ".join(
+            str(part)
+            for part in (
+                dimension_payload.get("primary_dim_raw"),
+                dimension_payload.get("secondary_dim_raw"),
+                dimension_payload.get("third_dim_raw"),
+                dimension_payload.get("dimension_path_raw"),
+            )
+            if part
+        )
+        text_low_value = is_low_value_comment(clean_comment_text)
+        service_candidate = _is_service_comment_candidate(clean_comment_text, dimension_text)
+        low_value = text_low_value or service_candidate
+        low_value_reasons = []
+        if text_low_value:
+            low_value_reasons.append("默认或空评价")
+        if service_candidate:
+            low_value_reasons.append("服务履约评价")
         quality_flags = []
         if text_presence != Core3ValuePresenceStatus.PRESENT:
             quality_flags.append(Core3QualityIssueType.UNKNOWN_VALUE.value)
@@ -279,7 +296,7 @@ class CommentCleaner:
             "sentiment_raw": _string_or_none(_field(row, "sentiment")),
             "sentiment_clean": sentiment_clean,
             "low_value_flag": low_value,
-            "low_value_reason": "默认或空评价" if low_value else None,
+            "low_value_reason": "；".join(low_value_reasons) if low_value_reasons else None,
             "duplicate_group_key": stable_hash(clean_comment_text, version=CORE3_M01_CLEAN_HASH_VERSION)
             if clean_comment_text
             else None,
@@ -289,6 +306,7 @@ class CommentCleaner:
             "quality_flags": quality_flags,
         }
         payload["clean_hash"] = CleanHashService.clean_hash("comment", payload)
+        payload["_service_candidate"] = service_candidate
 
         sentences = []
         if not low_value:
@@ -363,6 +381,7 @@ class CleanSkuBuilder:
         claims: list[Mapping[str, Any]] | None = None,
         comments: list[Mapping[str, Any]] | None = None,
         comment_dimensions: list[Mapping[str, Any]] | None = None,
+        comment_summaries: Mapping[str, Mapping[str, Any]] | None = None,
         market_scope: Mapping[str, Any] | None = None,
         category_code: Core3CategoryCode | str = Core3CategoryCode.TV,
         run_id: str | None = None,
@@ -377,6 +396,11 @@ class CleanSkuBuilder:
             "comment": list(comments or []),
         }
         comment_dimension_records = list(comment_dimensions or [])
+        comment_summaries_by_sku = {
+            str(sku_code): dict(summary)
+            for sku_code, summary in (comment_summaries or {}).items()
+            if sku_code
+        }
         market_scope_json = dict(market_scope or build_market_batch_scope(records_by_domain["market"]))
         sku_codes = sorted(
             {
@@ -385,6 +409,7 @@ class CleanSkuBuilder:
                 for record in records
                 if record.get("sku_code")
             }
+            | set(comment_summaries_by_sku)
         )
 
         sku_payloads: list[dict[str, Any]] = []
@@ -408,6 +433,7 @@ class CleanSkuBuilder:
                 domain_records,
                 market_scope=market_scope_json,
                 comment_dimensions=sku_comment_dimensions,
+                comment_summary=comment_summaries_by_sku.get(sku_code),
             )
             field_conflicts_json = _field_conflicts_json(domain_records)
             missing_signals_json = _missing_signals_json(coverage_json)
@@ -490,6 +516,7 @@ class QualityIssueBuilder:
         category_code: Core3CategoryCode | str = Core3CategoryCode.TV,
         run_id: str | None = None,
         module_run_id: str | None = None,
+        include_comment_row_issues: bool = True,
     ) -> QualityIssueBuildResult:
         issues: list[dict[str, Any]] = []
         common = {
@@ -559,25 +586,26 @@ class QualityIssueBuilder:
                     clean_table="core3_clean_claim",
                 )
             )
-        for comment in comments or []:
-            issues.extend(
-                self._issues_from_quality_flags(
-                    common,
-                    comment,
-                    domain="comment",
-                    clean_table="core3_clean_comment",
+        if include_comment_row_issues:
+            for comment in comments or []:
+                issues.extend(
+                    self._issues_from_quality_flags(
+                        common,
+                        comment,
+                        domain="comment",
+                        clean_table="core3_clean_comment",
+                    )
                 )
-            )
-        for dimension in comment_dimensions or []:
-            issues.extend(
-                self._issues_from_quality_flags(
-                    common,
-                    dimension,
-                    domain="comment",
-                    clean_table="core3_clean_comment_dimension",
+            for dimension in comment_dimensions or []:
+                issues.extend(
+                    self._issues_from_quality_flags(
+                        common,
+                        dimension,
+                        domain="comment",
+                        clean_table="core3_clean_comment_dimension",
+                    )
                 )
-            )
-        issues.extend(self._duplicate_comment_issues(common, comments or []))
+            issues.extend(self._duplicate_comment_issues(common, comments or []))
 
         return QualityIssueBuildResult(issues=_dedupe_issues(issues))
 
@@ -826,10 +854,10 @@ def build_preliminary_cleaning_summary(
             service_after_low_value_count,
             max(raw_comment_count - low_value_count, 0),
         ),
-        "service_candidate_not_blocked": True,
+        "service_candidate_not_blocked": False,
         "explanation_cn": [
-            "本阶段只快速过滤空、默认、明显低质评论。",
-            "服务类评论仅做候选计数，不提前拦截；后续根据占比再判断是否前置拦截。",
+            "本阶段快速过滤空、默认、明显低质评论。",
+            "客服、物流、安装、售后等服务履约评价在 M01 并入低价值评论，只保留质量统计，不进入后续产品分析。",
         ],
     }
     return {
@@ -843,10 +871,16 @@ def _coverage_json(
     *,
     market_scope: Mapping[str, Any] | None = None,
     comment_dimensions: list[Mapping[str, Any]] | None = None,
+    comment_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     attributes = domain_records["attribute"]
     comments = domain_records["comment"]
     markets = domain_records["market"]
+    comment_coverage = _comment_coverage_json(
+        comments,
+        comment_dimensions or [],
+        comment_summary=comment_summary,
+    )
     return {
         "market": {
             "row_count": len(markets),
@@ -862,12 +896,29 @@ def _coverage_json(
             "row_count": len(domain_records["claim"]),
             "covered": bool(domain_records["claim"]),
         },
-        "comment": {
-            "row_count": len(comments),
-            "covered": bool(comments),
-            "distinct_comment_id_count": len({row.get("comment_id") for row in comments if row.get("comment_id")}),
-            "preliminary_filter": _comment_preliminary_filter_json(comments, comment_dimensions or []),
-        },
+        "comment": comment_coverage,
+    }
+
+
+def _comment_coverage_json(
+    comments: list[Mapping[str, Any]],
+    comment_dimensions: list[Mapping[str, Any]],
+    *,
+    comment_summary: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    if comment_summary is not None:
+        raw_row_count = int(comment_summary.get("row_count") or 0)
+        return {
+            "row_count": raw_row_count,
+            "covered": bool(comment_summary.get("covered", raw_row_count > 0)),
+            "distinct_comment_id_count": int(comment_summary.get("distinct_comment_id_count") or 0),
+            "preliminary_filter": dict(comment_summary.get("preliminary_filter") or {}),
+        }
+    return {
+        "row_count": len(comments),
+        "covered": bool(comments),
+        "distinct_comment_id_count": len({row.get("comment_id") for row in comments if row.get("comment_id")}),
+        "preliminary_filter": _comment_preliminary_filter_json(comments, comment_dimensions),
     }
 
 
@@ -1008,7 +1059,10 @@ def _comment_preliminary_filter_json(
     for row in comments:
         source_row_id = str(row.get("source_row_id") or "")
         dimension_text = dimension_text_by_source_row_id.get(source_row_id, "")
-        is_service_candidate = _is_service_comment_candidate(row.get("clean_comment_text"), dimension_text)
+        is_service_candidate = bool(row.get("_service_candidate")) or _is_service_comment_candidate(
+            row.get("clean_comment_text"),
+            dimension_text,
+        )
         if is_service_candidate:
             service_candidate_count += 1
             if not bool(row.get("low_value_flag")):
@@ -1031,8 +1085,8 @@ def _comment_preliminary_filter_json(
             service_after_low_value_count,
             max(raw_row_count - low_value_count, 0),
         ),
-        "service_candidate_not_blocked": True,
-        "policy_cn": "本阶段仅过滤空/默认/低质评论；服务类只计数，不提前拦截。",
+        "service_candidate_not_blocked": False,
+        "policy_cn": "本阶段过滤空/默认/低质评论；客服、物流、安装、售后等服务履约评价并入低价值评论，不进入后续产品分析。",
     }
 
 

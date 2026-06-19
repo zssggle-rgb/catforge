@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 from uuid import uuid4
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import bindparam, inspect, select, text
 
 from app.models.entities import Core3SourceBatch, Core3SourceImpactedSku, Core3SourceRowRegistry
 from app.schemas.core3_real_data import Core3SourceBatchRegisterRequest
@@ -275,6 +275,29 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
         self.raw_source_guard.ensure_read_only_sql(sql)
         row = self.db.execute(text(sql), {"source_pk": source_pk}).mappings().first()
         return dict(row) if row else None
+
+    def get_rows_by_source_refs(
+        self,
+        source_table: str,
+        source_pks: Sequence[str],
+    ) -> dict[str, dict[str, Any]]:
+        config = self._config(source_table)
+        normalized_source_pks = _normalized_source_pk_values(source_pks)
+        if not normalized_source_pks:
+            return {}
+
+        sql = (
+            f"SELECT * FROM {_quote_identifier(config.source_table)} "
+            f"WHERE {_quote_identifier(config.source_pk_column)} IN :source_pks"
+        )
+        self.raw_source_guard.ensure_read_only_sql(sql)
+        stmt = text(sql).bindparams(bindparam("source_pks", expanding=True))
+        rows = self.db.execute(stmt, {"source_pks": normalized_source_pks}).mappings()
+        return {
+            str(row.get(config.source_pk_column)): dict(row)
+            for row in rows
+            if row.get(config.source_pk_column) is not None
+        }
 
     def _config(self, source_table: str) -> SourceTableConfig:
         table_name = self.ensure_source_table_name(source_table)
@@ -679,6 +702,16 @@ def _string_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _normalized_source_pk_values(source_pks: Sequence[str]) -> tuple[Any, ...]:
+    unique_values = tuple(dict.fromkeys(str(value) for value in source_pks if value not in (None, "")))
+    if not unique_values:
+        return ()
+    try:
+        return tuple(int(value) for value in unique_values)
+    except ValueError:
+        return unique_values
 
 
 def _new_m00_batch_id(started_at: datetime) -> str:
