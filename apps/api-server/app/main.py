@@ -1,6 +1,8 @@
+import logging
+from time import perf_counter
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
@@ -22,6 +24,9 @@ from app.core.config import get_settings
 from app.core.database import init_db
 
 
+logger = logging.getLogger("catforge.api")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -34,6 +39,32 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def log_slow_requests(request: Request, call_next):
+        started_at = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            elapsed = perf_counter() - started_at
+            logger.exception(
+                "request failed method=%s path=%s duration=%.3fs",
+                request.method,
+                request.url.path,
+                elapsed,
+            )
+            raise
+        elapsed = perf_counter() - started_at
+        if elapsed >= settings.slow_request_seconds:
+            logger.warning(
+                "slow request method=%s path=%s status=%s duration=%.3fs",
+                request.method,
+                request.url.path,
+                response.status_code,
+                elapsed,
+            )
+        return response
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

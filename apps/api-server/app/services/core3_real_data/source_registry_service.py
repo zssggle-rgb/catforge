@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from sqlalchemy.orm import Session
 
+from app.models.entities import Core3SourceBatch
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema, Core3SourceBatchRegisterRequest
 from app.services.core3_real_data.constants import (
     CORE3_M00_ROW_HASH_VERSION,
@@ -117,7 +118,7 @@ SOURCE_TABLE_IMPACT_REASON_CN: dict[str, str] = {
     "comment_data": "该型号本批次存在评论数据新增或变化，建议更新评论证据、评论信号和后续画像。",
 }
 
-M00_INCREMENTAL_OVERLAP_WINDOW = timedelta(days=1)
+M00_DEFAULT_ROW_CHUNK_SIZE = 5_000
 
 
 @dataclass(frozen=True)
@@ -451,9 +452,11 @@ class SourceRegistryRunner:
         self,
         db: Session,
         row_analyzer: SourceRowAnalyzer | None = None,
+        row_chunk_size: int = M00_DEFAULT_ROW_CHUNK_SIZE,
     ) -> None:
         self.db = db
         self.row_analyzer = row_analyzer or SourceRowAnalyzer()
+        self.row_chunk_size = max(int(row_chunk_size), 1)
 
     def run(self, context: Core3RunContext, target: Core3ModuleTarget) -> Core3ModuleRunResultSchema:
         request = Core3SourceBatchRegisterRequest(
@@ -500,6 +503,7 @@ class SourceRegistryRunner:
 
         scan_started_at = datetime.now(timezone.utc)
         batch = batch_repository.create_running_batch(batch_request, scan_started_at=scan_started_at)
+        batch_id = batch.batch_id
         schema_snapshot_json: dict[str, Any] = {}
         input_watermark_json: dict[str, Any] = {}
         row_counts_json: dict[str, dict[str, int]] = {}
@@ -513,13 +517,15 @@ class SourceRegistryRunner:
         total_changed_input_count = 0
         total_output_count = 0
         review_required = False
+        total_chunk_count = 0
 
         try:
+            self.db.commit()
             for source_table in batch_request.source_tables:
                 snapshot = raw_repository.inspect_table(source_table)
                 watermark = raw_repository.get_table_watermark(source_table)
                 previous_state = _previous_table_state(previous_success_batch, source_table)
-                scan_plan = _build_scan_plan(
+                scan_plans = _build_scan_plans(
                     source_table=source_table,
                     batch_type=effective_batch_type,
                     previous_state=previous_state,
@@ -536,17 +542,15 @@ class SourceRegistryRunner:
                     "current_max_id": watermark.max_source_pk,
                     "current_min_write_time": _datetime_to_iso(watermark.min_write_time),
                     "current_max_write_time": _datetime_to_iso(watermark.max_write_time),
-                    "candidate_rule": _candidate_rule(scan_plan, previous_state),
+                    "candidate_rule": _candidate_rule(scan_plans, previous_state),
+                    "scan_plan_count": len(scan_plans),
+                    "row_chunk_size": self.row_chunk_size,
                     "fallback_reason": (
                         "no_previous_success_batch"
                         if requested_batch_type == Core3SourceBatchType.INCREMENTAL and previous_success_batch is None
                         else None
                     ),
-                    "overlap_window_hours": (
-                        int(M00_INCREMENTAL_OVERLAP_WINDOW.total_seconds() // 3600)
-                        if scan_plan.batch_type == Core3SourceBatchType.INCREMENTAL
-                        else None
-                    ),
+                    "overlap_window_hours": None,
                 }
                 write_time_range_json[source_table] = {
                     "min_write_time": _datetime_to_iso(watermark.min_write_time),
@@ -564,68 +568,96 @@ class SourceRegistryRunner:
                 if _write_time_watermark_regressed(watermark.max_write_time, previous_state):
                     quality_counter["write_time_watermark_regressed"] += 1
 
-                for raw_row in raw_repository.iter_rows(source_table, scan_plan):
-                    total_input_count += 1
-                    previous_row = None
-                    source_pk_value = raw_row.get("id")
-                    if previous_success_batch is not None and source_pk_value not in (None, ""):
-                        previous_row = row_repository.find_latest_by_source(
-                            source_table=source_table,
-                            source_pk=str(source_pk_value),
-                            hash_version=request.hash_version,
-                        )
-                    analysis = self.row_analyzer.analyze(
+                table_chunk_count = 0
+                for scan_plan in scan_plans:
+                    should_lookup_previous = _scan_plan_requires_previous_lookup(
+                        scan_plan,
+                        previous_state=previous_state,
+                        previous_success_batch=previous_success_batch,
+                    )
+                    for raw_rows in raw_repository.iter_row_chunks(
                         source_table,
-                        raw_row,
-                        previous_row=_previous_source_row(previous_row),
-                        hash_version=request.hash_version,
-                    )
-                    row_repository.create_row_registry(
-                        batch_id=batch.batch_id,
-                        source_table=analysis.source_table,
-                        source_pk=analysis.source_pk,
-                        source_pk_strategy="id_column",
-                        source_row_id=analysis.source_row_id,
-                        row_hash=analysis.row_hash,
-                        hash_version=request.hash_version,
-                        previous_row=previous_row,
-                        sku_code_candidate=_string_or_none(raw_row.get("model_code")),
-                        model_name_raw=_string_or_none(raw_row.get("model")),
-                        brand_raw=_string_or_none(raw_row.get("brand")),
-                        category_raw=_string_or_none(raw_row.get("category")),
-                        write_time=raw_row.get("write_time"),
-                        business_key_json=analysis.business_key_json,
-                        source_field_presence_json=analysis.source_field_presence_json,
-                        operation_type=analysis.operation_type.value,
-                        change_reason=analysis.change_reason,
-                        affected_modules=analysis.affected_modules,
-                        quality_hint=analysis.quality_hint,
-                        review_required=analysis.review_required,
-                        review_status=analysis.review_status.value,
-                    )
-                    table_counts["scanned"] += 1
-                    table_counts["registered"] += 1
-                    table_counts[analysis.operation_type.value] += 1
-                    if analysis.operation_type in (
-                        Core3SourceOperationType.INSERT,
-                        Core3SourceOperationType.UPDATE,
-                        Core3SourceOperationType.NOT_SEEN_IN_CURRENT_SCAN,
+                        scan_plan,
+                        chunk_size=self.row_chunk_size,
                     ):
-                        total_changed_input_count += 1
-                        _accumulate_impacted_sku(impacted_skus, raw_row, analysis)
-                    if analysis.operation_type != Core3SourceOperationType.SKIPPED:
-                        total_output_count += 1
-                    for quality_code in analysis.quality_hint.get("codes", []):
-                        quality_counter[quality_code] += 1
-                    if analysis.review_required:
-                        review_required = True
-                    _accumulate_affected_module_summary(
-                        affected_module_summary,
-                        source_table,
-                        analysis.affected_modules,
-                    )
+                        previous_rows_by_source: dict[str, Any] = {}
+                        if should_lookup_previous:
+                            previous_rows_by_source = row_repository.find_latest_by_sources(
+                                source_table=source_table,
+                                source_pks=[
+                                    str(raw_row.get("id"))
+                                    for raw_row in raw_rows
+                                    if raw_row.get("id") not in (None, "")
+                                ],
+                                hash_version=request.hash_version,
+                            )
+
+                        for raw_row in raw_rows:
+                            total_input_count += 1
+                            source_pk_value = raw_row.get("id")
+                            previous_row = (
+                                previous_rows_by_source.get(str(source_pk_value))
+                                if source_pk_value not in (None, "")
+                                else None
+                            )
+                            analysis = self.row_analyzer.analyze(
+                                source_table,
+                                raw_row,
+                                previous_row=_previous_source_row(previous_row),
+                                hash_version=request.hash_version,
+                            )
+                            row_repository.create_row_registry(
+                                batch_id=batch_id,
+                                source_table=analysis.source_table,
+                                source_pk=analysis.source_pk,
+                                source_pk_strategy="id_column",
+                                source_row_id=analysis.source_row_id,
+                                row_hash=analysis.row_hash,
+                                hash_version=request.hash_version,
+                                previous_row=previous_row,
+                                sku_code_candidate=_string_or_none(raw_row.get("model_code")),
+                                model_name_raw=_string_or_none(raw_row.get("model")),
+                                brand_raw=_string_or_none(raw_row.get("brand")),
+                                category_raw=_string_or_none(raw_row.get("category")),
+                                write_time=raw_row.get("write_time"),
+                                business_key_json=analysis.business_key_json,
+                                source_field_presence_json=analysis.source_field_presence_json,
+                                operation_type=analysis.operation_type.value,
+                                change_reason=analysis.change_reason,
+                                affected_modules=analysis.affected_modules,
+                                quality_hint=analysis.quality_hint,
+                                review_required=analysis.review_required,
+                                review_status=analysis.review_status.value,
+                            )
+                            table_counts["scanned"] += 1
+                            table_counts["registered"] += 1
+                            table_counts[analysis.operation_type.value] += 1
+                            if analysis.operation_type in (
+                                Core3SourceOperationType.INSERT,
+                                Core3SourceOperationType.UPDATE,
+                                Core3SourceOperationType.NOT_SEEN_IN_CURRENT_SCAN,
+                            ):
+                                total_changed_input_count += 1
+                                _accumulate_impacted_sku(impacted_skus, raw_row, analysis)
+                            if analysis.operation_type != Core3SourceOperationType.SKIPPED:
+                                total_output_count += 1
+                            for quality_code in analysis.quality_hint.get("codes", []):
+                                quality_counter[quality_code] += 1
+                            if analysis.review_required:
+                                review_required = True
+                            _accumulate_affected_module_summary(
+                                affected_module_summary,
+                                source_table,
+                                analysis.affected_modules,
+                            )
+
+                        table_chunk_count += 1
+                        total_chunk_count += 1
+                        self.db.flush()
+                        self.db.commit()
 
                 row_counts_json[source_table] = _row_count_payload(table_counts)
+                input_watermark_json[source_table]["processed_chunk_count"] = table_chunk_count
 
             for quality_code in _cross_table_quality_codes(source_table_watermarks):
                 quality_counter[quality_code] += 1
@@ -655,12 +687,17 @@ class SourceRegistryRunner:
                 review_required=review_required,
                 review_reason={"codes": sorted(quality_counter)} if review_required else None,
             )
+            self.db.commit()
         except Exception as exc:
-            batch_repository.mark_failed(
-                batch,
-                error_code="m00_source_registration_failed",
-                error_message=str(exc),
-            )
+            self.db.rollback()
+            failed_batch = self.db.get(Core3SourceBatch, batch_id)
+            if failed_batch is not None:
+                batch_repository.mark_failed(
+                    failed_batch,
+                    error_code="m00_source_registration_failed",
+                    error_message=str(exc),
+                )
+                self.db.commit()
             raise
 
         summary_json = {
@@ -674,6 +711,8 @@ class SourceRegistryRunner:
             "quality_summary": batch.quality_summary_json,
             "impacted_sku_count": batch.impacted_sku_count,
             "impacted_sku_aggregation_deferred": False,
+            "processed_chunk_count": total_chunk_count,
+            "row_chunk_size": self.row_chunk_size,
         }
         return Core3ModuleRunResultSchema(
             module_code=Core3ModuleCode.M00,
@@ -730,41 +769,91 @@ def _previous_table_state(previous_batch: Any | None, source_table: str) -> dict
     }
 
 
-def _build_scan_plan(
+def _build_scan_plans(
     *,
     source_table: str,
     batch_type: Core3SourceBatchType,
     previous_state: Mapping[str, Any],
-) -> SourceScanPlan:
+) -> tuple[SourceScanPlan, ...]:
     if batch_type == Core3SourceBatchType.FULL:
-        return SourceScanPlan(source_table=source_table, batch_type=Core3SourceBatchType.FULL)
+        return (SourceScanPlan(source_table=source_table, batch_type=Core3SourceBatchType.FULL),)
 
     previous_max_write_time = _parse_datetime(previous_state.get("previous_max_write_time"))
-    min_write_time = (
-        previous_max_write_time - M00_INCREMENTAL_OVERLAP_WINDOW if previous_max_write_time else None
-    )
     min_source_pk_exclusive = _string_or_none(previous_state.get("previous_max_id"))
-    return SourceScanPlan(
-        source_table=source_table,
-        batch_type=Core3SourceBatchType.INCREMENTAL,
-        min_source_pk_exclusive=min_source_pk_exclusive,
-        min_write_time_exclusive=min_write_time,
-        combine_filters_with_or=bool(min_source_pk_exclusive and min_write_time),
-    )
+    plans: list[SourceScanPlan] = []
+    if min_source_pk_exclusive:
+        plans.append(
+            SourceScanPlan(
+                source_table=source_table,
+                batch_type=Core3SourceBatchType.INCREMENTAL,
+                min_source_pk_exclusive=min_source_pk_exclusive,
+            )
+        )
+    if previous_max_write_time:
+        plans.append(
+            SourceScanPlan(
+                source_table=source_table,
+                batch_type=Core3SourceBatchType.INCREMENTAL,
+                max_source_pk=min_source_pk_exclusive,
+                min_write_time_exclusive=previous_max_write_time,
+            )
+        )
+    if plans:
+        return tuple(plans)
+    return (SourceScanPlan(source_table=source_table, batch_type=Core3SourceBatchType.INCREMENTAL),)
 
 
-def _candidate_rule(scan_plan: SourceScanPlan, previous_state: Mapping[str, Any]) -> str:
+def _candidate_rule(scan_plans: tuple[SourceScanPlan, ...], previous_state: Mapping[str, Any]) -> str:
+    scan_plan = scan_plans[0] if scan_plans else SourceScanPlan(source_table="", batch_type=Core3SourceBatchType.FULL)
     if scan_plan.batch_type == Core3SourceBatchType.FULL:
         if previous_state.get("previous_max_id") is None and previous_state.get("previous_max_write_time") is None:
             return "full_table_scan"
         return "explicit_full_table_scan"
-    if scan_plan.min_source_pk_exclusive and scan_plan.min_write_time_exclusive:
-        return "incremental_id_or_write_time_overlap"
+    if _has_incremental_new_id_plan(scan_plans) and _has_incremental_existing_write_time_plan(scan_plans):
+        return "incremental_id_watermark_and_existing_write_time"
     if scan_plan.min_source_pk_exclusive:
         return "incremental_id_watermark"
     if scan_plan.min_write_time_exclusive:
-        return "incremental_write_time_overlap"
+        return "incremental_write_time_watermark"
     return "incremental_no_watermark_full_scan"
+
+
+def _has_incremental_new_id_plan(scan_plans: tuple[SourceScanPlan, ...]) -> bool:
+    return any(
+        scan_plan.batch_type == Core3SourceBatchType.INCREMENTAL
+        and scan_plan.min_source_pk_exclusive
+        and scan_plan.max_source_pk is None
+        and scan_plan.min_write_time_exclusive is None
+        for scan_plan in scan_plans
+    )
+
+
+def _has_incremental_existing_write_time_plan(scan_plans: tuple[SourceScanPlan, ...]) -> bool:
+    return any(
+        scan_plan.batch_type == Core3SourceBatchType.INCREMENTAL
+        and scan_plan.max_source_pk is not None
+        and scan_plan.min_write_time_exclusive is not None
+        for scan_plan in scan_plans
+    )
+
+
+def _scan_plan_requires_previous_lookup(
+    scan_plan: SourceScanPlan,
+    *,
+    previous_state: Mapping[str, Any],
+    previous_success_batch: Any | None,
+) -> bool:
+    if previous_success_batch is None:
+        return False
+    previous_max_id = _string_or_none(previous_state.get("previous_max_id"))
+    if (
+        previous_max_id
+        and scan_plan.min_source_pk_exclusive == previous_max_id
+        and scan_plan.max_source_pk is None
+        and scan_plan.min_write_time_exclusive is None
+    ):
+        return False
+    return True
 
 
 def _table_schema_quality_codes(snapshot: Any, previous_state: Mapping[str, Any]) -> list[str]:

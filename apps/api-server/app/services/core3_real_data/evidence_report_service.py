@@ -553,7 +553,7 @@ class EvidenceReportService:
         candidate_pool_summary = _candidate_pool_summary(run, target.audits)
         review_questions = _review_questions(run, cards, target.selection_issues, data_quality_note)
         sop_trace = _sop_trace(target, cards)
-        short_evidence_map = [_evidence_ref_payload(ref) for ref in evidence_map.values()]
+        short_evidence_map = _referenced_evidence_ref_payloads(evidence_map, cards)
         export_payload = {
             "标题": f"{target_display} 核心三竞品报告",
             "结论": executive,
@@ -1003,6 +1003,23 @@ def _short_refs(evidence_ids: Iterable[str], evidence_map: Mapping[str, _Evidenc
             }
         )
     return refs
+
+
+def _referenced_evidence_ref_payloads(
+    evidence_map: Mapping[str, _EvidenceRef],
+    cards: Sequence[M15EvidenceCardRecord],
+) -> list[dict[str, Any]]:
+    referenced_short_refs = {
+        str(item.get("short_ref"))
+        for card in cards
+        for item in card.short_evidence_refs_json
+        if isinstance(item, dict) and item.get("short_ref")
+    }
+    return [
+        _evidence_ref_payload(ref)
+        for ref in evidence_map.values()
+        if ref.short_ref in referenced_short_refs
+    ]
 
 
 def _evidence_ref_payload(ref: _EvidenceRef) -> dict[str, Any]:

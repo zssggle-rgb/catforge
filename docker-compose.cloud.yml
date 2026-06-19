@@ -16,6 +16,8 @@ services:
       context: .
       dockerfile: apps/api-server/Dockerfile
     restart: unless-stopped
+    mem_limit: ${CATFORGE_API_MEM_LIMIT:-3g}
+    memswap_limit: ${CATFORGE_API_MEMSWAP_LIMIT:-3g}
     env_file:
       - ${CATFORGE_CONTAINER_ENV_FILE:-.env}
     environment:
@@ -24,6 +26,7 @@ services:
       CATFORGE_UPLOAD_DIR: ${CATFORGE_UPLOAD_DIR:-/data/uploads}
       CATFORGE_EXPORT_DIR: ${CATFORGE_EXPORT_DIR:-/data/exports}
       CATFORGE_SYNC_JOBS: ${CATFORGE_SYNC_JOBS:-true}
+      CATFORGE_SLOW_REQUEST_SECONDS: ${CATFORGE_SLOW_REQUEST_SECONDS:-2.0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

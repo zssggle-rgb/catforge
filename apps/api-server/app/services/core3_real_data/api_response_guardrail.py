@@ -97,12 +97,12 @@ class ApiResponseGuardrail:
                 self._walk(item, path=f"{path}[{index}]")
             return
         if isinstance(value, str):
-            if UUID_PATTERN.search(value) or HASH_PATTERN.search(value):
-                raise ApiResponseGuardrailError(f"业务响应包含内部标识：{path}")
-            upper_value = value.upper()
             key_name = path.rsplit(".", 1)[-1].lower()
             if key_name in SAFE_CODE_VALUE_KEYS:
                 return
+            if UUID_PATTERN.search(value) or HASH_PATTERN.search(value):
+                raise ApiResponseGuardrailError(f"业务响应包含内部标识：{path}")
+            upper_value = value.upper()
             if any(term in value for term in FORBIDDEN_TEXT_FRAGMENTS) or any(
                 term in upper_value for term in {"SELECT ", " FROM ", " JOIN "}
             ):
