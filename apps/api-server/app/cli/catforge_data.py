@@ -78,8 +78,12 @@ def _build_parser() -> argparse.ArgumentParser:
     prepare.add_argument(
         "--register-source-batch",
         choices=("none", "incremental", "full"),
-        default="none",
-        help="Create a new M00 source batch before cleaning. Use incremental for newly uploaded raw data.",
+        default="incremental",
+        help=(
+            "Create a source batch before cleaning. Defaults to incremental so new-data "
+            "preprocessing runs source registration and preliminary cleaning together. "
+            "Use none with --batch-id to clean an existing batch."
+        ),
     )
     prepare.add_argument(
         "--source-tables",
@@ -119,6 +123,28 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
     with SessionLocal() as db:
         batch_id = args.batch_id
         source_registration: dict[str, Any] | None = None
+        if args.dry_run and args.register_source_batch != "none":
+            return {
+                "command": "prepare-new-data",
+                "status": "dry_run",
+                "source_registration": {
+                    "will_register_source_batch": True,
+                    "batch_type": args.register_source_batch,
+                    "source_tables": _parse_csv(args.source_tables),
+                },
+                "plan": {
+                    "batch_id": None,
+                    "sku_count": None,
+                    "chunk_count": None,
+                    "sku_batch_size": args.sku_batch_size,
+                    "source_registration_mode": args.register_source_batch,
+                    "include_no_change": bool(args.include_no_change),
+                    "will_run_modules": ["M00", "M01"],
+                    "will_not_run_modules": ["M02", "M05"],
+                },
+                "message_cn": "这是数据预处理执行计划，尚未登记源批次，也未写入清洗结果。",
+            }
+
         if args.register_source_batch != "none":
             source_registration = _register_source_batch(db, args)
             batch_id = str(source_registration["batch_id"])
@@ -149,8 +175,9 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "sku_count": len(target_skus),
             "chunk_count": len(chunks),
             "sku_batch_size": args.sku_batch_size,
+            "source_registration_mode": args.register_source_batch,
             "include_no_change": bool(args.include_no_change),
-            "will_run_modules": ["M01"],
+            "will_run_modules": ["M00", "M01"] if args.register_source_batch != "none" else ["M01"],
             "will_not_run_modules": ["M02", "M05"],
         }
         if args.dry_run:
@@ -159,7 +186,7 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
                 "status": "dry_run",
                 "source_registration": source_registration,
                 "plan": plan,
-                "message_cn": "这是执行计划，尚未写入 M01 清洗结果。",
+                "message_cn": "这是数据预处理执行计划，尚未写入清洗结果。",
             }
 
         execution_label = args.run_id or _new_cli_run_id("m01")
@@ -197,6 +224,12 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
         elif last_result and last_result["status"] == "warning":
             status = "warning"
 
+        message_cn = (
+            "已完成数据预处理：已执行源数据登记和初步清洗过滤，未进入证据或评论语义分析阶段。"
+            if args.register_source_batch != "none"
+            else "已完成已有批次初步清洗过滤，未进入证据或评论语义分析阶段。"
+        )
+
         return {
             "command": "prepare-new-data",
             "status": status,
@@ -206,7 +239,7 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "plan": plan,
             "processed_chunks": chunk_results,
             "m01_summary": last_result["summary_json"] if last_result else {},
-            "message_cn": "已完成初步清洗：只运行源登记和 M01 预处理，未进入 M02/M05。",
+            "message_cn": message_cn,
         }
 
 

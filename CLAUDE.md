@@ -26,7 +26,7 @@ Useful commands:
 ```bash
 docker compose -f docker-compose.cloud.yml ps
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --batch-id latest --format json
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --register-source-batch incremental --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --sku-batch-size 50 --format json
 ```
 
 ## Business Command Routing
@@ -35,10 +35,10 @@ Use the `catforge-data` skill when the user asks to preprocess new uploaded data
 
 For "先初步处理一下" or "初步清洗":
 
-1. Register a new source batch only if needed.
+1. Register a new incremental source batch by default.
 2. Run preliminary cleaning by SKU chunks.
 3. Do not run downstream evidence/comment semantic stages unless the user asks for full processing.
-4. Report batch id, processed SKU count, clean row counts, weekly market coverage, low-value comment count/rate, service-candidate count/rate, and review-required issues.
+4. Report batch id, processed SKU count, clean row counts, weekly market coverage, low-value comment count/rate, service-fulfillment blocked count/rate, and review-required issues.
 
 Do not require business users to know internal module names. Internal module codes may be mentioned only when explaining implementation details.
 
@@ -51,7 +51,7 @@ Do not require business users to know internal module names. Internal module cod
 - Only gaps between the first and last observed week are internal-gap soft warnings.
 - TV attributes can have missing values; do not overstate attribute missingness as a blocker.
 - Empty/default/obvious low-value comments should be filtered quickly.
-- Service-related comments should be counted first, not blocked before the user decides from measured volume.
+- Service-fulfillment comments such as customer service, logistics, installation, after-sales, refund, and repair should be marked as low-value in M01, kept for quality statistics, and blocked from downstream product/comment sentence analysis.
 
 ## Engineering Rules
 
