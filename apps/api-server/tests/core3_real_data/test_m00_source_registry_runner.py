@@ -166,6 +166,25 @@ def seed_quality_warning_row(session: Session) -> None:
     session.flush()
 
 
+def seed_comment_rows(session: Session, *, row_count: int) -> None:
+    for row_id in range(1, row_count + 1):
+        session.execute(
+            text(
+                """
+                INSERT INTO comment_data (
+                    id, model_code, category, brand, model, comment_id, comment_content,
+                    comments_segments, primary_dim, secondary_dim, third_dim, sentiment, write_time
+                ) VALUES (
+                    :row_id, 'TV00029115', '彩电', '海信', '85E7Q', :comment_id, '画质很好',
+                    '画质很好', '画质', '清晰度', NULL, '正向', '2026-06-11 12:00:00'
+                )
+                """
+            ),
+            {"row_id": row_id, "comment_id": f"c{row_id}"},
+        )
+    session.flush()
+
+
 def test_source_registry_runner_full_registers_batch_and_rows():
     session = make_session()
     seed_valid_rows(session)
@@ -282,6 +301,33 @@ def test_source_registry_runner_marks_quality_warning_batch_for_review():
     assert row.source_field_presence_json["write_time"] == "null"
 
 
+def test_source_registry_runner_full_scan_commits_in_chunks_and_records_progress():
+    session = make_session()
+    seed_comment_rows(session, row_count=5)
+
+    result = SourceRegistryRunner(session, row_chunk_size=2).register_batch(
+        Core3SourceBatchRegisterRequest(
+            project_id="core3_mvp",
+            source_tables=["comment_data"],
+        )
+    )
+
+    assert result.status == "success"
+    assert result.input_count == 5
+    assert result.output_count == 5
+    assert result.summary_json["processed_chunk_count"] == 3
+    assert result.summary_json["row_chunk_size"] == 2
+
+    batch = session.execute(
+        select(entities.Core3SourceBatch).where(
+            entities.Core3SourceBatch.batch_id == result.summary_json["batch_id"]
+        )
+    ).scalar_one()
+    assert batch.input_watermark_json["comment_data"]["processed_chunk_count"] == 3
+    assert batch.input_watermark_json["comment_data"]["row_chunk_size"] == 2
+    assert batch.row_counts_json["comment_data"]["insert"] == 5
+
+
 def test_source_registry_runner_incremental_without_history_falls_back_to_full():
     session = make_session()
     seed_valid_rows(session)
@@ -363,7 +409,7 @@ def test_source_registry_runner_incremental_uses_previous_watermark_and_writes_i
     watermark = batch.input_watermark_json["week_sales_data"]
     assert watermark["previous_success_batch_id"] == first.summary_json["batch_id"]
     assert watermark["previous_max_id"] == "1"
-    assert watermark["candidate_rule"] == "incremental_id_or_write_time_overlap"
+    assert watermark["candidate_rule"] == "incremental_id_watermark_and_existing_write_time"
     assert batch.row_counts_json["week_sales_data"]["update"] == 1
     assert batch.row_counts_json["week_sales_data"]["insert"] == 1
     assert batch.row_counts_json["week_sales_data"]["no_change"] == 0
@@ -378,7 +424,7 @@ def test_source_registry_runner_incremental_uses_previous_watermark_and_writes_i
     assert impacted_sku.operation_summary_json["by_source_table"]["week_sales_data"]["insert"] == 1
 
 
-def test_source_registry_runner_incremental_overlap_no_change_does_not_create_impacted_sku():
+def test_source_registry_runner_incremental_without_candidates_does_not_create_impacted_sku():
     session = make_session()
     seed_valid_rows(session)
     SourceRegistryRunner(session).register_batch(
@@ -397,7 +443,7 @@ def test_source_registry_runner_incremental_overlap_no_change_does_not_create_im
     )
 
     assert result.status == "success"
-    assert result.input_count == 1
+    assert result.input_count == 0
     assert result.changed_input_count == 0
     assert result.summary_json["impacted_sku_count"] == 0
 
@@ -406,7 +452,8 @@ def test_source_registry_runner_incremental_overlap_no_change_does_not_create_im
             entities.Core3SourceBatch.batch_id == result.summary_json["batch_id"]
         )
     ).scalar_one()
-    assert batch.row_counts_json["week_sales_data"]["no_change"] == 1
+    assert batch.row_counts_json["week_sales_data"]["registered"] == 0
+    assert batch.row_counts_json["week_sales_data"]["no_change"] == 0
     impacted_sku_count = session.execute(
         select(func.count()).select_from(entities.Core3SourceImpactedSku).where(
             entities.Core3SourceImpactedSku.batch_id == result.summary_json["batch_id"]

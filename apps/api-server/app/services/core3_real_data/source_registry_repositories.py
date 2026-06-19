@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 from uuid import uuid4
@@ -233,6 +233,39 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
         for row in result.mappings():
             yield dict(row)
 
+    def iter_row_chunks(
+        self,
+        source_table: str,
+        scan_plan: SourceScanPlan,
+        *,
+        chunk_size: int,
+    ) -> Iterable[list[dict[str, Any]]]:
+        config = self._config(source_table)
+        normalized_chunk_size = max(int(chunk_size), 1)
+        remaining = scan_plan.limit
+        next_min_source_pk_exclusive = scan_plan.min_source_pk_exclusive
+
+        while remaining is None or remaining > 0:
+            current_limit = normalized_chunk_size if remaining is None else min(normalized_chunk_size, remaining)
+            current_plan = replace(
+                scan_plan,
+                min_source_pk_exclusive=next_min_source_pk_exclusive,
+                limit=current_limit,
+                offset=0,
+            )
+            rows = list(self.iter_rows(source_table, current_plan))
+            if not rows:
+                break
+
+            yield rows
+
+            if remaining is not None:
+                remaining -= len(rows)
+            last_source_pk = rows[-1].get(config.source_pk_column)
+            if last_source_pk in (None, "") or len(rows) < current_limit:
+                break
+            next_min_source_pk_exclusive = str(last_source_pk)
+
     def get_row_by_source_ref(self, source_table: str, source_pk: str) -> dict[str, Any] | None:
         config = self._config(source_table)
         sql = (
@@ -419,6 +452,44 @@ class SourceRowRegistryRepository(Core3BaseRepository):
             .limit(1)
         )
         return self.db.execute(stmt).scalars().first()
+
+    def find_latest_by_sources(
+        self,
+        *,
+        source_table: str,
+        source_pks: Sequence[str],
+        hash_version: str,
+    ) -> dict[str, Core3SourceRowRegistry]:
+        table_name = RawSourceRepository.ensure_source_table_name(source_table)
+        normalized_source_pks = tuple(
+            dict.fromkeys(str(source_pk) for source_pk in source_pks if source_pk not in (None, ""))
+        )
+        if not normalized_source_pks:
+            return {}
+
+        stmt = (
+            select(Core3SourceRowRegistry)
+            .join(Core3SourceBatch, Core3SourceBatch.batch_id == Core3SourceRowRegistry.batch_id)
+            .where(Core3SourceRowRegistry.project_id == self.project_id)
+            .where(Core3SourceRowRegistry.category_code == self.category_code.value)
+            .where(Core3SourceRowRegistry.source_table == table_name)
+            .where(Core3SourceRowRegistry.source_pk.in_(normalized_source_pks))
+            .where(Core3SourceRowRegistry.hash_version == hash_version)
+            .where(
+                Core3SourceBatch.status.in_(
+                    [
+                        Core3SourceBatchStatus.REGISTERED.value,
+                        Core3SourceBatchStatus.REGISTERED_WITH_WARNING.value,
+                    ]
+                )
+            )
+            .order_by(Core3SourceRowRegistry.source_pk.asc(), Core3SourceRowRegistry.created_at.desc())
+        )
+        latest_by_source: dict[str, Core3SourceRowRegistry] = {}
+        for row in self.db.execute(stmt).scalars():
+            if row.source_pk is not None and row.source_pk not in latest_by_source:
+                latest_by_source[row.source_pk] = row
+        return latest_by_source
 
     def create_row_registry(
         self,
