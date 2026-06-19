@@ -162,18 +162,18 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
                 "message_cn": "这是执行计划，尚未写入 M01 清洗结果。",
             }
 
-        run_id = args.run_id or _new_cli_run_id("m01")
+        execution_label = args.run_id or _new_cli_run_id("m01")
+        run_id = args.run_id
         chunk_results: list[dict[str, Any]] = []
         last_result: dict[str, Any] | None = None
         runner = CleaningQualityRunner(db)
         for index, chunk in enumerate(chunks, start=1):
-            module_run_id = args.module_run_id or f"{run_id}-chunk-{index:04d}"
             result = runner.run_batch(
                 project_id=args.project_id,
                 category_code=args.category_code,
                 batch_id=batch_id,
                 run_id=run_id,
-                module_run_id=module_run_id,
+                module_run_id=args.module_run_id,
                 include_no_change=bool(args.include_no_change),
                 target_sku_codes=tuple(chunk),
             )
@@ -201,6 +201,7 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "command": "prepare-new-data",
             "status": status,
             "batch_id": batch_id,
+            "execution_label": execution_label,
             "source_registration": source_registration,
             "plan": plan,
             "processed_chunks": chunk_results,
