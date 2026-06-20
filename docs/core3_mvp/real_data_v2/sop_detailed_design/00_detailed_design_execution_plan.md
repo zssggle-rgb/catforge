@@ -37,7 +37,8 @@
 -> M00 原始数据批次与行登记
 -> M01 清洗规范化与质量诊断
 -> M02 Evidence 原子层
--> M03 参数字段画像与标准参数抽取
+-> M03A 品类参数语义资产生成
+-> M03B 参数字段画像与 SKU 参数事实画像
 -> M04a 基础卖点激活
 -> M05 评论基础证据层
 -> M06 评论下游信号抽取层
@@ -216,28 +217,29 @@
 | 01 | `M00_source_batch_registry_design.md` | 原始数据批次与行登记详细设计 |
 | 02 | `M01_cleaning_quality_design.md` | 清洗规范化与质量诊断详细设计 |
 | 03 | `M02_evidence_atom_design.md` | Evidence 原子层详细设计 |
-| 04 | `M03_param_extraction_design.md` | 参数字段画像与标准参数抽取详细设计 |
-| 05 | `M04a_base_claim_activation_design.md` | 基础卖点激活详细设计 |
-| 06 | `M05_comment_evidence_design.md` | 评论基础证据层详细设计 |
-| 07 | `M06_comment_downstream_signal_design.md` | 评论下游信号抽取层详细设计 |
-| 08 | `M04b_claim_comment_enhancement_design.md` | 评论验证增强详细设计 |
-| 09 | `M07_market_profile_design.md` | 市场画像与可比池基线详细设计 |
-| 10 | `M08_sku_signal_profile_design.md` | SKU 综合信号画像详细设计 |
-| 11 | `M08_4_comment_native_dimension_discovery_design.md` | 评论原生业务维度发现详细设计 |
-| 12 | `M08_5_business_dimension_ontology_calibration_design.md` | 业务维度本体融合发布详细设计 |
-| 12.5 | `M08_4_M08_5_dimension_boundary_optimization_design.md` | M08.4/M08.5 业务维度边界、参数锚点和稀疏化补充设计 |
-| 12.6 | `M08_4_product_anchor_correction_design.md` | M08.4 产品锚点索引、评分和质量拦截修正补充设计 |
-| 12.7 | `M08_6_product_anchor_evidence_layer_design.md` | M03-M08.5 参数、卖点、评论分层产品锚点校准详细设计 |
-| 13 | `M09_user_task_design.md` | 用户任务模块详细设计 |
-| 14 | `M10_target_group_design.md` | 目标客群模块详细设计 |
-| 15 | `M11_battlefield_design.md` | 价值战场模块详细设计 |
-| 15.1 | `M11_battlefield_v2_size_price_pool_design.md` | 价值战场 v2：尺寸价格池、主辅战场和销量分配补充设计 |
-| 16 | `M11_5_claim_value_layer_design.md` | 战场内卖点价值分层详细设计 |
-| 17 | `M12_candidate_recall_design.md` | 候选池召回模块详细设计 |
-| 18 | `M13_component_scoring_design.md` | 竞品组件评分模块详细设计 |
-| 19 | `M14_core3_selection_design.md` | 三槽位核心竞品选择详细设计 |
-| 20 | `M15_evidence_report_design.md` | 证据卡与高层报告详细设计 |
-| 21 | `M16_incremental_review_acceptance_design.md` | 增量任务编排、复核和验收详细设计 |
+| 04 | `M03A_param_taxonomy_semantic_asset_design.md` | 品类参数语义资产生成详细设计 |
+| 05 | `M03_param_extraction_design.md` | 参数字段画像与 SKU 参数事实画像详细设计 |
+| 06 | `M04a_base_claim_activation_design.md` | 基础卖点激活详细设计 |
+| 07 | `M05_comment_evidence_design.md` | 评论基础证据层详细设计 |
+| 08 | `M06_comment_downstream_signal_design.md` | 评论下游信号抽取层详细设计 |
+| 09 | `M04b_claim_comment_enhancement_design.md` | 评论验证增强详细设计 |
+| 10 | `M07_market_profile_design.md` | 市场画像与可比池基线详细设计 |
+| 11 | `M08_sku_signal_profile_design.md` | SKU 综合信号画像详细设计 |
+| 12 | `M08_4_comment_native_dimension_discovery_design.md` | 评论原生业务维度发现详细设计 |
+| 13 | `M08_5_business_dimension_ontology_calibration_design.md` | 业务维度本体融合发布详细设计 |
+| 13.5 | `M08_4_M08_5_dimension_boundary_optimization_design.md` | M08.4/M08.5 业务维度边界、参数锚点和稀疏化补充设计 |
+| 13.6 | `M08_4_product_anchor_correction_design.md` | M08.4 产品锚点索引、评分和质量拦截修正补充设计 |
+| 13.7 | `M08_6_product_anchor_evidence_layer_design.md` | M03-M08.5 参数、卖点、评论分层产品锚点校准详细设计 |
+| 14 | `M09_user_task_design.md` | 用户任务模块详细设计 |
+| 15 | `M10_target_group_design.md` | 目标客群模块详细设计 |
+| 16 | `M11_battlefield_design.md` | 价值战场模块详细设计 |
+| 16.1 | `M11_battlefield_v2_size_price_pool_design.md` | 价值战场 v2：尺寸价格池、主辅战场和销量分配补充设计 |
+| 17 | `M11_5_claim_value_layer_design.md` | 战场内卖点价值分层详细设计 |
+| 18 | `M12_candidate_recall_design.md` | 候选池召回模块详细设计 |
+| 19 | `M13_component_scoring_design.md` | 竞品组件评分模块详细设计 |
+| 20 | `M14_core3_selection_design.md` | 三槽位核心竞品选择详细设计 |
+| 21 | `M15_evidence_report_design.md` | 证据卡与高层报告详细设计 |
+| 22 | `M16_incremental_review_acceptance_design.md` | 增量任务编排、复核和验收详细设计 |
 
 ## 6. 00 总体架构与数据字典设计要求
 

@@ -230,6 +230,16 @@ from app.services.core3_real_data.param_extraction_schemas import (
     StdParamDefinition,
     StdParamSeed,
 )
+from app.services.core3_real_data.param_taxonomy_schemas import (
+    M03A_RULE_VERSION,
+    ParamTaxonomyDraftRequest,
+    ParamTaxonomyDraftResult,
+    ParamTaxonomyOut,
+    ParamTaxonomyPublishRequest,
+    ParamTaxonomyReviewDecisionRequest,
+    ParamTaxonomyReviewItemRead,
+    ParamTaxonomyReviewItemListOut,
+)
 from app.services.core3_real_data.base_claim_activation_schemas import (
     BaseClaimActivationRunRequest,
     BaseClaimActivationRunResult,
@@ -700,6 +710,23 @@ class Core3ParamExtractionRunApiRequest(Core3RealDataBaseModel):
         if any(not sku_code.strip() for sku_code in target_sku_codes):
             raise ValueError("target_sku_codes must not contain empty values")
         return target_sku_codes
+
+
+class Core3ParamTaxonomyDraftApiRequest(Core3RealDataBaseModel):
+    batch_ids: list[str] = Field(min_length=1)
+    taxonomy_version: str | None = None
+    use_llm: bool = True
+    force_rebuild: bool = False
+    created_by: str = "factory-web"
+    rule_version: str = M03A_RULE_VERSION
+
+    @field_validator("batch_ids")
+    @classmethod
+    def validate_batch_ids(cls, batch_ids: list[str]) -> list[str]:
+        normalized = [batch_id.strip() for batch_id in batch_ids]
+        if any(not batch_id for batch_id in normalized):
+            raise ValueError("batch_ids must not contain empty values")
+        return normalized
 
 
 class Core3BaseClaimActivationRunApiRequest(Core3RealDataBaseModel):

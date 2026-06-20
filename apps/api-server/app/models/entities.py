@@ -1619,6 +1619,231 @@ class Core3SkuParamProfile(Base, AuditMixin):
     rule_version: Mapped[str] = mapped_column(String(80), nullable=False, default="m03_param_extraction_v1")
 
 
+class Core3ParamTaxonomyVersion(Base, AuditMixin):
+    __tablename__ = "core3_param_taxonomy_version"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "taxonomy_version",
+            name="uq_core3_param_taxonomy_version_project_category_version",
+        ),
+        Index("ix_core3_param_taxonomy_version_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_taxonomy_version_hash", "taxonomy_hash"),
+        Index("ix_core3_param_taxonomy_version_source_batches_gin", "source_batch_ids", postgresql_using="gin"),
+    )
+
+    taxonomy_version_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(60), nullable=False, default="draft", index=True)
+    source_batch_ids: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    source_field_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active_param_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocking_review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    llm_model_snapshot: Mapped[str | None] = mapped_column(String(160))
+    llm_prompt_version: Mapped[str | None] = mapped_column(String(120))
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m03a_param_taxonomy_v1")
+    taxonomy_hash: Mapped[str] = mapped_column(String(120), nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False, default="system")
+
+
+class Core3ParamRawFieldInventory(Base, AuditMixin):
+    __tablename__ = "core3_param_raw_field_inventory"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "raw_param_name",
+            name="uq_core3_param_raw_field_inventory_version_raw_name",
+        ),
+        Index("ix_core3_param_raw_field_inventory_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_raw_field_inventory_top_values_gin", "top_values_json", postgresql_using="gin"),
+        Index("ix_core3_param_raw_field_inventory_pattern_gin", "value_pattern_json", postgresql_using="gin"),
+    )
+
+    raw_field_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    raw_param_name: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    clean_param_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    normalized_param_name: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_coverage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_coverage_rate: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    unknown_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    unknown_rate: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    top_values_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    sample_values_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    value_pattern_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    unit_candidates_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    cooccurrence_field_names: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    field_status: Mapped[str] = mapped_column(String(80), nullable=False, default="review_required", index=True)
+    field_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+
+
+class Core3ParamFieldCluster(Base, AuditMixin):
+    __tablename__ = "core3_param_field_cluster"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "cluster_code",
+            name="uq_core3_param_field_cluster_version_code",
+        ),
+        Index("ix_core3_param_field_cluster_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_field_cluster_members_gin", "member_raw_fields", postgresql_using="gin"),
+    )
+
+    field_cluster_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    cluster_code: Mapped[str] = mapped_column(String(160), nullable=False)
+    cluster_name_candidate: Mapped[str | None] = mapped_column(String(240))
+    member_raw_fields: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    cluster_method: Mapped[str] = mapped_column(String(80), nullable=False, default="rule")
+    cluster_confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    cluster_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+
+
+class Core3ParamConceptCandidate(Base, AuditMixin):
+    __tablename__ = "core3_param_concept_candidate"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "candidate_code",
+            name="uq_core3_param_concept_candidate_version_code",
+        ),
+        Index("ix_core3_param_concept_candidate_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_concept_candidate_capability_tags_gin", "capability_tags", postgresql_using="gin"),
+        Index("ix_core3_param_concept_candidate_source_fields_gin", "source_raw_fields", postgresql_using="gin"),
+    )
+
+    concept_candidate_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    candidate_code: Mapped[str] = mapped_column(String(160), nullable=False)
+    candidate_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    source_cluster_ids: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    source_raw_fields: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    definition_candidate: Mapped[str] = mapped_column(Text, nullable=False)
+    data_type_candidate: Mapped[str] = mapped_column(String(80), nullable=False, default="string")
+    unit_candidate: Mapped[str | None] = mapped_column(String(80))
+    parser_candidate: Mapped[str | None] = mapped_column(String(120))
+    capability_tags: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    benefit_hints: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    scenario_hints: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    comparison_axis: Mapped[str] = mapped_column(String(160), nullable=False, default="not_comparable")
+    evidence_role: Mapped[str] = mapped_column(String(80), nullable=False, default="weak_signal")
+    risk_notes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    llm_confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    rule_confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="review_required", index=True)
+
+
+class Core3ParamDefinition(Base, AuditMixin):
+    __tablename__ = "core3_param_definition"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "param_code",
+            name="uq_core3_param_definition_version_code",
+        ),
+        Index("ix_core3_param_definition_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_definition_group", "param_group"),
+        Index("ix_core3_param_definition_capability_tags_gin", "capability_tags", postgresql_using="gin"),
+        Index("ix_core3_param_definition_source_fields_gin", "source_raw_fields", postgresql_using="gin"),
+    )
+
+    param_definition_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    param_code: Mapped[str] = mapped_column(String(160), nullable=False)
+    param_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    param_group: Mapped[str] = mapped_column(String(120), nullable=False, default="other")
+    data_type: Mapped[str] = mapped_column(String(80), nullable=False, default="string")
+    unit: Mapped[str | None] = mapped_column(String(80))
+    value_parser: Mapped[str] = mapped_column(String(120), nullable=False, default="string")
+    parser_config_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_raw_fields: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    capability_tags: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    benefit_hints: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    scenario_hints: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    comparison_axis: Mapped[str] = mapped_column(String(160), nullable=False, default="not_comparable")
+    evidence_role: Mapped[str] = mapped_column(String(80), nullable=False, default="weak_signal")
+    analysis_status: Mapped[str] = mapped_column(String(80), nullable=False, default="active", index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    definition_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+
+
+class Core3ParamFieldMappingRule(Base, AuditMixin):
+    __tablename__ = "core3_param_field_mapping_rule"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "raw_param_name",
+            "param_code",
+            "mapping_type",
+            name="uq_core3_param_field_mapping_rule_version_raw_param_type",
+        ),
+        Index("ix_core3_param_field_mapping_rule_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_field_mapping_rule_type", "mapping_type"),
+    )
+
+    mapping_rule_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    raw_param_name: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    param_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    mapping_type: Mapped[str] = mapped_column(String(80), nullable=False, default="review_required")
+    value_policy: Mapped[str] = mapped_column(String(80), nullable=False, default="requires_rule")
+    parser_type: Mapped[str | None] = mapped_column(String(120))
+    parser_config_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    invalid_value_policy_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="review_required", index=True)
+
+
+class Core3ParamTaxonomyReviewItem(Base, AuditMixin):
+    __tablename__ = "core3_param_taxonomy_review_item"
+    __table_args__ = (
+        UniqueConstraint(
+            "taxonomy_version",
+            "item_type",
+            "raw_param_name",
+            "param_code",
+            name="uq_core3_param_taxonomy_review_item_version_type_raw_param",
+        ),
+        Index("ix_core3_param_taxonomy_review_item_project_category", "project_id", "category_code"),
+        Index("ix_core3_param_taxonomy_review_item_type", "item_type"),
+        Index("ix_core3_param_taxonomy_review_item_evidence_gin", "evidence_json", postgresql_using="gin"),
+    )
+
+    review_item_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    item_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False, default="warning", index=True)
+    raw_param_name: Mapped[str | None] = mapped_column(String(240), index=True)
+    param_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    issue_summary_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    suggested_action: Mapped[str] = mapped_column(String(120), nullable=False, default="review")
+    review_decision_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="review_required", index=True)
+
+
 class Core3ExtractClaimHit(Base, AuditMixin):
     __tablename__ = "core3_extract_claim_hit"
     __table_args__ = (

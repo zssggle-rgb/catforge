@@ -104,6 +104,7 @@ from app.schemas.core3_real_data import (
     Core3ParamAliasCandidateListOut,
     Core3ParamExtractionRunApiRequest,
     Core3ParamFieldProfileListOut,
+    Core3ParamTaxonomyDraftApiRequest,
     Core3ParamValueConflictListOut,
     Core3QualityIssueListOut,
     Core3SkuParamOut,
@@ -201,6 +202,13 @@ from app.schemas.core3_real_data import (
     ExtractParamValueRead,
     ParamAliasCandidateRead,
     ParamFieldProfileRead,
+    ParamTaxonomyDraftRequest,
+    ParamTaxonomyDraftResult,
+    ParamTaxonomyOut,
+    ParamTaxonomyPublishRequest,
+    ParamTaxonomyReviewDecisionRequest,
+    ParamTaxonomyReviewItemRead,
+    ParamTaxonomyReviewItemListOut,
     ParamValueConflictRead,
     SkuEvidenceQuery,
     SkuEvidenceResponse,
@@ -338,6 +346,13 @@ from app.services.core3_real_data.param_extraction_repositories import (
     ParamExtractionRepository,
 )
 from app.services.core3_real_data.param_extraction_runner import ParamExtractionRunner
+from app.services.core3_real_data.param_taxonomy_repositories import (
+    ParamTaxonomyEvidenceReader,
+    ParamTaxonomyImmutableError,
+    ParamTaxonomyNotFoundError,
+    ParamTaxonomyRepository,
+)
+from app.services.core3_real_data.param_taxonomy_service import ParamTaxonomyService
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.runner import Core3ModuleTarget
 from app.services.core3_real_data.run_context import build_run_context
@@ -1139,6 +1154,173 @@ def list_param_conflicts(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/draft",
+    response_model=ParamTaxonomyDraftResult,
+)
+def build_param_taxonomy_draft(
+    project_id: str,
+    category_code: str,
+    payload: Core3ParamTaxonomyDraftApiRequest,
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyDraftResult:
+    normalized_category = category_code.strip().upper()
+    _validate_taxonomy_batches(db, project_id, normalized_category, payload.batch_ids)
+    repository = ParamTaxonomyRepository(db, project_id)
+    evidence_reader = ParamTaxonomyEvidenceReader(db, project_id)
+    request = ParamTaxonomyDraftRequest(
+        category_code=normalized_category,
+        batch_ids=payload.batch_ids,
+        taxonomy_version=payload.taxonomy_version,
+        use_llm=payload.use_llm,
+        force_rebuild=payload.force_rebuild,
+        created_by=payload.created_by,
+        rule_version=payload.rule_version,
+    )
+    try:
+        result = ParamTaxonomyService(repository, evidence_reader).build_draft(request)
+        db.commit()
+        return result
+    except ParamTaxonomyImmutableError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/current",
+    response_model=ParamTaxonomyOut,
+)
+def get_current_param_taxonomy(
+    project_id: str,
+    category_code: str,
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyOut:
+    normalized_category = category_code.strip().upper()
+    repository = ParamTaxonomyRepository(db, project_id)
+    version = repository.get_current_published(normalized_category)
+    if version is None:
+        raise HTTPException(status_code=404, detail="published param taxonomy not found")
+    return _param_taxonomy_out(repository.load_taxonomy(version.taxonomy_version, category_code=normalized_category))
+
+
+@router.get(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/{taxonomy_version}",
+    response_model=ParamTaxonomyOut,
+)
+def get_param_taxonomy(
+    project_id: str,
+    category_code: str,
+    taxonomy_version: str,
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyOut:
+    normalized_category = category_code.strip().upper()
+    repository = ParamTaxonomyRepository(db, project_id)
+    try:
+        return _param_taxonomy_out(repository.load_taxonomy(taxonomy_version, category_code=normalized_category))
+    except ParamTaxonomyNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/{taxonomy_version}/review-items",
+    response_model=ParamTaxonomyReviewItemListOut,
+)
+def list_param_taxonomy_review_items(
+    project_id: str,
+    category_code: str,
+    taxonomy_version: str,
+    review_status: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyReviewItemListOut:
+    normalized_category = category_code.strip().upper()
+    repository = ParamTaxonomyRepository(db, project_id)
+    if repository.get_version(taxonomy_version, category_code=normalized_category) is None:
+        raise HTTPException(status_code=404, detail="param taxonomy not found")
+    items = repository.list_review_items(
+        taxonomy_version,
+        category_code=normalized_category,
+        review_status=review_status,
+        limit=limit,
+        offset=offset,
+    )
+    return ParamTaxonomyReviewItemListOut(
+        items=[ParamTaxonomyReviewItemRead.model_validate(item, from_attributes=True) for item in items],
+        total=repository.count_review_items(
+            taxonomy_version,
+            category_code=normalized_category,
+            review_status=review_status,
+        ),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/{taxonomy_version}/review-decisions",
+    response_model=ParamTaxonomyReviewItemRead,
+)
+def decide_param_taxonomy_review_item(
+    project_id: str,
+    category_code: str,
+    taxonomy_version: str,
+    payload: ParamTaxonomyReviewDecisionRequest,
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyReviewItemRead:
+    normalized_category = category_code.strip().upper()
+    repository = ParamTaxonomyRepository(db, project_id)
+    if repository.get_version(taxonomy_version, category_code=normalized_category) is None:
+        raise HTTPException(status_code=404, detail="param taxonomy not found")
+    try:
+        item = repository.apply_review_decision(
+            taxonomy_version=taxonomy_version,
+            review_item_id=payload.review_item_id,
+            review_status=payload.decision,
+            decision_payload=payload.decision_payload,
+        )
+        db.commit()
+        return ParamTaxonomyReviewItemRead.model_validate(item, from_attributes=True)
+    except ParamTaxonomyNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/projects/{project_id}/categories/{category_code}/param-taxonomies/{taxonomy_version}/publish",
+    response_model=ParamTaxonomyOut,
+)
+def publish_param_taxonomy(
+    project_id: str,
+    category_code: str,
+    taxonomy_version: str,
+    payload: ParamTaxonomyPublishRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+) -> ParamTaxonomyOut:
+    del payload
+    normalized_category = category_code.strip().upper()
+    repository = ParamTaxonomyRepository(db, project_id)
+    try:
+        repository.publish(category_code=normalized_category, taxonomy_version=taxonomy_version)
+        db.commit()
+        return _param_taxonomy_out(repository.load_taxonomy(taxonomy_version, category_code=normalized_category))
+    except ParamTaxonomyNotFoundError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
@@ -6991,6 +7173,25 @@ def _get_batch_or_404(db: Session, project_id: str, batch_id: str) -> entities.C
     if not batch:
         raise HTTPException(status_code=404, detail="source batch not found")
     return batch
+
+
+def _validate_taxonomy_batches(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_ids: list[str],
+) -> None:
+    for batch_id in batch_ids:
+        batch = _get_batch_or_404(db, project_id, batch_id)
+        if str(batch.category_code).upper() != category_code:
+            raise HTTPException(
+                status_code=400,
+                detail=f"batch {batch_id} belongs to category {batch.category_code}, not {category_code}",
+            )
+
+
+def _param_taxonomy_out(payload: dict[str, Any]) -> ParamTaxonomyOut:
+    return ParamTaxonomyOut.model_validate(payload)
 
 
 def _count_model_rows(db: Session, model_cls: Any, filters: list[Any]) -> int:
