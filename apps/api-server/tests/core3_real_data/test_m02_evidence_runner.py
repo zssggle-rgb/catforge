@@ -18,6 +18,7 @@ from app.services.core3_real_data.constants import (
 from app.services.core3_real_data.evidence_atom_service import (
     MAX_SQL_EXCLUDE_SOURCE_ROW_IDS,
     EvidenceAtomRunner,
+    _exclude_low_value_comment_rows,
     _exclude_source_rows,
 )
 from app.services.core3_real_data.run_context import build_run_context
@@ -407,6 +408,30 @@ def test_large_comment_source_exclusion_does_not_expand_sql_parameters():
 
     assert "NOT IN" not in str(compiled)
     assert not compiled.params
+
+
+def test_large_comment_filter_still_excludes_low_value_rows_in_sql():
+    source_row_ids = {f"comment_data:{index}" for index in range(MAX_SQL_EXCLUDE_SOURCE_ROW_IDS + 1)}
+
+    comment_stmt = _exclude_low_value_comment_rows(
+        select(entities.Core3CleanComment),
+        "core3_clean_comment",
+        entities.Core3CleanComment,
+    )
+    comment_stmt = _exclude_source_rows(comment_stmt, entities.Core3CleanComment, source_row_ids)
+    comment_sql = str(comment_stmt.compile())
+
+    sentence_stmt = _exclude_low_value_comment_rows(
+        select(entities.Core3CleanCommentSentence),
+        "core3_clean_comment_sentence",
+        entities.Core3CleanCommentSentence,
+    )
+    sentence_sql = str(sentence_stmt.compile())
+
+    assert "low_value_flag" in comment_sql
+    assert "NOT IN" not in comment_sql
+    assert "EXISTS" in sentence_sql
+    assert "low_value_flag" in sentence_sql
 
 
 def test_evidence_atom_runner_excludes_low_value_comments_from_semantic_evidence_but_keeps_quality_issue():

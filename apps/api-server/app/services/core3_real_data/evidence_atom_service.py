@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -205,6 +205,7 @@ class CleanFactReader:
             )
             stmt = _exclude_comment_quality_source_rows(stmt, model_cls, comment_filter.excluded_source_rows)
         elif clean_table in COMMENT_SEMANTIC_CLEAN_TABLES:
+            stmt = _exclude_low_value_comment_rows(stmt, clean_table, model_cls)
             stmt = _exclude_source_rows(stmt, model_cls, comment_filter.excluded_source_rows)
         stmt = stmt.order_by(*_order_columns(model_cls))
         records = list(self.db.execute(stmt).scalars())
@@ -828,6 +829,21 @@ def _exclude_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) ->
         return stmt
     for source_row_chunk in _chunks(sorted(source_row_ids), 1000):
         stmt = stmt.where(~model_cls.source_row_id.in_(tuple(source_row_chunk)))
+    return stmt
+
+
+def _exclude_low_value_comment_rows(stmt: Any, clean_table: str, model_cls: Any) -> Any:
+    if clean_table == "core3_clean_comment" and hasattr(model_cls, "low_value_flag"):
+        return stmt.where(model_cls.low_value_flag.is_(False))
+    if clean_table in {"core3_clean_comment_sentence", "core3_clean_comment_dimension"} and hasattr(
+        model_cls,
+        "clean_comment_id",
+    ):
+        return stmt.where(
+            exists()
+            .where(entities.Core3CleanComment.clean_comment_id == model_cls.clean_comment_id)
+            .where(entities.Core3CleanComment.low_value_flag.is_(False))
+        )
     return stmt
 
 
