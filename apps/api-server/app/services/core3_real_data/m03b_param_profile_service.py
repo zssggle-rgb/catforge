@@ -1692,16 +1692,52 @@ def _display_tech_class(by_field: Mapping[str, Any]) -> tuple[str, dict[str, Any
     basis = {field: record for field, record in by_field.items() if field in {"产品技术", "背光源", "背光源细分", "MINILED", "MINILED2", "RGB", "量子点"}}
     joined = " ".join(text_for(field) for field in basis)
     upper = joined.upper()
-    normalized = _normalize_text(joined)
     if "OLED" in upper:
         return "oled", basis
     if "激光" in joined or "LASER" in upper:
         return "laser", basis
-    mini_negative = "非miniled" in normalized or "非mini-led" in normalized or "非mini led" in normalized
-    mini = ("MINILED" in upper or "MINI LED" in upper or "MINI-LED" in upper or "MiniLED" in joined) and not mini_negative
-    rgb = "RGB" in upper
-    qd = any(token in upper for token in ("QD", "QLED", "QUANTUM")) or "量子点" in joined
-    if mini and rgb:
+
+    def compact(value: str) -> str:
+        return _normalize_text(value).replace("-", "").replace("_", "")
+
+    def has_miniled(value: str) -> bool:
+        value_compact = compact(value)
+        return "miniled" in value_compact or "mini-led" in _normalize_text(value)
+
+    def is_miniled_negative(value: str) -> bool:
+        value_normalized = _normalize_text(value)
+        value_compact = compact(value)
+        return value_normalized in FALSE_LITERALS or value_compact in {"非miniled", "nominiled"} or "非miniled" in value_compact
+
+    mini_flag_text = text_for("MINILED")
+    mini_type_text = text_for("MINILED2")
+    backlight_source_text = text_for("背光源")
+    backlight_subtype_text = text_for("背光源细分")
+    product_tech_text = text_for("产品技术")
+    quantum_dot_text = text_for("量子点")
+
+    specific_type_text = " ".join((mini_type_text, backlight_subtype_text, product_tech_text))
+    specific_type_upper = specific_type_text.upper()
+    specific_type_compact = compact(specific_type_text)
+    mini_flag_normalized = _normalize_text(mini_flag_text)
+    mini_flag_positive = mini_flag_normalized in TRUE_LITERALS or (has_miniled(mini_flag_text) and not is_miniled_negative(mini_flag_text))
+    subtype_positive_mini = any(has_miniled(value) and not is_miniled_negative(value) for value in (mini_type_text, backlight_subtype_text, product_tech_text))
+    source_positive_mini = has_miniled(backlight_source_text) and not is_miniled_negative(backlight_source_text)
+    mini = subtype_positive_mini or mini_flag_positive or source_positive_mini
+    if is_miniled_negative(mini_type_text) and not (mini_flag_positive or source_positive_mini):
+        mini = False
+    if is_miniled_negative(mini_flag_text) and not (subtype_positive_mini or source_positive_mini):
+        mini = False
+
+    rgb_miniled = "rgbminiled" in specific_type_compact or "RGB-MINILED" in specific_type_upper or "RGB MINI" in specific_type_upper
+    qd = (
+        any(token in specific_type_upper for token in ("QD", "QLED", "QUANTUM"))
+        or "量子点" in specific_type_text
+        or any(token in upper for token in ("QLED", "QUANTUM"))
+        or ("QD" in upper and not rgb_miniled)
+        or (_present(quantum_dot_text) and _normalize_text(quantum_dot_text) not in FALSE_LITERALS)
+    )
+    if mini and rgb_miniled:
         return "rgb_miniled", basis
     if mini and qd:
         return "qd_miniled", basis

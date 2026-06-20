@@ -14,7 +14,7 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
     Core3TargetScopeType,
 )
-from app.services.core3_real_data.m03b_param_profile_service import M03BParamEvidenceReader, M03BRunner
+from app.services.core3_real_data.m03b_param_profile_service import M03BParamEvidenceReader, M03BRunner, _display_tech_class
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.run_context import build_run_context
 from app.services.core3_real_data.runner import Core3ModuleTarget
@@ -25,6 +25,10 @@ BATCH_ID = "m00_202606180001"
 RUN_ID = "run-m03b"
 MODULE_RUN_ID = "module-run-m03b"
 SKU_CODE = "TV00027549"
+
+
+def raw_param(raw_field: str, clean_value: str) -> dict[str, str]:
+    return {"clean_field": raw_field, "clean_value": clean_value, "evidence_id": f"ev_{raw_field}"}
 
 
 def make_session() -> Session:
@@ -93,6 +97,50 @@ def seed_foundation(session: Session) -> None:
         )
     )
     session.flush()
+
+
+def test_display_tech_class_uses_rgb_only_when_miniled_type_is_explicit_rgb_miniled():
+    display_class, _ = _display_tech_class(
+        {
+            "产品技术": raw_param("产品技术", "LCD"),
+            "背光源": raw_param("背光源", "LED"),
+            "MINILED": raw_param("MINILED", "是"),
+            "MINILED2": raw_param("MINILED2", "MINILED"),
+            "RGB": raw_param("RGB", "RGB"),
+        }
+    )
+    assert display_class == "miniled"
+
+    display_class, _ = _display_tech_class(
+        {
+            "产品技术": raw_param("产品技术", "LCD"),
+            "MINILED": raw_param("MINILED", "是"),
+            "MINILED2": raw_param("MINILED2", "QD-MINILED"),
+            "RGB": raw_param("RGB", "RGB"),
+        }
+    )
+    assert display_class == "qd_miniled"
+
+    display_class, _ = _display_tech_class(
+        {
+            "产品技术": raw_param("产品技术", "LCD"),
+            "MINILED": raw_param("MINILED", "是"),
+            "MINILED2": raw_param("MINILED2", "RGB-MINILED"),
+            "RGB": raw_param("RGB", "RGB"),
+        }
+    )
+    assert display_class == "rgb_miniled"
+
+    display_class, _ = _display_tech_class(
+        {
+            "产品技术": raw_param("产品技术", "LCD"),
+            "背光源": raw_param("背光源", "LED"),
+            "MINILED": raw_param("MINILED", "否"),
+            "MINILED2": raw_param("MINILED2", "非MINILED"),
+            "RGB": raw_param("RGB", "RGB"),
+        }
+    )
+    assert display_class == "lcd_led"
 
 
 def seed_tv_param_evidence(session: Session) -> None:
