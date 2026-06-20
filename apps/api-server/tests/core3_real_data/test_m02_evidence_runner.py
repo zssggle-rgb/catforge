@@ -15,7 +15,11 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
     Core3TargetScopeType,
 )
-from app.services.core3_real_data.evidence_atom_service import EvidenceAtomRunner
+from app.services.core3_real_data.evidence_atom_service import (
+    MAX_SQL_EXCLUDE_SOURCE_ROW_IDS,
+    EvidenceAtomRunner,
+    _exclude_source_rows,
+)
 from app.services.core3_real_data.run_context import build_run_context
 from app.services.core3_real_data.runner import Core3ModuleTarget
 
@@ -392,6 +396,17 @@ def test_evidence_atom_runner_consumes_clean_facts_and_writes_atoms_links_summar
     assert "battlefield_code" not in param.evidence_payload_json
     assert "competitor_sku_code" not in param.evidence_payload_json
     assert session.execute(select(entities.Core3EvidenceLink)).scalars().all()
+
+
+def test_large_comment_source_exclusion_does_not_expand_sql_parameters():
+    stmt = select(entities.Core3CleanComment)
+    source_row_ids = {f"comment_data:{index}" for index in range(MAX_SQL_EXCLUDE_SOURCE_ROW_IDS + 1)}
+
+    filtered_stmt = _exclude_source_rows(stmt, entities.Core3CleanComment, source_row_ids)
+    compiled = filtered_stmt.compile()
+
+    assert "NOT IN" not in str(compiled)
+    assert not compiled.params
 
 
 def test_evidence_atom_runner_excludes_low_value_comments_from_semantic_evidence_but_keeps_quality_issue():

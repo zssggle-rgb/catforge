@@ -19,6 +19,7 @@ from app.schemas.core3_real_data import Core3SourceBatchRegisterRequest
 from app.services.core3_real_data.cleaning_repositories import CleaningQueryRepository
 from app.services.core3_real_data.cleaning_runner import CleaningQualityRunner
 from app.services.core3_real_data.constants import Core3SourceBatchStatus, Core3SourceBatchType
+from app.services.core3_real_data.evidence_atom_service import EvidenceAtomRunner
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.source_registry_service import SourceRegistryRunner
 
@@ -73,7 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     prepare = subparsers.add_parser(
         "prepare-new-data",
-        help="Register optional raw changes and run preliminary cleaning only.",
+        help="Register optional raw changes, clean data, and prepare evidence for analysis.",
     )
     _add_common_project_args(prepare)
     prepare.add_argument("--batch-id", default="latest")
@@ -94,6 +95,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     prepare.add_argument("--sku-code", action="append", default=[], help="Restrict cleaning to one SKU. Repeatable.")
     prepare.add_argument("--sku-batch-size", type=int, default=50, help="SKU chunk size for M01 cleaning.")
+    prepare.add_argument(
+        "--evidence-sku-batch-size",
+        type=int,
+        default=1,
+        help="SKU chunk size for M02 evidence preparation.",
+    )
+    prepare.add_argument("--skip-evidence", action="store_true", help=argparse.SUPPRESS)
     prepare.add_argument("--limit-skus", type=int, default=None, help="Limit target SKUs for smoke tests.")
     prepare.add_argument("--include-no-change", action="store_true")
     prepare.add_argument(
@@ -149,13 +157,15 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
                     "batch_id": None,
                     "sku_count": None,
                     "chunk_count": None,
+                    "evidence_chunk_count": None,
                     "sku_batch_size": args.sku_batch_size,
+                    "evidence_sku_batch_size": args.evidence_sku_batch_size,
                     "source_registration_mode": args.register_source_batch,
                     "include_no_change": bool(args.include_no_change),
-                    "will_run_modules": ["M00", "M01"],
-                    "will_not_run_modules": ["M02", "M05"],
+                    "will_run_modules": ["M00", "M01"] if args.skip_evidence else ["M00", "M01", "M02"],
+                    "will_not_run_modules": ["M02", "M05"] if args.skip_evidence else ["M05"],
                 },
-                "message_cn": "这是数据预处理执行计划，尚未登记源批次，也未写入清洗结果。",
+                "message_cn": "这是数据预处理执行计划，尚未登记源批次，也未写入清洗和证据准备结果。",
             }
 
         if args.register_source_batch != "none":
@@ -183,15 +193,18 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             )
 
         chunks = _sku_chunks(target_skus, args.sku_batch_size) if target_skus else [()]
+        evidence_chunks = _sku_chunks(target_skus, args.evidence_sku_batch_size) if target_skus else [()]
         plan = {
             "batch_id": batch_id,
             "sku_count": len(target_skus),
             "chunk_count": len(chunks),
+            "evidence_chunk_count": len(evidence_chunks) if not args.skip_evidence else 0,
             "sku_batch_size": args.sku_batch_size,
+            "evidence_sku_batch_size": args.evidence_sku_batch_size,
             "source_registration_mode": args.register_source_batch,
             "include_no_change": bool(args.include_no_change),
-            "will_run_modules": ["M00", "M01"] if args.register_source_batch != "none" else ["M01"],
-            "will_not_run_modules": ["M02", "M05"],
+            "will_run_modules": _prepare_run_modules(args.register_source_batch, include_evidence=not args.skip_evidence),
+            "will_not_run_modules": ["M02", "M05"] if args.skip_evidence else ["M05"],
             "resolved_project_id": project_id,
             "resolved_category_code": category_code,
         }
@@ -201,13 +214,15 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
                 "status": "dry_run",
                 "source_registration": source_registration,
                 "plan": plan,
-                "message_cn": "这是数据预处理执行计划，尚未写入清洗结果。",
+                "message_cn": "这是数据预处理执行计划，尚未写入清洗和证据准备结果。",
             }
 
         execution_label = args.run_id or _new_cli_run_id("m01")
         run_id = args.run_id
         chunk_results: list[dict[str, Any]] = []
+        evidence_chunk_results: list[dict[str, Any]] = []
         last_result: dict[str, Any] | None = None
+        last_evidence_result: dict[str, Any] | None = None
         runner = CleaningQualityRunner(db)
         for index, chunk in enumerate(chunks, start=1):
             result = runner.run_batch(
@@ -233,17 +248,55 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             if last_result["status"] in {"failed", "blocked"}:
                 break
 
+        if last_result and last_result["status"] not in {"failed", "blocked"} and not args.skip_evidence:
+            evidence_runner = EvidenceAtomRunner(db)
+            evidence_module_run_id = f"{args.module_run_id}-m02" if args.module_run_id else None
+            for index, chunk in enumerate(evidence_chunks, start=1):
+                result = evidence_runner.run_batch(
+                    project_id=project_id,
+                    category_code=category_code,
+                    batch_id=batch_id,
+                    run_id=run_id,
+                    module_run_id=evidence_module_run_id,
+                    target_sku_codes=tuple(chunk),
+                )
+                db.commit()
+                db.expunge_all()
+                last_evidence_result = _module_result_payload(result)
+                evidence_chunk_results.append(
+                    {
+                        "chunk_index": index,
+                        "sku_count": len(chunk),
+                        "status": last_evidence_result["status"],
+                        "input_count": last_evidence_result["input_count"],
+                        "output_count": last_evidence_result["output_count"],
+                    }
+                )
+                if last_evidence_result["status"] in {"failed", "blocked"}:
+                    break
+
         status = "success"
         if last_result and last_result["status"] in {"failed", "blocked"}:
             status = last_result["status"]
+        elif last_evidence_result and last_evidence_result["status"] in {"failed", "blocked"}:
+            status = last_evidence_result["status"]
         elif last_result and last_result["status"] == "warning":
             status = "warning"
+        elif last_evidence_result and last_evidence_result["status"] == "warning":
+            status = "warning"
 
-        message_cn = (
-            "已完成数据预处理：已执行源数据登记和初步清洗过滤，未进入证据或评论语义分析阶段。"
-            if args.register_source_batch != "none"
-            else "已完成已有批次初步清洗过滤，未进入证据或评论语义分析阶段。"
-        )
+        if args.skip_evidence:
+            message_cn = (
+                "已完成快速预检：已执行源数据登记和初步清洗过滤，尚未生成分析证据。"
+                if args.register_source_batch != "none"
+                else "已完成已有批次快速预检：已执行初步清洗过滤，尚未生成分析证据。"
+            )
+        else:
+            message_cn = (
+                "已完成数据预处理：已执行源数据登记、初步清洗过滤和分析证据准备，数据已可进入事实分析。"
+                if args.register_source_batch != "none"
+                else "已完成已有批次数据预处理：已执行初步清洗过滤和分析证据准备，数据已可进入事实分析。"
+            )
 
         return {
             "command": "prepare-new-data",
@@ -255,7 +308,9 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "source_registration": source_registration,
             "plan": plan,
             "processed_chunks": chunk_results,
+            "processed_evidence_chunks": evidence_chunk_results,
             "m01_summary": last_result["summary_json"] if last_result else {},
+            "m02_summary": last_evidence_result["summary_json"] if last_evidence_result else {},
             "message_cn": message_cn,
         }
 
@@ -1068,6 +1123,13 @@ def _sku_chunks(skus: Sequence[str], chunk_size: int) -> list[tuple[str, ...]]:
     if chunk_size <= 0:
         return [tuple(skus)]
     return [tuple(skus[index : index + chunk_size]) for index in range(0, len(skus), chunk_size)]
+
+
+def _prepare_run_modules(register_source_batch: str, *, include_evidence: bool) -> list[str]:
+    modules = ["M00", "M01"] if register_source_batch != "none" else ["M01"]
+    if include_evidence:
+        modules.append("M02")
+    return modules
 
 
 def _module_result_payload(result: Any) -> dict[str, Any]:

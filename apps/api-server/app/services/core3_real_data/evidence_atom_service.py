@@ -55,6 +55,7 @@ CLEAN_MODEL_BY_TABLE: dict[str, Any] = {
 }
 
 M02_PARTITION_STRATEGY = "sku_partition_v1"
+MAX_SQL_EXCLUDE_SOURCE_ROW_IDS = 50000
 COMMENT_SEMANTIC_CLEAN_TABLES = frozenset(
     {
         "core3_clean_comment",
@@ -386,6 +387,10 @@ class EvidenceAtomService:
                     **partition_result,
                 }
             )
+            self.context.db.flush()
+            self.context.db.expunge_all()
+            atom_repository.clear_save_cache()
+            link_repository.clear_save_cache()
 
         self.context.db.flush()
 
@@ -819,6 +824,8 @@ def _is_non_business_comment_template(value: Any) -> bool:
 def _exclude_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) -> Any:
     if not source_row_ids or not hasattr(model_cls, "source_row_id"):
         return stmt
+    if len(source_row_ids) > MAX_SQL_EXCLUDE_SOURCE_ROW_IDS:
+        return stmt
     for source_row_chunk in _chunks(sorted(source_row_ids), 1000):
         stmt = stmt.where(~model_cls.source_row_id.in_(tuple(source_row_chunk)))
     return stmt
@@ -826,6 +833,8 @@ def _exclude_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) ->
 
 def _exclude_comment_quality_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) -> Any:
     if not source_row_ids or not hasattr(model_cls, "source_row_id"):
+        return stmt
+    if len(source_row_ids) > MAX_SQL_EXCLUDE_SOURCE_ROW_IDS:
         return stmt
     for source_row_chunk in _chunks(sorted(source_row_ids), 1000):
         stmt = stmt.where(

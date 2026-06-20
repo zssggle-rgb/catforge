@@ -20,6 +20,7 @@ def test_prepare_new_data_defaults_to_incremental_source_registration():
     assert args.register_source_batch == "incremental"
     assert args.batch_id == "latest"
     assert args.sku_batch_size == 50
+    assert args.evidence_sku_batch_size == 1
 
 
 def test_prepare_new_data_can_rerun_existing_batch_without_source_registration():
@@ -95,7 +96,8 @@ def test_prepare_new_data_dry_run_does_not_register_source_batch(monkeypatch):
 
     assert result["status"] == "dry_run"
     assert result["source_registration"]["will_register_source_batch"] is True
-    assert result["plan"]["will_run_modules"] == ["M00", "M01"]
+    assert result["plan"]["will_run_modules"] == ["M00", "M01", "M02"]
+    assert result["plan"]["will_not_run_modules"] == ["M05"]
 
 
 def test_inspect_sku_quality_summarizes_one_sku(monkeypatch):

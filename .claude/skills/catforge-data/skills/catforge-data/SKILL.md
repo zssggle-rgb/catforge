@@ -1,13 +1,13 @@
 ---
 name: catforge-data
-description: Prepare newly uploaded CatForge category data and inspect preliminary data quality using business-language commands.
+description: Prepare newly uploaded CatForge category data for analysis and inspect preliminary data quality using business-language commands.
 ---
 
 # CatForge Data Skill
 
 Use this skill when the user asks to:
 
-- "先初步处理一下", "预处理新数据", "初步清洗", or similar.
+- "先初步处理一下", "预处理新数据", "初步清洗", "把数据准备好分析", or similar.
 - Check whether newly uploaded CatForge data is ready for later analysis.
 - Inspect SKU weekly market coverage, preliminary comment quality, missing data, or quality warnings.
 - Inspect one SKU's preliminary cleaning result, such as "这个 SKU 清理情况" or "这个 SKU 评论还有多少有效内容".
@@ -16,10 +16,10 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 
 ## Execution Rules
 
-- Preliminary processing defaults to source registration plus preliminary cleaning: create an incremental source batch, then run M01 cleaning only.
+- Preliminary processing defaults to analysis-ready data preparation: create an incremental source batch, run cleaning, then prepare traceable evidence for later fact analysis.
 - To rerun cleaning for an existing source batch, explicitly use `--register-source-batch none --batch-id <batch_id-or-latest>`.
-- Preliminary processing must not run evidence/comment semantic stages such as M02 or M05.
-- Run M01 by SKU chunks by default to avoid high CPU and memory pressure on 205.
+- Preliminary processing must not run comment semantic or business-profile stages such as M05 and later modules.
+- Run cleaning and evidence preparation by SKU chunks by default to avoid high CPU and memory pressure on 205.
 - Empty, default, and obvious low-value comments are filtered from sentence/evidence preparation in M01 and counted in the preliminary summary.
 - Service-fulfillment comments such as customer service, logistics, installation, after-sales, refund, and repair are marked as low-value in M01, kept for quality statistics, and blocked from downstream product/comment sentence analysis.
 - Single-platform data in one SKU-week is normal and should be explained as single-channel sales or platform special supply, not as missing coverage.
@@ -30,13 +30,13 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 From the deployed CatForge repository on 205, prefer running inside the API container:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
 ```
 
-If a source batch already exists and the user only wants to rerun preliminary cleaning:
+If a source batch already exists and the user wants to prepare it for analysis:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
 ```
 
 Inspect current preliminary quality without rerunning:
@@ -54,7 +54,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 For a small smoke test:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --evidence-sku-batch-size 1 --format json
 ```
 
 When checking whether a previous run finished, inspect by the explicit `batch_id` when available. If CLI counts are empty or inconsistent with the run log, cross-check `core3_clean_*`, `core3_source_batch`, and `core3_data_quality_issue` in PostgreSQL before replying.
@@ -65,6 +65,7 @@ When reporting results to the user, summarize:
 
 - batch id
 - processed SKU count and chunk count
+- evidence preparation status
 - clean row counts
 - weekly market coverage summary
 - low-value comment count/rate

@@ -46,6 +46,10 @@ class EvidenceAtomRepository(Core3BaseRepository):
     def skip_existing_lookup_when_empty(self) -> None:
         self._skip_existing_lookup = True
 
+    def clear_save_cache(self) -> None:
+        self._atom_by_id.clear()
+        self._current_by_key.clear()
+
     def count_current_atoms(self) -> int:
         stmt = (
             select(func.count())
@@ -419,6 +423,9 @@ class EvidenceLinkRepository(Core3BaseRepository):
 
     def skip_existing_lookup_for_batch(self, batch_id: str) -> None:
         self._skip_existing_lookup_batches.add(batch_id)
+
+    def clear_save_cache(self) -> None:
+        self._link_by_key.clear()
 
     def count_batch_links(self, batch_id: str) -> int:
         stmt = (
