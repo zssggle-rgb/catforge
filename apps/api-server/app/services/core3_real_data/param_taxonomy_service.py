@@ -286,11 +286,8 @@ class ParamTaxonomyService:
         llm_payload: dict[str, Any] = {}
         llm_used = False
         if request.use_llm:
-            try:
-                llm_payload = self.llm_client.generate_taxonomy(llm_package)
-                llm_used = True
-            except ParamTaxonomyLlmError as exc:
-                warnings.append(str(exc))
+            llm_payload = self.llm_client.generate_taxonomy(llm_package)
+            llm_used = True
 
         taxonomy_version = request.taxonomy_version or _default_taxonomy_version(request.category_code)
         candidate_payloads, definition_payloads, mapping_payloads, review_payloads = self._build_assets(
@@ -613,9 +610,9 @@ class ParamTaxonomyService:
         cluster_by_field = _cluster_lookup(cluster_payloads)
         llm_candidates = llm_payload.get("param_candidates") if isinstance(llm_payload, Mapping) else None
         if not isinstance(llm_candidates, list) or not llm_candidates:
-            llm_candidates = _fallback_candidates(field_payloads)
             if llm_used:
-                warnings.append("LLM did not return param_candidates; used rule fallback candidates")
+                raise ParamTaxonomyLlmError("LLM taxonomy generation returned empty param_candidates")
+            llm_candidates = _fallback_candidates(field_payloads)
 
         candidates: list[dict[str, Any]] = []
         definitions: list[dict[str, Any]] = []

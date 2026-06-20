@@ -352,7 +352,7 @@ from app.services.core3_real_data.param_taxonomy_repositories import (
     ParamTaxonomyNotFoundError,
     ParamTaxonomyRepository,
 )
-from app.services.core3_real_data.param_taxonomy_service import ParamTaxonomyService
+from app.services.core3_real_data.param_taxonomy_service import ParamTaxonomyLlmError, ParamTaxonomyService
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.runner import Core3ModuleTarget
 from app.services.core3_real_data.run_context import build_run_context
@@ -1186,6 +1186,9 @@ def build_param_taxonomy_draft(
     except ParamTaxonomyImmutableError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ParamTaxonomyLlmError as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc

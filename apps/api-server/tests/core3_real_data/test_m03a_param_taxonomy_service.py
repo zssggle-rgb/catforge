@@ -17,7 +17,7 @@ from app.services.core3_real_data.param_taxonomy_schemas import (
     TaxonomyReviewStatus,
     TaxonomyStatus,
 )
-from app.services.core3_real_data.param_taxonomy_service import ParamTaxonomyService
+from app.services.core3_real_data.param_taxonomy_service import ParamTaxonomyLlmError, ParamTaxonomyService
 
 
 PROJECT_ID = "core3_mvp"
@@ -91,6 +91,20 @@ class FakeTaxonomyClient:
             ],
             "review_items": [],
         }
+
+
+class FailingTaxonomyClient:
+    model_name = "deepseek-v4-pro"
+
+    def generate_taxonomy(self, package):
+        raise ParamTaxonomyLlmError("LLM unavailable")
+
+
+class EmptyCandidateTaxonomyClient:
+    model_name = "deepseek-v4-pro"
+
+    def generate_taxonomy(self, package):
+        return {"param_candidates": []}
 
 
 def make_session() -> Session:
@@ -270,6 +284,50 @@ def test_param_taxonomy_review_count_refreshes_and_publish_sets_current():
 
     assert published.status == TaxonomyStatus.PUBLISHED.value
     assert repository.get_current_published("TV").taxonomy_version == "tv_param_taxonomy_publish_v1"
+
+
+def test_param_taxonomy_requires_llm_when_enabled():
+    session = make_session()
+    repository = ParamTaxonomyRepository(session, PROJECT_ID)
+    service = ParamTaxonomyService(
+        repository,
+        ParamTaxonomyEvidenceReader(session, PROJECT_ID),
+        llm_client=FailingTaxonomyClient(),
+    )
+
+    with pytest.raises(ParamTaxonomyLlmError, match="LLM unavailable"):
+        service.build_draft(
+            ParamTaxonomyDraftRequest(
+                category_code="TV",
+                batch_ids=[BATCH_ID],
+                taxonomy_version="tv_param_taxonomy_requires_llm",
+                use_llm=True,
+            )
+        )
+
+    assert repository.get_version("tv_param_taxonomy_requires_llm", category_code="TV") is None
+
+
+def test_param_taxonomy_rejects_empty_llm_candidates_when_enabled():
+    session = make_session()
+    repository = ParamTaxonomyRepository(session, PROJECT_ID)
+    service = ParamTaxonomyService(
+        repository,
+        ParamTaxonomyEvidenceReader(session, PROJECT_ID),
+        llm_client=EmptyCandidateTaxonomyClient(),
+    )
+
+    with pytest.raises(ParamTaxonomyLlmError, match="empty param_candidates"):
+        service.build_draft(
+            ParamTaxonomyDraftRequest(
+                category_code="TV",
+                batch_ids=[BATCH_ID],
+                taxonomy_version="tv_param_taxonomy_empty_llm",
+                use_llm=True,
+            )
+        )
+
+    assert repository.get_version("tv_param_taxonomy_empty_llm", category_code="TV") is None
 
 
 def test_param_definition_rejects_downstream_business_codes_in_capability_tags():
