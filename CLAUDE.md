@@ -27,12 +27,15 @@ Useful commands:
 ```bash
 docker compose -f docker-compose.cloud.yml ps
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-sku-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --sku-code TV00029115 --format json
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --format json
 ```
 
 ## Business Command Routing
 
 Use the `catforge-data` skill when the user asks to preprocess new uploaded data, inspect data quality, or check preliminary SKU/comment coverage.
+
+For "某个 SKU 清理情况", "这个 SKU 评论还有多少有效内容", or similar, run `inspect-sku-quality` first. Report whether the SKU exists in the batch, market weekly coverage, attribute unknown count, claim count, comment low-value/service-fulfillment filtering, candidate comments after filtering, and review-required issues.
 
 For "先初步处理一下" or "初步清洗":
 

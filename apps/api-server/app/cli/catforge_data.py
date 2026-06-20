@@ -10,7 +10,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import distinct, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -43,6 +43,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload = _prepare_new_data(args)
         elif args.command == "inspect-data-quality":
             payload = _inspect_data_quality(args)
+        elif args.command == "inspect-sku-quality":
+            payload = _inspect_sku_quality(args)
         else:
             parser.error("missing command")
     except CliError as exc:
@@ -110,13 +112,22 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_project_args(inspect_parser)
     inspect_parser.add_argument("--batch-id", default="latest")
     inspect_parser.add_argument("--limit-skus", type=int, default=20)
+
+    sku_parser = subparsers.add_parser(
+        "inspect-sku-quality",
+        help="Inspect M01 preliminary cleaning and quality coverage for one SKU.",
+    )
+    _add_common_project_args(sku_parser)
+    sku_parser.add_argument("--batch-id", default="latest")
+    sku_parser.add_argument("--sku-code", required=True)
+    sku_parser.add_argument("--issue-limit", type=int, default=10)
     return parser
 
 
 def _add_common_project_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
-    parser.add_argument("--category-code", default=DEFAULT_CATEGORY_CODE)
-    parser.add_argument("--format", choices=("json", "text"), default="json")
+    parser.add_argument("--project-id", default=argparse.SUPPRESS)
+    parser.add_argument("--category-code", default=argparse.SUPPRESS)
+    parser.add_argument("--format", choices=("json", "text"), default=argparse.SUPPRESS)
 
 
 def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
@@ -284,6 +295,107 @@ def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:
         }
 
 
+def _inspect_sku_quality(args: argparse.Namespace) -> dict[str, Any]:
+    sku_code = str(args.sku_code).strip()
+    if not sku_code:
+        raise CliError("请提供有效的 --sku-code。")
+
+    with SessionLocal() as db:
+        batch_id, project_id, category_code = _resolve_batch_scope(
+            db,
+            project_id=args.project_id,
+            category_code=args.category_code,
+            batch_id=args.batch_id,
+        )
+        sku = _get_clean_sku(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            sku_code=sku_code,
+        )
+        if sku is None:
+            return {
+                "command": "inspect-sku-quality",
+                "status": "not_found",
+                "found": False,
+                "batch_id": batch_id,
+                "project_id": project_id,
+                "category_code": category_code,
+                "sku_code": sku_code,
+                "message_cn": f"批次 {batch_id} 中未找到 SKU {sku_code} 的 M01 清洗结果。",
+            }
+
+        return {
+            "command": "inspect-sku-quality",
+            "status": "success",
+            "found": True,
+            "batch_id": batch_id,
+            "project_id": project_id,
+            "category_code": category_code,
+            "sku_code": sku_code,
+            "sku": {
+                "sku_code": sku.sku_code,
+                "model_name": sku.model_name,
+                "brand_name": sku.brand_name,
+                "category_name": sku.category_name,
+                "source_tables": sku.source_tables or [],
+                "quality_status": sku.quality_status,
+                "quality_flags": sku.quality_flags or [],
+                "review_required": bool(sku.review_required),
+                "review_status": sku.review_status,
+            },
+            "row_counts": _sku_row_counts(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+            ),
+            "market_summary": _sku_market_summary(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+                coverage=sku.coverage_json or {},
+            ),
+            "attribute_summary": _sku_attribute_summary(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+                coverage=sku.coverage_json or {},
+            ),
+            "claim_summary": _sku_claim_summary(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+            ),
+            "comment_summary": _sku_comment_summary(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+                coverage=sku.coverage_json or {},
+            ),
+            "quality_issue_summary": _sku_quality_issue_summary(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                sku_code=sku_code,
+                issue_limit=args.issue_limit,
+            ),
+            "stored_coverage": sku.coverage_json or {},
+            "message_cn": f"已读取 SKU {sku_code} 在批次 {batch_id} 的 M01 清洗摘要。",
+        }
+
+
 def _register_source_batch(db: Session, args: argparse.Namespace) -> dict[str, Any]:
     request = Core3SourceBatchRegisterRequest(
         project_id=args.project_id,
@@ -393,6 +505,563 @@ def _resolve_target_skus(
         rows = [str(value) for value in db.execute(registry_stmt).scalars() if value]
     rows = _unique_values(rows)
     return rows[:limit] if limit else rows
+
+
+def _get_clean_sku(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> entities.Core3CleanSku | None:
+    stmt = (
+        select(entities.Core3CleanSku)
+        .where(entities.Core3CleanSku.project_id == project_id)
+        .where(entities.Core3CleanSku.category_code == category_code)
+        .where(entities.Core3CleanSku.batch_id == batch_id)
+        .where(entities.Core3CleanSku.sku_code == sku_code)
+        .limit(1)
+    )
+    return db.execute(stmt).scalars().first()
+
+
+def _sku_row_counts(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> dict[str, int]:
+    return {
+        "sku": _count_sku_rows(db, entities.Core3CleanSku, project_id, category_code, batch_id, sku_code),
+        "market": _count_sku_rows(db, entities.Core3CleanMarketWeekly, project_id, category_code, batch_id, sku_code),
+        "attribute": _count_sku_rows(db, entities.Core3CleanAttribute, project_id, category_code, batch_id, sku_code),
+        "claim": _count_sku_rows(db, entities.Core3CleanClaim, project_id, category_code, batch_id, sku_code),
+        "claim_sentence": _count_sku_rows(
+            db,
+            entities.Core3CleanClaimSentence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "comment": _count_sku_rows(db, entities.Core3CleanComment, project_id, category_code, batch_id, sku_code),
+        "comment_sentence": _count_sku_rows(
+            db,
+            entities.Core3CleanCommentSentence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "comment_dimension": _count_sku_rows(
+            db,
+            entities.Core3CleanCommentDimension,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "quality_issue": _count_sku_rows(
+            db,
+            entities.Core3DataQualityIssue,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+    }
+
+
+def _sku_market_summary(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+    coverage: dict[str, Any],
+) -> dict[str, Any]:
+    model = entities.Core3CleanMarketWeekly
+    min_week, max_week, min_period, max_period, distinct_week_count, sales_volume, sales_amount = db.execute(
+        _apply_sku_filters(
+            select(
+                func.min(model.period_week_index),
+                func.max(model.period_week_index),
+                func.min(model.period_raw),
+                func.max(model.period_raw),
+                func.count(distinct(model.period_raw)),
+                func.sum(model.sales_volume),
+                func.sum(model.sales_amount),
+            ),
+            model,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        )
+    ).one()
+    weekly_coverage = ((coverage.get("market") or {}).get("weekly_coverage") or {})
+    return {
+        "row_count": _count_sku_rows(db, model, project_id, category_code, batch_id, sku_code),
+        "period_week_index_min": min_week,
+        "period_week_index_max": max_week,
+        "period_raw_min": min_period,
+        "period_raw_max": max_period,
+        "distinct_week_count": int(distinct_week_count or 0),
+        "sales_volume_sum": sales_volume,
+        "sales_amount_sum": sales_amount,
+        "platform_counts": _group_counts(
+            db,
+            model,
+            model.platform_type,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "price_check_counts": _group_counts(
+            db,
+            model,
+            model.price_check_status,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "quality_status_counts": _group_counts(
+            db,
+            model,
+            model.quality_status,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "review_required_count": _count_sku_rows_where(
+            db,
+            model,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+            model.review_required.is_(True),
+        ),
+        "weekly_coverage": weekly_coverage,
+    }
+
+
+def _sku_attribute_summary(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+    coverage: dict[str, Any],
+) -> dict[str, Any]:
+    model = entities.Core3CleanAttribute
+    coverage_attribute = coverage.get("attribute") or {}
+    return {
+        "row_count": _count_sku_rows(db, model, project_id, category_code, batch_id, sku_code),
+        "unknown_count": coverage_attribute.get("unknown_count"),
+        "value_presence_counts": _group_counts(
+            db,
+            model,
+            model.value_presence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "quality_status_counts": _group_counts(
+            db,
+            model,
+            model.quality_status,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "review_required_count": _count_sku_rows_where(
+            db,
+            model,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+            model.review_required.is_(True),
+        ),
+    }
+
+
+def _sku_claim_summary(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> dict[str, Any]:
+    model = entities.Core3CleanClaim
+    return {
+        "row_count": _count_sku_rows(db, model, project_id, category_code, batch_id, sku_code),
+        "sentence_count": _count_sku_rows(
+            db,
+            entities.Core3CleanClaimSentence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "text_presence_counts": _group_counts(
+            db,
+            model,
+            model.claim_text_presence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "quality_status_counts": _group_counts(
+            db,
+            model,
+            model.quality_status,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "review_required_count": _count_sku_rows_where(
+            db,
+            model,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+            model.review_required.is_(True),
+        ),
+    }
+
+
+def _sku_comment_summary(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+    coverage: dict[str, Any],
+) -> dict[str, Any]:
+    model = entities.Core3CleanComment
+    row_count = _count_sku_rows(db, model, project_id, category_code, batch_id, sku_code)
+    low_value_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        model.low_value_flag.is_(True),
+    )
+    candidate_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        model.low_value_flag.is_(False),
+    )
+    service_condition = model.low_value_reason.contains("服务履约评价")
+    service_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        service_condition,
+    )
+    service_after_low_value_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        model.low_value_flag.is_(False),
+        service_condition,
+    )
+    empty_or_default_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        model.low_value_reason.contains("默认或空评价"),
+    )
+    duplicate_text_row_count = _count_sku_rows_where(
+        db,
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        model.duplicate_group_key.is_not(None),
+    )
+    distinct_comment_id_count = _count_distinct_sku_values(
+        db,
+        model,
+        model.comment_id,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    duplicate_text_group_count = _count_distinct_sku_values(
+        db,
+        model,
+        model.duplicate_group_key,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    dimension_model = entities.Core3CleanCommentDimension
+    dimension_count = _count_sku_rows(db, dimension_model, project_id, category_code, batch_id, sku_code)
+    dimension_available_count = _count_sku_rows_where(
+        db,
+        dimension_model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+        dimension_model.dimension_available.is_(True),
+    )
+    coverage_comment = coverage.get("comment") or {}
+    return {
+        "raw_row_count": row_count,
+        "low_value_comment_count": low_value_count,
+        "low_value_comment_rate": _rate(low_value_count, row_count),
+        "candidate_after_low_value_count": candidate_count,
+        "service_candidate_count": service_count,
+        "service_candidate_rate": _rate(service_count, row_count),
+        "service_candidate_after_low_value_count": service_after_low_value_count,
+        "service_candidate_after_low_value_rate": _rate(service_after_low_value_count, row_count),
+        "service_candidate_not_blocked": service_after_low_value_count > 0,
+        "empty_or_default_comment_count": empty_or_default_count,
+        "duplicate_text_group_count": duplicate_text_group_count,
+        "duplicate_text_row_count": duplicate_text_row_count,
+        "distinct_comment_id_count": distinct_comment_id_count,
+        "sentence_count": _count_sku_rows(
+            db,
+            entities.Core3CleanCommentSentence,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "dimension_count": dimension_count,
+        "dimension_available_count": dimension_available_count,
+        "sentiment_counts": _group_counts(
+            db,
+            model,
+            model.sentiment_clean,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "quality_status_counts": _group_counts(
+            db,
+            model,
+            model.quality_status,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+        ),
+        "review_required_count": _count_sku_rows_where(
+            db,
+            model,
+            project_id,
+            category_code,
+            batch_id,
+            sku_code,
+            model.review_required.is_(True),
+        ),
+        "stored_preliminary_filter": coverage_comment.get("preliminary_filter") or {},
+    }
+
+
+def _sku_quality_issue_summary(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+    issue_limit: int,
+) -> dict[str, Any]:
+    model = entities.Core3DataQualityIssue
+    counts: dict[str, Any] = {
+        "total": 0,
+        "info": 0,
+        "warning": 0,
+        "error": 0,
+        "review_required": 0,
+        "by_type": {},
+        "by_clean_table": {},
+    }
+    stmt = _apply_sku_filters(
+        select(model.severity, model.issue_type, model.clean_table, model.review_required, func.count()).group_by(
+            model.severity,
+            model.issue_type,
+            model.clean_table,
+            model.review_required,
+        ),
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    by_type: dict[str, int] = {}
+    by_clean_table: dict[str, int] = {}
+    for severity, issue_type, clean_table, review_required, count in db.execute(stmt).all():
+        normalized_count = int(count)
+        counts["total"] += normalized_count
+        if severity in {"info", "warning", "error"}:
+            counts[str(severity)] += normalized_count
+        if review_required:
+            counts["review_required"] += normalized_count
+        if issue_type:
+            by_type[str(issue_type)] = by_type.get(str(issue_type), 0) + normalized_count
+        if clean_table:
+            by_clean_table[str(clean_table)] = by_clean_table.get(str(clean_table), 0) + normalized_count
+    counts["by_type"] = by_type
+    counts["by_clean_table"] = by_clean_table
+    normalized_limit = max(int(issue_limit), 0)
+    sample_stmt = _apply_sku_filters(
+        select(model.issue_type, model.severity, model.clean_table, model.issue_detail, model.review_required)
+        .order_by(model.created_at, model.issue_id)
+        .limit(normalized_limit),
+        model,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    counts["sample_issues"] = [
+        {
+            "issue_type": issue_type,
+            "severity": severity,
+            "clean_table": clean_table,
+            "issue_detail": issue_detail,
+            "review_required": bool(review_required),
+        }
+        for issue_type, severity, clean_table, issue_detail, review_required in db.execute(sample_stmt).all()
+    ]
+    return counts
+
+
+def _count_sku_rows(
+    db: Session,
+    model_cls: Any,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> int:
+    return _count_sku_rows_where(db, model_cls, project_id, category_code, batch_id, sku_code)
+
+
+def _count_sku_rows_where(
+    db: Session,
+    model_cls: Any,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+    *conditions: Any,
+) -> int:
+    stmt = _apply_sku_filters(
+        select(func.count()).select_from(model_cls),
+        model_cls,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    for condition in conditions:
+        stmt = stmt.where(condition)
+    return int(db.execute(stmt).scalar_one())
+
+
+def _count_distinct_sku_values(
+    db: Session,
+    model_cls: Any,
+    column: Any,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> int:
+    stmt = _apply_sku_filters(
+        select(func.count(distinct(column))).select_from(model_cls),
+        model_cls,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    ).where(column.is_not(None))
+    return int(db.execute(stmt).scalar_one())
+
+
+def _group_counts(
+    db: Session,
+    model_cls: Any,
+    column: Any,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> dict[str, int]:
+    stmt = _apply_sku_filters(
+        select(column, func.count()).select_from(model_cls).group_by(column),
+        model_cls,
+        project_id,
+        category_code,
+        batch_id,
+        sku_code,
+    )
+    return {str(value) if value is not None else "unknown": int(count) for value, count in db.execute(stmt).all()}
+
+
+def _apply_sku_filters(
+    stmt: Any,
+    model_cls: Any,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_code: str,
+) -> Any:
+    return (
+        stmt.where(model_cls.project_id == project_id)
+        .where(model_cls.category_code == category_code)
+        .where(model_cls.batch_id == batch_id)
+        .where(model_cls.sku_code == sku_code)
+    )
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 4)
 
 
 def _sku_chunks(skus: Sequence[str], chunk_size: int) -> list[tuple[str, ...]]:

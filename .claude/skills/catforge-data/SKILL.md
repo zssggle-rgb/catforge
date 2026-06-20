@@ -10,6 +10,7 @@ Use this skill when the user asks to:
 - "先初步处理一下", "预处理新数据", "初步清洗", or similar.
 - Check whether newly uploaded CatForge data is ready for later analysis.
 - Inspect SKU weekly market coverage, preliminary comment quality, missing data, or quality warnings.
+- Inspect one SKU's preliminary cleaning result, such as "这个 SKU 清理情况" or "这个 SKU 评论还有多少有效内容".
 
 Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal implementation details in user-facing replies.
 
@@ -44,6 +45,12 @@ Inspect current preliminary quality without rerunning:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --format json
 ```
 
+Inspect one SKU's preliminary quality:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-sku-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --sku-code TV00029115 --format json
+```
+
 For a small smoke test:
 
 ```bash
@@ -63,5 +70,7 @@ When reporting results to the user, summarize:
 - low-value comment count/rate
 - service-fulfillment low-value count/rate, clearly saying those comments were blocked from downstream product/comment sentence analysis
 - review-required quality issues, if any
+
+For SKU-level results, summarize whether the SKU exists in the batch, market weekly coverage, single-platform weeks, attribute unknown count, claim count, raw comments, low-value comments, service-fulfillment comments, candidate comments after filtering, and SKU-level review-required issues.
 
 Use business language and avoid exposing internal module numbers unless the user asks for implementation details.
