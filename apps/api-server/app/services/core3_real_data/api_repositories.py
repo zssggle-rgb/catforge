@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import func, or_, select
 
 from app.models import entities
 from app.services.core3_real_data.repositories import Core3BaseRepository
+
+
+@dataclass(frozen=True)
+class Core3TargetReportSummary:
+    batch_id: str
+    target_sku_code: str
+    target_display_name_cn: str
+    report_title_cn: str
+    data_scope_note_cn: str
+    selected_count: int
+    core_competitors_json: list[dict[str, Any]]
 
 
 class Core3RealDataApiRepository(Core3BaseRepository):
@@ -150,18 +162,43 @@ class Core3RealDataApiRepository(Core3BaseRepository):
         batch_id: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[entities.Core3TargetReportPayload]:
+    ) -> list[Core3TargetReportSummary]:
         limit, offset = self.pagination(limit, offset, max_limit=1000)
+        stmt = self._target_report_summary_stmt(batch_id=batch_id)
+        rows = self.db.execute(stmt.limit(limit).offset(offset)).mappings()
+        return [
+            Core3TargetReportSummary(
+                batch_id=str(row["batch_id"]),
+                target_sku_code=str(row["target_sku_code"]),
+                target_display_name_cn=str(row["target_display_name_cn"]),
+                report_title_cn=str(row["report_title_cn"]),
+                data_scope_note_cn=str(row["data_scope_note_cn"]),
+                selected_count=int(row["selected_count"] or 0),
+                core_competitors_json=list(row["core_competitors_json"] or []),
+            )
+            for row in rows
+        ]
+
+    def _target_report_summary_stmt(self, *, batch_id: str | None = None):
+        report = entities.Core3TargetReportPayload
         stmt = (
-            select(entities.Core3TargetReportPayload)
-            .where(entities.Core3TargetReportPayload.project_id == self.project_id)
-            .where(entities.Core3TargetReportPayload.category_code == self.category_code.value)
-            .where(entities.Core3TargetReportPayload.is_current.is_(True))
-            .order_by(entities.Core3TargetReportPayload.target_sku_code)
+            select(
+                report.batch_id,
+                report.target_sku_code,
+                report.target_display_name_cn,
+                report.report_title_cn,
+                report.data_scope_note_cn,
+                report.selected_count,
+                report.core_competitors_json,
+            )
+            .where(report.project_id == self.project_id)
+            .where(report.category_code == self.category_code.value)
+            .where(report.is_current.is_(True))
+            .order_by(report.target_sku_code)
         )
         if batch_id:
-            stmt = stmt.where(entities.Core3TargetReportPayload.batch_id == batch_id)
-        return list(self.db.execute(stmt.limit(limit).offset(offset)).scalars())
+            stmt = stmt.where(report.batch_id == batch_id)
+        return stmt
 
     def list_cards(
         self,

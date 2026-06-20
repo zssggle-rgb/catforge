@@ -14,6 +14,7 @@ class Core3ModuleCode(StrEnum):
     M01 = "M01"
     M02 = "M02"
     M03 = "M03"
+    M03B = "M03B"
     M04A = "M04a"
     M05 = "M05"
     M06 = "M06"
@@ -171,6 +172,7 @@ class Core3EvidenceInactiveReason(StrEnum):
     QUALITY_ISSUE_RESOLVED = "quality_issue_resolved"
     SUPERSEDED_BY_CLEAN_HASH = "superseded_by_clean_hash"
     LOW_VALUE_SKIPPED = "low_value_skipped"
+    SERVICE_FULFILLMENT_SKIPPED = "service_fulfillment_skipped"
     DUPLICATE_REPRESENTATIVE_SKIPPED = "duplicate_representative_skipped"
     COMMENT_TEMPLATE_SKIPPED = "comment_template_skipped"
     MANUAL_REJECTED = "manual_rejected"
@@ -331,6 +333,10 @@ CORE3_M03_MODULE_VERSION = "m03-param-extraction-0.1.0"
 CORE3_M03_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M03_PARSER_VERSION = "m03_parser_v1"
 CORE3_M03_RULE_VERSION = "m03_param_v1"
+CORE3_M03B_MODULE_VERSION = "m03b-sku-param-profile-0.1.0"
+CORE3_M03B_TAXONOMY_VERSION = "tv_param_taxonomy_manual_v0.1"
+CORE3_M03B_PARSER_VERSION = "m03b_tv_parser_v0.1"
+CORE3_M03B_RULE_VERSION = "m03b_tv_param_profile_v0.1"
 CORE3_M04A_MODULE_VERSION = "m04a-base-claim-activation-0.1.0"
 CORE3_M04A_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M04A_RULE_VERSION = "m04a_claim_activation_v1"
@@ -1832,6 +1838,7 @@ CORE3_MODULE_ORDER: tuple[Core3ModuleCode, ...] = (
     Core3ModuleCode.M01,
     Core3ModuleCode.M02,
     Core3ModuleCode.M03,
+    Core3ModuleCode.M03B,
     Core3ModuleCode.M04A,
     Core3ModuleCode.M05,
     Core3ModuleCode.M06,
@@ -1857,14 +1864,17 @@ CORE3_MODULE_DAG_EDGES: tuple[tuple[Core3ModuleCode, Core3ModuleCode], ...] = (
     (Core3ModuleCode.M00, Core3ModuleCode.M01),
     (Core3ModuleCode.M01, Core3ModuleCode.M02),
     (Core3ModuleCode.M02, Core3ModuleCode.M03),
+    (Core3ModuleCode.M02, Core3ModuleCode.M03B),
     (Core3ModuleCode.M02, Core3ModuleCode.M04A),
     (Core3ModuleCode.M03, Core3ModuleCode.M04A),
+    (Core3ModuleCode.M03B, Core3ModuleCode.M04A),
     (Core3ModuleCode.M02, Core3ModuleCode.M05),
     (Core3ModuleCode.M05, Core3ModuleCode.M06),
     (Core3ModuleCode.M04A, Core3ModuleCode.M04B),
     (Core3ModuleCode.M06, Core3ModuleCode.M04B),
     (Core3ModuleCode.M02, Core3ModuleCode.M07),
     (Core3ModuleCode.M03, Core3ModuleCode.M08),
+    (Core3ModuleCode.M03B, Core3ModuleCode.M08),
     (Core3ModuleCode.M04B, Core3ModuleCode.M08),
     (Core3ModuleCode.M06, Core3ModuleCode.M08),
     (Core3ModuleCode.M07, Core3ModuleCode.M08),
@@ -1902,7 +1912,7 @@ CORE3_MODULE_DAG_EDGES: tuple[tuple[Core3ModuleCode, Core3ModuleCode], ...] = (
 CORE3_DATA_DOMAIN_START_MODULE: dict[Core3DataDomain, Core3ModuleCode] = {
     Core3DataDomain.SKU: Core3ModuleCode.M01,
     Core3DataDomain.MARKET: Core3ModuleCode.M01,
-    Core3DataDomain.PARAM: Core3ModuleCode.M03,
+    Core3DataDomain.PARAM: Core3ModuleCode.M03B,
     Core3DataDomain.CLAIM: Core3ModuleCode.M04A,
     Core3DataDomain.COMMENT: Core3ModuleCode.M05,
     Core3DataDomain.QUALITY: Core3ModuleCode.M01,
@@ -1923,6 +1933,7 @@ CORE3_MODULE_LABEL_CN: dict[Core3ModuleCode, str] = {
     Core3ModuleCode.M01: "清洗规范化与质量诊断",
     Core3ModuleCode.M02: "Evidence 原子层",
     Core3ModuleCode.M03: "参数字段画像与标准参数抽取",
+    Core3ModuleCode.M03B: "SKU 参数事实画像与参数档位覆盖",
     Core3ModuleCode.M04A: "基础卖点激活",
     Core3ModuleCode.M05: "评论基础证据层",
     Core3ModuleCode.M06: "评论下游信号抽取",

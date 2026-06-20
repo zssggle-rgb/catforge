@@ -104,10 +104,15 @@ from app.schemas.core3_real_data import (
     Core3ParamAliasCandidateListOut,
     Core3ParamExtractionRunApiRequest,
     Core3ParamFieldProfileListOut,
+    Core3ParamTierCoverageListOut,
+    Core3ParamTierCoverageRead,
     Core3ParamTaxonomyDraftApiRequest,
     Core3ParamValueConflictListOut,
+    Core3SkuParamDimensionTierListOut,
+    Core3SkuParamDimensionTierRead,
     Core3QualityIssueListOut,
     Core3SkuParamOut,
+    Core3SkuParamProfileRunApiRequest,
     Core3SourceBatchListOut,
     Core3SourceBatchOut,
     Core3SourceBatchRegisterApiRequest,
@@ -341,6 +346,11 @@ from app.services.core3_real_data.evidence_atom_repositories import (
     EvidenceLinkRepository,
 )
 from app.services.core3_real_data.evidence_atom_service import EvidenceAtomRunner
+from app.services.core3_real_data.m03b_param_profile_service import (
+    M03BParamEvidenceReader,
+    M03BParamProfileRepository,
+    M03BRunner,
+)
 from app.services.core3_real_data.param_extraction_repositories import (
     ParamEvidenceReader,
     ParamExtractionRepository,
@@ -977,6 +987,70 @@ def run_param_extraction(
         raise
 
 
+@router.post(
+    "/projects/{project_id}/batches/{batch_id}/params/m03b/run",
+    response_model=Core3ModuleRunResultSchema,
+)
+def run_sku_param_profiles(
+    project_id: str,
+    batch_id: str,
+    payload: Core3SkuParamProfileRunApiRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+) -> Core3ModuleRunResultSchema:
+    payload = payload or Core3SkuParamProfileRunApiRequest()
+    batch = _get_batch_or_404(db, project_id, batch_id)
+    repository_context = _repository_context(db, project_id, batch.category_code)
+    ready_evidence = M03BParamEvidenceReader(repository_context).list_param_raw_evidence(
+        batch_id,
+        target_sku_codes=payload.target_sku_codes,
+        sku_code_prefix=payload.sku_code_prefix,
+        limit=1,
+    )
+    if not ready_evidence:
+        raise HTTPException(
+            status_code=409,
+            detail="M02 evidence not ready: no current TV param_raw evidence for M03B.",
+        )
+
+    context = build_run_context(
+        run_id=payload.run_id or f"m03b-api-{batch_id}",
+        project_id=project_id,
+        category_code=payload.category_code,
+        batch_id=batch_id,
+        run_mode=Core3RunMode.DAILY_INCREMENTAL,
+        target_scope=Core3TargetScopeSchema(
+            scope_type=Core3TargetScopeType.CHANGED_SKU,
+            sku_codes=payload.target_sku_codes,
+            data_domains=[Core3DataDomain.PARAM],
+            note_cn="M03B SKU 参数事实画像与参数档位覆盖手工触发",
+        ),
+    )
+    target = Core3ModuleTarget(
+        scope=Core3ModuleTargetScope.BATCH,
+        target_ids=tuple(payload.target_sku_codes),
+        data_domains=(Core3DataDomain.PARAM,),
+        metadata={
+            "batch_id": batch_id,
+            "module_run_id": payload.module_run_id,
+            "taxonomy_version": payload.taxonomy_version,
+            "parser_version": payload.parser_version,
+            "rule_version": payload.rule_version,
+            "force_rebuild": payload.force_rebuild,
+            "sku_code_prefix": payload.sku_code_prefix,
+        },
+    )
+    try:
+        result = M03BRunner(db).run(context, target)
+        db.commit()
+        return result
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
 @router.get(
     "/projects/{project_id}/batches/{batch_id}/params/field-profiles",
     response_model=Core3ParamFieldProfileListOut,
@@ -1075,6 +1149,90 @@ def get_sku_params(
         profile=SkuParamProfileRead.model_validate(profile, from_attributes=True),
         values=[ExtractParamValueRead.model_validate(item, from_attributes=True) for item in values],
         conflicts=[ParamValueConflictRead.model_validate(item, from_attributes=True) for item in conflicts],
+    )
+
+
+@router.get(
+    "/projects/{project_id}/batches/{batch_id}/params/m03b/dimension-tiers",
+    response_model=Core3SkuParamDimensionTierListOut,
+)
+def list_sku_param_dimension_tiers(
+    project_id: str,
+    batch_id: str,
+    sku_code: str | None = Query(default=None),
+    dimension_code: str | None = Query(default=None),
+    tier_code: str | None = Query(default=None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> Core3SkuParamDimensionTierListOut:
+    batch = _get_batch_or_404(db, project_id, batch_id)
+    repository = M03BParamProfileRepository(_repository_context(db, project_id, batch.category_code))
+    items = repository.list_dimension_tiers(
+        batch_id,
+        sku_code=sku_code,
+        dimension_code=dimension_code,
+        tier_code=tier_code,
+        limit=limit,
+        offset=offset,
+    )
+    filters = [
+        entities.Core3SkuParamDimensionTier.project_id == project_id,
+        entities.Core3SkuParamDimensionTier.category_code == batch.category_code,
+        entities.Core3SkuParamDimensionTier.batch_id == batch_id,
+        entities.Core3SkuParamDimensionTier.is_current.is_(True),
+    ]
+    if sku_code is not None:
+        filters.append(entities.Core3SkuParamDimensionTier.sku_code == sku_code)
+    if dimension_code is not None:
+        filters.append(entities.Core3SkuParamDimensionTier.dimension_code == dimension_code)
+    if tier_code is not None:
+        filters.append(entities.Core3SkuParamDimensionTier.tier_code == tier_code)
+    return Core3SkuParamDimensionTierListOut(
+        items=[Core3SkuParamDimensionTierRead.model_validate(item, from_attributes=True) for item in items],
+        total=_count_model_rows(db, entities.Core3SkuParamDimensionTier, filters),
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/batches/{batch_id}/params/m03b/tier-coverages",
+    response_model=Core3ParamTierCoverageListOut,
+)
+def list_param_tier_coverages(
+    project_id: str,
+    batch_id: str,
+    dimension_code: str | None = Query(default=None),
+    tier_code: str | None = Query(default=None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> Core3ParamTierCoverageListOut:
+    batch = _get_batch_or_404(db, project_id, batch_id)
+    repository = M03BParamProfileRepository(_repository_context(db, project_id, batch.category_code))
+    items = repository.list_tier_coverages(
+        batch_id,
+        dimension_code=dimension_code,
+        tier_code=tier_code,
+        limit=limit,
+        offset=offset,
+    )
+    filters = [
+        entities.Core3ParamTierCoverage.project_id == project_id,
+        entities.Core3ParamTierCoverage.category_code == batch.category_code,
+        entities.Core3ParamTierCoverage.batch_id == batch_id,
+        entities.Core3ParamTierCoverage.is_current.is_(True),
+    ]
+    if dimension_code is not None:
+        filters.append(entities.Core3ParamTierCoverage.dimension_code == dimension_code)
+    if tier_code is not None:
+        filters.append(entities.Core3ParamTierCoverage.tier_code == tier_code)
+    return Core3ParamTierCoverageListOut(
+        items=[Core3ParamTierCoverageRead.model_validate(item, from_attributes=True) for item in items],
+        total=_count_model_rows(db, entities.Core3ParamTierCoverage, filters),
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -6797,6 +6955,20 @@ def _execute_initialization_module(
                     run_id=pipeline_run_id,
                     module_run_id=module_run_id,
                     force_rebuild=True,
+                ),
+                db,
+            ),
+            batch_id,
+        )
+    if module_code == Core3ModuleCode.M03B:
+        return (
+            run_sku_param_profiles(
+                project_id,
+                batch_id,
+                Core3SkuParamProfileRunApiRequest(
+                    run_id=pipeline_run_id,
+                    module_run_id=module_run_id,
+                    force_rebuild=payload.force_rebuild,
                 ),
                 db,
             ),

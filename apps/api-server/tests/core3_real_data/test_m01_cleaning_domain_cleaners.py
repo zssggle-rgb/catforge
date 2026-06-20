@@ -258,7 +258,63 @@ def test_comment_cleaner_marks_default_comment_low_value_but_keeps_fact():
     assert result.dimension["quality_flags"] == ["comment_dimension_missing"]
     assert "task_code" not in payload
     assert "target_group_code" not in payload
+
+
+def test_comment_cleaner_blocks_service_fulfillment_from_product_sentences():
+    result = CommentCleaner().clean(
+        {
+            "id": 42,
+            "model_code": "TV00029115",
+            "brand": "海信",
+            "model": "85E7Q",
+            "comment_id": "c-42",
+            "comment_content": "安装师傅很专业，物流配送也很快，客服回复及时",
+            "comments_segments": "安装师傅很专业；物流配送也很快",
+            "sentiment": "正面",
+            "primary_dim": "服务体验",
+            "secondary_dim": "安装配送",
+            "third_dim": "",
+        },
+        source_context("comment_data", "42"),
+    )
+
+    payload = result.comment
+    assert payload["clean_comment_text"] == "安装师傅很专业,物流配送也很快,客服回复及时"
+    assert payload["low_value_flag"] is False
+    assert payload["low_value_reason"] is None
+    assert payload["record_status"] == "skipped"
+    assert payload["quality_status"] == "ok"
+    assert payload["quality_flags"] == []
+    assert result.sentences == []
+    assert result.dimension is not None
+    assert result.dimension["dimension_path_raw"] == "服务体验/安装配送"
+    assert "task_code" not in payload
     assert "battlefield_code" not in payload
+
+
+def test_comment_cleaner_keeps_product_sentences_and_filters_service_sentences_in_mixed_comment():
+    result = CommentCleaner().clean(
+        {
+            "id": 43,
+            "model_code": "TV00029115",
+            "brand": "海信",
+            "model": "85E7Q",
+            "comment_id": "c-43",
+            "comment_content": "画质很好。安装师傅很专业。",
+            "comments_segments": "画质很好；物流配送也很快",
+            "sentiment": "正面",
+            "primary_dim": "产品体验",
+            "secondary_dim": "画质",
+            "third_dim": "",
+        },
+        source_context("comment_data", "43"),
+    )
+
+    payload = result.comment
+    assert payload["low_value_flag"] is False
+    assert payload["quality_flags"] == []
+    assert [sentence["sentence_text"] for sentence in result.sentences] == ["画质很好", "画质很好"]
+    assert {sentence["sentence_source"] for sentence in result.sentences} == {"system_split", "source_segment"}
 
 
 def test_common_context_versions_are_applied_to_all_domain_payloads():

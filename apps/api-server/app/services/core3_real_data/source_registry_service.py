@@ -61,6 +61,7 @@ SOURCE_TABLE_AFFECTED_MODULES: dict[str, tuple[Core3ModuleCode, ...]] = {
         Core3ModuleCode.M01,
         Core3ModuleCode.M02,
         Core3ModuleCode.M03,
+        Core3ModuleCode.M03B,
         Core3ModuleCode.M04A,
         Core3ModuleCode.M08,
         Core3ModuleCode.M08_4,

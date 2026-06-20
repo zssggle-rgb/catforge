@@ -63,6 +63,59 @@ EXACT_LOW_VALUE_COMMENT_PATTERNS = frozenset(
         "好评",
     }
 )
+SERVICE_FULFILLMENT_TERMS = frozenset(
+    {
+        "安装",
+        "安装师傅",
+        "师傅",
+        "配送",
+        "送货",
+        "送装",
+        "物流",
+        "快递",
+        "客服",
+        "售后",
+        "退换",
+        "退货",
+        "换货",
+        "发票",
+        "保修",
+        "保价",
+        "上门",
+        "预约",
+        "签收",
+        "派送",
+    }
+)
+PRODUCT_EXPERIENCE_TERMS = frozenset(
+    {
+        "画质",
+        "屏幕",
+        "清晰",
+        "色彩",
+        "亮度",
+        "音质",
+        "声音",
+        "刷新率",
+        "高刷",
+        "延迟",
+        "游戏",
+        "看球",
+        "体育",
+        "系统",
+        "遥控",
+        "语音",
+        "投屏",
+        "护眼",
+        "尺寸",
+        "大屏",
+        "反应",
+        "流畅",
+        "卡顿",
+        "开机",
+        "广告",
+    }
+)
 
 
 class TextNormalizer:
@@ -284,6 +337,20 @@ def is_low_value_comment(value: Any, patterns: Iterable[str] = DEFAULT_LOW_VALUE
         return True
     compact = normalized.replace(" ", "")
     return compact in EXACT_LOW_VALUE_COMMENT_PATTERNS or any(pattern in compact for pattern in patterns)
+
+
+def is_service_fulfillment_text(value: Any) -> bool:
+    normalized = TextNormalizer.normalize(value)
+    if not normalized:
+        return False
+    compact = normalized.replace(" ", "")
+    service_hits = [term for term in SERVICE_FULFILLMENT_TERMS if term in compact]
+    if not service_hits:
+        return False
+    product_hit = any(term in compact for term in PRODUCT_EXPERIENCE_TERMS)
+    if product_hit:
+        return False
+    return True
 
 
 def extract_number_candidates(value: Any) -> list[dict[str, str]]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -19,6 +20,9 @@ from app.services.core3_real_data.constants import (
     CORE3_M03_PARSER_VERSION,
     CORE3_M03_RULE_VERSION,
     CORE3_M03_SEED_VERSION,
+    CORE3_M03B_PARSER_VERSION,
+    CORE3_M03B_RULE_VERSION,
+    CORE3_M03B_TAXONOMY_VERSION,
     CORE3_M04A_RULE_VERSION,
     CORE3_M04A_SEED_VERSION,
     CORE3_M04B_MODULE_VERSION,
@@ -712,6 +716,25 @@ class Core3ParamExtractionRunApiRequest(Core3RealDataBaseModel):
         return target_sku_codes
 
 
+class Core3SkuParamProfileRunApiRequest(Core3RealDataBaseModel):
+    category_code: Core3CategoryCode = Core3CategoryCode.TV
+    run_id: str | None = None
+    module_run_id: str | None = None
+    target_sku_codes: list[str] = Field(default_factory=list)
+    taxonomy_version: str = CORE3_M03B_TAXONOMY_VERSION
+    parser_version: str = CORE3_M03B_PARSER_VERSION
+    rule_version: str = CORE3_M03B_RULE_VERSION
+    force_rebuild: bool = False
+    sku_code_prefix: str | None = "TV"
+
+    @field_validator("target_sku_codes")
+    @classmethod
+    def validate_target_sku_codes(cls, target_sku_codes: list[str]) -> list[str]:
+        if any(not sku_code.strip() for sku_code in target_sku_codes):
+            raise ValueError("target_sku_codes must not contain empty values")
+        return target_sku_codes
+
+
 class Core3ParamTaxonomyDraftApiRequest(Core3RealDataBaseModel):
     batch_ids: list[str] = Field(min_length=1)
     taxonomy_version: str | None = None
@@ -817,6 +840,77 @@ class Core3SkuParamOut(Core3RealDataBaseModel):
     profile: SkuParamProfileRead
     values: list[ExtractParamValueRead] = Field(default_factory=list)
     conflicts: list[ParamValueConflictRead] = Field(default_factory=list)
+
+
+class Core3SkuParamDimensionTierRead(Core3RealDataBaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid", use_enum_values=True)
+
+    dimension_tier_id: str
+    project_id: str
+    category_code: Core3CategoryCode = Core3CategoryCode.TV
+    batch_id: str
+    run_id: str | None = None
+    module_run_id: str | None = None
+    taxonomy_version: str
+    sku_code: str
+    model_name: str | None = None
+    dimension_code: str
+    tier_code: str
+    tier_name: str
+    tier_rank: int | None = None
+    basis_param_codes: list[Any] = Field(default_factory=list)
+    basis_values_json: dict[str, Any] = Field(default_factory=dict)
+    rule_snapshot_json: dict[str, Any] = Field(default_factory=dict)
+    explanation: str
+    evidence_ids: list[Any] = Field(default_factory=list)
+    confidence: Decimal
+    quality_flags: list[Any] = Field(default_factory=list)
+    profile_hash: str
+    is_current: bool = True
+    rule_version: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class Core3ParamTierCoverageRead(Core3RealDataBaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="forbid", use_enum_values=True)
+
+    tier_coverage_id: str
+    project_id: str
+    category_code: Core3CategoryCode = Core3CategoryCode.TV
+    batch_id: str
+    run_id: str | None = None
+    module_run_id: str | None = None
+    taxonomy_version: str
+    dimension_code: str
+    tier_code: str
+    tier_name: str
+    tier_rank: int | None = None
+    rule_summary: str
+    sku_count: int
+    sku_ratio: Decimal
+    sku_codes: list[Any] = Field(default_factory=list)
+    sample_sku_codes: list[Any] = Field(default_factory=list)
+    coverage_status: str
+    coverage_hash: str
+    is_current: bool = True
+    rule_version: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class Core3SkuParamDimensionTierListOut(Core3RealDataBaseModel):
+    items: list[Core3SkuParamDimensionTierRead] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+
+
+class Core3ParamTierCoverageListOut(Core3RealDataBaseModel):
+    items: list[Core3ParamTierCoverageRead] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
 
 
 class Core3ClaimHitListOut(Core3RealDataBaseModel):

@@ -12,6 +12,7 @@ from app.services.core3_real_data.cleaning_normalizers import (
     extract_claim_seq,
     extract_number_candidates,
     is_low_value_comment,
+    is_service_fulfillment_text,
 )
 from app.services.core3_real_data.constants import Core3QualityIssueType, Core3ValuePresenceStatus
 
@@ -114,6 +115,13 @@ def test_low_value_comment_marks_defaults_but_keeps_business_comments():
     assert is_low_value_comment("默认好评")
     assert is_low_value_comment("好评")
     assert not is_low_value_comment("画质很好，游戏模式延迟低，值得好评")
+
+
+def test_service_fulfillment_text_marks_service_only_without_product_mix():
+    assert is_service_fulfillment_text("安装师傅很专业，物流也很快")
+    assert is_service_fulfillment_text("客服处理售后退换货很及时")
+    assert not is_service_fulfillment_text("画质很好，安装师傅也很专业")
+    assert not is_service_fulfillment_text("游戏模式延迟低，物流包装也不错")
 
 
 def test_clean_hash_ignores_volatile_fields_but_keeps_quality_changes():

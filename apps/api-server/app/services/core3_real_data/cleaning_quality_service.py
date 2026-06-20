@@ -18,6 +18,7 @@ from app.services.core3_real_data.cleaning_normalizers import (
     extract_claim_seq,
     extract_number_candidates,
     is_low_value_comment,
+    is_service_fulfillment_text,
 )
 from app.services.core3_real_data.constants import (
     CORE3_M01_CLEAN_HASH_VERSION,
@@ -245,6 +246,7 @@ class CommentCleaner:
         segment_clean = _clean_text(segment_raw)
         sentiment_clean = _clean_sentiment(_field(row, "sentiment"))
         low_value = is_low_value_comment(clean_comment_text)
+        service_fulfillment = is_service_fulfillment_text(clean_comment_text)
         dimension_payload = self._dimension(row, context)
         quality_flags = []
         if text_presence != Core3ValuePresenceStatus.PRESENT:
@@ -286,11 +288,16 @@ class CommentCleaner:
             "clean_record_key": CleanHashService.clean_record_key("comment", context.source_row_id),
             "quality_status": _quality_status(quality_flags),
             "quality_flags": quality_flags,
+            "record_status": (
+                Core3CleanRecordStatus.SKIPPED.value
+                if service_fulfillment
+                else Core3CleanRecordStatus.ACTIVE.value
+            ),
         }
         payload["clean_hash"] = CleanHashService.clean_hash("comment", payload)
 
         sentences = []
-        if not low_value:
+        if not low_value and not service_fulfillment:
             sentences.extend(
                 _sentence_payload(
                     context,
@@ -305,10 +312,10 @@ class CommentCleaner:
                         "is_from_existing_segment": False,
                     },
                 )
-                for index, sentence in enumerate(SentenceSplitter.split(clean_comment_text), start=1)
+                for index, sentence in enumerate(_product_comment_sentences(clean_comment_text), start=1)
             )
-        if segment_clean and not low_value:
-            for index, sentence in enumerate(SentenceSplitter.split(segment_clean), start=1):
+        if segment_clean and not low_value and not service_fulfillment:
+            for index, sentence in enumerate(_product_comment_sentences(segment_clean), start=1):
                 sentences.append(
                     _sentence_payload(
                         context,
@@ -673,6 +680,10 @@ def _issue_values(issue_types: list[Core3QualityIssueType | None]) -> list[str]:
 
 def _quality_status(quality_flags: list[str]) -> str:
     return Core3CleanQualityStatus.WARNING.value if quality_flags else Core3CleanQualityStatus.OK.value
+
+
+def _product_comment_sentences(value: Any) -> list[str]:
+    return [sentence for sentence in SentenceSplitter.split(value) if not is_service_fulfillment_text(sentence)]
 
 
 def _coverage_json(domain_records: Mapping[str, list[Mapping[str, Any]]]) -> dict[str, Any]:

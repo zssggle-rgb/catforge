@@ -21,6 +21,10 @@ from app.services.core3_real_data.constants import (
     Core3SourceOperationType,
     Core3SourcePkStrategy,
 )
+from app.services.core3_real_data.pipeline_dependency_graph import (
+    CORE3_PIPELINE_MODULE_ORDER,
+    CORE3_PIPELINE_REQUIRED_UPSTREAMS,
+)
 
 
 def test_module_order_matches_sop_sequence():
@@ -29,6 +33,7 @@ def test_module_order_matches_sop_sequence():
         "M01",
         "M02",
         "M03",
+        "M03B",
         "M04a",
         "M05",
         "M06",
@@ -57,14 +62,25 @@ def test_module_dag_edges_only_reference_known_modules():
     assert CORE3_MODULE_DAG_EDGES
     assert all(source in known_modules and target in known_modules for source, target in CORE3_MODULE_DAG_EDGES)
     assert (Core3ModuleCode.M00, Core3ModuleCode.M01) in CORE3_MODULE_DAG_EDGES
+    assert (Core3ModuleCode.M02, Core3ModuleCode.M03B) in CORE3_MODULE_DAG_EDGES
+    assert (Core3ModuleCode.M03B, Core3ModuleCode.M04A) in CORE3_MODULE_DAG_EDGES
     assert (Core3ModuleCode.M14, Core3ModuleCode.M15) in CORE3_MODULE_DAG_EDGES
     assert (Core3ModuleCode.M15, Core3ModuleCode.M16) in CORE3_MODULE_DAG_EDGES
+
+
+def test_pipeline_dependency_graph_includes_m03b_param_profile_stage():
+    assert CORE3_PIPELINE_MODULE_ORDER.index(Core3ModuleCode.M03) < CORE3_PIPELINE_MODULE_ORDER.index(Core3ModuleCode.M03B)
+    assert CORE3_PIPELINE_MODULE_ORDER.index(Core3ModuleCode.M03B) < CORE3_PIPELINE_MODULE_ORDER.index(Core3ModuleCode.M04A)
+    assert CORE3_PIPELINE_REQUIRED_UPSTREAMS[Core3ModuleCode.M03B] == (Core3ModuleCode.M02,)
+    assert Core3ModuleCode.M03B in CORE3_PIPELINE_REQUIRED_UPSTREAMS[Core3ModuleCode.M04A]
+    assert Core3ModuleCode.M03B in CORE3_PIPELINE_REQUIRED_UPSTREAMS[Core3ModuleCode.M08]
 
 
 def test_data_domain_mapping_and_labels_are_complete():
     assert set(CORE3_DATA_DOMAIN_START_MODULE) == set(Core3DataDomain)
     assert set(CORE3_DATA_DOMAIN_LABEL_CN) == set(Core3DataDomain)
     assert set(CORE3_MODULE_LABEL_CN) == set(Core3ModuleCode)
+    assert CORE3_DATA_DOMAIN_START_MODULE[Core3DataDomain.PARAM] == Core3ModuleCode.M03B
     assert CORE3_DATA_DOMAIN_START_MODULE[Core3DataDomain.COMMENT] == Core3ModuleCode.M05
     assert CORE3_DATA_DOMAIN_START_MODULE[Core3DataDomain.REPORT] == Core3ModuleCode.M15
 

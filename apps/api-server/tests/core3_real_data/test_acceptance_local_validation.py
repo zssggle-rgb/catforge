@@ -64,7 +64,7 @@ def test_acceptance_api_guardrail_blocks_internal_display_terms():
 
 def test_acceptance_api_guardrail_allows_controlled_codes_for_frontend_mapping():
     payload = {
-        "project_id": "core3_local_validation",
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
         "category_code": "TV",
         "target": {"sku_code": "TV900001", "target_sku_code": "TV900001"},
         "release_status": {

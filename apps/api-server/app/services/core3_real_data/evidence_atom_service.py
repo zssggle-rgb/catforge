@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
+from app.services.core3_real_data.cleaning_normalizers import is_service_fulfillment_text
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
     CORE3_M01_CLEAN_HASH_VERSION,
@@ -105,6 +106,7 @@ class CleanFactBatch:
 @dataclass(frozen=True)
 class CommentSemanticFilter:
     low_value_source_rows: set[str]
+    service_fulfillment_source_rows: set[str]
     duplicate_non_representative_source_rows: set[str]
     template_source_rows: set[str]
 
@@ -112,6 +114,7 @@ class CommentSemanticFilter:
     def excluded_source_rows(self) -> set[str]:
         return (
             set(self.low_value_source_rows)
+            | set(self.service_fulfillment_source_rows)
             | set(self.duplicate_non_representative_source_rows)
             | set(self.template_source_rows)
         )
@@ -247,6 +250,7 @@ class CleanFactReader:
         target_comments = list(self.db.execute(stmt).mappings())
 
         low_value_source_rows: set[str] = set()
+        service_fulfillment_source_rows: set[str] = set()
         template_source_rows: set[str] = set()
         duplicate_candidate_groups: set[str] = set()
         target_rows_by_source: dict[str, Mapping[str, Any]] = {}
@@ -255,6 +259,9 @@ class CleanFactReader:
             if not source_row_id:
                 continue
             target_rows_by_source[source_row_id] = comment
+            if _is_service_fulfillment_record(comment):
+                service_fulfillment_source_rows.add(source_row_id)
+                continue
             if _is_low_value_comment_record(comment):
                 low_value_source_rows.add(source_row_id)
                 continue
@@ -290,7 +297,11 @@ class CleanFactReader:
 
         duplicate_non_representative_source_rows: set[str] = set()
         for source_row_id, comment in target_rows_by_source.items():
-            if source_row_id in low_value_source_rows or source_row_id in template_source_rows:
+            if (
+                source_row_id in low_value_source_rows
+                or source_row_id in service_fulfillment_source_rows
+                or source_row_id in template_source_rows
+            ):
                 continue
             duplicate_group_key = comment.get("duplicate_group_key")
             representative_source_row_id = representative_by_group.get(str(duplicate_group_key)) if duplicate_group_key else None
@@ -299,6 +310,7 @@ class CleanFactReader:
 
         return CommentSemanticFilter(
             low_value_source_rows=low_value_source_rows,
+            service_fulfillment_source_rows=service_fulfillment_source_rows,
             duplicate_non_representative_source_rows=duplicate_non_representative_source_rows,
             template_source_rows=template_source_rows,
         )
@@ -517,6 +529,7 @@ class EvidenceAtomService:
             "inactive_link_count": inactive_link_count,
             "preloaded_link_count": preloaded_link_count,
             "skipped_low_value_comment_count": len(comment_filter.low_value_source_rows),
+            "skipped_service_fulfillment_count": len(comment_filter.service_fulfillment_source_rows),
             "skipped_duplicate_comment_count": len(comment_filter.duplicate_non_representative_source_rows),
             "skipped_template_comment_count": len(comment_filter.template_source_rows),
         }
@@ -532,6 +545,10 @@ class EvidenceAtomService:
         inactive_evidence_ids: list[str] = []
         for source_row_ids, inactive_reason in [
             (comment_filter.low_value_source_rows, Core3EvidenceInactiveReason.LOW_VALUE_SKIPPED.value),
+            (
+                comment_filter.service_fulfillment_source_rows,
+                Core3EvidenceInactiveReason.SERVICE_FULFILLMENT_SKIPPED.value,
+            ),
             (
                 comment_filter.duplicate_non_representative_source_rows,
                 Core3EvidenceInactiveReason.DUPLICATE_REPRESENTATIVE_SKIPPED.value,
@@ -794,6 +811,10 @@ def _is_low_value_comment_record(record: Mapping[str, Any] | Any) -> bool:
         return True
     quality_flags = _record_value(record, "quality_flags") or []
     return Core3QualityIssueType.LOW_VALUE_COMMENT.value in {str(flag) for flag in quality_flags}
+
+
+def _is_service_fulfillment_record(record: Mapping[str, Any] | Any) -> bool:
+    return is_service_fulfillment_text(_record_value(record, "clean_comment_text") or _record_value(record, "raw_comment_text"))
 
 
 def _is_non_business_comment_template(value: Any) -> bool:

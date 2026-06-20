@@ -14,6 +14,8 @@ from app.schemas.core3_real_data import (
     Core3PipelineInitializationStatusResponse,
 )
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_RULE_VERSION,
+    CORE3_M03_RULE_VERSION,
     CORE3_MODULE_LABEL_CN,
     Core3CategoryCode,
     Core3ModuleCode,
@@ -26,6 +28,7 @@ class InitializationArtifact:
     model: type
     target_field: str | None = None
     current_only: bool = True
+    where_equals: tuple[tuple[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,8 +76,20 @@ INITIALIZATION_MODULE_SPECS: tuple[InitializationModuleSpec, ...] = (
         "生成参数画像",
         "从参数、卖点和质量提示中抽取标准参数，形成 SKU 参数画像。",
         (
-            InitializationArtifact(entities.Core3ExtractParamValue, "sku_code"),
-            InitializationArtifact(entities.Core3SkuParamProfile, "sku_code"),
+            InitializationArtifact(entities.Core3ExtractParamValue, "sku_code", where_equals=(("rule_version", CORE3_M03_RULE_VERSION),)),
+            InitializationArtifact(entities.Core3SkuParamProfile, "sku_code", where_equals=(("rule_version", CORE3_M03_RULE_VERSION),)),
+        ),
+        output_target_field="sku_code",
+    ),
+    InitializationModuleSpec(
+        Core3ModuleCode.M03B,
+        "生成 SKU 参数事实画像",
+        "只基于参数 evidence 生成 SKU 参数事实画像，并形成各参数维度档位与档位覆盖。",
+        (
+            InitializationArtifact(entities.Core3ExtractParamValue, "sku_code", where_equals=(("rule_version", CORE3_M03B_RULE_VERSION),)),
+            InitializationArtifact(entities.Core3SkuParamProfile, "sku_code", where_equals=(("rule_version", CORE3_M03B_RULE_VERSION),)),
+            InitializationArtifact(entities.Core3SkuParamDimensionTier, "sku_code", where_equals=(("rule_version", CORE3_M03B_RULE_VERSION),)),
+            InitializationArtifact(entities.Core3ParamTierCoverage, None, where_equals=(("rule_version", CORE3_M03B_RULE_VERSION),)),
         ),
         output_target_field="sku_code",
     ),
@@ -324,9 +339,9 @@ class PipelineInitializationStatusService:
         previous_statuses: list[Core3PipelineInitializationModuleStatus],
     ) -> Core3PipelineInitializationModuleStatus:
         latest_run = self._latest_module_run(spec.module_code, batch_id)
-        output_count = sum(self._count(artifact.model, batch_id, current_only=artifact.current_only) for artifact in spec.artifacts)
+        output_count = sum(self._artifact_count(artifact, batch_id) for artifact in spec.artifacts)
         processed_target_count = self._processed_target_count(spec, batch_id)
-        current_output_count = sum(self._count(artifact.model, batch_id, current_only=True) for artifact in spec.artifacts)
+        current_output_count = sum(self._artifact_count(artifact, batch_id, current_only=True) for artifact in spec.artifacts)
         review_issue_count = _review_issue_count(latest_run)
         warning_count = len(latest_run.warnings_json or []) if latest_run else 0
         blocked_reason = _blocked_reason_for_previous(previous_statuses)
@@ -403,35 +418,78 @@ class PipelineInitializationStatusService:
             return 0
         target_field = spec.output_target_field
         if not target_field:
-            return 1 if sum(self._count(artifact.model, batch_id, current_only=artifact.current_only) for artifact in spec.artifacts) else 0
+            return 1 if sum(self._artifact_count(artifact, batch_id) for artifact in spec.artifacts) else 0
         totals = []
         for artifact in spec.artifacts:
             if not hasattr(artifact.model, target_field):
                 continue
             totals.append(
-                self._count_distinct(
-                    artifact.model,
+                self._artifact_count_distinct(
+                    artifact,
                     target_field,
                     batch_id,
-                    current_only=artifact.current_only,
                 )
             )
         return max(totals or [0])
 
-    def _count(self, model: type, batch_id: str | None, *, current_only: bool) -> int:
-        filters = self._base_filters(model, batch_id, current_only=current_only)
+    def _artifact_count(self, artifact: InitializationArtifact, batch_id: str | None, *, current_only: bool | None = None) -> int:
+        return self._count(
+            artifact.model,
+            batch_id,
+            current_only=artifact.current_only if current_only is None else current_only,
+            where_equals=artifact.where_equals,
+        )
+
+    def _artifact_count_distinct(
+        self,
+        artifact: InitializationArtifact,
+        field_name: str,
+        batch_id: str | None,
+    ) -> int:
+        return self._count_distinct(
+            artifact.model,
+            field_name,
+            batch_id,
+            current_only=artifact.current_only,
+            where_equals=artifact.where_equals,
+        )
+
+    def _count(
+        self,
+        model: type,
+        batch_id: str | None,
+        *,
+        current_only: bool,
+        where_equals: tuple[tuple[str, Any], ...] = (),
+    ) -> int:
+        filters = self._base_filters(model, batch_id, current_only=current_only, where_equals=where_equals)
         if filters is None:
             return 0
         return int(self.db.execute(select(func.count()).select_from(model).where(*filters)).scalar_one())
 
-    def _count_distinct(self, model: type, field_name: str, batch_id: str | None, *, current_only: bool) -> int:
-        filters = self._base_filters(model, batch_id, current_only=current_only)
+    def _count_distinct(
+        self,
+        model: type,
+        field_name: str,
+        batch_id: str | None,
+        *,
+        current_only: bool,
+        where_equals: tuple[tuple[str, Any], ...] = (),
+    ) -> int:
+        filters = self._base_filters(model, batch_id, current_only=current_only, where_equals=where_equals)
         if filters is None:
             return 0
         field = getattr(model, field_name)
         return int(self.db.execute(select(func.count(func.distinct(field))).select_from(model).where(*filters)).scalar_one())
 
-    def _base_filters(self, model: type, batch_id: str | None, *, current_only: bool) -> list[Any] | None:
+    def _base_filters(
+        self,
+        model: type,
+        batch_id: str | None,
+        *,
+        current_only: bool,
+        where_equals: tuple[tuple[str, Any], ...] = (),
+    ) -> list[Any] | None:
         if not hasattr(model, "project_id"):
             return None
         filters: list[Any] = [model.project_id == self.project_id]
@@ -441,6 +499,10 @@ class PipelineInitializationStatusService:
             filters.append(model.batch_id == batch_id)
         if current_only and hasattr(model, "is_current"):
             filters.append(model.is_current.is_(True))
+        for field_name, expected_value in where_equals:
+            if not hasattr(model, field_name):
+                return None
+            filters.append(getattr(model, field_name) == expected_value)
         return filters
 
     def _resolve_batch(self, batch_id: str | None) -> entities.Core3SourceBatch | None:

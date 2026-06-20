@@ -23,6 +23,7 @@ v2 的核心修正：
 9. [用户任务独立模块详细设计](05a_user_task_module_design.md)
 10. [页面、API、任务编排与实施验收](06_ui_api_execution_plan.md)
 11. [彩电真实数据结果链路解释](07_result_chain_explainer_tv_example.md)
+12. [分层分析路径指导](08_layered_analysis_path_guidance.md)
 
 ## 与旧设计的关系
 
@@ -30,6 +31,7 @@ v2 的核心修正：
 - `docs/core3_mvp/13_real_data_ingestion_preanalysis_design.md` 是第一版真实数据接入设计，概念有效但分层不够细。
 - 本目录是后续讨论和实现真实样例数据接入的主设计依据。
 - 后续模块详细设计按 `00a_competitor_sop_module_plan.md` 一个一个生成，先讨论确认，再进入下一模块。
+- `08_layered_analysis_path_guidance.md` 是在 `07_result_chain_explainer_tv_example.md` 基础上重新整理的分层分析路径，用于指导后续模块保留、优化、合并和执行顺序调整。
 
 ## 一句话架构
 

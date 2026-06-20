@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.models import entities
 from app.schemas.core3_real_data import Core3TargetScopeSchema
 from app.services.core3_real_data.constants import (
+    Core3EvidenceInactiveReason,
     Core3EvidenceLinkStatus,
     Core3ModuleTargetScope,
     Core3QualityIssueType,
@@ -561,6 +562,106 @@ def test_evidence_atom_runner_excludes_low_value_comments_from_semantic_evidence
     assert result.summary_json["partition_summaries"][0]["skipped_low_value_comment_count"] == 1
 
 
+def test_evidence_atom_runner_excludes_service_fulfillment_from_product_comment_evidence():
+    session = make_session()
+    service_comment = entities.Core3CleanComment(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        run_id=RUN_ID,
+        module_run_id=MODULE_RUN_ID,
+        source_table="comment_data",
+        source_pk="service-comment",
+        source_row_id="comment_data:service-comment",
+        source_row_hash="sha256:m00_row_hash_v1:service-comment",
+        source_operation_type="insert",
+        sku_code="TV00029115",
+        model_name="85E7Q",
+        brand_name="海信",
+        platform_raw="京东",
+        comment_id="c-service",
+        comment_time_parse_status="missing",
+        raw_comment_text="安装师傅很专业，物流配送也很快",
+        clean_comment_text="安装师傅很专业,物流配送也很快",
+        comment_text_presence="present",
+        comment_text_hash="sha256:text:service",
+        sentiment_clean="positive",
+        low_value_flag=False,
+        low_value_reason=None,
+        duplicate_group_key="sha256:text:service",
+        dimension_available=False,
+        clean_record_key="comment:comment_data:service-comment",
+        clean_hash="sha256:m01_clean_hash_v1:service-comment",
+        clean_version="m01_clean_v1",
+        hash_version="m01_clean_hash_v1",
+        record_status="skipped",
+        quality_status="ok",
+        quality_flags=[],
+        review_required=False,
+        review_status="auto_pass",
+    )
+    legacy_semantic_atom = entities.Core3EvidenceAtom(
+        evidence_id="legacy-service-comment-raw",
+        evidence_key="legacy-service-comment-raw",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        run_id=RUN_ID,
+        module_run_id=MODULE_RUN_ID,
+        sku_code="TV00029115",
+        model_name="85E7Q",
+        brand_name="海信",
+        evidence_type="comment_raw",
+        evidence_grain="row",
+        evidence_field="clean_comment_text",
+        evidence_title="评论正文",
+        source_table="comment_data",
+        source_pk="service-comment",
+        source_row_id="comment_data:service-comment",
+        source_row_hash="sha256:m00_row_hash_v1:service-comment",
+        clean_table="core3_clean_comment",
+        clean_record_key="comment:comment_data:service-comment",
+        clean_hash="sha256:m01_clean_hash_v1:legacy-service-comment",
+        clean_version="m01_clean_v1",
+        raw_field="raw_comment_text",
+        raw_value="安装师傅很专业，物流配送也很快",
+        clean_field="clean_comment_text",
+        clean_value="安装师傅很专业,物流配送也很快",
+        value_presence="present",
+        text_value="安装师傅很专业,物流配送也很快",
+        comment_id="c-service",
+        comment_text_hash="sha256:text:service",
+        quality_status="ok",
+        quality_flags=[],
+        base_confidence=Decimal("0.3000"),
+        confidence_level="low",
+        evidence_payload_json={"legacy": True},
+        evidence_status="current",
+        is_current=True,
+        evidence_version="m02_evidence_v1",
+        confidence_rule_version="m02_confidence_v1",
+        asset_version="default",
+        review_required=True,
+        review_status="review_required",
+    )
+    session.add(service_comment)
+    session.add(legacy_semantic_atom)
+    session.flush()
+
+    result = EvidenceAtomRunner(session).run(make_context(), make_target())
+
+    current_service_atoms = session.execute(
+        select(entities.Core3EvidenceAtom)
+        .where(entities.Core3EvidenceAtom.source_row_id == "comment_data:service-comment")
+        .where(entities.Core3EvidenceAtom.is_current.is_(True))
+        .where(entities.Core3EvidenceAtom.evidence_status == "current")
+    ).scalars().all()
+    assert current_service_atoms == []
+    assert legacy_semantic_atom.evidence_status == "inactive"
+    assert legacy_semantic_atom.inactive_reason == Core3EvidenceInactiveReason.SERVICE_FULFILLMENT_SKIPPED.value
+    assert result.summary_json["partition_summaries"][0]["skipped_service_fulfillment_count"] == 1
+
+
 def test_evidence_atom_runner_keeps_only_one_representative_for_duplicate_comment_text():
     session = make_session()
     common = {
@@ -598,8 +699,8 @@ def test_evidence_atom_runner_keeps_only_one_representative_for_duplicate_commen
             url_id=f"url-dup-{index}",
             comment_id=f"comment-dup-{index}",
             comment_time=datetime(2026, 6, 10, 10, index % 60, tzinfo=timezone.utc),
-            raw_comment_text="包装不错，客服很好",
-            clean_comment_text="包装不错，客服很好",
+            raw_comment_text="画质不错，音质很好",
+            clean_comment_text="画质不错，音质很好",
             clean_record_key=f"comment:comment_data:dup-{index}",
             clean_hash=f"sha256:m01_clean_hash_v1:comment-dup-{index}",
         )
@@ -662,8 +763,8 @@ def test_evidence_atom_runner_marks_legacy_duplicate_comment_evidence_inactive()
             url_id=f"url-legacy-dup-{index}",
             comment_id=f"comment-legacy-dup-{index}",
             comment_time=datetime(2026, 6, 10, 10, index % 60, tzinfo=timezone.utc),
-            raw_comment_text="安装很好，物流很快",
-            clean_comment_text="安装很好，物流很快",
+            raw_comment_text="画质很好，音质不错",
+            clean_comment_text="画质很好，音质不错",
             clean_record_key=f"comment:comment_data:legacy-dup-{index}",
             clean_hash=f"sha256:m01_clean_hash_v1:legacy-comment-dup-{index}",
         )

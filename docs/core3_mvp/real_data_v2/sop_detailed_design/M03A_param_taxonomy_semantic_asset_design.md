@@ -15,9 +15,9 @@ M03 被拆成两个生命周期不同的能力：
 | 模块 | 生命周期 | 目标 |
 | --- | --- | --- |
 | M03A | 品类资产低频生成 | 从该品类原始字段生成参数 taxonomy |
-| M03B | 新数据批次高频执行 | 使用已发布 taxonomy 生成 SKU 参数事实画像 |
+| M03B | 新数据批次高频执行 | 使用已发布 taxonomy 生成 SKU 参数事实画像和参数档位覆盖 |
 
-本文只设计 M03A。M03B 延续现有 M03 参数抽取能力，但输入要从静态 seed 改为已发布 taxonomy。
+本文只设计 M03A。M03B 详细设计见 `M03B_sku_param_profile_design.md`；它延续现有 M03 参数抽取能力，但输入要从静态 seed 改为已发布 taxonomy，并额外消费 taxonomy 中的参数档位规则。
 
 ## 2. 设计目标
 
@@ -467,7 +467,7 @@ M03A 低频运行，触发条件：
 | 人工要求重做品类参数体系 | 新建 taxonomy draft |
 | 下游发现参数映射错误 | 针对字段或参数生成复核项，新版 taxonomy 修正 |
 
-M03B 高频运行，输入变化只重算 SKU 参数画像，不自动修改 taxonomy。
+M03B 高频运行，输入变化只重算 SKU 参数画像和参数档位覆盖，不自动修改 taxonomy。
 
 ## 8. 服务设计
 
@@ -553,14 +553,15 @@ taxonomy_version
 M03B blocked: category taxonomy is not published.
 ```
 
-M03B 输出 SKU 参数画像时必须记录：
+M03B 输出 SKU 参数画像和参数档位覆盖时必须记录：
 
 - `taxonomy_version`
 - `taxonomy_hash`
 - `param_definition_hash`
 - `mapping_rule_hash`
+- `dimension_tier_rule_hash`
 
-M03B 不能在运行中自动新增标准参数或修改映射规则。
+M03B 不能在运行中自动新增标准参数、修改映射规则或修改档位规则。
 
 ## 11. 质量和复核规则
 
