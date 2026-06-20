@@ -12,6 +12,8 @@ v2 的核心修正：
 
 ## 阅读顺序
 
+### 设计与方法论
+
 1. [设计依据与总体原则](00_design_basis_and_principles.md)
 2. [竞品生成方法论 SOP 模块设计计划](00a_competitor_sop_module_plan.md)
 3. [从原始表到三竞品的完整流水线](01_pipeline_from_raw_to_competitor.md)
@@ -24,12 +26,25 @@ v2 的核心修正：
 10. [页面、API、任务编排与实施验收](06_ui_api_execution_plan.md)
 11. [彩电真实数据结果链路解释](07_result_chain_explainer_tv_example.md)
 
+### 当前实现
+
+当前已经落地的实现说明单独放在 [current_implementation](current_implementation/README.md)，用于和前面的设计稿、历史开发说明分开。
+
+当前实现文档包括：
+
+1. [数据预处理 CLI 与 Claude Code Skill 分支开发手册](current_implementation/00_data_preprocess_cli_skill_branch_manual.md)
+2. [M00 原始数据登记当前实现说明](current_implementation/01_m00_source_registry_implementation.md)
+3. [M01 清洗与质量过滤当前实现说明](current_implementation/02_m01_cleaning_quality_implementation.md)
+4. [M02 Evidence 原子层当前实现说明](current_implementation/03_m02_evidence_atom_implementation.md)
+
 ## 与旧设计的关系
 
 - `docs/core3_mvp/00_*` 到 `12_*` 仍是 Core3 MVP 的基础设计。
 - `docs/core3_mvp/13_real_data_ingestion_preanalysis_design.md` 是第一版真实数据接入设计，概念有效但分层不够细。
 - 本目录是后续讨论和实现真实样例数据接入的主设计依据。
+- `current_implementation/` 记录当前分支已经实现、可执行、可验证的模块行为；排查线上和 205 行为时优先看这里。
 - 后续模块详细设计按 `00a_competitor_sop_module_plan.md` 一个一个生成，先讨论确认，再进入下一模块。
+- 后续模块完成实现后，也要在 `current_implementation/` 中新增对应实现文档，避免设计稿和实现稿混用。
 
 ## 一句话架构
 
