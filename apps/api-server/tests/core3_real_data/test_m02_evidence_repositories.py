@@ -64,6 +64,26 @@ def make_context(session: Session) -> Core3RepositoryContext:
     return Core3RepositoryContext(db=session, project_id=PROJECT_ID)
 
 
+class EmptyScalarResult:
+    def scalars(self):
+        return []
+
+
+class RecordingSession:
+    def __init__(self) -> None:
+        self.source_row_param_sizes: list[int] = []
+
+    def execute(self, stmt):
+        params = stmt.compile().params
+        for key, value in params.items():
+            if key.startswith("source_row_id") and isinstance(value, (list, tuple)):
+                self.source_row_param_sizes.append(len(value))
+        return EmptyScalarResult()
+
+    def flush(self) -> None:
+        raise AssertionError("flush should not run when no evidence rows are matched")
+
+
 def atom_payload(clean_table: str = "core3_clean_attribute", **overrides) -> dict:
     source_record = {
         "project_id": PROJECT_ID,
@@ -107,6 +127,23 @@ def atom_payload(clean_table: str = "core3_clean_attribute", **overrides) -> dic
         review_status="auto_pass",
     )
     return payload
+
+
+def test_mark_evidence_inactive_by_source_rows_chunks_large_source_sets():
+    session = RecordingSession()
+    repo = EvidenceAtomRepository(Core3RepositoryContext(db=session, project_id=PROJECT_ID))
+    source_row_ids = [f"comment_data:{index}" for index in range(2501)]
+
+    inactive_ids = repo.mark_evidence_inactive_by_source_rows(
+        BATCH_ID,
+        source_row_ids=source_row_ids,
+        clean_tables=["core3_clean_comment"],
+        inactive_reason="low_value_skipped",
+        evidence_types=["comment_raw"],
+    )
+
+    assert inactive_ids == []
+    assert session.source_row_param_sizes == [1000, 1000, 501]
 
 
 def test_evidence_atom_repository_is_idempotent_and_lists_current_by_sku():
