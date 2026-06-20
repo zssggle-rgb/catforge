@@ -29,26 +29,28 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 From the deployed CatForge repository on 205, prefer running inside the API container:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --format json
 ```
 
 If a source batch already exists and the user only wants to rerun preliminary cleaning:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --register-source-batch none --batch-id latest --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --sku-batch-size 50 --format json
 ```
 
 Inspect current preliminary quality without rerunning:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --batch-id latest --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --format json
 ```
 
 For a small smoke test:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --format json
 ```
+
+When checking whether a previous run finished, inspect by the explicit `batch_id` when available. If CLI counts are empty or inconsistent with the run log, cross-check `core3_clean_*`, `core3_source_batch`, and `core3_data_quality_issue` in PostgreSQL before replying.
 
 ## Response Shape
 

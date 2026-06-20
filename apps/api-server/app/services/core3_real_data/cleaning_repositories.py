@@ -433,14 +433,7 @@ class CleaningQueryRepository(Core3BaseRepository):
             "comment_dimension": self._count(Core3CleanCommentDimension, batch_id),
             "quality_issue": self._count(Core3DataQualityIssue, batch_id),
         }
-        issues = DataQualityIssueRepository(self.context).list_quality_issues(batch_id, limit=1000)
-        issue_counts = {
-            "info": sum(1 for issue in issues if issue.severity == "info"),
-            "warning": sum(1 for issue in issues if issue.severity == "warning"),
-            "error": sum(1 for issue in issues if issue.severity == "error"),
-            "review_required": sum(1 for issue in issues if issue.review_required),
-            "by_type": _count_by([issue.issue_type for issue in issues]),
-        }
+        issue_counts = self._quality_issue_counts(batch_id)
         return {
             "batch_id": batch_id,
             "clean_counts": clean_counts,
@@ -476,6 +469,42 @@ class CleaningQueryRepository(Core3BaseRepository):
         )
         return int(self.db.execute(stmt).scalar_one())
 
+    def _quality_issue_counts(self, batch_id: str) -> dict[str, Any]:
+        stmt = (
+            select(
+                Core3DataQualityIssue.severity,
+                Core3DataQualityIssue.issue_type,
+                Core3DataQualityIssue.review_required,
+                func.count(),
+            )
+            .where(Core3DataQualityIssue.project_id == self.project_id)
+            .where(Core3DataQualityIssue.category_code == self.category_code.value)
+            .where(Core3DataQualityIssue.batch_id == batch_id)
+            .group_by(
+                Core3DataQualityIssue.severity,
+                Core3DataQualityIssue.issue_type,
+                Core3DataQualityIssue.review_required,
+            )
+        )
+        issue_counts: dict[str, Any] = {
+            "info": 0,
+            "warning": 0,
+            "error": 0,
+            "review_required": 0,
+            "by_type": {},
+        }
+        by_type: dict[str, int] = {}
+        for severity, issue_type, review_required, count in self.db.execute(stmt).all():
+            normalized_count = int(count)
+            if severity in {"info", "warning", "error"}:
+                issue_counts[str(severity)] += normalized_count
+            if review_required:
+                issue_counts["review_required"] += normalized_count
+            if issue_type:
+                by_type[str(issue_type)] = by_type.get(str(issue_type), 0) + normalized_count
+        issue_counts["by_type"] = by_type
+        return issue_counts
+
     def _list_all_clean_skus(self, batch_id: str) -> list[Core3CleanSku]:
         stmt = (
             select(Core3CleanSku)
@@ -500,13 +529,6 @@ class CleaningQueryRepository(Core3BaseRepository):
 def _operation_values(operation_types: Sequence[Core3SourceOperationType | str] | None) -> tuple[str, ...]:
     source = operation_types or DEFAULT_M01_OPERATION_TYPES
     return tuple(item.value if hasattr(item, "value") else str(item) for item in source)
-
-
-def _count_by(values: Sequence[str]) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for value in values:
-        counts[value] = counts.get(value, 0) + 1
-    return counts
 
 
 def _jsonable(value: Any) -> Any:

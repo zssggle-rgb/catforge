@@ -456,3 +456,41 @@ def test_data_quality_issue_repository_dedupes_and_filters_null_safe():
     assert summary["issue_counts"]["warning"] == 1
     assert summary["issue_counts"]["review_required"] == 1
     assert summary["issue_counts"]["by_type"] == {"claim_coverage_missing": 1}
+
+
+def test_clean_summary_counts_all_quality_issues_without_page_limit():
+    session = make_session()
+    context = make_context(session)
+    repo = DataQualityIssueRepository(context)
+
+    for index in range(1005):
+        repo.save_issue(
+            {
+                "batch_id": BATCH_ID,
+                "run_id": RUN_ID,
+                "module_run_id": MODULE_RUN_ID,
+                "module_code": "M01",
+                "domain": Core3DataDomain.PARAM,
+                "source_table": "attribute_data",
+                "source_row_id": f"attribute_data:{index}",
+                "clean_table": "core3_clean_attribute",
+                "clean_record_key": f"attribute:TV{index:08d}",
+                "sku_code": f"TV{index:08d}",
+                "issue_type": Core3QualityIssueType.UNKNOWN_VALUE,
+                "severity": Core3QualityIssueSeverity.INFO,
+                "issue_detail": "存在空值、unknown 或横杠等未知值",
+                "issue_payload_json": {"attribute": {"unknown": True}},
+                "suggested_downstream_action": "按未知值处理，不得当作 false",
+                "review_required": False,
+                "review_status": Core3ReviewStatus.AUTO_PASS,
+            },
+            flush=False,
+        )
+    session.flush()
+
+    summary = CleaningQueryRepository(context).get_clean_summary(BATCH_ID)
+
+    assert summary["clean_counts"]["quality_issue"] == 1005
+    assert summary["issue_counts"]["info"] == 1005
+    assert summary["issue_counts"]["review_required"] == 0
+    assert summary["issue_counts"]["by_type"] == {"unknown_value": 1005}

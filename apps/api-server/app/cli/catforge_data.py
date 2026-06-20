@@ -122,6 +122,8 @@ def _add_common_project_args(parser: argparse.ArgumentParser) -> None:
 def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
     with SessionLocal() as db:
         batch_id = args.batch_id
+        project_id = args.project_id
+        category_code = args.category_code
         source_registration: dict[str, Any] | None = None
         if args.dry_run and args.register_source_batch != "none":
             return {
@@ -149,17 +151,17 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             source_registration = _register_source_batch(db, args)
             batch_id = str(source_registration["batch_id"])
         else:
-            batch_id = _resolve_batch_id(
+            batch_id, project_id, category_code = _resolve_batch_scope(
                 db,
-                project_id=args.project_id,
-                category_code=args.category_code,
+                project_id=project_id,
+                category_code=category_code,
                 batch_id=batch_id,
             )
 
         target_skus = _resolve_target_skus(
             db,
-            project_id=args.project_id,
-            category_code=args.category_code,
+            project_id=project_id,
+            category_code=category_code,
             batch_id=batch_id,
             requested_skus=args.sku_code,
             limit=args.limit_skus,
@@ -179,6 +181,8 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "include_no_change": bool(args.include_no_change),
             "will_run_modules": ["M00", "M01"] if args.register_source_batch != "none" else ["M01"],
             "will_not_run_modules": ["M02", "M05"],
+            "resolved_project_id": project_id,
+            "resolved_category_code": category_code,
         }
         if args.dry_run:
             return {
@@ -196,8 +200,8 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
         runner = CleaningQualityRunner(db)
         for index, chunk in enumerate(chunks, start=1):
             result = runner.run_batch(
-                project_id=args.project_id,
-                category_code=args.category_code,
+                project_id=project_id,
+                category_code=category_code,
                 batch_id=batch_id,
                 run_id=run_id,
                 module_run_id=args.module_run_id,
@@ -234,6 +238,8 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "command": "prepare-new-data",
             "status": status,
             "batch_id": batch_id,
+            "project_id": project_id,
+            "category_code": category_code,
             "execution_label": execution_label,
             "source_registration": source_registration,
             "plan": plan,
@@ -245,13 +251,13 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
 
 def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:
     with SessionLocal() as db:
-        batch_id = _resolve_batch_id(
+        batch_id, project_id, category_code = _resolve_batch_scope(
             db,
             project_id=args.project_id,
             category_code=args.category_code,
             batch_id=args.batch_id,
         )
-        context = Core3RepositoryContext(db=db, project_id=args.project_id, category_code=args.category_code)
+        context = Core3RepositoryContext(db=db, project_id=project_id, category_code=category_code)
         query = CleaningQueryRepository(context)
         summary = query.get_clean_summary(batch_id)
         skus = query.list_clean_skus(batch_id, limit=max(args.limit_skus, 1))
@@ -259,6 +265,8 @@ def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:
             "command": "inspect-data-quality",
             "status": "success",
             "batch_id": batch_id,
+            "project_id": project_id,
+            "category_code": category_code,
             "clean_counts": summary["clean_counts"],
             "issue_counts": summary["issue_counts"],
             "review_required": summary["review_required"],
@@ -299,20 +307,56 @@ def _resolve_batch_id(
     category_code: str,
     batch_id: str,
 ) -> str:
+    return _resolve_batch_scope(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+    )[0]
+
+
+def _resolve_batch_scope(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+) -> tuple[str, str, str]:
     if batch_id != "latest":
-        return batch_id
-    stmt = (
-        select(entities.Core3SourceBatch)
-        .where(entities.Core3SourceBatch.project_id == project_id)
-        .where(entities.Core3SourceBatch.category_code == category_code)
-        .where(entities.Core3SourceBatch.status.in_(CONSUMABLE_BATCH_STATUSES))
-        .order_by(entities.Core3SourceBatch.scan_started_at.desc(), entities.Core3SourceBatch.created_at.desc())
-        .limit(1)
-    )
-    batch = db.execute(stmt).scalars().first()
+        batch = _find_source_batch_by_id(db, batch_id)
+        if batch is None:
+            return batch_id, project_id, category_code
+        return str(batch.batch_id), str(batch.project_id), str(batch.category_code)
+
+    batch = _find_latest_source_batch(db, project_id=project_id, category_code=category_code)
+    if batch is None:
+        batch = _find_latest_source_batch(db, project_id=None, category_code=category_code)
     if batch is None:
         raise CliError("没有找到可消费的 source batch；请先注册源数据批次。")
-    return str(batch.batch_id)
+    return str(batch.batch_id), str(batch.project_id), str(batch.category_code)
+
+
+def _find_source_batch_by_id(db: Session, batch_id: str) -> entities.Core3SourceBatch | None:
+    stmt = select(entities.Core3SourceBatch).where(entities.Core3SourceBatch.batch_id == batch_id).limit(1)
+    return db.execute(stmt).scalars().first()
+
+
+def _find_latest_source_batch(
+    db: Session,
+    *,
+    project_id: str | None,
+    category_code: str,
+) -> entities.Core3SourceBatch | None:
+    stmt = select(entities.Core3SourceBatch).where(
+        entities.Core3SourceBatch.status.in_(CONSUMABLE_BATCH_STATUSES)
+    )
+    if project_id is not None:
+        stmt = stmt.where(entities.Core3SourceBatch.project_id == project_id)
+    if category_code:
+        stmt = stmt.where(entities.Core3SourceBatch.category_code == category_code)
+    stmt = stmt.order_by(entities.Core3SourceBatch.scan_started_at.desc(), entities.Core3SourceBatch.created_at.desc()).limit(1)
+    batch = db.execute(stmt).scalars().first()
+    return batch
 
 
 def _resolve_target_skus(

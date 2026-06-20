@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "catforge-data",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CatForge data preparation and preliminary quality inspection commands.",
   "author": {
     "name": "CatForge"

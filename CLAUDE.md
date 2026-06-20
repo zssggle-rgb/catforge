@@ -19,14 +19,15 @@ Claude Code should act as an execution agent, not as a free-form analyst. Prefer
 - Docker Compose file: `docker-compose.cloud.yml`.
 - API container service: `api`.
 - Production database: `catforge_dev`; app user is `catforge_app`.
+- Current 205 real-data project id: `d8d2245b-358b-4a64-95cc-9d7f2341bd26`; category code: `TV`.
 - Do not run destructive SQL against raw or clean tables unless the user explicitly asks and the exact impact is clear.
 
 Useful commands:
 
 ```bash
 docker compose -f docker-compose.cloud.yml ps
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --batch-id latest --format json
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --sku-batch-size 50 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-data-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --format json
 ```
 
 ## Business Command Routing
@@ -38,7 +39,8 @@ For "先初步处理一下" or "初步清洗":
 1. Register a new incremental source batch by default.
 2. Run preliminary cleaning by SKU chunks.
 3. Do not run downstream evidence/comment semantic stages unless the user asks for full processing.
-4. Report batch id, processed SKU count, clean row counts, weekly market coverage, low-value comment count/rate, service-fulfillment blocked count/rate, and review-required issues.
+4. Inspect the resulting batch by explicit `batch_id`; if the CLI output is empty or suspicious, verify counts directly in PostgreSQL before answering.
+5. Report batch id, processed SKU count, clean row counts, weekly market coverage, low-value comment count/rate, service-fulfillment blocked count/rate, and review-required issues.
 
 Do not require business users to know internal module names. Internal module codes may be mentioned only when explaining implementation details.
 
