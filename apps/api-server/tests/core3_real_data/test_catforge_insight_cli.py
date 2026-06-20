@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_insight
 from app.models import entities
-from app.services.core3_real_data.constants import CORE3_M03B_RULE_VERSION
+from app.services.core3_real_data.constants import CORE3_M03B_AC_RULE_VERSION, CORE3_M03B_AC_TAXONOMY_VERSION, CORE3_M03B_RULE_VERSION
 
 
 PROJECT_ID = "core3_mvp"
@@ -79,6 +79,35 @@ def seed_data(session: Session) -> None:
             profile_hash="sha256:test-profile",
             seed_version="tv_param_taxonomy_manual_v0.1",
             rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id="profile_ac_kfr35",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code="AC00000001",
+            model_name="KFR-35GW",
+            param_values_json={
+                "horsepower_hp": {"normalized_value": 1.5},
+                "fresh_air_flag": {"normalized_value": True},
+                "dimension_tier_profile": {"horsepower": "hp_1_5", "health": "health_fresh_air"},
+            },
+            core_picture_params_json={"horsepower_hp": {"normalized_value": 1.5}},
+            core_gaming_params_json={},
+            core_system_params_json={"fresh_air_flag": {"normalized_value": True}},
+            core_eye_care_params_json={},
+            param_completeness=Decimal("0.760000"),
+            known_param_count=25,
+            unknown_param_count=3,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=["ev_ac_hp", "ev_ac_fresh"],
+            quality_summary_json={"taxonomy_category_code": "AC"},
+            profile_hash="sha256:test-ac-profile",
+            seed_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
         )
     )
     session.add(
@@ -192,6 +221,51 @@ def seed_data(session: Session) -> None:
             rule_version=CORE3_M03B_RULE_VERSION,
         )
     )
+    session.add(
+        entities.Core3SkuParamDimensionTier(
+            dimension_tier_id="tier_ac_kfr35_health",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+            sku_code="AC00000001",
+            model_name="KFR-35GW",
+            dimension_code="health",
+            tier_code="health_fresh_air",
+            tier_name="新风能力",
+            tier_rank=20,
+            basis_param_codes=["fresh_air_flag", "purification_flag"],
+            basis_values_json={"fresh_air_flag": True},
+            rule_snapshot_json={},
+            explanation="具备新风。",
+            evidence_ids=["ev_ac_fresh"],
+            confidence=Decimal("1.0000"),
+            quality_flags=[],
+            profile_hash="sha256:test-ac-tier-health",
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3ParamTierCoverage(
+            tier_coverage_id="coverage_ac_health_fresh_air",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+            dimension_code="health",
+            tier_code="health_fresh_air",
+            tier_name="新风能力",
+            tier_rank=20,
+            rule_summary="具备新风",
+            sku_count=1,
+            sku_ratio=Decimal("0.006452"),
+            sku_codes=["AC00000001"],
+            sample_sku_codes=["AC00000001"],
+            coverage_status="insufficient_sample",
+            coverage_hash="sha256:test-ac-coverage-health",
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
+        )
+    )
     session.commit()
 
 
@@ -239,6 +313,7 @@ def test_tier_coverage_and_natural_language_route_to_matching_skus():
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id="latest",
+        product_category="auto",
         output_format="json",
         sku_limit=1,
     )
@@ -250,6 +325,51 @@ def test_tier_coverage_and_natural_language_route_to_matching_skus():
     assert {item["tier_code"] for item in direct["coverages"]} == {"miniled"}
     assert natural["routed_command"] == "tier-coverage"
     assert natural["coverages"][0]["tier_code"] == "miniled"
+
+
+def test_ac_taxonomy_profile_and_tier_queries_are_routed_by_natural_language():
+    session = make_session()
+
+    taxonomy = catforge_insight.answer_natural_language(
+        session,
+        question="查空调标准参数",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+    profile = catforge_insight.answer_natural_language(
+        session,
+        question="查 AC00000001 的参数画像",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+    coverage = catforge_insight.answer_natural_language(
+        session,
+        question="查空调新风档位覆盖哪些 SKU",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+
+    assert taxonomy["category_code"] == "AC"
+    assert taxonomy["taxonomy_version"] == CORE3_M03B_AC_TAXONOMY_VERSION
+    assert any(item["param_code"] == "fresh_air_flag" for item in taxonomy["params"])
+    assert profile["status"] == "ok"
+    assert profile["product_category"] == "AC"
+    assert profile["sku"]["sku_code"] == "AC00000001"
+    assert profile["dimension_tier_profile"]["health"] == "health_fresh_air"
+    assert coverage["product_category"] == "AC"
+    assert coverage["coverages"][0]["sku_codes"] == ["AC00000001"]
 
 
 def test_cli_main_can_emit_json_for_natural_language(monkeypatch, capsys):

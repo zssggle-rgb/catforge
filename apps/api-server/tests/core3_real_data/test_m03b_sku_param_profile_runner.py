@@ -8,6 +8,9 @@ from sqlalchemy.pool import StaticPool
 from app.models import entities
 from app.schemas.core3_real_data import Core3TargetScopeSchema
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_PARSER_VERSION,
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_AC_TAXONOMY_VERSION,
     Core3ModuleTargetScope,
     Core3RunMode,
     Core3RunStatus,
@@ -221,6 +224,51 @@ def seed_tv_param_evidence(session: Session) -> None:
     session.flush()
 
 
+def seed_ac_param_evidence(session: Session) -> None:
+    ac_fields = {
+        "标准品牌": "美的",
+        "系列": "风语者",
+        "三大品牌系列": "风语者",
+        "产品类型": "挂机冷暖",
+        "安装方式": "挂机",
+        "内机尺寸": "885*293*196",
+        "冷媒": "R32",
+        "冷暖": "冷暖",
+        "净化功能": "否",
+        "制冷量": "3510",
+        "制冷量段": "1匹半",
+        "制热量": "0",
+        "匹数": "1.5",
+        "匹数段": "1-1.5匹",
+        "变频": "变频",
+        "循环风量": "0",
+        "新风空调": "是",
+        "智能WIFI": "是",
+        "智能感应": "否",
+        "智能语音": "否",
+        "能效": "一级",
+        "能效比": "5.28",
+        "能效等级": "新一级",
+        "能效等级合并": "一级",
+        "自清洁": "是",
+        "舒适风": "是",
+    }
+    session.add_all(
+        entities.Core3EvidenceAtom(
+            **evidence(
+                f"ev_ac_{index:03d}_{raw_field}",
+                sku_code="AC00000001",
+                model_name="KFR-35GW",
+                brand_name="美的",
+                evidence_field=raw_field,
+                clean_value=value,
+            )
+        )
+        for index, (raw_field, value) in enumerate(ac_fields.items(), start=1)
+    )
+    session.flush()
+
+
 def evidence(
     evidence_id: str,
     *,
@@ -401,3 +449,56 @@ def test_m03b_force_rebuild_refreshes_same_business_keys():
     assert result.status == Core3RunStatus.SUCCESS
     assert session.scalar(select(func.count()).select_from(entities.Core3SkuParamProfile)) == 1
     assert session.scalar(select(func.count()).select_from(entities.Core3SkuParamDimensionTier)) == 9
+
+
+def test_m03b_runner_builds_ac_param_profile_with_ac_taxonomy_and_prefix_boundary():
+    session = make_session()
+    seed_tv_param_evidence(session)
+    seed_ac_param_evidence(session)
+
+    result = M03BRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+        parser_version=CORE3_M03B_AC_PARSER_VERSION,
+        rule_version=CORE3_M03B_AC_RULE_VERSION,
+        sku_code_prefix="AC",
+        force_rebuild=True,
+    )
+
+    assert result.status == Core3RunStatus.SUCCESS
+    assert result.summary_json["category_boundary_filter"] == "sku_code_prefix_AC"
+    assert result.summary_json["sku_profile_count"] == 1
+
+    profile = session.execute(
+        select(entities.Core3SkuParamProfile)
+        .where(entities.Core3SkuParamProfile.sku_code == "AC00000001")
+        .where(entities.Core3SkuParamProfile.rule_version == CORE3_M03B_AC_RULE_VERSION)
+    ).scalar_one()
+    values = profile.param_values_json
+    assert values["_metadata"]["taxonomy_version"] == CORE3_M03B_AC_TAXONOMY_VERSION
+    assert values["horsepower_hp"]["normalized_value"] == 1.5
+    assert values["heating_capacity_w"]["normalized_value"] == 0
+    assert values["heating_function_flag"]["normalized_value"] is False
+    assert values["airflow_volume_m3h"]["value_presence"] == "unknown"
+    assert values["energy_grade_normalized"]["normalized_value"] == "一级"
+    assert values["dimension_tier_profile"] == {
+        "airflow": "airflow_unknown",
+        "comfort": "comfort_full",
+        "cooling_capacity": "cooling_1_5_3000_3999",
+        "energy": "energy_grade_1",
+        "health": "health_fresh_air",
+        "heating": "heating_none",
+        "horsepower": "hp_1_5",
+        "installation": "wall_mounted",
+        "smart": "smart_ac_wifi",
+    }
+
+    coverage = session.execute(
+        select(entities.Core3ParamTierCoverage)
+        .where(entities.Core3ParamTierCoverage.taxonomy_version == CORE3_M03B_AC_TAXONOMY_VERSION)
+        .where(entities.Core3ParamTierCoverage.dimension_code == "health")
+        .where(entities.Core3ParamTierCoverage.tier_code == "health_fresh_air")
+    ).scalar_one()
+    assert coverage.sku_codes == ["AC00000001"]

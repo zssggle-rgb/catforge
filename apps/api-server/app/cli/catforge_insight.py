@@ -19,14 +19,37 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models import entities
-from app.services.core3_real_data.constants import CORE3_M03B_RULE_VERSION
-from app.services.core3_real_data.m03b_param_profile_service import M03BTierDefinition, tv_param_taxonomy_v0_1
+from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_RULE_VERSION,
+)
+from app.services.core3_real_data.m03b_param_profile_service import (
+    M03BTaxonomy,
+    M03BTierDefinition,
+    ac_param_taxonomy_v0_1,
+    tv_param_taxonomy_v0_1,
+)
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
 DEFAULT_CATEGORY_CODE = "TV"
 LATEST_BATCH = "latest"
 DEFAULT_SKU_LIMIT = 50
+
+PRODUCT_CATEGORY_CONFIGS = {
+    "TV": {
+        "label_cn": "彩电",
+        "rule_version": CORE3_M03B_RULE_VERSION,
+        "sku_prefix": "TV",
+        "taxonomy_factory": tv_param_taxonomy_v0_1,
+    },
+    "AC": {
+        "label_cn": "空调",
+        "rule_version": CORE3_M03B_AC_RULE_VERSION,
+        "sku_prefix": "AC",
+        "taxonomy_factory": ac_param_taxonomy_v0_1,
+    },
+}
 
 DIMENSION_ALIASES = {
     "尺寸": "size",
@@ -56,6 +79,28 @@ DIMENSION_ALIASES = {
     "appearance": "appearance",
     "能效": "energy",
     "energy": "energy",
+    "安装": "installation",
+    "安装方式": "installation",
+    "installation": "installation",
+    "匹数": "horsepower",
+    "horsepower": "horsepower",
+    "制冷量": "cooling_capacity",
+    "制冷": "cooling_capacity",
+    "cooling": "cooling_capacity",
+    "cooling_capacity": "cooling_capacity",
+    "制热": "heating",
+    "heating": "heating",
+    "循环风量": "airflow",
+    "风量": "airflow",
+    "airflow": "airflow",
+    "新风": "health",
+    "净化": "health",
+    "健康": "health",
+    "health": "health",
+    "舒适": "comfort",
+    "舒适风": "comfort",
+    "自清洁": "comfort",
+    "comfort": "comfort",
 }
 
 
@@ -65,11 +110,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with SessionLocal() as db:
             if args.command == "sku-param-profile":
+                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
                 result = query_sku_param_profile(
                     db,
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
+                    product_category=product_category,
                     query=args.query,
                     sku_code=args.sku_code,
                     model_name=args.model_name,
@@ -77,17 +124,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                     param_limit=args.param_limit,
                 )
             elif args.command == "tv-param-taxonomy":
-                result = query_tv_param_taxonomy(
+                result = query_param_taxonomy(
+                    product_category="TV",
+                    group=args.group,
+                    search=args.search,
+                    include_excluded=args.include_excluded,
+                )
+            elif args.command == "ac-param-taxonomy":
+                result = query_param_taxonomy(
+                    product_category="AC",
+                    group=args.group,
+                    search=args.search,
+                    include_excluded=args.include_excluded,
+                )
+            elif args.command == "param-taxonomy":
+                result = query_param_taxonomy(
+                    product_category=normalize_product_category_arg(args.product_category),
                     group=args.group,
                     search=args.search,
                     include_excluded=args.include_excluded,
                 )
             elif args.command == "tier-coverage":
+                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.tier_code)
                 result = query_tier_coverage(
                     db,
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
+                    product_category=product_category,
                     dimension=args.dimension_code,
                     tier=args.tier_code,
                     query=args.query,
@@ -100,6 +164,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
+                    product_category=args.product_category,
                     output_format=args.format,
                     sku_limit=args.sku_limit,
                 )
@@ -124,6 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     profile = subparsers.add_parser("sku-param-profile", help="Query one SKU/model parameter fact profile.")
     add_common_args(profile)
+    add_product_category_arg(profile)
     profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
     profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
     profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
@@ -137,8 +203,22 @@ def build_parser() -> argparse.ArgumentParser:
     taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
     add_format_arg(taxonomy)
 
+    ac_taxonomy = subparsers.add_parser("ac-param-taxonomy", help="Query the AC standard parameter taxonomy.")
+    ac_taxonomy.add_argument("--group", help="Filter by parameter group, such as capacity, smart, energy.")
+    ac_taxonomy.add_argument("--search", help="Search parameter code/name/raw fields.")
+    ac_taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
+    add_format_arg(ac_taxonomy)
+
+    generic_taxonomy = subparsers.add_parser("param-taxonomy", help="Query a product category standard parameter taxonomy.")
+    add_product_category_arg(generic_taxonomy, default="tv", allow_auto=False)
+    generic_taxonomy.add_argument("--group", help="Filter by parameter group.")
+    generic_taxonomy.add_argument("--search", help="Search parameter code/name/raw fields.")
+    generic_taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
+    add_format_arg(generic_taxonomy)
+
     coverage = subparsers.add_parser("tier-coverage", help="Query SKU coverage for parameter dimension tiers.")
     add_common_args(coverage)
+    add_product_category_arg(coverage)
     coverage.add_argument("--dimension-code", help="Dimension code or alias, such as display_tech, 画质, 尺寸.")
     coverage.add_argument("--tier-code", help="Tier code, tier name, or alias, such as miniled or 旗舰画质.")
     coverage.add_argument("--query", help="Natural tier query text. Matching uses dimension/tier code, Chinese names, and rule summary.")
@@ -147,6 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
     add_common_args(ask)
+    add_product_category_arg(ask)
     ask.add_argument("question", nargs="+", help="Natural-language question.")
     ask.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include for tier coverage.")
     add_format_arg(ask)
@@ -159,6 +240,11 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--batch-id", default=LATEST_BATCH)
 
 
+def add_product_category_arg(parser: argparse.ArgumentParser, *, default: str = "auto", allow_auto: bool = True) -> None:
+    choices = ("auto", "tv", "ac") if allow_auto else ("tv", "ac")
+    parser.add_argument("--product-category", choices=choices, default=default, help="Business product category. Use auto for natural-language routing.")
+
+
 def add_format_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--format", choices=("json", "text"), default="text")
 
@@ -169,18 +255,21 @@ def query_sku_param_profile(
     project_id: str,
     category_code: str,
     batch_id: str,
+    product_category: str = "TV",
     query: str | None = None,
     sku_code: str | None = None,
     model_name: str | None = None,
     include_param_values: bool = False,
     param_limit: int = 120,
 ) -> dict[str, Any]:
-    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    config = product_category_config(product_category)
+    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["rule_version"])
     profile = find_sku_profile(
         db,
         project_id=project_id,
         category_code=category_code,
         batch_id=resolved_batch_id,
+        rule_version=config["rule_version"],
         query=query,
         sku_code=sku_code,
         model_name=model_name,
@@ -205,6 +294,8 @@ def query_sku_param_profile(
         "status": "ok",
         "project_id": project_id,
         "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
         "batch_id": resolved_batch_id,
         "rule_version": profile.rule_version,
         "sku": {
@@ -254,7 +345,18 @@ def query_tv_param_taxonomy(
     search: str | None = None,
     include_excluded: bool = False,
 ) -> dict[str, Any]:
-    taxonomy = tv_param_taxonomy_v0_1()
+    return query_param_taxonomy(product_category="TV", group=group, search=search, include_excluded=include_excluded)
+
+
+def query_param_taxonomy(
+    *,
+    product_category: str,
+    group: str | None = None,
+    search: str | None = None,
+    include_excluded: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy = config["taxonomy_factory"]()
     group_norm = normalize_token(group)
     search_norm = normalize_token(search)
     params = []
@@ -297,6 +399,7 @@ def query_tv_param_taxonomy(
     result = {
         "status": "ok",
         "category_code": taxonomy.category_code,
+        "product_category_label_cn": config["label_cn"],
         "taxonomy_version": taxonomy.taxonomy_version,
         "param_count": len(params),
         "total_param_count": len(taxonomy.standard_params),
@@ -325,13 +428,15 @@ def query_tier_coverage(
     project_id: str,
     category_code: str,
     batch_id: str,
+    product_category: str = "TV",
     dimension: str | None = None,
     tier: str | None = None,
     query: str | None = None,
     sku_limit: int = DEFAULT_SKU_LIMIT,
 ) -> dict[str, Any]:
-    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True)
-    taxonomy = tv_param_taxonomy_v0_1()
+    config = product_category_config(product_category)
+    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["rule_version"])
+    taxonomy = config["taxonomy_factory"]()
     matched_dimension = resolve_dimension(dimension, query)
     matched_tiers = resolve_tiers(taxonomy.dimension_tiers, dimension=matched_dimension, tier=tier, query=query)
     stmt = (
@@ -339,7 +444,8 @@ def query_tier_coverage(
         .where(entities.Core3ParamTierCoverage.project_id == project_id)
         .where(entities.Core3ParamTierCoverage.category_code == category_code)
         .where(entities.Core3ParamTierCoverage.batch_id == resolved_batch_id)
-        .where(entities.Core3ParamTierCoverage.rule_version == CORE3_M03B_RULE_VERSION)
+        .where(entities.Core3ParamTierCoverage.rule_version == config["rule_version"])
+        .where(entities.Core3ParamTierCoverage.taxonomy_version == taxonomy.taxonomy_version)
         .where(entities.Core3ParamTierCoverage.is_current.is_(True))
         .order_by(
             entities.Core3ParamTierCoverage.dimension_code,
@@ -387,6 +493,8 @@ def query_tier_coverage(
         "status": "ok",
         "project_id": project_id,
         "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
         "batch_id": resolved_batch_id,
         "query": query,
         "matched_dimension": matched_dimension,
@@ -403,13 +511,19 @@ def answer_natural_language(
     project_id: str,
     category_code: str,
     batch_id: str,
+    product_category: str,
     output_format: str,
     sku_limit: int,
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
+    resolved_product_category = resolve_product_category(product_category, query=question)
     if "标准参数" in question or "参数表" in question or "参数分类" in question:
-        result = query_tv_param_taxonomy(search=extract_taxonomy_search(question), include_excluded="排除" in question)
-        result["routed_command"] = "tv-param-taxonomy"
+        result = query_param_taxonomy(
+            product_category=resolved_product_category,
+            search=extract_taxonomy_search(question, product_category=resolved_product_category),
+            include_excluded="排除" in question,
+        )
+        result["routed_command"] = "param-taxonomy"
         return result
     if should_route_to_tier_coverage(question, normalized):
         result = query_tier_coverage(
@@ -417,6 +531,7 @@ def answer_natural_language(
             project_id=project_id,
             category_code=category_code,
             batch_id=batch_id,
+            product_category=resolved_product_category,
             dimension=None,
             tier=None,
             query=question,
@@ -431,6 +546,7 @@ def answer_natural_language(
         project_id=project_id,
         category_code=category_code,
         batch_id=batch_id,
+        product_category=resolved_product_category,
         query=query or question,
         include_param_values=output_format == "json",
     )
@@ -439,7 +555,15 @@ def answer_natural_language(
     return result
 
 
-def resolve_batch_id(db: Session, project_id: str, category_code: str, batch_id: str, *, require_profile: bool) -> str:
+def resolve_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+) -> str:
     if batch_id != LATEST_BATCH:
         return batch_id
     if require_profile:
@@ -447,7 +571,7 @@ def resolve_batch_id(db: Session, project_id: str, category_code: str, batch_id:
             select(entities.Core3SkuParamProfile.batch_id)
             .where(entities.Core3SkuParamProfile.project_id == project_id)
             .where(entities.Core3SkuParamProfile.category_code == category_code)
-            .where(entities.Core3SkuParamProfile.rule_version == CORE3_M03B_RULE_VERSION)
+            .where(entities.Core3SkuParamProfile.rule_version == rule_version)
             .order_by(entities.Core3SkuParamProfile.created_at.desc(), entities.Core3SkuParamProfile.batch_id.desc())
             .limit(1)
         ).scalar_one_or_none()
@@ -471,6 +595,7 @@ def find_sku_profile(
     project_id: str,
     category_code: str,
     batch_id: str,
+    rule_version: str,
     query: str | None,
     sku_code: str | None,
     model_name: str | None,
@@ -481,7 +606,7 @@ def find_sku_profile(
         entities.Core3SkuParamProfile.project_id == project_id,
         entities.Core3SkuParamProfile.category_code == category_code,
         entities.Core3SkuParamProfile.batch_id == batch_id,
-        entities.Core3SkuParamProfile.rule_version == CORE3_M03B_RULE_VERSION,
+        entities.Core3SkuParamProfile.rule_version == rule_version,
     ]
     if sku_code:
         filters.append(func.lower(entities.Core3SkuParamProfile.sku_code) == sku_code.lower())
@@ -524,7 +649,8 @@ def list_dimension_tiers(db: Session, profile: entities.Core3SkuParamProfile) ->
             .where(entities.Core3SkuParamDimensionTier.category_code == profile.category_code)
             .where(entities.Core3SkuParamDimensionTier.batch_id == profile.batch_id)
             .where(entities.Core3SkuParamDimensionTier.sku_code == profile.sku_code)
-            .where(entities.Core3SkuParamDimensionTier.rule_version == CORE3_M03B_RULE_VERSION)
+            .where(entities.Core3SkuParamDimensionTier.rule_version == profile.rule_version)
+            .where(entities.Core3SkuParamDimensionTier.taxonomy_version == profile.seed_version)
             .where(entities.Core3SkuParamDimensionTier.is_current.is_(True))
             .order_by(entities.Core3SkuParamDimensionTier.dimension_code)
         ).scalars()
@@ -596,7 +722,7 @@ def resolve_tiers(
 def should_route_to_tier_coverage(question: str, normalized: str) -> bool:
     if any(word in question for word in ("档位", "覆盖", "有哪些 SKU", "哪些 SKU", "sku列表", "SKU列表")):
         return True
-    tier_words = ("miniled", "oled", "lcd", "qled", "旗舰画质", "高端画质", "一级能效", "巨幕", "无分区")
+    tier_words = ("miniled", "oled", "lcd", "qled", "旗舰画质", "高端画质", "一级能效", "巨幕", "无分区", "挂机", "柜机", "新风", "舒适风", "自清洁", "循环风量", "匹")
     return any(word in normalized for word in tier_words)
 
 
@@ -611,14 +737,54 @@ def extract_sku_or_model_query(question: str) -> str | None:
     return None
 
 
-def extract_taxonomy_search(question: str) -> str | None:
+def extract_taxonomy_search(question: str, *, product_category: str = "TV") -> str | None:
     for marker in ("查", "看", "搜索"):
         if marker in question:
             tail = question.split(marker, 1)[1].strip()
             for suffix in ("标准参数", "参数表", "参数分类"):
                 tail = tail.replace(suffix, "").strip()
-            return None if normalize_token(tail) in {"彩电", "电视", "tv"} else tail or None
+            category_words = {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
+            return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
     return None
+
+
+def normalize_product_category_arg(value: str | None) -> str:
+    normalized = normalize_token(value or "TV")
+    if normalized in {"tv", "彩电", "电视"}:
+        return "TV"
+    if normalized in {"ac", "空调"}:
+        return "AC"
+    raise CatForgeInsightError(f"不支持的产品品类：{value}")
+
+
+def resolve_product_category(
+    value: str | None,
+    *,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    dimension: str | None = None,
+    tier: str | None = None,
+) -> str:
+    normalized = normalize_token(value or "auto")
+    if normalized != "auto":
+        return normalize_product_category_arg(value)
+    text = " ".join(item for item in (query, sku_code, model_name, dimension, tier) if item)
+    text_norm = normalize_token(text)
+    if "空调" in text_norm or re.search(r"\bAC\d{4,}\b", text.upper()):
+        return "AC"
+    if "彩电" in text_norm or "电视" in text_norm or re.search(r"\bTV\d{4,}\b", text.upper()):
+        return "TV"
+    return "TV"
+
+
+def product_category_config(product_category: str) -> dict[str, Any]:
+    normalized = normalize_product_category_arg(product_category)
+    return PRODUCT_CATEGORY_CONFIGS[normalized]
+
+
+def taxonomy_for_product_category(product_category: str) -> M03BTaxonomy:
+    return product_category_config(product_category)["taxonomy_factory"]()
 
 
 def normalize_token(value: Any) -> str:
@@ -646,6 +812,7 @@ def extract_match_tokens(value: str) -> list[str]:
         "多少",
         "彩电",
         "电视",
+        "空调",
     }
     raw_tokens = re.findall(r"[A-Za-z0-9+\-]+|[\u4e00-\u9fff]+", value)
     tokens = []
@@ -701,8 +868,9 @@ def render_text(result: dict[str, Any]) -> str:
             lines.append(f"- {item['dimension_code']}: {item['tier_name']} ({item['tier_code']})")
         return "\n".join(lines)
     if "params" in result:
+        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
         lines = [
-            f"彩电标准参数：{result['param_count']}/{result['total_param_count']} 个；taxonomy={result['taxonomy_version']}",
+            f"{label}标准参数：{result['param_count']}/{result['total_param_count']} 个；taxonomy={result['taxonomy_version']}",
             "分组数量：" + ", ".join(f"{key}={value}" for key, value in result["group_counts"].items()),
         ]
         for item in result["params"][:80]:

@@ -7,7 +7,7 @@ This manual documents the read-only parameter insight interface added for M03B o
 `catforge_insight` lets an agent or external caller query:
 
 1. One SKU/model's parameter fact profile.
-2. The TV standard parameter taxonomy.
+2. The TV or AC standard parameter taxonomy.
 3. SKU coverage for a parameter tier.
 
 It does not generate or mutate data. It reads M03B outputs from:
@@ -30,6 +30,9 @@ Defaults:
 - `project_id`: `d8d2245b-358b-4a64-95cc-9d7f2341bd26`
 - `category_code`: `TV`
 - `batch_id`: `latest`, resolved to the latest batch that has M03B SKU parameter profiles.
+- `product_category`: `auto` for natural-language `ask`, otherwise `tv` or `ac`.
+
+Current 205 data note: AC evidence is still stored under the same source `category_code=TV` batch. The read interface separates AC from TV by product category rule version and taxonomy version, not by source `category_code`.
 
 ## Commands
 
@@ -38,7 +41,9 @@ Defaults:
 ```bash
 python -m app.cli.catforge_insight ask "查 100A4F 的参数画像" --format json
 python -m app.cli.catforge_insight ask "查彩电标准参数" --format json
+python -m app.cli.catforge_insight ask "查空调标准参数" --format json
 python -m app.cli.catforge_insight ask "查 MiniLED 档位覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查空调新风档位覆盖哪些 SKU" --sku-limit 100 --format json
 ```
 
 The router is deterministic and only maps common user wording to one of the atomic commands.
@@ -48,6 +53,7 @@ The router is deterministic and only maps common user wording to one of the atom
 ```bash
 python -m app.cli.catforge_insight sku-param-profile --query 100A4F --format json
 python -m app.cli.catforge_insight sku-param-profile --sku-code TV00027354 --include-param-values --format json
+python -m app.cli.catforge_insight sku-param-profile --sku-code AC00000001 --product-category ac --include-param-values --format json
 ```
 
 Output includes:
@@ -59,11 +65,13 @@ Output includes:
 - Core picture/gaming/system/eye-care parameter sections.
 - Optional full extracted parameter values.
 
-### TV standard parameter taxonomy
+### Standard parameter taxonomy
 
 ```bash
 python -m app.cli.catforge_insight tv-param-taxonomy --format json
 python -m app.cli.catforge_insight tv-param-taxonomy --group picture --search MINILED --format json
+python -m app.cli.catforge_insight ac-param-taxonomy --format json
+python -m app.cli.catforge_insight param-taxonomy --product-category ac --group health --format json
 ```
 
 Output includes:
@@ -79,6 +87,7 @@ Output includes:
 ```bash
 python -m app.cli.catforge_insight tier-coverage --dimension-code display_tech --tier-code miniled --sku-limit 100 --format json
 python -m app.cli.catforge_insight tier-coverage --query "旗舰画质覆盖 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight tier-coverage --product-category ac --dimension-code health --tier-code health_fresh_air --sku-limit 100 --format json
 ```
 
 Output includes:

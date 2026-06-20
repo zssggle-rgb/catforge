@@ -1,7 +1,7 @@
 """M03B SKU parameter fact profiles and tier coverage.
 
 M03B is intentionally deterministic. It consumes only M02 ``param_raw`` evidence
-and a published/manual TV parameter taxonomy asset. It does not read claims,
+and published/manual category parameter taxonomy assets. It does not read claims,
 comments, market facts, or quality text.
 """
 
@@ -22,6 +22,9 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_PARSER_VERSION,
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_AC_TAXONOMY_VERSION,
     CORE3_M03B_MODULE_VERSION,
     CORE3_M03B_PARSER_VERSION,
     CORE3_M03B_RULE_VERSION,
@@ -314,14 +317,16 @@ class M03BParamProfileRepository(ParamExtractionRepository):
 
 
 class M03BTaxonomyLoader:
-    """Load the currently reviewed TV taxonomy asset."""
+    """Load reviewed category taxonomy assets bundled for deterministic M03B runs."""
 
     def load(self, taxonomy_version: str = CORE3_M03B_TAXONOMY_VERSION, *, category_code: str = "TV") -> M03BTaxonomy:
-        if category_code != "TV":
-            raise ValueError(f"M03B bundled taxonomy only supports TV, got {category_code}")
-        if taxonomy_version != CORE3_M03B_TAXONOMY_VERSION:
-            raise ValueError(f"unsupported M03B taxonomy_version: {taxonomy_version}")
-        return TV_PARAM_TAXONOMY_V0_1
+        if taxonomy_version == CORE3_M03B_TAXONOMY_VERSION:
+            if category_code != "TV":
+                raise ValueError(f"M03B TV taxonomy requires TV source category, got {category_code}")
+            return TV_PARAM_TAXONOMY_V0_1
+        if taxonomy_version == CORE3_M03B_AC_TAXONOMY_VERSION:
+            return AC_PARAM_TAXONOMY_V0_1
+        raise ValueError(f"unsupported M03B taxonomy_version: {taxonomy_version}")
 
 
 class M03BRunner:
@@ -649,6 +654,7 @@ class M03BProfileBuilder:
         }
         quality_summary_json = {
             "taxonomy_version": self.taxonomy.taxonomy_version,
+            "taxonomy_category_code": self.taxonomy.category_code,
             "parser_version": self.parser_version,
             "rule_version": self.rule_version,
             "known_core_param_count": known_core_count,
@@ -662,6 +668,7 @@ class M03BProfileBuilder:
             "parse_warning_count": sum(1 for entry in main_values.values() if entry.get("quality_flags")),
             "category_boundary_filter": f"sku_code_prefix_{self.sku_code_prefix}" if self.sku_code_prefix else None,
         }
+        core_sections = _core_sections(self.taxonomy.category_code, main_values)
         profile_payload = {
             "sku_param_profile_id": _sku_profile_id(self.project_id, self.batch_id, sku_code, self.taxonomy.taxonomy_version, self.rule_version),
             "project_id": self.project_id,
@@ -672,10 +679,10 @@ class M03BProfileBuilder:
             "sku_code": sku_code,
             "model_name": model_name,
             "param_values_json": param_values_json,
-            "core_picture_params_json": _core_summary(main_values, CORE_PICTURE_CODES),
-            "core_gaming_params_json": _core_summary(main_values, CORE_GAMING_CODES),
-            "core_system_params_json": _core_summary(main_values, CORE_SYSTEM_CODES),
-            "core_eye_care_params_json": _core_summary(main_values, CORE_COMFORT_CODES),
+            "core_picture_params_json": core_sections["primary"],
+            "core_gaming_params_json": core_sections["secondary"],
+            "core_system_params_json": core_sections["system"],
+            "core_eye_care_params_json": core_sections["comfort"],
             "param_completeness": completeness,
             "known_param_count": known_param_count,
             "unknown_param_count": unknown_param_count,
@@ -776,6 +783,12 @@ class M03BProfileBuilder:
         return payload
 
     def _add_derived_profile_values(self, values_by_param: dict[str, list[dict[str, Any]]], records: list[Any]) -> None:
+        if self.taxonomy.category_code == "AC":
+            self._add_ac_derived_profile_values(values_by_param, records)
+            return
+        self._add_tv_derived_profile_values(values_by_param, records)
+
+    def _add_tv_derived_profile_values(self, values_by_param: dict[str, list[dict[str, Any]]], records: list[Any]) -> None:
         by_field = {_record_raw_field(record): record for record in records}
         size = _main_numeric(values_by_param.get("screen_size_inch", []))
         if size is not None:
@@ -806,6 +819,57 @@ class M03BProfileBuilder:
                     evidence_ids=[_field_value(record, "evidence_id") for record in display_basis.values()],
                 )
             )
+
+    def _add_ac_derived_profile_values(self, values_by_param: dict[str, list[dict[str, Any]]], records: list[Any]) -> None:
+        if "horsepower_segment" not in values_by_param:
+            horsepower = _main_numeric(values_by_param.get("horsepower_hp", []))
+            if horsepower is not None:
+                tier = _ac_horsepower_tier_by_number(horsepower)
+                values_by_param.setdefault("horsepower_segment", []).append(
+                    _derived_profile_entry(
+                        param_code="horsepower_segment",
+                        param_name="匹数段",
+                        param_group="capacity",
+                        data_type="enum",
+                        normalized_value=tier,
+                        value_text=tier,
+                        basis_param_codes=["horsepower_hp"],
+                        rule="derive_ac_horsepower_segment",
+                    )
+                )
+        if "heating_function_flag" not in values_by_param:
+            heating_capacity = _main_numeric(values_by_param.get("heating_capacity_w", []))
+            if heating_capacity is not None:
+                has_heating = heating_capacity > Decimal("0")
+                values_by_param.setdefault("heating_function_flag", []).append(
+                    _derived_profile_entry(
+                        param_code="heating_function_flag",
+                        param_name="制热功能",
+                        param_group="capacity",
+                        data_type="boolean",
+                        normalized_value=has_heating,
+                        value_text="true" if has_heating else "false",
+                        basis_param_codes=["heating_capacity_w"],
+                        rule="derive_ac_heating_function",
+                        value_presence=VALUE_PRESENT if has_heating else VALUE_DERIVED_FALSE,
+                    )
+                )
+        if "installation_type" not in values_by_param:
+            product_type = _main_text({key: _select_main_profile_entry(value) for key, value in values_by_param.items()}, "product_type_combo")
+            installation = _ac_installation_from_text(product_type or "")
+            if installation != "unknown":
+                values_by_param.setdefault("installation_type", []).append(
+                    _derived_profile_entry(
+                        param_code="installation_type",
+                        param_name="安装方式",
+                        param_group="installation",
+                        data_type="enum",
+                        normalized_value=installation,
+                        value_text=installation,
+                        basis_param_codes=["product_type_combo"],
+                        rule="derive_ac_installation_type",
+                    )
+                )
 
     def _add_false_by_absence_values(self, values_by_param: dict[str, list[dict[str, Any]]], records: list[Any]) -> int:
         count = 0
@@ -842,17 +906,30 @@ class M03BProfileBuilder:
         model_name: str | None,
         values: dict[str, dict[str, Any]],
     ) -> list[M03BDimensionTier]:
-        tier_results = [
-            _size_dimension(values),
-            _display_tech_dimension(values),
-            _local_dimming_dimension(values),
-            _picture_overall_dimension(values),
-            _performance_dimension(values),
-            _smart_dimension(values),
-            _ports_dimension(values),
-            _appearance_dimension(values),
-            _energy_dimension(values),
-        ]
+        if self.taxonomy.category_code == "AC":
+            tier_results = [
+                _ac_installation_dimension(values),
+                _ac_horsepower_dimension(values),
+                _ac_cooling_capacity_dimension(values),
+                _ac_heating_dimension(values),
+                _ac_airflow_dimension(values),
+                _ac_energy_dimension(values),
+                _ac_health_dimension(values),
+                _ac_smart_dimension(values),
+                _ac_comfort_dimension(values),
+            ]
+        else:
+            tier_results = [
+                _size_dimension(values),
+                _display_tech_dimension(values),
+                _local_dimming_dimension(values),
+                _picture_overall_dimension(values),
+                _performance_dimension(values),
+                _smart_dimension(values),
+                _ports_dimension(values),
+                _appearance_dimension(values),
+                _energy_dimension(values),
+            ]
         tiers: list[M03BDimensionTier] = []
         for result in tier_results:
             definition = self.tier_lookup.get((result["dimension_code"], result["tier_code"]))
@@ -1010,6 +1087,42 @@ CORE_SYSTEM_CODES = (
     "wifi_builtin_flag",
 )
 CORE_COMFORT_CODES = ("hdr_support_flag", "declared_brightness_nit_or_band", "declared_refresh_rate_hz")
+AC_CORE_CAPACITY_CODES = (
+    "product_type_combo",
+    "installation_type",
+    "horsepower_hp",
+    "cooling_capacity_w",
+    "cooling_capacity_segment",
+    "heating_capacity_w",
+    "heating_function_flag",
+    "heat_cool_mode",
+    "inverter_flag",
+)
+AC_CORE_AIR_ENERGY_CODES = (
+    "airflow_volume_m3h",
+    "comfort_airflow_flag",
+    "energy_grade_normalized",
+    "energy_efficiency_ratio",
+    "refrigerant_type",
+)
+AC_CORE_SMART_HEALTH_CODES = (
+    "fresh_air_flag",
+    "purification_flag",
+    "self_cleaning_flag",
+    "wifi_control_flag",
+    "smart_sensing_flag",
+    "voice_control_flag",
+)
+AC_CORE_IDENTITY_CODES = (
+    "brand_name_standard",
+    "product_series",
+    "indoor_unit_dimensions_mm",
+    "retail_product_segment",
+    "installation_hp_segment",
+    "installation_inverter_segment",
+    "installation_inverter_hp_segment",
+    "custom_hp_segment",
+)
 
 
 def tv_param_taxonomy_v0_1() -> M03BTaxonomy:
@@ -1169,6 +1282,91 @@ def tv_param_taxonomy_v0_1() -> M03BTaxonomy:
     )
 
 
+def ac_param_taxonomy_v0_1() -> M03BTaxonomy:
+    params = (
+        _param("brand_name_standard", "标准品牌", "identity", "string", ("标准品牌",), "string"),
+        _param("product_series", "产品系列", "identity", "string", ("系列", "三大品牌系列"), "string"),
+        _param("product_type_combo", "产品类型组合", "identity", "string", ("产品类型",), "string", required_for_core=True),
+        _param("installation_type", "安装方式", "installation", "enum", ("安装方式", "产品类型"), "ac_installation_type", required_for_core=True),
+        _param("indoor_unit_dimensions_mm", "内机尺寸", "installation", "object", ("内机尺寸",), "dimensions_mm", unit="mm"),
+        _param("heat_cool_mode", "冷暖模式", "capability", "enum", ("冷暖", "产品类型"), "ac_heat_cool_mode", required_for_core=True),
+        _param("inverter_flag", "变频", "capability", "boolean", ("变频",), "feature_presence", required_for_core=True),
+        _param("horsepower_hp", "匹数", "capacity", "number", ("匹数",), "number", unit="HP", required_for_core=True),
+        _param("horsepower_segment", "匹数段", "capacity", "enum", ("匹数段",), "string"),
+        _param("cooling_capacity_w", "制冷量", "capacity", "number", ("制冷量",), "watt", unit="W", required_for_core=True),
+        _param("cooling_capacity_segment", "制冷量段", "capacity", "enum", ("制冷量段",), "string"),
+        _param("heating_capacity_w", "制热量", "capacity", "number", ("制热量",), "watt", unit="W", required_for_core=True),
+        _param("heating_function_flag", "制热功能", "capacity", "boolean", ("制热量",), "ac_heating_function", missing_policy="false_by_absence", required_for_core=True),
+        _param("airflow_volume_m3h", "循环风量", "airflow", "number", ("循环风量",), "ac_airflow_m3h", unit="m3/h", required_for_core=True),
+        _param("comfort_airflow_flag", "舒适风", "airflow", "boolean", ("舒适风",), "feature_presence", missing_policy="false_by_absence"),
+        _param("fresh_air_flag", "新风", "health", "boolean", ("新风空调",), "feature_presence", missing_policy="false_by_absence"),
+        _param("purification_flag", "净化功能", "health", "boolean", ("净化功能",), "feature_presence", missing_policy="false_by_absence"),
+        _param("self_cleaning_flag", "自清洁", "maintenance", "boolean", ("自清洁",), "feature_presence", missing_policy="false_by_absence"),
+        _param("refrigerant_type", "冷媒", "efficiency", "string", ("冷媒",), "string"),
+        _param("energy_grade_raw", "能效等级原始标签", "energy", "string", ("能效等级",), "string"),
+        _param("energy_grade_normalized", "能效等级", "energy", "enum", ("能效等级合并", "能效", "能效等级"), "ac_energy_grade", required_for_core=True),
+        _param("energy_grade_simple", "能效简化标签", "energy", "enum", ("能效",), "ac_energy_grade"),
+        _param("energy_efficiency_ratio", "能效比", "energy", "number", ("能效比",), "number", required_for_core=True),
+        _param("wifi_control_flag", "智能 WiFi", "smart", "boolean", ("智能WIFI",), "feature_presence", missing_policy="false_by_absence"),
+        _param("smart_sensing_flag", "智能感应", "smart", "boolean", ("智能感应",), "feature_presence", missing_policy="false_by_absence"),
+        _param("voice_control_flag", "智能语音", "smart", "boolean", ("智能语音",), "feature_presence", missing_policy="false_by_absence"),
+        _param("retail_product_segment", "业务产品类别", "business", "string", ("四平产品类别",), "string"),
+        _param("installation_hp_segment", "安装方式匹数段", "business", "string", ("安装方式匹数段",), "string"),
+        _param("installation_inverter_segment", "安装方式变频段", "business", "string", ("安装方式变频",), "string"),
+        _param("installation_inverter_hp_segment", "安装变频匹数段", "business", "string", ("安装方式变频匹数",), "string"),
+        _param("custom_hp_segment", "空调定制匹数段", "business", "string", ("空调定制匹数段",), "string"),
+    )
+    tiers = (
+        _tier("installation", "wall_mounted", "挂机/壁挂式", 10, "安装方式或产品类型包含挂机/壁挂"),
+        _tier("installation", "floor_standing", "柜机/立柜式", 20, "安装方式或产品类型包含柜机/立柜"),
+        _tier("installation", "installation_unknown", "安装方式未知", None, "缺少安装方式输入"),
+        _tier("horsepower", "hp_1_or_below", "1 匹及以下", 10, "匹数 <= 1HP"),
+        _tier("horsepower", "hp_1_5", "1.5 匹", 20, "1HP < 匹数 <= 1.5HP"),
+        _tier("horsepower", "hp_2", "2 匹", 30, "1.5HP < 匹数 <= 2HP"),
+        _tier("horsepower", "hp_3", "3 匹", 40, "2HP < 匹数 <= 3HP"),
+        _tier("horsepower", "hp_3_plus", "3 匹以上", 50, "匹数 > 3HP"),
+        _tier("horsepower", "hp_unknown", "匹数未知", None, "缺少匹数输入"),
+        _tier("cooling_capacity", "cooling_small_lt3000", "小制冷量 <3000W", 10, "制冷量 < 3000W"),
+        _tier("cooling_capacity", "cooling_1_5_3000_3999", "1.5 匹常见制冷量", 20, "3000W <= 制冷量 < 4000W"),
+        _tier("cooling_capacity", "cooling_2_4000_5499", "2 匹常见制冷量", 30, "4000W <= 制冷量 < 5500W"),
+        _tier("cooling_capacity", "cooling_3_6500_7499", "3 匹常见制冷量", 40, "6500W <= 制冷量 < 7500W"),
+        _tier("cooling_capacity", "cooling_large_7500_plus", "大制冷量 7500W+", 50, "制冷量 >= 7500W"),
+        _tier("cooling_capacity", "cooling_unknown", "制冷量未知", None, "缺少制冷量输入"),
+        _tier("heating", "heating_none", "无制热功能", 0, "制热量为 0 或制热功能为否"),
+        _tier("heating", "heating_present", "具备制热", 20, "制热功能为是"),
+        _tier("heating", "heating_high_8000_plus", "高制热量 8000W+", 40, "制热量 >= 8000W"),
+        _tier("airflow", "airflow_low_lt700", "低循环风量 <700", 10, "循环风量 < 700m3/h"),
+        _tier("airflow", "airflow_medium_700_999", "中循环风量 700-999", 20, "700m3/h <= 循环风量 < 1000m3/h"),
+        _tier("airflow", "airflow_high_1000_1499", "高循环风量 1000-1499", 30, "1000m3/h <= 循环风量 < 1500m3/h"),
+        _tier("airflow", "airflow_very_high_1500_plus", "超高循环风量 1500+", 40, "循环风量 >= 1500m3/h"),
+        _tier("airflow", "airflow_unknown", "循环风量未知", None, "缺少循环风量或循环风量为 0"),
+        _tier("energy", "energy_grade_1", "一级能效", 30, "标准化能效等级为一级"),
+        _tier("energy", "energy_grade_2", "二级能效", 20, "标准化能效等级为二级"),
+        _tier("energy", "energy_grade_3", "三级能效", 10, "标准化能效等级为三级"),
+        _tier("energy", "energy_other", "其他能效", 5, "能效标签存在但无法归入一级/二级/三级"),
+        _tier("energy", "energy_unknown", "能效未知", None, "缺少能效等级"),
+        _tier("health", "health_none", "无新风/净化", 0, "新风和净化均未标注"),
+        _tier("health", "health_purification", "净化能力", 10, "具备净化"),
+        _tier("health", "health_fresh_air", "新风能力", 20, "具备新风"),
+        _tier("health", "health_fresh_purification", "新风+净化", 30, "同时具备新风和净化"),
+        _tier("smart", "smart_ac_none", "无智能控制", 0, "WiFi、智能感应、语音均未标注"),
+        _tier("smart", "smart_ac_wifi", "WiFi 远程控制", 10, "具备 WiFi/远程控制"),
+        _tier("smart", "smart_ac_interaction", "智能交互增强", 20, "具备智能感应或智能语音"),
+        _tier("smart", "smart_ac_full", "WiFi+智能交互", 30, "WiFi 与智能感应/语音同时具备"),
+        _tier("comfort", "comfort_basic", "基础舒适", 0, "舒适风和自清洁均未标注"),
+        _tier("comfort", "comfort_airflow", "舒适风", 10, "具备舒适风"),
+        _tier("comfort", "comfort_self_cleaning", "自清洁", 20, "具备自清洁"),
+        _tier("comfort", "comfort_full", "舒适风+自清洁", 30, "舒适风与自清洁同时具备"),
+    )
+    return M03BTaxonomy(
+        taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+        category_code="AC",
+        standard_params=params,
+        excluded_raw_fields={},
+        dimension_tiers=tiers,
+    )
+
+
 def _param(
     param_code: str,
     param_name: str,
@@ -1207,6 +1405,7 @@ def _tier(dimension_code: str, tier_code: str, tier_name: str, tier_rank: int | 
 
 
 TV_PARAM_TAXONOMY_V0_1 = tv_param_taxonomy_v0_1()
+AC_PARAM_TAXONOMY_V0_1 = ac_param_taxonomy_v0_1()
 
 
 def _sku_allowed(record: Any, sku_code_prefix: str | None) -> bool:
@@ -1343,6 +1542,21 @@ def _parse_param_value(param: M03BParamDefinition, raw_value: Any, raw_field: st
         return _parse_nits_or_band(text)
     if parser == "percentage_ratio":
         return _parse_percentage_ratio(text)
+    if parser == "dimensions_mm":
+        return _parse_dimensions_mm(text)
+    if parser == "ac_installation_type":
+        installation_type = _ac_installation_from_text(text)
+        if installation_type == "unknown":
+            return _parsed_unknown_text(text, param.unit, "parse_failed")
+        return _parsed_present(installation_type, value_text=text, unit=param.unit)
+    if parser == "ac_heat_cool_mode":
+        return _parse_ac_heat_cool_mode(text)
+    if parser == "ac_heating_function":
+        return _parse_ac_heating_function(text)
+    if parser == "ac_airflow_m3h":
+        return _parse_ac_airflow_m3h(text)
+    if parser == "ac_energy_grade":
+        return _parse_ac_energy_grade(text)
     if parser == "feature_presence":
         return _parse_feature_presence(text, param.unit)
     if parser == "boolean":
@@ -1476,6 +1690,80 @@ def _parse_percentage_ratio(text: str) -> M03BParsedValue:
     normalized = number * Decimal("100") if number <= Decimal("1.5") else number
     flags = ("unit_inferred_percent",)
     return _parsed_present(_json_number(normalized), numeric_value=normalized, value_text=text, unit="%", quality_flags=flags)
+
+
+def _parse_dimensions_mm(text: str) -> M03BParsedValue:
+    numbers = _numbers(text)
+    if len(numbers) < 2:
+        return _parsed_unknown_text(text, "mm", "parse_failed")
+    labels = ("length", "width", "height")
+    normalized = {"raw": text, "unit": "mm"}
+    for index, number in enumerate(numbers[:3]):
+        normalized[labels[index]] = _json_number(number)
+    return _parsed_present(normalized, value_text=text, unit="mm", quality_flags=("unit_inferred_mm",))
+
+
+def _parse_ac_heat_cool_mode(text: str) -> M03BParsedValue:
+    normalized = _normalize_text(text)
+    if "冷暖" in normalized or ("制冷" in normalized and "制热" in normalized):
+        return _parsed_present("冷暖", value_text=text)
+    if "单冷" in normalized or ("制冷" in normalized and "制热" not in normalized):
+        return _parsed_present("单冷", value_text=text)
+    if "冷" in normalized and "暖" in normalized:
+        return _parsed_present("冷暖", value_text=text)
+    return _parsed_unknown_text(text, None, "parse_failed")
+
+
+def _parse_ac_heating_function(text: str) -> M03BParsedValue:
+    number = _first_decimal(text)
+    if number is not None:
+        return _parsed_present(number > Decimal("0"), numeric_value=number, value_text=text)
+    normalized = _normalize_text(text)
+    if "冷暖" in normalized or "制热" in normalized:
+        return _parsed_present(True, value_text=text)
+    if "单冷" in normalized or normalized in FALSE_LITERALS:
+        return _parsed_present(False, value_text=text)
+    return _parsed_unknown_text(text, None, "parse_failed")
+
+
+def _parse_ac_airflow_m3h(text: str) -> M03BParsedValue:
+    number = _first_decimal(text)
+    if number is None:
+        return _parsed_unknown_text(text, "m3/h", "parse_failed")
+    if number <= Decimal("0"):
+        return M03BParsedValue(
+            value_presence=VALUE_UNKNOWN,
+            normalized_value=None,
+            numeric_value=None,
+            value_text=text,
+            unit="m3/h",
+            parser_status="zero_airflow_invalid",
+            quality_flags=("zero_airflow_invalid",),
+        )
+    return _parsed_present(_json_number(number), numeric_value=number, value_text=text, unit="m3/h", quality_flags=("unit_inferred_m3h",))
+
+
+def _parse_ac_energy_grade(text: str) -> M03BParsedValue:
+    normalized = _normalize_text(text)
+    if "其他" in normalized:
+        return M03BParsedValue(
+            value_presence=VALUE_UNKNOWN,
+            normalized_value=None,
+            numeric_value=None,
+            value_text=text,
+            unit=None,
+            parser_status="coarse_energy_grade",
+            quality_flags=("coarse_energy_grade",),
+        )
+    if "1" in normalized or "一" in normalized:
+        return _parsed_present("一级", numeric_value=Decimal("1"), value_text=text)
+    if "2" in normalized or "二" in normalized:
+        return _parsed_present("二级", numeric_value=Decimal("2"), value_text=text)
+    if "3" in normalized or "三" in normalized:
+        return _parsed_present("三级", numeric_value=Decimal("3"), value_text=text)
+    if "4" in normalized or "四" in normalized:
+        return _parsed_present("四级", numeric_value=Decimal("4"), value_text=text)
+    return _parsed_unknown_text(text, None, "parse_failed")
 
 
 def _parse_feature_presence(text: str, unit: str | None = None) -> M03BParsedValue:
@@ -1930,6 +2218,150 @@ def _energy_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
     return _dimension_result("energy", tier, basis, f"能效等级为 {grade_text}，归入 {tier}。")
 
 
+def _ac_installation_from_text(text: str) -> str:
+    if not text:
+        return "unknown"
+    normalized = _normalize_text(text)
+    if "柜" in normalized or "立柜" in normalized:
+        return "floor_standing"
+    if "挂" in normalized or "壁挂" in normalized:
+        return "wall_mounted"
+    return "unknown"
+
+
+def _ac_horsepower_tier_by_number(horsepower: Decimal) -> str:
+    if horsepower <= Decimal("1"):
+        return "hp_1_or_below"
+    if horsepower <= Decimal("1.5"):
+        return "hp_1_5"
+    if horsepower <= Decimal("2"):
+        return "hp_2"
+    if horsepower <= Decimal("3"):
+        return "hp_3"
+    return "hp_3_plus"
+
+
+def _ac_installation_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["installation_type", "product_type_combo"]
+    installation = _main_text(values, "installation_type") or _ac_installation_from_text(_main_text(values, "product_type_combo") or "")
+    if installation not in {"wall_mounted", "floor_standing"}:
+        return _dimension_result("installation", "installation_unknown", basis, "缺少安装方式，无法判断挂机/柜机。", quality_flags=["missing_installation_type"])
+    return _dimension_result("installation", installation, basis, f"安装方式识别为 {installation}。")
+
+
+def _ac_horsepower_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    horsepower = _decimal(values.get("horsepower_hp", {}).get("numeric_value")) if values.get("horsepower_hp") else None
+    if horsepower is None:
+        return _dimension_result("horsepower", "hp_unknown", ["horsepower_hp"], "缺少匹数，无法判断能力规格。", quality_flags=["missing_horsepower"])
+    tier = _ac_horsepower_tier_by_number(horsepower)
+    return _dimension_result("horsepower", tier, ["horsepower_hp"], f"匹数 {horsepower}HP，归入 {tier}。")
+
+
+def _ac_cooling_capacity_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    cooling = _decimal(values.get("cooling_capacity_w", {}).get("numeric_value")) if values.get("cooling_capacity_w") else None
+    if cooling is None:
+        return _dimension_result("cooling_capacity", "cooling_unknown", ["cooling_capacity_w"], "缺少制冷量。", quality_flags=["missing_cooling_capacity"])
+    if cooling < Decimal("3000"):
+        tier = "cooling_small_lt3000"
+    elif cooling < Decimal("4000"):
+        tier = "cooling_1_5_3000_3999"
+    elif cooling < Decimal("5500"):
+        tier = "cooling_2_4000_5499"
+    elif cooling < Decimal("7500"):
+        tier = "cooling_3_6500_7499"
+    else:
+        tier = "cooling_large_7500_plus"
+    return _dimension_result("cooling_capacity", tier, ["cooling_capacity_w"], f"制冷量 {cooling}W，归入 {tier}。")
+
+
+def _ac_heating_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["heating_function_flag", "heating_capacity_w", "heat_cool_mode"]
+    heating_capacity = _decimal(values.get("heating_capacity_w", {}).get("numeric_value")) if values.get("heating_capacity_w") else None
+    has_heating = _main_bool(values, "heating_function_flag")
+    if not has_heating or heating_capacity == Decimal("0"):
+        return _dimension_result("heating", "heating_none", basis, "制热量为 0 或制热功能为否，按无制热功能处理。")
+    if heating_capacity is not None and heating_capacity >= Decimal("8000"):
+        return _dimension_result("heating", "heating_high_8000_plus", basis, f"制热量 {heating_capacity}W，归入高制热量。")
+    return _dimension_result("heating", "heating_present", basis, f"制热功能成立，制热量 {heating_capacity or '未知'}W。")
+
+
+def _ac_airflow_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    airflow = _decimal(values.get("airflow_volume_m3h", {}).get("numeric_value")) if values.get("airflow_volume_m3h") else None
+    if airflow is None:
+        return _dimension_result("airflow", "airflow_unknown", ["airflow_volume_m3h"], "缺少循环风量或循环风量为 0。", quality_flags=["missing_or_invalid_airflow"])
+    if airflow < Decimal("700"):
+        tier = "airflow_low_lt700"
+    elif airflow < Decimal("1000"):
+        tier = "airflow_medium_700_999"
+    elif airflow < Decimal("1500"):
+        tier = "airflow_high_1000_1499"
+    else:
+        tier = "airflow_very_high_1500_plus"
+    return _dimension_result("airflow", tier, ["airflow_volume_m3h"], f"循环风量 {airflow}m3/h，归入 {tier}。")
+
+
+def _ac_energy_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["energy_grade_normalized", "energy_grade_raw", "energy_grade_simple", "energy_efficiency_ratio"]
+    grade_text = (_main_text(values, "energy_grade_normalized") or _main_text(values, "energy_grade_raw") or "").strip()
+    if not grade_text:
+        return _dimension_result("energy", "energy_unknown", basis, "缺少能效等级。", quality_flags=["missing_energy_grade"])
+    if "1" in grade_text or "一" in grade_text:
+        tier = "energy_grade_1"
+    elif "2" in grade_text or "二" in grade_text:
+        tier = "energy_grade_2"
+    elif "3" in grade_text or "三" in grade_text:
+        tier = "energy_grade_3"
+    else:
+        tier = "energy_other"
+    ratio = _decimal(values.get("energy_efficiency_ratio", {}).get("numeric_value")) if values.get("energy_efficiency_ratio") else None
+    return _dimension_result("energy", tier, basis, f"能效等级 {grade_text}，能效比 {ratio or '未知'}，归入 {tier}。")
+
+
+def _ac_health_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["fresh_air_flag", "purification_flag"]
+    fresh_air = _main_bool(values, "fresh_air_flag")
+    purification = _main_bool(values, "purification_flag")
+    if fresh_air and purification:
+        tier = "health_fresh_purification"
+    elif fresh_air:
+        tier = "health_fresh_air"
+    elif purification:
+        tier = "health_purification"
+    else:
+        tier = "health_none"
+    return _dimension_result("health", tier, basis, f"新风={fresh_air}，净化={purification}，归入 {tier}。")
+
+
+def _ac_smart_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["wifi_control_flag", "smart_sensing_flag", "voice_control_flag"]
+    wifi = _main_bool(values, "wifi_control_flag")
+    interaction = _main_bool(values, "smart_sensing_flag") or _main_bool(values, "voice_control_flag")
+    if wifi and interaction:
+        tier = "smart_ac_full"
+    elif interaction:
+        tier = "smart_ac_interaction"
+    elif wifi:
+        tier = "smart_ac_wifi"
+    else:
+        tier = "smart_ac_none"
+    return _dimension_result("smart", tier, basis, f"WiFi={wifi}，智能感应/语音={interaction}，归入 {tier}。")
+
+
+def _ac_comfort_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
+    basis = ["comfort_airflow_flag", "self_cleaning_flag"]
+    comfort_airflow = _main_bool(values, "comfort_airflow_flag")
+    self_cleaning = _main_bool(values, "self_cleaning_flag")
+    if comfort_airflow and self_cleaning:
+        tier = "comfort_full"
+    elif self_cleaning:
+        tier = "comfort_self_cleaning"
+    elif comfort_airflow:
+        tier = "comfort_airflow"
+    else:
+        tier = "comfort_basic"
+    return _dimension_result("comfort", tier, basis, f"舒适风={comfort_airflow}，自清洁={self_cleaning}，归入 {tier}。")
+
+
 def _dimension_result(
     dimension_code: str,
     tier_code: str,
@@ -1967,6 +2399,22 @@ def _basis_values(values: Mapping[str, dict[str, Any]], param_codes: Sequence[st
 
 def _core_summary(values: Mapping[str, dict[str, Any]], param_codes: Sequence[str]) -> dict[str, Any]:
     return _basis_values(values, param_codes)
+
+
+def _core_sections(taxonomy_category_code: str, values: Mapping[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    if taxonomy_category_code == "AC":
+        return {
+            "primary": _core_summary(values, AC_CORE_CAPACITY_CODES),
+            "secondary": _core_summary(values, AC_CORE_AIR_ENERGY_CODES),
+            "system": _core_summary(values, AC_CORE_SMART_HEALTH_CODES),
+            "comfort": _core_summary(values, AC_CORE_IDENTITY_CODES),
+        }
+    return {
+        "primary": _core_summary(values, CORE_PICTURE_CODES),
+        "secondary": _core_summary(values, CORE_GAMING_CODES),
+        "system": _core_summary(values, CORE_SYSTEM_CODES),
+        "comfort": _core_summary(values, CORE_COMFORT_CODES),
+    }
 
 
 def _unique_preserve_order(values: Iterable[Any]) -> list[str]:
