@@ -150,6 +150,48 @@ def seed_data(session: Session) -> None:
             rule_version=CORE3_M03B_RULE_VERSION,
         )
     )
+    session.add(
+        entities.Core3ParamTierCoverage(
+            tier_coverage_id="coverage_display_lcd_led",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            dimension_code="display_tech",
+            tier_code="lcd_led",
+            tier_name="LCD/LED",
+            tier_rank=10,
+            rule_summary="LCD + LED 背光，非 MiniLED",
+            sku_count=1,
+            sku_ratio=Decimal("0.100000"),
+            sku_codes=["TV00010000"],
+            sample_sku_codes=["TV00010000"],
+            coverage_status="covered",
+            coverage_hash="sha256:test-coverage-lcd-led",
+            rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3ParamTierCoverage(
+            tier_coverage_id="coverage_picture_premium",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            dimension_code="picture_overall",
+            tier_code="picture_premium",
+            tier_name="高端画质",
+            tier_rank=40,
+            rule_summary="MiniLED/QD/RGB MiniLED，且亮度或分区有明显支撑",
+            sku_count=1,
+            sku_ratio=Decimal("0.100000"),
+            sku_codes=["TV00027354"],
+            sample_sku_codes=["TV00027354"],
+            coverage_status="covered",
+            coverage_hash="sha256:test-coverage-picture-premium",
+            rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
     session.commit()
 
 
@@ -205,6 +247,7 @@ def test_tier_coverage_and_natural_language_route_to_matching_skus():
     assert direct["coverage_count"] == 1
     assert direct["coverages"][0]["sku_codes"] == ["TV00027354"]
     assert direct["coverages"][0]["sku_codes_truncated"] is True
+    assert {item["tier_code"] for item in direct["coverages"]} == {"miniled"}
     assert natural["routed_command"] == "tier-coverage"
     assert natural["coverages"][0]["tier_code"] == "miniled"
 

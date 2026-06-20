@@ -574,13 +574,13 @@ def resolve_tiers(
     for item in tiers:
         if dimension and item.dimension_code != dimension:
             continue
-        haystack = normalize_token(" ".join([item.dimension_code, item.tier_code, item.tier_name, item.rule_summary]))
+        identity_haystack = normalize_token(" ".join([item.dimension_code, item.tier_code, item.tier_name]))
         exact_terms = {
             normalize_token(item.dimension_code),
             normalize_token(item.tier_code),
             normalize_token(item.tier_name),
         }
-        if query_norm in exact_terms or any(token and token in haystack for token in query_tokens):
+        if query_norm in exact_terms or any(token and token in identity_haystack for token in query_tokens):
             matches.append(item)
     if tier and not matches:
         tier_norm = normalize_token(tier)
