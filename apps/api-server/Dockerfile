@@ -8,12 +8,15 @@ ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 WORKDIR /app
 
 COPY apps/api-server/pyproject.toml ./pyproject.toml
+
+RUN python -c "import subprocess, sys, tomllib; deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-cache-dir', *deps])"
+
 COPY apps/api-server/alembic.ini ./alembic.ini
 COPY apps/api-server/alembic ./alembic
 COPY apps/api-server/app ./app
 COPY examples ./examples
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 EXPOSE 8000
 

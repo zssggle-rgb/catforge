@@ -93,8 +93,43 @@ The check verifies SSH, Docker, Git, rsync, PostgreSQL service readiness, `/opt/
 
 ## Deploy
 
+### Daily API hot-fix
+
+For normal Server A development, prefer the hot-fix path after code is committed:
+
 ```bash
-scripts/deploy.sh dev
+scripts/sync-hotfix-205.sh dev
+```
+
+This path is for Python/API source changes under `apps/api-server/app/`, CLI changes, and Claude Code skill updates. It:
+
+1. Requires a clean local Git working tree.
+2. Pushes the current committed branch to GitHub by default.
+3. Syncs `/opt/catforge` on 205 to the same commit.
+4. Falls back to a local git bundle when 205 cannot reach GitHub.
+5. Copies API source into the running API container.
+6. Restarts only the API container.
+7. Reinstalls CatForge Claude Code skills when permissions allow.
+8. Checks server-local `/readyz`.
+
+Useful optional settings:
+
+```bash
+CATFORGE_HOTFIX_GIT_REF=
+CATFORGE_HOTFIX_PUSH=true
+CATFORGE_HOTFIX_BUNDLE_FALLBACK=true
+CATFORGE_HOTFIX_INSTALL_CLAUDE_SKILLS=true
+CATFORGE_HOTFIX_SMOKE_COMMAND='python -m app.cli.catforge_insight ask "查彩电标准参数" --format json'
+```
+
+`CATFORGE_HOTFIX_GIT_REF` defaults to the current local branch. This is intentionally separate from full-deploy `CATFORGE_GIT_REF`, which may point to `main`.
+
+Use the lower-level `scripts/hotfix-api.sh dev` only when the remote Git worktree is already synced and you only need to copy API source into the running container.
+
+### Full deploy
+
+```bash
+scripts/full-deploy-205.sh dev
 ```
 
 Server A dev should deploy from GitHub:
@@ -107,7 +142,7 @@ CATFORGE_GIT_REF=main
 
 With `CATFORGE_SYNC_STRATEGY=github`, the deploy script fetches `CATFORGE_GIT_REF` on the server and deploys that committed revision. The old rsync mode remains available by setting `CATFORGE_SYNC_STRATEGY=rsync`, but it should only be used for local debugging because it can deploy uncommitted workstation state.
 
-The deploy script:
+`scripts/full-deploy-205.sh` is a clear wrapper around `scripts/deploy.sh`. The deploy script:
 
 1. Syncs code into `/opt/catforge` from GitHub or rsync, depending on `CATFORGE_SYNC_STRATEGY`.
 2. Uploads the runtime `.env` when `CATFORGE_RUNTIME_ENV_FILE` is set.
@@ -115,6 +150,16 @@ The deploy script:
 4. Runs `alembic upgrade head`.
 5. Starts API, web, and Redis.
 6. Checks `/healthz` and `/readyz` when `CATFORGE_APP_URL` is configured.
+
+Use full deploy instead of hot-fix when any of these changed:
+
+- `apps/api-server/pyproject.toml` or Python dependencies.
+- `apps/api-server/Dockerfile`, `docker-compose.cloud.yml`, or runtime container settings.
+- Alembic migrations or database schema.
+- Frontend code or web image contents.
+- System packages, base images, or Redis/web service configuration.
+
+The API Dockerfile installs dependencies before copying API source, then installs the local package with `--no-deps`. That keeps full builds faster when only Python source changed, but hot-fix is still the default for day-to-day API iteration.
 
 ## Server B policy
 

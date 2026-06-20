@@ -7,6 +7,7 @@ env_file="${CATFORGE_ENV_FILE:-.catforge/deploy-${target}.env}"
 usage() {
   echo "Usage: $0 [dev|test]"
   echo "Hot-fix Python API source into the running container without rebuilding images."
+  echo "Prefer scripts/sync-hotfix-205.sh for normal 205 work; this script is the low-level API source copy fallback."
   echo "Use scripts/deploy.sh when dependencies, migrations, Dockerfiles, or frontend assets changed."
 }
 
