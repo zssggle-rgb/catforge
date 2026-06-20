@@ -700,6 +700,8 @@ def resolve_tiers(
     for item in tiers:
         if dimension and item.dimension_code != dimension:
             continue
+        if should_skip_negative_tier_match(query_text, item):
+            continue
         identity_haystack = normalize_token(" ".join([item.dimension_code, item.tier_code, item.tier_name]))
         exact_terms = {
             normalize_token(item.dimension_code),
@@ -717,6 +719,21 @@ def resolve_tiers(
             and (normalize_token(item.tier_code) == tier_norm or normalize_token(item.tier_name) == tier_norm)
         ]
     return matches
+
+
+def should_skip_negative_tier_match(query_text: str, item: M03BTierDefinition) -> bool:
+    query_norm = normalize_token(query_text)
+    if any(token in query_norm for token in ("无", "没有", "不具备", "none")):
+        return False
+    negative_tier_codes = {"health_none", "smart_ac_none", "comfort_basic"}
+    positive_terms = {
+        "health": ("新风", "净化"),
+        "smart": ("wifi", "智能", "语音", "感应"),
+        "comfort": ("舒适风", "自清洁"),
+    }
+    if item.tier_code not in negative_tier_codes:
+        return False
+    return any(normalize_token(term) in query_norm for term in positive_terms.get(item.dimension_code, ()))
 
 
 def should_route_to_tier_coverage(question: str, normalized: str) -> bool:

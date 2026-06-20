@@ -372,6 +372,24 @@ def test_ac_taxonomy_profile_and_tier_queries_are_routed_by_natural_language():
     assert coverage["coverages"][0]["sku_codes"] == ["AC00000001"]
 
 
+def test_positive_ac_tier_query_does_not_match_negative_tier():
+    taxonomy = catforge_insight.query_param_taxonomy(product_category="AC")
+    tiers = [
+        catforge_insight.M03BTierDefinition(
+            dimension_code=item["dimension_code"],
+            tier_code=item["tier_code"],
+            tier_name=item["tier_name"],
+            tier_rank=item["tier_rank"],
+            rule_summary=item["rule_summary"],
+        )
+        for item in taxonomy["dimension_tiers"]
+    ]
+
+    matches = catforge_insight.resolve_tiers(tiers, dimension="health", tier=None, query="查空调新风档位覆盖哪些 SKU")
+
+    assert {item.tier_code for item in matches} == {"health_fresh_air", "health_fresh_purification"}
+
+
 def test_cli_main_can_emit_json_for_natural_language(monkeypatch, capsys):
     session = make_session()
 
