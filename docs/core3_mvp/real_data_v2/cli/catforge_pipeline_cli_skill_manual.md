@@ -1,13 +1,14 @@
 # CatForge Pipeline CLI and Claude Skill Manual
 
-This manual documents the execution CLI for agent-driven data preparation and SKU parameter profile generation.
+This manual documents the execution CLI for agent-driven data preparation, SKU parameter profile generation, and SKU claim fact profile generation.
 
 ## Purpose
 
-`catforge_pipeline` lets an agent or external caller run write actions without requiring the user to know module codes. The current implemented action is:
+`catforge_pipeline` lets an agent or external caller run write actions without requiring the user to know module codes. The current implemented actions are:
 
 1. Generate or rerun SKU parameter fact profiles for TV.
 2. Generate or rerun SKU parameter fact profiles for AC.
+3. Generate or rerun SKU claim fact profiles for TV.
 
 For read-only questions, use `catforge_insight` instead.
 
@@ -32,6 +33,13 @@ Current 205 data note: TV and AC evidence are in the same source batch. The CLI 
 | TV | `TV` | `tv_param_taxonomy_manual_v0.1` | `m03b_tv_param_profile_v0.1` |
 | AC | `AC` | `ac_param_taxonomy_manual_v0.1` | `m03b_ac_param_profile_v0.1` |
 
+M04C claim fact profiles currently have a published TV taxonomy only:
+
+| Product category | SKU prefix | Claim taxonomy version | Claim rule version |
+|---|---|---|---|
+| TV | `TV` | `tv_claim_taxonomy_manual_v0.1` | `m04c_tv_claim_fact_profile_v0.1` |
+| AC | `AC` | not published | not available |
+
 ## Commands
 
 ### Natural-language router
@@ -39,18 +47,22 @@ Current 205 data note: TV and AC evidence are in the same source batch. The CLI 
 ```bash
 python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 参数画像" --force-rebuild --format json
 python -m app.cli.catforge_pipeline ask "生成空调 SKU 参数画像" --force-rebuild --format json
+python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 卖点事实画像" --force-rebuild --format json
 ```
 
-The router is deterministic. It maps "彩电/电视/TV" to TV and "空调/AC" to AC. It only executes parameter profile generation.
+The router is deterministic. It maps "彩电/电视/TV" to TV and "空调/AC" to AC. Requests that mention "卖点" route to claim fact profile generation; parameter requests route to parameter profile generation.
 
 ### Atomic command
 
 ```bash
 python -m app.cli.catforge_pipeline run-param-profile --product-category tv --batch-id latest --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-param-profile --product-category ac --batch-id latest --force-rebuild --format json
+python -m app.cli.catforge_pipeline run-claim-profile --product-category tv --batch-id latest --input-source auto --force-rebuild --format json
 ```
 
 `--force-rebuild` replaces same business-key outputs when output hashes changed. Use it when source data, taxonomy, or rules have changed.
+
+For `run-claim-profile`, use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when raw selling points are current but M01/M02 have not been rerun.
 
 ## Outputs
 
@@ -62,6 +74,7 @@ Output includes:
 - Input evidence count.
 - Output count.
 - SKU profile count, parameter value count, dimension tier count, and tier coverage count.
+- For claim profiles: SKU profile count, claim fact count, parameter-supported fact claim count, service-fulfillment count, dimension position count, and position coverage count.
 - Warnings.
 
 ## Claude Code Skill

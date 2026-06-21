@@ -1,6 +1,6 @@
 # CatForge Insight CLI and Claude Skill Manual
 
-This manual documents the read-only parameter insight interface added for M03B outputs.
+This manual documents the read-only insight interface for parameter profiles and claim fact profiles.
 
 ## Purpose
 
@@ -9,6 +9,9 @@ This manual documents the read-only parameter insight interface added for M03B o
 1. One SKU/model's parameter fact profile.
 2. The TV or AC standard parameter taxonomy.
 3. SKU coverage for a parameter tier.
+4. One SKU/model's TV claim fact profile.
+5. The TV standard claim taxonomy.
+6. SKU coverage for a TV claim position.
 
 It does not generate or mutate data. It reads M03B outputs from:
 
@@ -16,6 +19,13 @@ It does not generate or mutate data. It reads M03B outputs from:
 - `core3_extract_param_value`
 - `core3_sku_param_dimension_tier`
 - `core3_param_tier_coverage`
+
+It reads M04C outputs from:
+
+- `core3_sku_claim_fact_profile`
+- `core3_sku_claim_fact`
+- `core3_sku_claim_dimension_position`
+- `core3_claim_position_coverage`
 
 ## Runtime
 
@@ -44,6 +54,9 @@ python -m app.cli.catforge_insight ask "查彩电标准参数" --format json
 python -m app.cli.catforge_insight ask "查空调标准参数" --format json
 python -m app.cli.catforge_insight ask "查 MiniLED 档位覆盖哪些 SKU" --sku-limit 100 --format json
 python -m app.cli.catforge_insight ask "查空调新风档位覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的卖点画像" --format json
+python -m app.cli.catforge_insight ask "查彩电标准卖点" --format json
+python -m app.cli.catforge_insight ask "查 MiniLED 复合画质旗舰型覆盖哪些 SKU" --sku-limit 100 --format json
 ```
 
 The router is deterministic and only maps common user wording to one of the atomic commands.
@@ -93,6 +106,55 @@ python -m app.cli.catforge_insight tier-coverage --product-category ac --dimensi
 Output includes:
 
 - Dimension and tier code/name.
+- Rule summary.
+- SKU count and ratio.
+- SKU list, limited by `--sku-limit`; use `--sku-limit 0` to return all.
+
+### SKU claim fact profile
+
+```bash
+python -m app.cli.catforge_insight sku-claim-profile --query 100A4F --include-claim-facts --format json
+python -m app.cli.catforge_insight sku-claim-profile --sku-code TV00027354 --format json
+```
+
+Output includes:
+
+- SKU code, model name, and brand name.
+- Raw claim count, matched claim count, fact claim count, unsupported-by-parameter count, parameter-unknown count, and service-fulfillment count.
+- Standard claim codes and parameter-supported fact claim codes.
+- Dimension profile and claim positions.
+- Optional claim fact rows, including parameter support explanation.
+
+Service-fulfillment claims are separated and are not counted as product fact claims.
+
+### Standard claim taxonomy
+
+```bash
+python -m app.cli.catforge_insight claim-taxonomy --product-category tv --format json
+python -m app.cli.catforge_insight claim-taxonomy --product-category tv --search MiniLED --format json
+python -m app.cli.catforge_insight claim-taxonomy --product-category tv --dimension 画质 --format json
+```
+
+Output includes:
+
+- Claim taxonomy version.
+- Standard claim definitions.
+- Claim dimension counts.
+- Support parameter mapping.
+- Claim position definitions.
+
+### Claim position coverage
+
+```bash
+python -m app.cli.catforge_insight claim-position-coverage --query "MiniLED 复合画质旗舰型覆盖 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight claim-position-coverage --dimension-code 画质 --position-source supported --sku-limit 100 --format json
+python -m app.cli.catforge_insight claim-position-coverage --query "AI 语音增强型有哪些 SKU" --sku-limit 100 --format json
+```
+
+Output includes:
+
+- Dimension and position code/name.
+- `position_source`: `supported` by default, meaning the position is based on parameter-supported fact claims.
 - Rule summary.
 - SKU count and ratio.
 - SKU list, limited by `--sku-limit`; use `--sku-limit 0` to return all.

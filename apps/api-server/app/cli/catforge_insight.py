@@ -1,7 +1,7 @@
-"""Read-only CatForge insight CLI for SKU parameter facts.
+"""Read-only CatForge insight CLI for SKU parameter and claim facts.
 
 This CLI is designed for agent usage. It exposes stable, deterministic query
-commands over M03B outputs without requiring the user to know module codes.
+commands over fact-profile outputs without requiring the user to know module codes.
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from app.models import entities
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M04C_TV_TAXONOMY_VERSION,
 )
 from app.services.core3_real_data.m03b_param_profile_service import (
     M03BTaxonomy,
@@ -29,6 +31,7 @@ from app.services.core3_real_data.m03b_param_profile_service import (
     ac_param_taxonomy_v0_1,
     tv_param_taxonomy_v0_1,
 )
+from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, tv_claim_taxonomy_v0_1
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -42,12 +45,18 @@ PRODUCT_CATEGORY_CONFIGS = {
         "rule_version": CORE3_M03B_RULE_VERSION,
         "sku_prefix": "TV",
         "taxonomy_factory": tv_param_taxonomy_v0_1,
+        "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
+        "claim_taxonomy_version": CORE3_M04C_TV_TAXONOMY_VERSION,
+        "claim_taxonomy_factory": tv_claim_taxonomy_v0_1,
     },
     "AC": {
         "label_cn": "空调",
         "rule_version": CORE3_M03B_AC_RULE_VERSION,
         "sku_prefix": "AC",
         "taxonomy_factory": ac_param_taxonomy_v0_1,
+        "claim_rule_version": None,
+        "claim_taxonomy_version": None,
+        "claim_taxonomy_factory": None,
     },
 }
 
@@ -101,6 +110,35 @@ DIMENSION_ALIASES = {
     "舒适风": "comfort",
     "自清洁": "comfort",
     "comfort": "comfort",
+}
+
+CLAIM_DIMENSION_ALIASES = {
+    "画质": "picture_quality",
+    "显示": "picture_quality",
+    "图像": "picture_quality",
+    "游戏": "motion_gaming",
+    "运动": "motion_gaming",
+    "电竞": "motion_gaming",
+    "智能": "smart_interaction",
+    "语音": "smart_interaction",
+    "互联": "smart_interaction",
+    "音质": "audio_cinema",
+    "影音": "audio_cinema",
+    "影院": "audio_cinema",
+    "外观": "appearance_installation",
+    "安装": "appearance_installation",
+    "性能": "system_performance",
+    "系统": "system_performance",
+    "能效": "energy_value",
+    "价格": "energy_value",
+    "价值": "energy_value",
+    "picture_quality": "picture_quality",
+    "motion_gaming": "motion_gaming",
+    "smart_interaction": "smart_interaction",
+    "audio_cinema": "audio_cinema",
+    "appearance_installation": "appearance_installation",
+    "system_performance": "system_performance",
+    "energy_value": "energy_value",
 }
 
 
@@ -157,6 +195,39 @@ def main(argv: Sequence[str] | None = None) -> int:
                     query=args.query,
                     sku_limit=args.sku_limit,
                 )
+            elif args.command == "claim-taxonomy":
+                result = query_claim_taxonomy(
+                    product_category=normalize_product_category_arg(args.product_category),
+                    dimension=args.dimension,
+                    search=args.search,
+                )
+            elif args.command == "sku-claim-profile":
+                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
+                result = query_sku_claim_profile(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=product_category,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    include_claim_facts=args.include_claim_facts,
+                )
+            elif args.command == "claim-position-coverage":
+                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.position_code)
+                result = query_claim_position_coverage(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=product_category,
+                    dimension=args.dimension_code,
+                    position=args.position_code,
+                    query=args.query,
+                    position_source=args.position_source,
+                    sku_limit=args.sku_limit,
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -183,7 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli.catforge_insight",
-        description="Query CatForge SKU parameter profiles, TV parameter taxonomy, and tier coverage.",
+        description="Query CatForge SKU parameter profiles, claim fact profiles, taxonomies, and coverage.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -224,6 +295,31 @@ def build_parser() -> argparse.ArgumentParser:
     coverage.add_argument("--query", help="Natural tier query text. Matching uses dimension/tier code, Chinese names, and rule summary.")
     coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
     add_format_arg(coverage)
+
+    claim_taxonomy = subparsers.add_parser("claim-taxonomy", help="Query a product category standard claim taxonomy.")
+    add_product_category_arg(claim_taxonomy, default="tv", allow_auto=False)
+    claim_taxonomy.add_argument("--dimension", help="Filter by claim dimension.")
+    claim_taxonomy.add_argument("--search", help="Search claim code/name/dimension/subtype/support params.")
+    add_format_arg(claim_taxonomy)
+
+    claim_profile = subparsers.add_parser("sku-claim-profile", help="Query one SKU/model claim fact profile.")
+    add_common_args(claim_profile)
+    add_product_category_arg(claim_profile)
+    claim_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    claim_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    claim_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
+    claim_profile.add_argument("--include-claim-facts", action="store_true", help="Include matched claim fact rows.")
+    add_format_arg(claim_profile)
+
+    claim_coverage = subparsers.add_parser("claim-position-coverage", help="Query SKU coverage for claim dimension positions.")
+    add_common_args(claim_coverage)
+    add_product_category_arg(claim_coverage)
+    claim_coverage.add_argument("--dimension-code", help="Claim dimension code or alias, such as picture_quality or 画质.")
+    claim_coverage.add_argument("--position-code", help="Claim position code or name, such as picture_flagship_miniled_composite.")
+    claim_coverage.add_argument("--position-source", choices=("supported", "claimed", "all"), default="supported", help="Use parameter-supported positions by default.")
+    claim_coverage.add_argument("--query", help="Natural position query text.")
+    claim_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    add_format_arg(claim_coverage)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
     add_common_args(ask)
@@ -504,6 +600,274 @@ def query_tier_coverage(
     }
 
 
+def query_claim_taxonomy(
+    *,
+    product_category: str,
+    dimension: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy = claim_taxonomy_for_product_category(product_category)
+    dimension_code = resolve_claim_dimension(dimension, search)
+    search_norm = normalize_token(search)
+    claims = []
+    dimension_counts: dict[str, int] = defaultdict(int)
+    raw_support_mapping: dict[str, list[str]] = defaultdict(list)
+    for claim in taxonomy.claims:
+        dimension_counts[claim.dimension_code] += 1
+        for param_code in claim.support_param_codes:
+            raw_support_mapping[param_code].append(claim.claim_code)
+        haystack = normalize_token(
+            " ".join(
+                [
+                    claim.claim_code,
+                    claim.claim_name,
+                    claim.dimension_code,
+                    claim.subtype_code,
+                    claim.claim_kind,
+                    " ".join(claim.support_param_codes),
+                    " ".join(claim.support_keywords),
+                ]
+            )
+        )
+        if dimension_code and claim.dimension_code != dimension_code:
+            continue
+        if search_norm and search_norm not in haystack:
+            continue
+        claims.append(
+            {
+                "claim_code": claim.claim_code,
+                "claim_name": claim.claim_name,
+                "dimension_code": claim.dimension_code,
+                "subtype_code": claim.subtype_code,
+                "claim_kind": claim.claim_kind,
+                "support_param_codes": list(claim.support_param_codes),
+                "support_keywords": list(claim.support_keywords),
+                "support_required": claim.support_required,
+                "service_separate": claim.service_separate,
+            }
+        )
+    return {
+        "status": "ok",
+        "category_code": taxonomy.product_category,
+        "product_category_label_cn": config["label_cn"],
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "claim_count": len(claims),
+        "total_claim_count": len(taxonomy.claims),
+        "dimension_counts": dict(sorted(dimension_counts.items())),
+        "claims": claims,
+        "support_param_mapping": {param_code: codes for param_code, codes in sorted(raw_support_mapping.items())},
+        "positions": [
+            {
+                "dimension_code": position.dimension_code,
+                "position_code": position.position_code,
+                "position_name": position.position_name,
+                "position_rank": position.position_rank,
+                "rule_summary": position.rule_summary,
+            }
+            for position in taxonomy.positions
+            if not dimension_code or position.dimension_code == dimension_code
+        ],
+    }
+
+
+def query_sku_claim_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    include_claim_facts: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    ensure_claim_taxonomy_available(product_category)
+    resolved_batch_id = resolve_claim_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["claim_rule_version"])
+    profile = find_sku_claim_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=config["claim_rule_version"],
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的卖点事实画像。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+        }
+    facts = list_sku_claim_facts(db, profile) if include_claim_facts else []
+    positions = list_sku_claim_positions(db, profile)
+    result = {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": profile.rule_version,
+        "taxonomy_version": profile.taxonomy_version,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "claim_summary": {
+            "raw_claim_count": profile.raw_claim_count,
+            "matched_claim_count": profile.matched_claim_count,
+            "fact_claim_count": profile.fact_claim_count,
+            "unsupported_claim_count": profile.unsupported_claim_count,
+            "param_unknown_claim_count": profile.param_unknown_claim_count,
+            "service_separate_claim_count": profile.service_separate_claim_count,
+            "confidence": decimal_to_float(profile.confidence),
+        },
+        "claim_codes": profile.claim_codes or [],
+        "fact_claim_codes": profile.fact_claim_codes or [],
+        "unsupported_claim_codes": profile.unsupported_claim_codes or [],
+        "service_claim_codes": profile.service_claim_codes or [],
+        "dimension_profile": profile.dimension_profile_json or {},
+        "dimension_position_profile": profile.dimension_position_profile_json or {},
+        "positions": [
+            {
+                "dimension_code": row.dimension_code,
+                "position_code": row.position_code,
+                "position_name": row.position_name,
+                "position_rank": row.position_rank,
+                "position_source": row.position_source,
+                "basis_claim_codes": row.basis_claim_codes or [],
+                "basis_fact_claim_codes": row.basis_fact_claim_codes or [],
+                "explanation": row.explanation,
+                "quality_flags": row.quality_flags or [],
+            }
+            for row in positions
+        ],
+        "quality_flags": profile.quality_flags or [],
+        "profile_hash": profile.profile_hash,
+    }
+    if include_claim_facts:
+        result["claim_facts"] = [
+            {
+                "claim_code": row.claim_code,
+                "claim_name": row.claim_name,
+                "claim_dimension": row.claim_dimension,
+                "claim_subtype": row.claim_subtype,
+                "claim_kind": row.claim_kind,
+                "clean_claim_text": row.clean_claim_text,
+                "param_support_status": row.param_support_status,
+                "supporting_param_codes": row.supporting_param_codes or [],
+                "support_explanation": row.support_explanation,
+                "fact_claim_flag": row.fact_claim_flag,
+                "service_separate_flag": row.service_separate_flag,
+                "quality_flags": row.quality_flags or [],
+            }
+            for row in facts
+        ]
+    return result
+
+
+def query_claim_position_coverage(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    dimension: str | None = None,
+    position: str | None = None,
+    query: str | None = None,
+    position_source: str = "supported",
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy = claim_taxonomy_for_product_category(product_category)
+    resolved_batch_id = resolve_claim_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["claim_rule_version"])
+    matched_dimension = resolve_claim_dimension(dimension, query)
+    matched_positions = resolve_claim_positions(taxonomy, dimension=matched_dimension, position=position, query=query)
+    stmt = (
+        select(entities.Core3ClaimPositionCoverage)
+        .where(entities.Core3ClaimPositionCoverage.project_id == project_id)
+        .where(entities.Core3ClaimPositionCoverage.category_code == category_code)
+        .where(entities.Core3ClaimPositionCoverage.batch_id == resolved_batch_id)
+        .where(entities.Core3ClaimPositionCoverage.rule_version == config["claim_rule_version"])
+        .where(entities.Core3ClaimPositionCoverage.taxonomy_version == taxonomy.taxonomy_version)
+        .where(entities.Core3ClaimPositionCoverage.is_current.is_(True))
+        .order_by(
+            entities.Core3ClaimPositionCoverage.position_source.desc(),
+            entities.Core3ClaimPositionCoverage.dimension_code,
+            entities.Core3ClaimPositionCoverage.position_rank.desc(),
+            entities.Core3ClaimPositionCoverage.position_code,
+        )
+    )
+    if position_source != "all":
+        stmt = stmt.where(entities.Core3ClaimPositionCoverage.position_source == position_source)
+    if matched_dimension:
+        stmt = stmt.where(entities.Core3ClaimPositionCoverage.dimension_code == matched_dimension)
+    if matched_positions:
+        pairs = {(item.dimension_code, item.position_code) for item in matched_positions}
+        stmt = stmt.where(
+            or_(
+                *[
+                    and_(
+                        entities.Core3ClaimPositionCoverage.dimension_code == dimension_code,
+                        entities.Core3ClaimPositionCoverage.position_code == position_code,
+                    )
+                    for dimension_code, position_code in pairs
+                ]
+            )
+        )
+    rows = list(db.execute(stmt).scalars())
+    coverages = []
+    for row in rows:
+        sku_codes = list(row.sku_codes or [])
+        visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
+        coverages.append(
+            {
+                "dimension_code": row.dimension_code,
+                "position_code": row.position_code,
+                "position_name": row.position_name,
+                "position_rank": row.position_rank,
+                "position_source": row.position_source,
+                "rule_summary": row.rule_summary,
+                "sku_count": row.sku_count,
+                "sku_ratio": decimal_to_float(row.sku_ratio),
+                "coverage_status": row.coverage_status,
+                "basis_claim_codes": row.basis_claim_codes or [],
+                "sku_codes": visible_skus,
+                "sku_codes_returned": len(visible_skus),
+                "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+                "sample_sku_codes": row.sample_sku_codes or [],
+            }
+        )
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "query": query,
+        "matched_dimension": matched_dimension,
+        "matched_position_count": len(matched_positions),
+        "position_source": position_source,
+        "coverage_count": len(coverages),
+        "coverages": coverages,
+    }
+
+
 def answer_natural_language(
     db: Session,
     *,
@@ -517,6 +881,43 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if "卖点" in question or "claim" in normalized:
+        if any(word in question for word in ("标准卖点", "卖点分类", "卖点维度", "卖点体系")):
+            result = query_claim_taxonomy(
+                product_category=resolved_product_category,
+                dimension=None,
+                search=extract_claim_taxonomy_search(question),
+            )
+            result["routed_command"] = "claim-taxonomy"
+            return result
+        if should_route_to_claim_position_coverage(question, normalized):
+            result = query_claim_position_coverage(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                dimension=None,
+                position=None,
+                query=question,
+                position_source="supported",
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "claim-position-coverage"
+            return result
+        query = extract_sku_or_model_query(question)
+        result = query_sku_claim_profile(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            query=query or question,
+            include_claim_facts=output_format == "json",
+        )
+        result["routed_command"] = "sku-claim-profile"
+        result["question"] = question
+        return result
     if "标准参数" in question or "参数表" in question or "参数分类" in question:
         result = query_param_taxonomy(
             product_category=resolved_product_category,
@@ -589,6 +990,32 @@ def resolve_batch_id(
     raise CatForgeInsightError(f"没有找到项目 {project_id} / {category_code} 的可用批次。")
 
 
+def resolve_claim_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3SkuClaimFactProfile.batch_id)
+            .where(entities.Core3SkuClaimFactProfile.project_id == project_id)
+            .where(entities.Core3SkuClaimFactProfile.category_code == category_code)
+            .where(entities.Core3SkuClaimFactProfile.rule_version == rule_version)
+            .where(entities.Core3SkuClaimFactProfile.is_current.is_(True))
+            .order_by(entities.Core3SkuClaimFactProfile.created_at.desc(), entities.Core3SkuClaimFactProfile.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
 def find_sku_profile(
     db: Session,
     *,
@@ -641,6 +1068,59 @@ def find_sku_profile(
     return [{"sku_code": row.sku_code, "model_name": row.model_name} for row in rows[:10]]
 
 
+def find_sku_claim_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+) -> entities.Core3SkuClaimFactProfile | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 卖点事实画像需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3SkuClaimFactProfile.project_id == project_id,
+        entities.Core3SkuClaimFactProfile.category_code == category_code,
+        entities.Core3SkuClaimFactProfile.batch_id == batch_id,
+        entities.Core3SkuClaimFactProfile.rule_version == rule_version,
+        entities.Core3SkuClaimFactProfile.is_current.is_(True),
+    ]
+    if sku_code:
+        filters.append(func.lower(entities.Core3SkuClaimFactProfile.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3SkuClaimFactProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3SkuClaimFactProfile.sku_code) == query_norm,
+                func.lower(entities.Core3SkuClaimFactProfile.model_name) == query_norm,
+                func.lower(entities.Core3SkuClaimFactProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3SkuClaimFactProfile)
+            .where(*filters)
+            .order_by(entities.Core3SkuClaimFactProfile.sku_code)
+            .limit(11)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    if len(exact) == 1:
+        return exact[0]
+    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
 def list_dimension_tiers(db: Session, profile: entities.Core3SkuParamProfile) -> list[entities.Core3SkuParamDimensionTier]:
     return list(
         db.execute(
@@ -653,6 +1133,38 @@ def list_dimension_tiers(db: Session, profile: entities.Core3SkuParamProfile) ->
             .where(entities.Core3SkuParamDimensionTier.taxonomy_version == profile.seed_version)
             .where(entities.Core3SkuParamDimensionTier.is_current.is_(True))
             .order_by(entities.Core3SkuParamDimensionTier.dimension_code)
+        ).scalars()
+    )
+
+
+def list_sku_claim_facts(db: Session, profile: entities.Core3SkuClaimFactProfile) -> list[entities.Core3SkuClaimFact]:
+    return list(
+        db.execute(
+            select(entities.Core3SkuClaimFact)
+            .where(entities.Core3SkuClaimFact.project_id == profile.project_id)
+            .where(entities.Core3SkuClaimFact.category_code == profile.category_code)
+            .where(entities.Core3SkuClaimFact.batch_id == profile.batch_id)
+            .where(entities.Core3SkuClaimFact.sku_code == profile.sku_code)
+            .where(entities.Core3SkuClaimFact.rule_version == profile.rule_version)
+            .where(entities.Core3SkuClaimFact.taxonomy_version == profile.taxonomy_version)
+            .where(entities.Core3SkuClaimFact.is_current.is_(True))
+            .order_by(entities.Core3SkuClaimFact.claim_dimension, entities.Core3SkuClaimFact.claim_code, entities.Core3SkuClaimFact.source_claim_key)
+        ).scalars()
+    )
+
+
+def list_sku_claim_positions(db: Session, profile: entities.Core3SkuClaimFactProfile) -> list[entities.Core3SkuClaimDimensionPosition]:
+    return list(
+        db.execute(
+            select(entities.Core3SkuClaimDimensionPosition)
+            .where(entities.Core3SkuClaimDimensionPosition.project_id == profile.project_id)
+            .where(entities.Core3SkuClaimDimensionPosition.category_code == profile.category_code)
+            .where(entities.Core3SkuClaimDimensionPosition.batch_id == profile.batch_id)
+            .where(entities.Core3SkuClaimDimensionPosition.sku_code == profile.sku_code)
+            .where(entities.Core3SkuClaimDimensionPosition.rule_version == profile.rule_version)
+            .where(entities.Core3SkuClaimDimensionPosition.taxonomy_version == profile.taxonomy_version)
+            .where(entities.Core3SkuClaimDimensionPosition.is_current.is_(True))
+            .order_by(entities.Core3SkuClaimDimensionPosition.position_source, entities.Core3SkuClaimDimensionPosition.dimension_code)
         ).scalars()
     )
 
@@ -721,6 +1233,53 @@ def resolve_tiers(
     return matches
 
 
+def resolve_claim_dimension(dimension: str | None, query: str | None) -> str | None:
+    candidates = [dimension] if dimension else []
+    if query:
+        candidates.append(query)
+    for candidate in candidates:
+        candidate_norm = normalize_token(candidate)
+        for alias, code in CLAIM_DIMENSION_ALIASES.items():
+            if normalize_token(alias) in candidate_norm:
+                return code
+    return None
+
+
+def resolve_claim_positions(
+    taxonomy: M04CClaimTaxonomy,
+    *,
+    dimension: str | None,
+    position: str | None,
+    query: str | None,
+) -> list[Any]:
+    if not position and not query:
+        return []
+    query_text = " ".join(value for value in (position, query) if value)
+    query_norm = normalize_token(query_text)
+    query_tokens = set(extract_match_tokens(query_text))
+    matches = []
+    for item in taxonomy.positions:
+        if dimension and item.dimension_code != dimension:
+            continue
+        identity_haystack = normalize_token(" ".join([item.dimension_code, item.position_code, item.position_name, item.rule_summary]))
+        exact_terms = {
+            normalize_token(item.dimension_code),
+            normalize_token(item.position_code),
+            normalize_token(item.position_name),
+        }
+        if query_norm in exact_terms or any(token and token in identity_haystack for token in query_tokens):
+            matches.append(item)
+    if position and not matches:
+        position_norm = normalize_token(position)
+        matches = [
+            item
+            for item in taxonomy.positions
+            if (not dimension or item.dimension_code == dimension)
+            and (normalize_token(item.position_code) == position_norm or normalize_token(item.position_name) == position_norm)
+        ]
+    return matches
+
+
 def should_skip_negative_tier_match(query_text: str, item: M03BTierDefinition) -> bool:
     query_norm = normalize_token(query_text)
     if any(token in query_norm for token in ("无", "没有", "不具备", "none")):
@@ -743,6 +1302,26 @@ def should_route_to_tier_coverage(question: str, normalized: str) -> bool:
     return any(word in normalized for word in tier_words)
 
 
+def should_route_to_claim_position_coverage(question: str, normalized: str) -> bool:
+    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表", "位置")):
+        return True
+    position_words = (
+        "miniled复合",
+        "旗舰画质",
+        "高阶显示",
+        "画质增强",
+        "电竞游戏",
+        "游戏准备",
+        "ai语音",
+        "全屋互联",
+        "家庭影院",
+        "壁画贴墙",
+        "轻薄全面屏",
+        "芯片存储",
+    )
+    return any(word in normalized for word in position_words)
+
+
 def extract_sku_or_model_query(question: str) -> str | None:
     sku_match = re.search(r"\b[A-Z]{1,4}\d{4,}\b", question.upper())
     if sku_match:
@@ -761,6 +1340,17 @@ def extract_taxonomy_search(question: str, *, product_category: str = "TV") -> s
             for suffix in ("标准参数", "参数表", "参数分类"):
                 tail = tail.replace(suffix, "").strip()
             category_words = {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
+            return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
+    return None
+
+
+def extract_claim_taxonomy_search(question: str) -> str | None:
+    for marker in ("查", "看", "搜索"):
+        if marker in question:
+            tail = question.split(marker, 1)[1].strip()
+            for suffix in ("标准卖点", "卖点分类", "卖点维度", "卖点体系"):
+                tail = tail.replace(suffix, "").strip()
+            category_words = {"彩电", "电视", "tv"}
             return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
     return None
 
@@ -798,6 +1388,17 @@ def resolve_product_category(
 def product_category_config(product_category: str) -> dict[str, Any]:
     normalized = normalize_product_category_arg(product_category)
     return PRODUCT_CATEGORY_CONFIGS[normalized]
+
+
+def ensure_claim_taxonomy_available(product_category: str) -> None:
+    config = product_category_config(product_category)
+    if not config.get("claim_taxonomy_factory") or not config.get("claim_rule_version"):
+        raise CatForgeInsightError(f"{config['label_cn']}标准卖点 taxonomy 尚未发布，不能查询 SKU 卖点事实画像。")
+
+
+def claim_taxonomy_for_product_category(product_category: str) -> M04CClaimTaxonomy:
+    ensure_claim_taxonomy_available(product_category)
+    return product_category_config(product_category)["claim_taxonomy_factory"]()
 
 
 def taxonomy_for_product_category(product_category: str) -> M03BTaxonomy:
@@ -873,6 +1474,19 @@ def render_text(result: dict[str, Any]) -> str:
     status = result.get("status")
     if status != "ok":
         return result.get("message_cn") or result.get("error") or json.dumps(to_jsonable(result), ensure_ascii=False)
+    if "claim_summary" in result:
+        sku = result["sku"]
+        summary = result["claim_summary"]
+        lines = [
+            f"SKU 卖点事实画像：{sku.get('model_name') or '-'} / {sku.get('sku_code')}",
+            f"批次：{result['batch_id']}；原始卖点：{summary['raw_claim_count']}；匹配卖点：{summary['matched_claim_count']}；事实卖点：{summary['fact_claim_count']}；参数未知：{summary['param_unknown_claim_count']}；参数不支撑：{summary['unsupported_claim_count']}；服务履约：{summary['service_separate_claim_count']}",
+            "卖点位置：",
+        ]
+        for item in result.get("positions", []):
+            lines.append(f"- {item['position_source']} / {item['dimension_code']}: {item['position_name']} ({item['position_code']})")
+        if result.get("quality_flags"):
+            lines.append("质量标记：" + ", ".join(result["quality_flags"]))
+        return "\n".join(lines)
     if "sku" in result:
         sku = result["sku"]
         summary = result["summary"]
@@ -897,15 +1511,36 @@ def render_text(result: dict[str, Any]) -> str:
         if len(result["params"]) > 80:
             lines.append(f"... 还有 {len(result['params']) - 80} 个参数，使用 --format json 查看完整结果。")
         return "\n".join(lines)
+    if "claims" in result:
+        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
+        lines = [
+            f"{label}标准卖点：{result['claim_count']}/{result['total_claim_count']} 个；taxonomy={result['taxonomy_version']}",
+            "维度数量：" + ", ".join(f"{key}={value}" for key, value in result["dimension_counts"].items()),
+        ]
+        for item in result["claims"][:80]:
+            support = ", ".join(item["support_param_codes"]) or "不按参数判断"
+            kind = "服务履约单列" if item["service_separate"] else item["claim_kind"]
+            lines.append(f"- {item['dimension_code']} / {item['claim_code']} / {item['claim_name']} / {kind} / 参数支撑：{support}")
+        if len(result["claims"]) > 80:
+            lines.append(f"... 还有 {len(result['claims']) - 80} 个卖点，使用 --format json 查看完整结果。")
+        return "\n".join(lines)
     if "coverages" in result:
-        lines = [f"档位覆盖：批次 {result['batch_id']}，命中 {result['coverage_count']} 个档位"]
+        is_claim_coverage = "position_source" in result
+        unit_name = "位置" if is_claim_coverage else "档位"
+        lines = [f"{'卖点位置覆盖' if is_claim_coverage else '参数档位覆盖'}：批次 {result['batch_id']}，命中 {result['coverage_count']} 个{unit_name}"]
         for item in result["coverages"]:
             sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
             suffix = "（已截断）" if item["sku_codes_truncated"] else ""
-            lines.append(
-                f"- {item['dimension_code']} / {item['tier_name']} ({item['tier_code']}): "
-                f"{item['sku_count']} 个 SKU，占比 {item['sku_ratio']:.2%}；SKU：{sku_codes}{suffix}"
-            )
+            if "position_code" in item:
+                lines.append(
+                    f"- {item['position_source']} / {item['dimension_code']} / {item['position_name']} ({item['position_code']}): "
+                    f"{item['sku_count']} 个 SKU，占比 {item['sku_ratio']:.2%}；SKU：{sku_codes}{suffix}"
+                )
+            else:
+                lines.append(
+                    f"- {item['dimension_code']} / {item['tier_name']} ({item['tier_code']}): "
+                    f"{item['sku_count']} 个 SKU，占比 {item['sku_ratio']:.2%}；SKU：{sku_codes}{suffix}"
+                )
         return "\n".join(lines)
     return json.dumps(to_jsonable(result), ensure_ascii=False, indent=2)
 

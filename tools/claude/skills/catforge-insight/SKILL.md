@@ -1,6 +1,6 @@
 ---
 name: catforge-insight
-description: Query CatForge SKU parameter fact profiles, TV/AC standard parameters, and parameter tier SKU coverage using natural language.
+description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, and coverage using natural language.
 ---
 
 # CatForge Insight Skill
@@ -10,8 +10,11 @@ Use this skill when the user asks about:
 - A SKU/model's parameter fact profile, for example "查 100A4F 的参数画像", "TV00027354 参数情况", "AC00000001 参数情况", "这个 SKU 的硬件参数是什么".
 - TV/AC standard parameters, for example "彩电有哪些标准参数", "查空调标准参数表", "MiniLED 对应哪些原始字段", "新风对应哪些原始字段".
 - Parameter tier coverage, for example "MiniLED 档位覆盖哪些 SKU", "旗舰画质有哪些 SKU", "一级能效覆盖 SKU", "空调新风档位覆盖哪些 SKU".
+- A SKU/model's claim fact profile, for example "查 100A4F 的卖点画像", "TV00027354 卖点事实情况".
+- TV standard claims, for example "彩电有哪些标准卖点", "MiniLED 卖点对应哪些参数".
+- Claim position coverage, for example "MiniLED 复合画质旗舰型覆盖哪些 SKU", "AI 语音增强型有哪些 SKU".
 
-Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", and "档位覆盖"; only mention M03B if the user asks for implementation details.
+Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", and "覆盖 SKU"; only mention M03B/M04C if the user asks for implementation details.
 
 ## Working Directory
 
@@ -51,6 +54,18 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查空调新风档位覆盖哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的卖点画像" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电标准卖点" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 MiniLED 复合画质旗舰型覆盖哪些 SKU" --sku-limit 100 --format json
 ```
 
 ## Stable Atomic Commands
@@ -103,6 +118,30 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight tier-coverage --query "旗舰画质覆盖 SKU" --sku-limit 100 --format json
 ```
 
+Query one SKU/model's claim fact profile:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-claim-profile --query 100A4F --include-claim-facts --format json
+```
+
+Query TV standard claims:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-taxonomy --product-category tv --format json
+```
+
+Filter standard claims:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-taxonomy --product-category tv --search MiniLED --format json
+```
+
+Query claim position coverage:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-position-coverage --query "MiniLED 复合画质旗舰型覆盖 SKU" --sku-limit 100 --format json
+```
+
 ## Response Rules
 
 For SKU parameter profile results, summarize:
@@ -128,4 +167,24 @@ For tier coverage results, summarize:
 - SKU count and ratio.
 - Returned SKU list, noting if the list is truncated.
 
-If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no parameter profile was found in the selected batch and suggest checking whether M03B has run for that batch.
+For SKU claim fact profile results, summarize:
+
+- SKU code, model name, and brand.
+- Raw claim count, matched claim count, fact-claim count, parameter-unknown count, unsupported-by-parameter count, and service-fulfillment count.
+- Dimension profile and positions, especially supported positions.
+- Fact claims with parameter support when `claim_facts` is included.
+- Service-fulfillment claims must be described as separated, not product fact claims.
+
+For TV standard-claim results, summarize:
+
+- Taxonomy version and total claim count.
+- Dimensions and counts.
+- Relevant claim codes, Chinese names, dimensions, support parameter codes, and whether they are service separated.
+
+For claim position coverage results, summarize:
+
+- Batch id and whether coverage is `supported` or `claimed`.
+- Dimension, position name/code, SKU count and ratio.
+- Returned SKU list, noting if the list is truncated.
+
+If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding parameter or claim profile job has run for that batch.
