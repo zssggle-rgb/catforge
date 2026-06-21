@@ -1,6 +1,6 @@
 # CatForge Insight CLI and Claude Skill Manual
 
-This manual documents the read-only insight interface for parameter profiles, claim fact profiles, market profiles, comment fact profiles, and value battlefield profiles.
+This manual documents the read-only insight interface for parameter profiles, claim fact profiles, market profiles, comment fact profiles, target group profiles, and value battlefield profiles.
 
 ## Purpose
 
@@ -18,10 +18,13 @@ This manual documents the read-only insight interface for parameter profiles, cl
 10. One SKU/model's TV comment fact profile.
 11. The TV standard comment fact taxonomy.
 12. SKU coverage for a comment fact dimension, audience/use/brand/competitor signal, parameter support, or claim support.
-13. One SKU/model's TV value battlefield profile.
-14. The TV standard value battlefield taxonomy.
-15. SKU coverage for a value battlefield and relation status.
-16. The latest TV value battlefield graph snapshot.
+13. One SKU/model's TV target group profile.
+14. The TV standard target group taxonomy.
+15. SKU coverage for a target group and relation status.
+16. One SKU/model's TV value battlefield profile.
+17. The TV standard value battlefield taxonomy.
+18. SKU coverage for a value battlefield and relation status.
+19. The latest TV value battlefield graph snapshot.
 
 It does not generate or mutate data. It reads M03B outputs from:
 
@@ -52,6 +55,14 @@ It reads M05C-B outputs from:
 - `core3_comment_fact_review_issue`
 
 M05C-B, also called `m05b` in business discussion, is the LLM-based generation stage. `catforge_insight` is M05C-C read-only query and never calls an LLM.
+
+It reads M10C outputs from:
+
+- `core3_m10c_sku_target_group_profile`
+- `core3_m10c_sku_target_group_score`
+- `core3_m10c_target_group_coverage`
+
+M10C target group profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices.
 
 It reads M11C outputs from:
 
@@ -100,6 +111,10 @@ python -m app.cli.catforge_insight ask "查 100A4F 的评论事实画像" --form
 python -m app.cli.catforge_insight ask "查彩电评论事实维度" --format json
 python -m app.cli.catforge_insight ask "品牌力评论覆盖哪些 SKU" --sku-limit 100 --format json
 python -m app.cli.catforge_insight ask "哪些 SKU 评论里提到索尼" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的目标客群" --format json
+python -m app.cli.catforge_insight ask "查彩电目标客群预设" --format json
+python -m app.cli.catforge_insight ask "性价比理性用户有哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "哪些 SKU 是未满足长辈友好需求" --sku-limit 100 --format json
 python -m app.cli.catforge_insight ask "查 100A4F 的价值战场" --format json
 python -m app.cli.catforge_insight ask "查彩电价值战场预设" --format json
 python -m app.cli.catforge_insight ask "大屏换新性价比战场有哪些 SKU" --sku-limit 100 --format json
@@ -297,6 +312,53 @@ Output includes:
 - SKU count and positive/negative/neutral counts.
 - SKU list and evidence examples, limited by `--sku-limit`.
 - Brand-power signals must not be mixed with competitor mentions.
+
+### SKU target group profile
+
+```bash
+python -m app.cli.catforge_insight sku-target-group --query 100A4F --include-scores --format json
+python -m app.cli.catforge_insight sku-target-group --sku-code TV00027354 --format json
+```
+
+Output includes:
+
+- SKU code, model name, and brand.
+- M03B five-tier size and M10C size-tier price band.
+- Primary target group, secondary target groups, comment-observed groups, brand-claimed groups, latent groups, and unmet group needs.
+- Score details when `--include-scores` is used: comment audience/motivation, task proxy, size-price fit, claim alignment, parameter capability, market validation, brand trust boost, and evidence.
+- No-primary reason and review status.
+
+### Target group taxonomy
+
+```bash
+python -m app.cli.catforge_insight target-group-taxonomy --product-category tv --format json
+python -m app.cli.catforge_insight target-group-taxonomy --product-category tv --target-group-code TG_VALUE_MAXIMIZER --format json
+python -m app.cli.catforge_insight target-group-taxonomy --product-category tv --search 长辈 --format json
+```
+
+Output includes:
+
+- Target group taxonomy version.
+- Target group definitions.
+- Source task codes.
+- Size-tier and price-band fit rules.
+- Comment subdimensions and keywords.
+- Claim codes and parameter codes.
+
+### Target group coverage
+
+```bash
+python -m app.cli.catforge_insight target-group-skus --target-group-code TG_VALUE_MAXIMIZER --sku-limit 100 --format json
+python -m app.cli.catforge_insight target-group-skus --query "性价比理性用户有哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight target-group-skus --query "哪些 SKU 是未满足长辈友好需求" --relation-status unmet_group_need --sku-limit 100 --format json
+```
+
+Output includes:
+
+- Target group name/code and relation status filter.
+- SKU count and relation-status distribution.
+- SKU list, limited by `--sku-limit`; use `--sku-limit 0` to return all.
+- Per-SKU target-group score details.
 
 ### SKU value battlefield profile
 
