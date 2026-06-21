@@ -1,6 +1,6 @@
 # CatForge Insight CLI and Claude Skill Manual
 
-This manual documents the read-only insight interface for parameter profiles and claim fact profiles.
+This manual documents the read-only insight interface for parameter profiles, claim fact profiles, and market profiles.
 
 ## Purpose
 
@@ -12,6 +12,9 @@ This manual documents the read-only insight interface for parameter profiles and
 4. One SKU/model's TV claim fact profile.
 5. The TV standard claim taxonomy.
 6. SKU coverage for a TV claim position.
+7. One SKU/model's market profile.
+8. Price-band, size-segment, and size-price market bucket coverage.
+9. Comparable-pool baselines for one SKU/model.
 
 It does not generate or mutate data. It reads M03B outputs from:
 
@@ -26,6 +29,15 @@ It reads M04C outputs from:
 - `core3_sku_claim_fact`
 - `core3_sku_claim_dimension_position`
 - `core3_claim_position_coverage`
+
+It reads M07 outputs from:
+
+- `core3_sku_market_profile`
+- `core3_market_signal`
+- `core3_comparable_pool_baseline`
+- `core3_market_pool_member`
+
+Current M07 query note: the updated M07 design adds business absolute price buckets and `core3_market_bucket_coverage`. Until that service/table implementation is complete, `market-bucket-coverage` derives coverage from current M07 profile fields: `price_band_category`, `size_segment`, and their cross bucket.
 
 ## Runtime
 
@@ -57,6 +69,9 @@ python -m app.cli.catforge_insight ask "查空调新风档位覆盖哪些 SKU" -
 python -m app.cli.catforge_insight ask "查 100A4F 的卖点画像" --format json
 python -m app.cli.catforge_insight ask "查彩电标准卖点" --format json
 python -m app.cli.catforge_insight ask "查 MiniLED 复合画质旗舰型覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的市场画像" --format json
+python -m app.cli.catforge_insight ask "查高价格带覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的可比池" --sku-limit 100 --format json
 ```
 
 The router is deterministic and only maps common user wording to one of the atomic commands.
@@ -158,6 +173,55 @@ Output includes:
 - Rule summary.
 - SKU count and ratio.
 - SKU list, limited by `--sku-limit`; use `--sku-limit 0` to return all.
+
+### SKU market profile
+
+```bash
+python -m app.cli.catforge_insight sku-market-profile --query 100A4F --include-signals --include-pools --format json
+python -m app.cli.catforge_insight sku-market-profile --sku-code TV00027354 --analysis-window recent_4w --format json
+```
+
+Output includes:
+
+- SKU code, model name, and brand name.
+- Analysis window and active week count.
+- Sales volume, sales amount, weighted average price, latest price, main platform, and platform share.
+- Price position: dynamic price band, category/size price percentile, category/size volume percentile.
+- Size position: screen size, size segment, screen size class, market pool key.
+- Current bucket fallback: price bucket, size bucket, and size-price bucket derived from current M07 fields.
+- Optional market signals and comparable-pool summaries.
+
+### Market bucket coverage
+
+```bash
+python -m app.cli.catforge_insight market-bucket-coverage --bucket-type price --query high --sku-limit 100 --format json
+python -m app.cli.catforge_insight market-bucket-coverage --bucket-type size --query 85 --sku-limit 100 --format json
+python -m app.cli.catforge_insight market-bucket-coverage --bucket-type size_price --sku-limit 100 --format json
+```
+
+Output includes:
+
+- Bucket type, code, and label.
+- SKU count and valid-volume SKU count.
+- Total sales volume and sales amount.
+- Median price, median volume, and median amount.
+- Top SKUs by sales volume.
+- SKU list, limited by `--sku-limit`; use `--sku-limit 0` to return all.
+
+### Comparable pools
+
+```bash
+python -m app.cli.catforge_insight comparable-pools --query 100A4F --sku-limit 100 --format json
+python -m app.cli.catforge_insight comparable-pools --sku-code TV00027354 --pool-type same_price_band --format json
+```
+
+Output includes:
+
+- Pool type and sample status.
+- Target size segment and target price band.
+- Pool SKU count and valid member count.
+- Median price, median volume, and median amount.
+- Candidate SKU list, limited by `--sku-limit`.
 
 ## Claude Code Skill
 

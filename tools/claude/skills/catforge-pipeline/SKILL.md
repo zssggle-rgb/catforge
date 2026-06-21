@@ -1,6 +1,6 @@
 ---
 name: catforge-pipeline
-description: Run CatForge data-preparation, SKU parameter profile, and SKU claim fact profile jobs from natural language.
+description: Run CatForge data-preparation, SKU parameter profile, SKU claim fact profile, and SKU market profile jobs from natural language.
 ---
 
 # CatForge Pipeline Skill
@@ -14,8 +14,12 @@ Use this skill when the user asks Claude Code to execute preparation/profile wor
 - "重新生成彩电 SKU 卖点事实画像"
 - "电视新增 SKU 了，更新卖点画像"
 - "把彩电卖点事实准备好可以分析"
+- "重新生成彩电市场画像"
+- "重跑 TV00027354 的量价市场画像"
+- "更新彩电价格区间和尺寸区间的市场画像"
 
 This is an execution skill. For read-only questions like "查某个 SKU 的参数画像", "查彩电标准卖点", or "查某个 SKU 的卖点画像", use `catforge-insight` instead.
+For read-only market questions like "查某个 SKU 的市场画像", "查价格区间覆盖哪些 SKU", or "查某个 SKU 的可比池", also use `catforge-insight`.
 
 ## Working Directory
 
@@ -57,6 +61,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 卖点事实画像" --force-rebuild --format json
 ```
 
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电市场画像" --format json
+```
+
 ## Stable Atomic Commands
 
 Run TV SKU parameter profiles:
@@ -77,9 +85,22 @@ Run TV SKU claim fact profiles:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-claim-profile --product-category tv --batch-id latest --input-source auto --force-rebuild --format json
 ```
 
+Run TV market profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --format json
+```
+
+Run one SKU/window market profile:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --analysis-window full_observed_window --sku-code TV00027354 --format json
+```
+
 Use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when the current deployment has new raw selling points but M01/M02 have not been rerun yet.
 
 Use `--batch-id latest` unless the user gives a specific batch id. Use `--force-rebuild` when source data or taxonomy/rules have changed and existing profile business keys should be refreshed.
+For M07 market profiles, omit `--analysis-window` to run all windows. The current implementation writes market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket persistence from the updated M07 design requires the follow-up M07 service/table implementation.
 
 ## Response Rules
 
@@ -89,6 +110,7 @@ After execution, summarize:
 - Input evidence count and output count.
 - SKU profile count, parameter value count, dimension tier count, and tier coverage count.
 - For claim profiles, summarize SKU claim profile count, claim fact count, parameter-supported fact-claim count, service-fulfillment count, dimension position count, and position coverage count.
+- For market profiles, summarize market profile count, market signal count, comparable-pool count, pool-member count, and review-required count.
 - Warnings, especially empty input, parameter conflicts, or failed status.
 
 If the CLI returns `error`, report the error and do not claim the job completed. If the job succeeds with warnings, state that outputs were written but review may be needed.

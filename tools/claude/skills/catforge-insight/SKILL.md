@@ -1,6 +1,6 @@
 ---
 name: catforge-insight
-description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, and coverage using natural language.
+description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, market profiles, comparable pools, and coverage using natural language.
 ---
 
 # CatForge Insight Skill
@@ -13,8 +13,11 @@ Use this skill when the user asks about:
 - A SKU/model's claim fact profile, for example "查 100A4F 的卖点画像", "TV00027354 卖点事实情况".
 - TV standard claims, for example "彩电有哪些标准卖点", "MiniLED 卖点对应哪些参数".
 - Claim position coverage, for example "MiniLED 复合画质旗舰型覆盖哪些 SKU", "AI 语音增强型有哪些 SKU".
+- A SKU/model's market profile, for example "查 100A4F 的市场画像", "TV00027354 量价情况", "这个 SKU 在市场里什么位置".
+- Market bucket coverage, for example "高价格带覆盖哪些 SKU", "85 寸尺寸区间有哪些 SKU", "价格区间销量头部是谁".
+- Comparable-pool baselines, for example "查 100A4F 的可比池", "TV00027354 同价格带池".
 
-Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", and "覆盖 SKU"; only mention M03B/M04C if the user asks for implementation details.
+Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", and "覆盖 SKU"; only mention M03B/M04C/M07 if the user asks for implementation details.
 
 ## Working Directory
 
@@ -66,6 +69,18 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 MiniLED 复合画质旗舰型覆盖哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的市场画像" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查高价格带覆盖哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的可比池" --sku-limit 100 --format json
 ```
 
 ## Stable Atomic Commands
@@ -142,6 +157,24 @@ Query claim position coverage:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-position-coverage --query "MiniLED 复合画质旗舰型覆盖 SKU" --sku-limit 100 --format json
 ```
 
+Query one SKU/model's market profile:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-market-profile --query 100A4F --include-signals --include-pools --format json
+```
+
+Query market bucket coverage:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight market-bucket-coverage --bucket-type price --query high --sku-limit 100 --format json
+```
+
+Query comparable pools:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comparable-pools --query 100A4F --sku-limit 100 --format json
+```
+
 ## Response Rules
 
 For SKU parameter profile results, summarize:
@@ -186,5 +219,24 @@ For claim position coverage results, summarize:
 - Batch id and whether coverage is `supported` or `claimed`.
 - Dimension, position name/code, SKU count and ratio.
 - Returned SKU list, noting if the list is truncated.
+
+For SKU market profile results, summarize:
+
+- SKU code, model name, and analysis window.
+- Sales volume, sales amount, weighted average price, latest price, main platform, and platform share.
+- Price position and size position: price band, size segment, category/size volume percentile, same-pool SKU count.
+- Current bucket fallback fields if present. Note that persisted business absolute price buckets require the follow-up M07 implementation.
+- Market signals and comparable pools when included.
+
+For market bucket coverage results, summarize:
+
+- Bucket type, code, and label.
+- SKU count, total sales volume, total sales amount, median price, and top SKUs.
+- Returned SKU list, noting if the list is truncated.
+- If `bucket_source=current_m07_profile_fallback`, state that the current query uses M07 dynamic price bands and size segments until the business bucket table is implemented.
+
+For comparable-pool results, summarize:
+
+- Target SKU/model, pool count, pool type, sample status, SKU count, median price/volume/amount, and candidate SKUs.
 
 If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding parameter or claim profile job has run for that batch.

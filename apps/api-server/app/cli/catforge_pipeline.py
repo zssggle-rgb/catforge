@@ -28,10 +28,14 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M07_POOL_RULE_VERSION,
+    CORE3_M07_PRICE_BAND_RULE_VERSION,
+    CORE3_M07_RULE_VERSION,
     Core3RunStatus,
 )
 from app.services.core3_real_data.m03b_param_profile_service import M03BRunner
 from app.services.core3_real_data.m04c_claim_fact_profile_service import INPUT_SOURCE_AUTO, M04CRunner
+from app.services.core3_real_data.market_profile_runner import MarketProfileRunner
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -84,6 +88,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     input_source=args.input_source,
                     force_rebuild=args.force_rebuild,
                 )
+            elif args.command == "run-market-profile":
+                result = run_market_profile(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    sku_scope=args.sku_code or (),
+                    analysis_windows=args.analysis_window or (),
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -127,6 +140,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_claim.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_claim)
 
+    run_market = subparsers.add_parser("run-market-profile", help="Generate or rerun SKU market profiles and comparable-pool baselines.")
+    add_common_args(run_market)
+    run_market.add_argument("--analysis-window", action="append", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"), help="Analysis window to run. Repeat for multiple windows. Default runs all M07 windows.")
+    run_market.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    add_format_arg(run_market)
+
     ask = subparsers.add_parser("ask", help="Route a natural-language execution request.")
     add_common_args(ask)
     add_product_category_arg(ask)
@@ -164,6 +183,20 @@ def answer_natural_language(
     input_source: str = INPUT_SOURCE_AUTO,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
+    if should_run_market_profile(question):
+        if resolved_product_category != "TV":
+            raise CatForgePipelineError("M07 市场画像 CLI 当前只支持彩电/TV；其他品类需要先完成对应市场尺寸轴和规则。")
+        result = run_market_profile(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            sku_scope=extract_sku_scope(question),
+            analysis_windows=extract_analysis_windows(question),
+        )
+        result["question"] = question
+        result["routed_command"] = "run-market-profile"
+        return result
     if should_run_claim_profile(question):
         result = run_claim_profile(
             db,
@@ -190,6 +223,53 @@ def answer_natural_language(
     result["question"] = question
     result["routed_command"] = "run-param-profile"
     return result
+
+
+def run_market_profile(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    sku_scope: Sequence[str] = (),
+    analysis_windows: Sequence[str] = (),
+) -> dict[str, Any]:
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = MarketProfileRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        rule_version=CORE3_M07_RULE_VERSION,
+        price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
+        pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
+        sku_scope=tuple(sku_scope),
+        analysis_windows=tuple(analysis_windows),
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": "TV",
+        "product_category_label_cn": "彩电",
+        "batch_id": resolved_batch_id,
+        "sku_scope": list(sku_scope),
+        "analysis_windows": list(analysis_windows) or "all",
+        "rule_version": CORE3_M07_RULE_VERSION,
+        "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
+        "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
 
 
 def run_claim_profile(
@@ -310,6 +390,15 @@ def should_run_param_profile(question: str) -> bool:
     return any(word in question for word in ("参数画像", "参数事实", "标准参数", "生成", "重跑", "重新", "更新", "数据准备", "准备好可以分析"))
 
 
+def should_run_market_profile(question: str) -> bool:
+    normalized = normalize_token(question)
+    if "市场画像" in question:
+        return any(word in normalized for word in ("生成", "重跑", "重新", "更新", "执行", "跑", "计算", "量价", "市场画像"))
+    return any(word in normalized for word in ("量价画像", "市场量价", "价格区间", "尺寸区间")) and any(
+        word in normalized for word in ("生成", "重跑", "重新", "更新", "执行", "跑", "计算")
+    )
+
+
 def should_run_claim_profile(question: str) -> bool:
     normalized = normalize_token(question)
     return "卖点" in question and any(
@@ -326,6 +415,26 @@ def should_run_claim_profile(question: str) -> bool:
             "准备好可以分析",
         )
     )
+
+
+def extract_sku_scope(question: str) -> list[str]:
+    return sorted(set(re.findall(r"\b[A-Z]{1,4}\d{4,}\b", question.upper())))
+
+
+def extract_analysis_windows(question: str) -> list[str]:
+    normalized = normalize_token(question)
+    windows: list[str] = []
+    if any(token in normalized for token in ("全量", "全观察", "完整窗口", "fullobservedwindow")):
+        windows.append("full_observed_window")
+    if any(token in normalized for token in ("最新周", "latestweek")):
+        windows.append("latest_week")
+    if any(token in normalized for token in ("近4周", "最近4周", "recent4w")):
+        windows.append("recent_4w")
+    if any(token in normalized for token in ("近8周", "最近8周", "recent8w")):
+        windows.append("recent_8w")
+    if any(token in normalized for token in ("近12周", "最近12周", "recent12w")):
+        windows.append("recent_12w")
+    return windows
 
 
 def normalize_product_category_arg(value: str | None) -> str:
@@ -378,17 +487,37 @@ def render_text(result: dict[str, Any]) -> str:
     label = result.get("product_category_label_cn") or result.get("product_category")
     summary = result.get("summary") or {}
     is_claim_profile = isinstance(summary, dict) and "claim_fact_count" in summary
-    job_name = "SKU 卖点事实画像" if is_claim_profile else "SKU 参数画像"
-    input_label = "输入卖点" if is_claim_profile else "输入 evidence"
+    is_market_profile = isinstance(summary, dict) and "market_profile_count" in summary
+    if is_market_profile:
+        job_name = "SKU 市场画像"
+        input_label = "输入周销量价"
+    elif is_claim_profile:
+        job_name = "SKU 卖点事实画像"
+        input_label = "输入卖点"
+    else:
+        job_name = "SKU 参数画像"
+        input_label = "输入 evidence"
     lines = [
         f"{label} {job_name}生成完成：status={result['module_status']}",
-        f"批次：{result['batch_id']}；{input_label}：{result['input_count']}；输出：{result['output_count']}；前缀：{result['sku_code_prefix']}",
-        f"taxonomy={result['taxonomy_version']}；rule={result['rule_version']}",
+        f"批次：{result['batch_id']}；{input_label}：{result['input_count']}；输出：{result['output_count']}",
     ]
+    if result.get("sku_code_prefix"):
+        lines[-1] += f"；前缀：{result['sku_code_prefix']}"
+    if result.get("taxonomy_version"):
+        lines.append(f"taxonomy={result['taxonomy_version']}；rule={result['rule_version']}")
+    else:
+        lines.append(f"rule={result['rule_version']}")
     if result.get("warnings"):
         lines.append("warnings: " + ", ".join(result["warnings"]))
     if isinstance(summary, dict):
-        if is_claim_profile:
+        if is_market_profile:
+            lines.append(
+                "画像数："
+                f"{summary.get('market_profile_count', 0)}；市场信号：{summary.get('market_signal_count', 0)}；"
+                f"可比池：{summary.get('comparable_pool_count', 0)}；池成员：{summary.get('pool_member_count', 0)}；"
+                f"需复核：{summary.get('review_required_count', 0)}"
+            )
+        elif is_claim_profile:
             lines.append(
                 "画像数："
                 f"{summary.get('sku_profile_count', 0)}；卖点事实：{summary.get('claim_fact_count', 0)}；"

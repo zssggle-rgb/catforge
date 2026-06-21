@@ -1,6 +1,6 @@
 # CatForge Pipeline CLI and Claude Skill Manual
 
-This manual documents the execution CLI for agent-driven data preparation, SKU parameter profile generation, and SKU claim fact profile generation.
+This manual documents the execution CLI for agent-driven data preparation, SKU parameter profile generation, SKU claim fact profile generation, and SKU market profile generation.
 
 ## Purpose
 
@@ -9,6 +9,7 @@ This manual documents the execution CLI for agent-driven data preparation, SKU p
 1. Generate or rerun SKU parameter fact profiles for TV.
 2. Generate or rerun SKU parameter fact profiles for AC.
 3. Generate or rerun SKU claim fact profiles for TV.
+4. Generate or rerun SKU market profiles, market signals, and comparable-pool baselines for TV.
 
 For read-only questions, use `catforge_insight` instead.
 
@@ -48,9 +49,12 @@ M04C claim fact profiles currently have a published TV taxonomy only:
 python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 参数画像" --force-rebuild --format json
 python -m app.cli.catforge_pipeline ask "生成空调 SKU 参数画像" --force-rebuild --format json
 python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 卖点事实画像" --force-rebuild --format json
+python -m app.cli.catforge_pipeline ask "重新生成彩电市场画像" --format json
+python -m app.cli.catforge_pipeline ask "重新生成 TV00027354 的市场画像" --format json
 ```
 
 The router is deterministic. It maps "彩电/电视/TV" to TV and "空调/AC" to AC. Requests that mention "卖点" route to claim fact profile generation; parameter requests route to parameter profile generation.
+Requests that mention "市场画像", "量价画像", "价格区间", or "尺寸区间" route to M07 market-profile generation. The M07 CLI currently supports TV.
 
 ### Atomic command
 
@@ -58,11 +62,15 @@ The router is deterministic. It maps "彩电/电视/TV" to TV and "空调/AC" to
 python -m app.cli.catforge_pipeline run-param-profile --product-category tv --batch-id latest --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-param-profile --product-category ac --batch-id latest --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-claim-profile --product-category tv --batch-id latest --input-source auto --force-rebuild --format json
+python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --format json
+python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --analysis-window full_observed_window --sku-code TV00027354 --format json
 ```
 
 `--force-rebuild` replaces same business-key outputs when output hashes changed. Use it when source data, taxonomy, or rules have changed.
 
 For `run-claim-profile`, use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when raw selling points are current but M01/M02 have not been rerun.
+
+For `run-market-profile`, omit `--analysis-window` to run all M07 windows. Use repeated `--analysis-window` or repeated `--sku-code` for scoped reruns. M07 currently writes existing market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket fields from the updated M07 design require the follow-up M07 service/table implementation.
 
 ## Outputs
 
@@ -75,6 +83,7 @@ Output includes:
 - Output count.
 - SKU profile count, parameter value count, dimension tier count, and tier coverage count.
 - For claim profiles: SKU profile count, claim fact count, parameter-supported fact claim count, service-fulfillment count, dimension position count, and position coverage count.
+- For market profiles: market profile count, market signal count, comparable-pool count, pool-member count, and review-required count.
 - Warnings.
 
 ## Claude Code Skill

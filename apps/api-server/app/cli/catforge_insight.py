@@ -12,6 +12,7 @@ import re
 import sys
 from collections import defaultdict
 from decimal import Decimal
+from statistics import median
 from typing import Any, Iterable, Sequence
 
 from sqlalchemy import and_, func, or_, select
@@ -24,6 +25,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M07_RULE_VERSION,
 )
 from app.services.core3_real_data.m03b_param_profile_service import (
     M03BTaxonomy,
@@ -228,6 +230,44 @@ def main(argv: Sequence[str] | None = None) -> int:
                     position_source=args.position_source,
                     sku_limit=args.sku_limit,
                 )
+            elif args.command == "sku-market-profile":
+                result = query_sku_market_profile(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    analysis_window=args.analysis_window,
+                    include_signals=args.include_signals,
+                    include_pools=args.include_pools,
+                    sku_limit=args.sku_limit,
+                )
+            elif args.command == "market-bucket-coverage":
+                result = query_market_bucket_coverage(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    bucket_type=args.bucket_type,
+                    query=args.query,
+                    analysis_window=args.analysis_window,
+                    sku_limit=args.sku_limit,
+                )
+            elif args.command == "comparable-pools":
+                result = query_comparable_pools(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    pool_type=args.pool_type,
+                    analysis_window=args.analysis_window,
+                    sku_limit=args.sku_limit,
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -320,6 +360,35 @@ def build_parser() -> argparse.ArgumentParser:
     claim_coverage.add_argument("--query", help="Natural position query text.")
     claim_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
     add_format_arg(claim_coverage)
+
+    market_profile = subparsers.add_parser("sku-market-profile", help="Query one SKU/model market profile.")
+    add_common_args(market_profile)
+    market_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    market_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    market_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
+    market_profile.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
+    market_profile.add_argument("--include-signals", action="store_true", help="Include market signal rows for the selected window.")
+    market_profile.add_argument("--include-pools", action="store_true", help="Include comparable-pool summaries for the selected window.")
+    market_profile.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of pool member SKU codes to include; 0 means all.")
+    add_format_arg(market_profile)
+
+    market_bucket = subparsers.add_parser("market-bucket-coverage", help="Query price-band, size, or size-price market bucket coverage.")
+    add_common_args(market_bucket)
+    market_bucket.add_argument("--bucket-type", choices=("all", "price", "size", "size_price"), default="all", help="Bucket type to query. Current implementation uses M07 price band and size segment until business buckets are persisted.")
+    market_bucket.add_argument("--query", help="Natural bucket query text, such as high price band, 85 size, or mid_high.")
+    market_bucket.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
+    market_bucket.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include per bucket; 0 means all.")
+    add_format_arg(market_bucket)
+
+    comparable_pools = subparsers.add_parser("comparable-pools", help="Query comparable-pool baselines for one SKU/model.")
+    add_common_args(comparable_pools)
+    comparable_pools.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    comparable_pools.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    comparable_pools.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
+    comparable_pools.add_argument("--pool-type", choices=("same_size", "adjacent_size", "same_price_band", "size_price_band", "platform_overlap", "market_active"), help="Optional pool type filter.")
+    comparable_pools.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
+    comparable_pools.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of candidate SKU codes to include per pool; 0 means all.")
+    add_format_arg(comparable_pools)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
     add_common_args(ask)
@@ -868,6 +937,234 @@ def query_claim_position_coverage(
     }
 
 
+def query_sku_market_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    analysis_window: str = "full_observed_window",
+    include_signals: bool = False,
+    include_pools: bool = False,
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    profile = find_sku_market_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=CORE3_M07_RULE_VERSION,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        analysis_window=analysis_window,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的市场画像。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+            "analysis_window": analysis_window,
+        }
+    signals = list_market_signals(db, profile) if include_signals else []
+    pools = list_comparable_pools(db, profile) if include_pools else []
+    result = {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "batch_id": resolved_batch_id,
+        "rule_version": profile.rule_version,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "analysis_window": profile.analysis_window,
+        "period": {
+            "period_start_raw": profile.period_start_raw,
+            "period_end_raw": profile.period_end_raw,
+            "active_week_count": profile.active_week_count,
+            "market_row_count": profile.market_row_count,
+            "latest_week_gap": profile.latest_week_gap,
+        },
+        "market_metrics": {
+            "sales_volume_total": decimal_to_float(profile.sales_volume_total),
+            "sales_amount_total": decimal_to_float(profile.sales_amount_total),
+            "price_wavg": decimal_to_float(profile.price_wavg),
+            "price_latest": decimal_to_float(profile.price_latest),
+            "price_median": decimal_to_float(profile.price_median),
+            "price_min": decimal_to_float(profile.price_min),
+            "price_max": decimal_to_float(profile.price_max),
+            "price_per_inch": decimal_to_float(profile.price_per_inch),
+            "main_channel_type": profile.main_channel_type,
+            "main_platform": profile.main_platform,
+            "platform_count": profile.platform_count,
+            "platform_share": profile.platform_share_json or {},
+        },
+        "price_position": {
+            "price_band_category": profile.price_band_category,
+            "price_band_size": profile.price_band_size,
+            "price_percentile_in_category": decimal_to_float(profile.price_percentile_in_category),
+            "price_percentile_in_size": decimal_to_float(profile.price_percentile_in_size),
+            "volume_percentile_in_category": decimal_to_float(profile.volume_percentile_in_category),
+            "volume_percentile_in_size": decimal_to_float(profile.volume_percentile_in_size),
+            "same_pool_volume_percentile": decimal_to_float(profile.same_pool_volume_percentile),
+            "same_pool_sku_count": profile.same_pool_sku_count,
+            "price_gap_to_category_median": decimal_to_float(profile.price_gap_to_category_median),
+            "price_gap_to_size_median": decimal_to_float(profile.price_gap_to_size_median),
+            "volume_gap_to_size_median": decimal_to_float(profile.volume_gap_to_size_median),
+        },
+        "size_position": {
+            "screen_size_inch": decimal_to_float(profile.screen_size_inch),
+            "size_segment": profile.size_segment,
+            "screen_size_class": profile.screen_size_class,
+            "market_pool_key": profile.market_pool_key,
+            "size_param_confidence": decimal_to_float(profile.size_param_confidence),
+        },
+        "business_bucket_position": current_market_bucket_fallback(profile),
+        "quality": {
+            "market_confidence": decimal_to_float(profile.market_confidence),
+            "confidence_level": profile.confidence_level,
+            "sample_status": profile.sample_status,
+            "quality_flags": profile.quality_flags or [],
+            "review_required": profile.review_required,
+            "review_status": profile.review_status,
+        },
+        "evidence_id_count": len(profile.evidence_ids or []),
+        "result_hash": profile.result_hash,
+    }
+    if include_signals:
+        result["signals"] = [market_signal_payload(row) for row in signals]
+    if include_pools:
+        result["comparable_pools"] = [comparable_pool_payload(row, sku_limit=sku_limit) for row in pools]
+    return result
+
+
+def query_market_bucket_coverage(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    bucket_type: str = "all",
+    query: str | None = None,
+    analysis_window: str = "full_observed_window",
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    rows = list(
+        db.execute(
+            select(entities.Core3SkuMarketProfile)
+            .where(entities.Core3SkuMarketProfile.project_id == project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == category_code)
+            .where(entities.Core3SkuMarketProfile.batch_id == resolved_batch_id)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.analysis_window == analysis_window)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .order_by(entities.Core3SkuMarketProfile.sku_code)
+        ).scalars()
+    )
+    bucket_types = ("price", "size", "size_price") if bucket_type == "all" else (bucket_type,)
+    query_norm = normalize_token(query)
+    query_tokens = set(extract_match_tokens(query or ""))
+    coverages: list[dict[str, Any]] = []
+    for type_code in bucket_types:
+        grouped: dict[str, list[entities.Core3SkuMarketProfile]] = defaultdict(list)
+        labels: dict[str, str] = {}
+        for row in rows:
+            code, label = market_bucket_identity(row, type_code)
+            if query_norm and not market_bucket_query_matches(code, label, query_norm, query_tokens):
+                continue
+            grouped[code].append(row)
+            labels[code] = label
+        for code, profiles in grouped.items():
+            coverages.append(market_bucket_coverage_payload(type_code, code, labels[code], profiles, sku_limit=sku_limit))
+    coverages.sort(key=lambda item: (item["bucket_type"], item["bucket_code"]))
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "batch_id": resolved_batch_id,
+        "analysis_window": analysis_window,
+        "bucket_type": bucket_type,
+        "query": query,
+        "coverage_count": len(coverages),
+        "bucket_source": "current_m07_profile_fallback",
+        "bucket_source_note_cn": "当前 M07 尚未持久化业务绝对价格区间，CLI 先使用动态价格带和尺寸段派生覆盖；业务区间表落地后可切换到持久化结果。",
+        "coverages": coverages,
+    }
+
+
+def query_comparable_pools(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    pool_type: str | None = None,
+    analysis_window: str = "full_observed_window",
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    profile = find_sku_market_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=CORE3_M07_RULE_VERSION,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        analysis_window=analysis_window,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的市场画像，无法查询可比池。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+            "analysis_window": analysis_window,
+        }
+    pools = list_comparable_pools(db, profile, pool_type=pool_type)
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "batch_id": resolved_batch_id,
+        "analysis_window": analysis_window,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "pool_type": pool_type,
+        "pool_count": len(pools),
+        "pools": [comparable_pool_payload(row, sku_limit=sku_limit) for row in pools],
+    }
+
+
 def answer_natural_language(
     db: Session,
     *,
@@ -881,6 +1178,44 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if should_route_to_market_query(question, normalized):
+        if should_route_to_market_bucket_coverage(question, normalized):
+            result = query_market_bucket_coverage(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                bucket_type=market_bucket_type_from_question(question, normalized),
+                query=question,
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "market-bucket-coverage"
+            return result
+        if should_route_to_comparable_pools(question, normalized):
+            result = query_comparable_pools(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                query=extract_sku_or_model_query(question) or question,
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "comparable-pools"
+            result["question"] = question
+            return result
+        result = query_sku_market_profile(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            query=extract_sku_or_model_query(question) or question,
+            include_signals=output_format == "json",
+            include_pools=output_format == "json",
+            sku_limit=sku_limit,
+        )
+        result["routed_command"] = "sku-market-profile"
+        result["question"] = question
+        return result
     if "卖点" in question or "claim" in normalized:
         if any(word in question for word in ("标准卖点", "卖点分类", "卖点维度", "卖点体系")):
             result = query_claim_taxonomy(
@@ -1016,6 +1351,31 @@ def resolve_claim_batch_id(
     return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
 
 
+def resolve_market_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3SkuMarketProfile.batch_id)
+            .where(entities.Core3SkuMarketProfile.project_id == project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == category_code)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .order_by(entities.Core3SkuMarketProfile.created_at.desc(), entities.Core3SkuMarketProfile.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=CORE3_M07_RULE_VERSION)
+
+
 def find_sku_profile(
     db: Session,
     *,
@@ -1121,6 +1481,61 @@ def find_sku_claim_profile(
     return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
 
 
+def find_sku_market_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+    analysis_window: str,
+) -> entities.Core3SkuMarketProfile | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 市场画像需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3SkuMarketProfile.project_id == project_id,
+        entities.Core3SkuMarketProfile.category_code == category_code,
+        entities.Core3SkuMarketProfile.batch_id == batch_id,
+        entities.Core3SkuMarketProfile.rule_version == rule_version,
+        entities.Core3SkuMarketProfile.analysis_window == analysis_window,
+        entities.Core3SkuMarketProfile.is_current.is_(True),
+    ]
+    if sku_code:
+        filters.append(func.lower(entities.Core3SkuMarketProfile.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3SkuMarketProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3SkuMarketProfile.sku_code) == query_norm,
+                func.lower(entities.Core3SkuMarketProfile.model_name) == query_norm,
+                func.lower(entities.Core3SkuMarketProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3SkuMarketProfile)
+            .where(*filters)
+            .order_by(entities.Core3SkuMarketProfile.sku_code)
+            .limit(11)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    if len(exact) == 1:
+        return exact[0]
+    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
 def list_dimension_tiers(db: Session, profile: entities.Core3SkuParamProfile) -> list[entities.Core3SkuParamDimensionTier]:
     return list(
         db.execute(
@@ -1165,6 +1580,48 @@ def list_sku_claim_positions(db: Session, profile: entities.Core3SkuClaimFactPro
             .where(entities.Core3SkuClaimDimensionPosition.taxonomy_version == profile.taxonomy_version)
             .where(entities.Core3SkuClaimDimensionPosition.is_current.is_(True))
             .order_by(entities.Core3SkuClaimDimensionPosition.position_source, entities.Core3SkuClaimDimensionPosition.dimension_code)
+        ).scalars()
+    )
+
+
+def list_market_signals(db: Session, profile: entities.Core3SkuMarketProfile) -> list[entities.Core3MarketSignal]:
+    return list(
+        db.execute(
+            select(entities.Core3MarketSignal)
+            .where(entities.Core3MarketSignal.project_id == profile.project_id)
+            .where(entities.Core3MarketSignal.category_code == profile.category_code)
+            .where(entities.Core3MarketSignal.batch_id == profile.batch_id)
+            .where(entities.Core3MarketSignal.sku_code == profile.sku_code)
+            .where(entities.Core3MarketSignal.analysis_window == profile.analysis_window)
+            .where(entities.Core3MarketSignal.rule_version == profile.rule_version)
+            .where(entities.Core3MarketSignal.is_current.is_(True))
+            .order_by(entities.Core3MarketSignal.signal_code, entities.Core3MarketSignal.comparison_scope)
+        ).scalars()
+    )
+
+
+def list_comparable_pools(
+    db: Session,
+    profile: entities.Core3SkuMarketProfile,
+    *,
+    pool_type: str | None = None,
+) -> list[entities.Core3ComparablePoolBaseline]:
+    filters = [
+        entities.Core3ComparablePoolBaseline.project_id == profile.project_id,
+        entities.Core3ComparablePoolBaseline.category_code == profile.category_code,
+        entities.Core3ComparablePoolBaseline.batch_id == profile.batch_id,
+        entities.Core3ComparablePoolBaseline.target_sku_code == profile.sku_code,
+        entities.Core3ComparablePoolBaseline.analysis_window == profile.analysis_window,
+        entities.Core3ComparablePoolBaseline.rule_version == profile.rule_version,
+        entities.Core3ComparablePoolBaseline.is_current.is_(True),
+    ]
+    if pool_type:
+        filters.append(entities.Core3ComparablePoolBaseline.pool_type == pool_type)
+    return list(
+        db.execute(
+            select(entities.Core3ComparablePoolBaseline)
+            .where(*filters)
+            .order_by(entities.Core3ComparablePoolBaseline.pool_type)
         ).scalars()
     )
 
@@ -1278,6 +1735,233 @@ def resolve_claim_positions(
             and (normalize_token(item.position_code) == position_norm or normalize_token(item.position_name) == position_norm)
         ]
     return matches
+
+
+def market_signal_payload(row: entities.Core3MarketSignal) -> dict[str, Any]:
+    return {
+        "signal_code": row.signal_code,
+        "signal_name": row.signal_name,
+        "signal_value": decimal_to_float(row.signal_value),
+        "signal_strength": decimal_to_float(row.signal_strength),
+        "signal_level": row.signal_level,
+        "basis_metric": row.basis_metric,
+        "basis_value": row.basis_value_json or {},
+        "comparison_scope": row.comparison_scope,
+        "comparison_scope_key": row.comparison_scope_key,
+        "polarity": row.polarity,
+        "confidence": decimal_to_float(row.confidence),
+        "sample_status": row.sample_status,
+        "quality_flags": row.quality_flags or [],
+    }
+
+
+def comparable_pool_payload(row: entities.Core3ComparablePoolBaseline, *, sku_limit: int) -> dict[str, Any]:
+    sku_codes = list(row.candidate_sku_codes or [])
+    visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
+    return {
+        "pool_id": row.pool_id,
+        "pool_type": row.pool_type,
+        "analysis_window": row.analysis_window,
+        "pool_sku_count": row.pool_sku_count,
+        "valid_member_count": row.valid_member_count,
+        "target_included": row.target_included,
+        "target_size_segment": row.target_size_segment,
+        "target_price_band": row.target_price_band,
+        "median_price": decimal_to_float(row.median_price),
+        "median_volume": decimal_to_float(row.median_volume),
+        "median_amount": decimal_to_float(row.median_amount),
+        "pool_confidence": decimal_to_float(row.pool_confidence),
+        "sample_status": row.sample_status,
+        "basis": row.basis,
+        "candidate_sku_codes": visible_skus,
+        "candidate_sku_codes_returned": len(visible_skus),
+        "candidate_sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+        "quality_flags": row.quality_flags or [],
+    }
+
+
+def current_market_bucket_fallback(profile: entities.Core3SkuMarketProfile) -> dict[str, Any]:
+    price_code, price_label = market_bucket_identity(profile, "price")
+    size_code, size_label = market_bucket_identity(profile, "size")
+    size_price_code, size_price_label = market_bucket_identity(profile, "size_price")
+    return {
+        "bucket_source": "current_m07_profile_fallback",
+        "price_bucket_code": price_code,
+        "price_bucket_label": price_label,
+        "price_bucket_basis": "price_band_category",
+        "size_bucket_code": size_code,
+        "size_bucket_label": size_label,
+        "size_bucket_basis": "size_segment",
+        "size_price_bucket_code": size_price_code,
+        "size_price_bucket_label": size_price_label,
+        "note_cn": "当前 M07 尚未持久化业务绝对价格区间，暂以动态价格带和尺寸段表达市场区间。",
+    }
+
+
+def market_bucket_identity(profile: entities.Core3SkuMarketProfile, bucket_type: str) -> tuple[str, str]:
+    if bucket_type == "price":
+        code = str(getattr(profile, "business_price_bucket_code", None) or profile.price_band_category or "unknown")
+        label = str(getattr(profile, "business_price_bucket_label", None) or price_band_label(code))
+        return code, label
+    if bucket_type == "size":
+        code = str(getattr(profile, "size_bucket_code", None) or profile.size_segment or profile.screen_size_class or "unknown")
+        label = str(getattr(profile, "size_bucket_label", None) or size_bucket_label(code, profile.screen_size_inch))
+        return code, label
+    if bucket_type == "size_price":
+        price_code, price_label = market_bucket_identity(profile, "price")
+        size_code, size_label = market_bucket_identity(profile, "size")
+        return f"{size_code}|{price_code}", f"{size_label} / {price_label}"
+    raise CatForgeInsightError(f"不支持的市场区间类型：{bucket_type}")
+
+
+def market_bucket_query_matches(code: str, label: str, query_norm: str, query_tokens: set[str]) -> bool:
+    haystack = normalize_token(" ".join([code, label]))
+    if query_norm in haystack or haystack in query_norm:
+        return True
+    if any(token and token in haystack for token in query_tokens):
+        return True
+    aliases = {
+        "high": ("高", "高价", "高价格", "高价格带", "高价位"),
+        "mid_high": ("中高", "中高价", "中高价格", "中高价格带", "中高价位"),
+        "mid": ("中", "中价", "中价格", "中价格带", "中价位"),
+        "mid_low": ("中低", "中低价", "中低价格", "中低价格带", "中低价位"),
+        "low": ("低", "低价", "低价格", "低价格带", "低价位"),
+    }
+    return any(normalize_token(alias) in query_norm for alias in aliases.get(code, ()))
+
+
+def price_band_label(code: str) -> str:
+    labels = {
+        "low": "低价位",
+        "mid_low": "中低价位",
+        "mid": "中价位",
+        "mid_high": "中高价位",
+        "high": "高价位",
+        "unknown": "价格未知",
+    }
+    return labels.get(code, code)
+
+
+def size_bucket_label(code: str, screen_size: Any) -> str:
+    if code and code != "unknown":
+        return f"{code} 寸" if str(code).replace(".", "", 1).isdigit() else str(code)
+    if screen_size is not None:
+        return f"{decimal_to_float(screen_size)} 寸"
+    return "尺寸未知"
+
+
+def market_bucket_coverage_payload(
+    bucket_type: str,
+    code: str,
+    label: str,
+    profiles: list[entities.Core3SkuMarketProfile],
+    *,
+    sku_limit: int,
+) -> dict[str, Any]:
+    sorted_profiles = sorted(
+        profiles,
+        key=lambda item: decimal_sort_value(item.sales_volume_total),
+        reverse=True,
+    )
+    sku_codes = [item.sku_code for item in sorted_profiles]
+    visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
+    volumes = [decimal_value(item.sales_volume_total) for item in profiles if item.sales_volume_total is not None]
+    amounts = [decimal_value(item.sales_amount_total) for item in profiles if item.sales_amount_total is not None]
+    prices = [decimal_value(item.price_wavg) for item in profiles if item.price_wavg is not None]
+    return {
+        "bucket_type": bucket_type,
+        "bucket_code": code,
+        "bucket_label": label,
+        "sku_count": len(profiles),
+        "valid_volume_sku_count": len(volumes),
+        "total_sales_volume": decimal_to_float(sum(volumes, Decimal("0"))) if volumes else None,
+        "total_sales_amount": decimal_to_float(sum(amounts, Decimal("0"))) if amounts else None,
+        "median_price": decimal_to_float(decimal_median(prices)),
+        "median_volume": decimal_to_float(decimal_median(volumes)),
+        "median_amount": decimal_to_float(decimal_median(amounts)),
+        "sample_status": sample_status_from_count(len(profiles)),
+        "sku_codes": visible_skus,
+        "sku_codes_returned": len(visible_skus),
+        "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+        "top_skus": [
+            {
+                "sku_code": item.sku_code,
+                "model_name": item.model_name,
+                "sales_volume_total": decimal_to_float(item.sales_volume_total),
+                "sales_amount_total": decimal_to_float(item.sales_amount_total),
+                "price_wavg": decimal_to_float(item.price_wavg),
+            }
+            for item in sorted_profiles[: min(len(sorted_profiles), 10)]
+        ],
+    }
+
+
+def decimal_value(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def decimal_sort_value(value: Any) -> Decimal:
+    if value is None:
+        return Decimal("-1")
+    return decimal_value(value)
+
+
+def decimal_median(values: list[Decimal]) -> Decimal | None:
+    if not values:
+        return None
+    return Decimal(str(median(values)))
+
+
+def sample_status_from_count(count: int) -> str:
+    if count >= 6:
+        return "sufficient"
+    if count >= 3:
+        return "limited"
+    if count > 0:
+        return "insufficient"
+    return "unknown"
+
+
+def should_route_to_market_query(question: str, normalized: str) -> bool:
+    return any(
+        token in normalized
+        for token in (
+            "市场画像",
+            "市场情况",
+            "量价",
+            "销量位置",
+            "价格区间",
+            "尺寸区间",
+            "价格带",
+            "同价位",
+            "可比池",
+            "市场池",
+        )
+    )
+
+
+def should_route_to_market_bucket_coverage(question: str, normalized: str) -> bool:
+    if any(token in normalized for token in ("价格区间", "尺寸区间", "价格带", "同价位", "销量位置")):
+        return True
+    return any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")) and any(
+        token in normalized for token in ("市场", "价格", "尺寸", "量价")
+    )
+
+
+def should_route_to_comparable_pools(question: str, normalized: str) -> bool:
+    return any(token in normalized for token in ("可比池", "市场池", "同尺寸池", "同价池", "同价格带"))
+
+
+def market_bucket_type_from_question(question: str, normalized: str) -> str:
+    if "价格" in normalized and "尺寸" in normalized:
+        return "size_price"
+    if "尺寸" in normalized:
+        return "size"
+    if "价格" in normalized or "价位" in normalized:
+        return "price"
+    return "all"
 
 
 def should_skip_negative_tier_match(query_text: str, item: M03BTierDefinition) -> bool:
@@ -1449,7 +2133,7 @@ def escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def decimal_to_float(value: Decimal | None) -> float | None:
+def decimal_to_float(value: Any) -> float | None:
     return float(value) if value is not None else None
 
 
@@ -1486,6 +2170,40 @@ def render_text(result: dict[str, Any]) -> str:
             lines.append(f"- {item['position_source']} / {item['dimension_code']}: {item['position_name']} ({item['position_code']})")
         if result.get("quality_flags"):
             lines.append("质量标记：" + ", ".join(result["quality_flags"]))
+        return "\n".join(lines)
+    if "market_metrics" in result:
+        sku = result["sku"]
+        metrics = result["market_metrics"]
+        price_position = result["price_position"]
+        size_position = result["size_position"]
+        bucket = result.get("business_bucket_position") or {}
+        quality = result["quality"]
+        lines = [
+            f"SKU 市场画像：{sku.get('model_name') or '-'} / {sku.get('sku_code')}",
+            f"批次：{result['batch_id']}；窗口：{result['analysis_window']}；销量：{metrics.get('sales_volume_total')}；销额：{metrics.get('sales_amount_total')}；加权均价：{metrics.get('price_wavg')}",
+            f"价格位置：{bucket.get('price_bucket_label') or price_position.get('price_band_category')}；品类价格分位：{price_position.get('price_percentile_in_category')}；品类销量分位：{price_position.get('volume_percentile_in_category')}",
+            f"尺寸位置：{bucket.get('size_bucket_label') or size_position.get('size_segment')}；同尺寸销量分位：{price_position.get('volume_percentile_in_size')}；同池 SKU 数：{price_position.get('same_pool_sku_count')}",
+            f"样本状态：{quality.get('sample_status')}；置信度：{quality.get('market_confidence')}",
+        ]
+        if result.get("signals"):
+            lines.append(f"市场信号：{len(result['signals'])} 条")
+        if result.get("comparable_pools"):
+            lines.append(f"可比池：{len(result['comparable_pools'])} 个")
+        if quality.get("quality_flags"):
+            lines.append("质量标记：" + ", ".join(quality["quality_flags"]))
+        return "\n".join(lines)
+    if "pools" in result:
+        sku = result["sku"]
+        lines = [
+            f"SKU 可比池：{sku.get('model_name') or '-'} / {sku.get('sku_code')}",
+            f"批次：{result['batch_id']}；窗口：{result['analysis_window']}；可比池：{result['pool_count']} 个",
+        ]
+        for item in result["pools"]:
+            sku_codes = ", ".join(item["candidate_sku_codes"]) if item["candidate_sku_codes"] else "-"
+            suffix = "（已截断）" if item["candidate_sku_codes_truncated"] else ""
+            lines.append(
+                f"- {item['pool_type']}: {item['pool_sku_count']} 个 SKU；样本={item['sample_status']}；SKU：{sku_codes}{suffix}"
+            )
         return "\n".join(lines)
     if "sku" in result:
         sku = result["sku"]
@@ -1524,6 +2242,17 @@ def render_text(result: dict[str, Any]) -> str:
         if len(result["claims"]) > 80:
             lines.append(f"... 还有 {len(result['claims']) - 80} 个卖点，使用 --format json 查看完整结果。")
         return "\n".join(lines)
+    if result.get("bucket_source"):
+        lines = [f"市场区间覆盖：批次 {result['batch_id']}，窗口 {result['analysis_window']}，命中 {result['coverage_count']} 个区间"]
+        for item in result["coverages"]:
+            sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
+            suffix = "（已截断）" if item["sku_codes_truncated"] else ""
+            lines.append(
+                f"- {item['bucket_type']} / {item['bucket_label']} ({item['bucket_code']}): "
+                f"{item['sku_count']} 个 SKU；总销量 {item['total_sales_volume']}；SKU：{sku_codes}{suffix}"
+            )
+        lines.append(result.get("bucket_source_note_cn", ""))
+        return "\n".join(line for line in lines if line)
     if "coverages" in result:
         is_claim_coverage = "position_source" in result
         unit_name = "位置" if is_claim_coverage else "档位"
