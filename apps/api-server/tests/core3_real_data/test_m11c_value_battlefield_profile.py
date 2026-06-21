@@ -1,0 +1,401 @@
+from datetime import datetime, timezone
+from decimal import Decimal
+
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from app.cli import catforge_insight, catforge_pipeline
+from app.models import entities
+from app.services.core3_real_data.constants import (
+    CORE3_M03B_RULE_VERSION,
+    CORE3_M03B_TAXONOMY_VERSION,
+    CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
+    CORE3_M07_RULE_VERSION,
+    CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
+    Core3RunStatus,
+    Core3SourceBatchStatus,
+)
+from app.services.core3_real_data.m11c_value_battlefield_service import M11CRunner
+
+
+PROJECT_ID = "core3_mvp"
+BATCH_ID = "m00_202606210011"
+SKU_VALUE = "TV00090001"
+SKU_MID = "TV00090002"
+SKU_HIGH = "TV00090003"
+
+
+def make_session() -> Session:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    for table in [
+        entities.CategoryProject.__table__,
+        entities.Core3SourceBatch.__table__,
+        entities.Core3SkuParamProfile.__table__,
+        entities.Core3SkuMarketProfile.__table__,
+        entities.Core3SkuClaimFactProfile.__table__,
+        entities.Core3SkuClaimFact.__table__,
+        entities.Core3SkuCommentFactProfile.__table__,
+        entities.Core3CommentFactAtom.__table__,
+        entities.Core3SkuValueBattlefieldProfile.__table__,
+        entities.Core3SkuValueBattlefieldScore.__table__,
+        entities.Core3ValueBattlefieldGraphSnapshot.__table__,
+    ]:
+        table.create(bind=engine, checkfirst=True)
+    session = Session(engine)
+    seed_foundation(session)
+    return session
+
+
+def seed_foundation(session: Session) -> None:
+    session.add(entities.CategoryProject(project_id=PROJECT_ID, name="Core3 MVP", category_code="TV"))
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 21, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    seed_sku(session, SKU_VALUE, "75X-Value", "海信", size=75, price=Decimal("2999"), volume=Decimal("900"))
+    seed_sku(session, SKU_MID, "75X-Mid", "TCL", size=75, price=Decimal("5999"), volume=Decimal("300"))
+    seed_sku(session, SKU_HIGH, "85X-High", "索尼", size=85, price=Decimal("9999"), volume=Decimal("100"))
+    seed_value_sku_claims(session)
+    seed_value_sku_comments(session)
+    session.commit()
+
+
+def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, *, size: int, price: Decimal, volume: Decimal) -> None:
+    amount = price * volume
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id=f"param-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code=sku_code,
+            model_name=model_name,
+            param_values_json={
+                "screen_size_inch": {"normalized_value": size, "numeric_value": size, "value_presence": "present"},
+                "resolution_class": {"normalized_value": "4K", "value_text": "4K", "value_presence": "present"},
+                "hdr_support_flag": {"normalized_value": True, "value_presence": "present"},
+                "declared_brightness_nit_or_band": {"normalized_value": 600, "numeric_value": 600, "value_presence": "present"},
+                "full_screen_design_flag": {"normalized_value": True, "value_presence": "present"},
+                "dimension_tier_profile": {"size": "xlarge_70_85"},
+            },
+            core_picture_params_json={},
+            core_gaming_params_json={},
+            core_system_params_json={},
+            core_eye_care_params_json={},
+            param_completeness=Decimal("0.800000"),
+            known_param_count=5,
+            unknown_param_count=0,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=[f"ev-param-{sku_code}"],
+            quality_summary_json={},
+            profile_hash=f"sha256:param-{sku_code}",
+            seed_version=CORE3_M03B_TAXONOMY_VERSION,
+            rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuMarketProfile(
+            profile_id=f"market-profile-{sku_code}",
+            sku_market_profile_id=f"market-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            analysis_window="full_observed_window",
+            active_week_count=12,
+            market_row_count=24,
+            platform_count=2,
+            screen_size_inch=Decimal(str(size)),
+            size_segment="75_85",
+            screen_size_class="large_upgrade",
+            sales_volume_total=volume,
+            sales_amount_total=amount,
+            price_wavg=price,
+            price_median=price,
+            price_per_inch=price / Decimal(size),
+            volume_percentile_in_size=Decimal("0.900000") if sku_code == SKU_VALUE else Decimal("0.300000"),
+            amount_percentile_in_size=Decimal("0.800000") if sku_code == SKU_VALUE else Decimal("0.200000"),
+            market_confidence=Decimal("0.9000"),
+            confidence_level="high",
+            sample_status="sufficient",
+            quality_flags=[],
+            evidence_ids=[f"ev-market-{sku_code}"],
+            rule_version=CORE3_M07_RULE_VERSION,
+            input_fingerprint=f"fp-{sku_code}",
+            result_hash=f"sha256:market-{sku_code}",
+        )
+    )
+
+
+def seed_value_sku_claims(session: Session) -> None:
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id=f"claim-profile-{SKU_VALUE}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code=SKU_VALUE,
+            model_name="75X-Value",
+            brand_name="海信",
+            raw_claim_count=3,
+            matched_claim_count=3,
+            fact_claim_count=3,
+            unsupported_claim_count=0,
+            param_unknown_claim_count=0,
+            service_separate_claim_count=0,
+            claim_texts_json=[],
+            claim_codes=["tv_claim_theater_scene", "tv_claim_value_price", "tv_claim_full_screen_design"],
+            fact_claim_codes=["tv_claim_theater_scene", "tv_claim_value_price", "tv_claim_full_screen_design"],
+            unsupported_claim_codes=[],
+            service_claim_codes=[],
+            dimension_profile_json={},
+            dimension_position_profile_json={},
+            claim_summary_json={},
+            evidence_ids=["ev-claim-profile"],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash="sha256:claim-profile-value",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
+    for claim_code, claim_name in [
+        ("tv_claim_theater_scene", "大屏影院"),
+        ("tv_claim_value_price", "高性价比"),
+        ("tv_claim_full_screen_design", "全面屏设计"),
+    ]:
+        session.add(claim_fact(claim_code, claim_name))
+
+
+def claim_fact(claim_code: str, claim_name: str) -> entities.Core3SkuClaimFact:
+    return entities.Core3SkuClaimFact(
+        claim_fact_id=f"claim-fact-{claim_code}",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+        sku_code=SKU_VALUE,
+        model_name="75X-Value",
+        brand_name="海信",
+        source_claim_key=f"seed:{claim_code}",
+        raw_claim_text=claim_name,
+        clean_claim_text=claim_name,
+        claim_code=claim_code,
+        claim_name=claim_name,
+        claim_dimension="value_test",
+        claim_subtype="value_test",
+        claim_kind="product_experience",
+        match_type="seed",
+        match_score=Decimal("1.0000"),
+        param_support_status="supported",
+        supporting_param_codes=["screen_size_inch"],
+        supporting_param_snapshot_json={},
+        support_explanation="test seed",
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=[f"ev-claim-{claim_code}"],
+        quality_flags=[],
+        confidence=Decimal("0.9000"),
+        fact_hash=f"sha256:{claim_code}",
+        rule_version=CORE3_M04C_TV_RULE_VERSION,
+    )
+
+
+def seed_value_sku_comments(session: Session) -> None:
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id=f"comment-profile-{SKU_VALUE}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+            sku_code=SKU_VALUE,
+            model_name="75X-Value",
+            brand_name="海信",
+            comment_sentence_count=3,
+            matched_sentence_count=3,
+            fact_atom_count=3,
+            product_fact_sentence_count=3,
+            positive_sentence_count=3,
+            negative_sentence_count=0,
+            dimension_summary_json={},
+            signal_summary_json={},
+            param_comment_support_json={},
+            claim_comment_support_json={},
+            polarity_summary_json={},
+            evidence_examples_json=[],
+            supported_param_codes=["screen_size_inch"],
+            contradicted_param_codes=[],
+            unmentioned_param_codes=[],
+            supported_claim_codes=["tv_claim_theater_scene", "tv_claim_value_price"],
+            contradicted_claim_codes=[],
+            unmentioned_claim_codes=[],
+            evidence_ids=["ev-comment-profile"],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash="sha256:comment-profile-value",
+            rule_version=CORE3_M05C_TV_RULE_VERSION,
+        )
+    )
+    comments = [
+        ("use_living_room_cinema", "客厅看电影大屏很震撼", "use_case_signal", "用途信号"),
+        ("appearance_size_fit", "75寸放客厅尺寸正好", "appearance_installation_space", "外观安装空间"),
+        ("value_price", "价格划算，补贴后性价比很高", "price_value_perception", "价格价值感知"),
+    ]
+    for index, (subdimension_code, text, dimension_code, dimension_name) in enumerate(comments, start=1):
+        session.add(comment_fact(index, subdimension_code, text, dimension_code, dimension_name))
+
+
+def comment_fact(index: int, subdimension_code: str, text: str, dimension_code: str, dimension_name: str) -> entities.Core3CommentFactAtom:
+    return entities.Core3CommentFactAtom(
+        comment_fact_id=f"comment-fact-{index}",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+        sku_code=SKU_VALUE,
+        model_name="75X-Value",
+        brand_name="海信",
+        source_comment_key=f"comment-{index}",
+        clean_comment_text=text,
+        dimension_code=dimension_code,
+        dimension_name=dimension_name,
+        subdimension_code=subdimension_code,
+        subdimension_name=subdimension_code,
+        dimension_type="product_experience" if not dimension_code.endswith("signal") else dimension_code,
+        polarity="positive",
+        evidence_strength="strong",
+        support_relation="supports_sku_param_claim",
+        support_target_type="signal",
+        supported_param_codes=["screen_size_inch"] if subdimension_code == "appearance_size_fit" else [],
+        contradicted_param_codes=[],
+        supported_claim_codes=["tv_claim_value_price"] if subdimension_code == "value_price" else [],
+        contradicted_claim_codes=[],
+        param_snapshot_json={},
+        claim_snapshot_json={},
+        signal_payload_json={},
+        extraction_payload_json={},
+        evidence_ids=[f"ev-comment-{index}"],
+        quality_flags=[],
+        confidence=Decimal("0.9000"),
+        fact_hash=f"sha256:comment-{index}",
+        rule_version=CORE3_M05C_TV_RULE_VERSION,
+    )
+
+
+def test_m11c_runner_generates_value_battlefield_profile_and_graph():
+    session = make_session()
+
+    result = M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status == Core3RunStatus.SUCCESS
+    assert result.summary_json["sku_count"] == 3
+    assert result.summary_json["battlefield_count"] == 12
+
+    profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_VALUE)
+    ).scalar_one()
+    assert profile.primary_battlefield_code == "BF_LARGE_SCREEN_VALUE_UPGRADE"
+    assert profile.size_tier == "xlarge_70_85"
+    assert profile.price_band_in_size_tier == "low"
+
+    score = session.execute(
+        select(entities.Core3SkuValueBattlefieldScore)
+        .where(entities.Core3SkuValueBattlefieldScore.sku_code == SKU_VALUE)
+        .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == "BF_LARGE_SCREEN_VALUE_UPGRADE")
+    ).scalar_one()
+    assert score.relation_status == "primary_battlefield"
+    assert score.market_gate_status == "matched"
+    assert score.user_voice_score > Decimal("0.9000")
+
+    graph = session.execute(select(entities.Core3ValueBattlefieldGraphSnapshot)).scalar_one()
+    assert graph.battlefield_count == 12
+    assert "BF_LARGE_SCREEN_VALUE_UPGRADE" in graph.coverage_summary_json
+
+
+def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
+    session = make_session()
+
+    pipeline_result = catforge_pipeline.run_value_battlefield(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    assert pipeline_result["status"] == "ok"
+    assert pipeline_result["summary"]["profile_count"] == 3
+
+    sku_profile = catforge_insight.query_sku_value_battlefield(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        query="75X-Value",
+        include_scores=True,
+    )
+    coverage = catforge_insight.query_value_battlefield_skus(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        battlefield_code="BF_LARGE_SCREEN_VALUE_UPGRADE",
+        sku_limit=10,
+    )
+    natural = catforge_insight.answer_natural_language(
+        session,
+        question="查 75X-Value 的价值战场",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+    taxonomy = catforge_insight.query_value_battlefield_taxonomy(product_category="TV")
+
+    assert sku_profile["status"] == "ok"
+    assert sku_profile["primary_battlefield_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE"
+    assert any(item["battlefield_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE" for item in sku_profile["scores"])
+    assert coverage["sku_codes"] == [SKU_VALUE]
+    assert natural["routed_command"] == "sku-value-battlefield"
+    assert natural["primary_battlefield_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE"
+    assert taxonomy["battlefield_count"] == 12
+    assert taxonomy["taxonomy_version"] == CORE3_M11C_TV_TAXONOMY_VERSION

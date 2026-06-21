@@ -38,6 +38,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M07_POOL_RULE_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
     Core3ModuleCode,
     Core3PipelineTriggerType,
     Core3ReleaseGateStatus,
@@ -54,6 +56,7 @@ from app.services.core3_real_data.m05c_comment_fact_profile_service import (
     M05C_DEFAULT_LLM_BATCH_SIZE,
     M05CRunner,
 )
+from app.services.core3_real_data.m11c_value_battlefield_service import M11CRunner
 from app.services.core3_real_data.market_profile_runner import MarketProfileRunner
 
 
@@ -77,6 +80,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
         "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+        "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -88,6 +93,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": None,
         "comment_taxonomy_version": None,
         "comment_rule_version": None,
+        "value_battlefield_taxonomy_version": None,
+        "value_battlefield_rule_version": None,
     },
 }
 
@@ -139,6 +146,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
+                )
+            elif args.command == "run-value-battlefield":
+                result = run_value_battlefield(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    sku_scope=args.sku_code or (),
+                    battlefield_codes=args.battlefield_code or (),
+                    graph_mode=args.graph_mode,
+                    force_rebuild=args.force_rebuild,
                 )
             elif args.command == "ask":
                 result = answer_natural_language(
@@ -210,6 +229,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_market.add_argument("--sku-chunk-size", type=int, default=DEFAULT_M07_SKU_CHUNK_SIZE, help="Number of SKUs per M07 execution chunk. Default keeps 205 memory below the API container limit.")
     add_format_arg(run_market)
 
+    run_value_battlefield = subparsers.add_parser("run-value-battlefield", help="Generate or rerun SKU value battlefield profiles and graph snapshots.")
+    add_common_args(run_value_battlefield)
+    add_product_category_arg(run_value_battlefield, default="tv", allow_auto=False)
+    run_value_battlefield.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_value_battlefield.add_argument("--battlefield-code", action="append", help="Optional battlefield scope. Repeat to run selected battlefields only.")
+    run_value_battlefield.add_argument("--graph-mode", choices=("inline", "skip", "rebuild-only"), default="inline", help="Graph handling. inline rebuilds graph with SKU profiles; skip writes only SKU profiles/scores; rebuild-only writes graph for the selected scope.")
+    run_value_battlefield.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
+    add_format_arg(run_value_battlefield)
+
     ask = subparsers.add_parser("ask", help="Route a natural-language execution request.")
     add_common_args(ask)
     add_product_category_arg(ask)
@@ -260,6 +288,21 @@ def answer_natural_language(
     coverage_mode: str = COMMENT_COVERAGE_AUTO,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
+    if should_run_value_battlefield(question):
+        result = run_value_battlefield(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            sku_scope=extract_sku_scope(question),
+            battlefield_codes=extract_battlefield_scope(question),
+            graph_mode="inline",
+            force_rebuild=force_rebuild,
+        )
+        result["question"] = question
+        result["routed_command"] = "run-value-battlefield"
+        return result
     if should_run_comment_profile(question):
         result = run_comment_profile(
             db,
@@ -305,7 +348,7 @@ def answer_natural_language(
         result["routed_command"] = "run-claim-profile"
         return result
     if not should_run_param_profile(question):
-        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像或市场画像。请说明要生成或重新生成哪类画像。")
+        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像或价值战场画像。请说明要生成或重新生成哪类画像。")
     result = run_param_profile(
         db,
         project_id=project_id,
@@ -317,6 +360,63 @@ def answer_natural_language(
     result["question"] = question
     result["routed_command"] = "run-param-profile"
     return result
+
+
+def run_value_battlefield(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_scope: Sequence[str] = (),
+    battlefield_codes: Sequence[str] = (),
+    graph_mode: str = "inline",
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    if not config.get("value_battlefield_taxonomy_version") or not config.get("value_battlefield_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}价值战场 taxonomy 尚未发布，不能生成 SKU 价值战场画像。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = M11CRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        taxonomy_version=config["value_battlefield_taxonomy_version"],
+        rule_version=config["value_battlefield_rule_version"],
+        target_sku_codes=sku_scope,
+        battlefield_codes=battlefield_codes,
+        force_rebuild=force_rebuild,
+        graph_mode=graph_mode,
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "sku_scope": list(sku_scope),
+        "battlefield_codes": list(battlefield_codes),
+        "graph_mode": graph_mode,
+        "taxonomy_version": config["value_battlefield_taxonomy_version"],
+        "rule_version": config["value_battlefield_rule_version"],
+        "force_rebuild": force_rebuild,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
 
 
 def run_comment_profile(
@@ -1009,6 +1109,27 @@ def should_run_param_profile(question: str) -> bool:
     return any(word in question for word in ("参数画像", "参数事实", "标准参数", "生成", "重跑", "重新", "更新", "数据准备", "准备好可以分析"))
 
 
+def should_run_value_battlefield(question: str) -> bool:
+    normalized = normalize_token(question)
+    if "价值战场" not in question and "战场图谱" not in question and "battlefield" not in normalized:
+        return False
+    return any(
+        word in normalized
+        for word in (
+            "生成",
+            "重跑",
+            "重新",
+            "更新",
+            "执行",
+            "跑",
+            "计算",
+            "准备好可以分析",
+            "图谱",
+            "画像",
+        )
+    )
+
+
 def should_run_market_profile(question: str) -> bool:
     normalized = normalize_token(question)
     if "市场画像" in question:
@@ -1058,6 +1179,10 @@ def should_run_claim_profile(question: str) -> bool:
 
 def extract_sku_scope(question: str) -> list[str]:
     return sorted(set(re.findall(r"\b[A-Z]{1,4}\d{4,}\b", question.upper())))
+
+
+def extract_battlefield_scope(question: str) -> list[str]:
+    return sorted(set(re.findall(r"\bBF_[A-Z0-9_]+\b", question.upper())))
 
 
 def extract_analysis_windows(question: str) -> list[str]:

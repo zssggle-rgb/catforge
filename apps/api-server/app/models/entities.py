@@ -5297,6 +5297,167 @@ class Core3SkuBattlefieldReviewIssue(Base, AuditMixin):
     review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
 
 
+class Core3SkuValueBattlefieldProfile(Base, AuditMixin):
+    __tablename__ = "core3_sku_value_battlefield_profile"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11c_profile_current",
+        ),
+        CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_m11c_profile_confidence"),
+        Index("ix_core3_m11c_profile_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11c_profile_sku", "project_id", "category_code", "batch_id", "sku_code"),
+        Index("ix_core3_m11c_profile_primary", "primary_battlefield_code"),
+        Index("ix_core3_m11c_profile_size_price", "size_tier", "price_band_in_size_tier"),
+        Index("ix_core3_m11c_profile_secondary_gin", "secondary_battlefield_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_profile_opportunity_gin", "opportunity_battlefield_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_profile_drag_gin", "drag_factor_battlefield_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_profile_summary_gin", "battlefield_summary_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_profile_evidence_gin", "evidence_ids_json", postgresql_using="gin"),
+    )
+
+    profile_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11c_tv_value_battlefield_profile_v0.1", index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    size_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown", index=True)
+    price_band_in_size_tier: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    price_percentile_in_size_tier: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    primary_battlefield_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    primary_relation_status: Mapped[str | None] = mapped_column(String(80), index=True)
+    secondary_battlefield_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    opportunity_battlefield_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    drag_factor_battlefield_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    battlefield_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    profile_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3SkuValueBattlefieldScore(Base, AuditMixin):
+    __tablename__ = "core3_sku_value_battlefield_score"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "battlefield_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11c_score_current",
+        ),
+        CheckConstraint("battlefield_score >= 0 and battlefield_score <= 1", name="ck_m11c_score_final"),
+        CheckConstraint("market_pool_fit_score >= 0 and market_pool_fit_score <= 1", name="ck_m11c_score_market_fit"),
+        CheckConstraint("user_voice_score >= 0 and user_voice_score <= 1", name="ck_m11c_score_user_voice"),
+        CheckConstraint("task_group_fit_score >= 0 and task_group_fit_score <= 1", name="ck_m11c_score_task_group"),
+        CheckConstraint("claim_alignment_score >= 0 and claim_alignment_score <= 1", name="ck_m11c_score_claim"),
+        CheckConstraint("param_capability_score >= 0 and param_capability_score <= 1", name="ck_m11c_score_param"),
+        CheckConstraint("market_validation_score >= 0 and market_validation_score <= 1", name="ck_m11c_score_market_validation"),
+        CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_m11c_score_confidence"),
+        Index("ix_core3_m11c_score_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11c_score_sku", "project_id", "category_code", "batch_id", "sku_code"),
+        Index("ix_core3_m11c_score_battlefield", "project_id", "category_code", "batch_id", "battlefield_code", "relation_status"),
+        Index("ix_core3_m11c_score_size_price", "size_tier", "price_band_in_size_tier"),
+        Index("ix_core3_m11c_score_breakdown_gin", "score_breakdown_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_score_evidence_gin", "evidence_ids_json", postgresql_using="gin"),
+    )
+
+    score_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11c_tv_value_battlefield_profile_v0.1", index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    battlefield_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    battlefield_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    battlefield_definition: Mapped[str] = mapped_column(Text, nullable=False)
+    relation_status: Mapped[str] = mapped_column(String(80), nullable=False, default="excluded", index=True)
+    value_effect: Mapped[str] = mapped_column(String(80), nullable=False, default="not_applicable", index=True)
+    battlefield_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    market_gate_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    market_pool_fit_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    user_voice_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    task_group_fit_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    claim_alignment_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    param_capability_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    market_validation_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    sentiment_polarity: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    size_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown", index=True)
+    price_band_in_size_tier: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    price_percentile_in_size_tier: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    score_breakdown_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    status_reason_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    result_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3ValueBattlefieldGraphSnapshot(Base, AuditMixin):
+    __tablename__ = "core3_value_battlefield_graph_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11c_graph_current",
+        ),
+        Index("ix_core3_m11c_graph_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11c_graph_graph_gin", "graph_json", postgresql_using="gin"),
+        Index("ix_core3_m11c_graph_coverage_gin", "coverage_summary_json", postgresql_using="gin"),
+    )
+
+    graph_snapshot_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11c_tv_value_battlefield_profile_v0.1", index=True)
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    battlefield_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    graph_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    coverage_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    graph_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
 class Core3SkuBattlefieldClaimCandidate(Base, AuditMixin):
     __tablename__ = "core3_sku_battlefield_claim_candidate"
     __table_args__ = (

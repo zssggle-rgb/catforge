@@ -10,7 +10,7 @@ import argparse
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 from typing import Any, Iterable, Sequence
@@ -28,6 +28,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
 )
 from app.services.core3_real_data.m03b_param_profile_service import (
     M03BTaxonomy,
@@ -37,6 +39,10 @@ from app.services.core3_real_data.m03b_param_profile_service import (
 )
 from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, tv_claim_taxonomy_v0_1
 from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CCommentTaxonomy, tv_comment_fact_taxonomy_v0_1
+from app.services.core3_real_data.m11c_value_battlefield_service import (
+    M11CValueBattlefieldTaxonomy,
+    tv_value_battlefield_taxonomy_v0_1,
+)
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -56,6 +62,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
         "comment_taxonomy_factory": tv_comment_fact_taxonomy_v0_1,
+        "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
+        "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+        "value_battlefield_taxonomy_factory": tv_value_battlefield_taxonomy_v0_1,
     },
     "AC": {
         "label_cn": "空调",
@@ -68,6 +77,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "comment_rule_version": None,
         "comment_taxonomy_version": None,
         "comment_taxonomy_factory": None,
+        "value_battlefield_rule_version": None,
+        "value_battlefield_taxonomy_version": None,
+        "value_battlefield_taxonomy_factory": None,
     },
 }
 
@@ -339,6 +351,44 @@ def main(argv: Sequence[str] | None = None) -> int:
                     analysis_window=args.analysis_window,
                     sku_limit=args.sku_limit,
                 )
+            elif args.command == "value-battlefield-taxonomy":
+                result = query_value_battlefield_taxonomy(
+                    product_category=normalize_product_category_arg(args.product_category),
+                    battlefield_code=args.battlefield_code,
+                    search=args.search,
+                )
+            elif args.command == "sku-value-battlefield":
+                result = query_sku_value_battlefield(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    include_scores=args.include_scores,
+                )
+            elif args.command == "value-battlefield-skus":
+                result = query_value_battlefield_skus(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    battlefield_code=args.battlefield_code,
+                    relation_status=args.relation_status,
+                    query=args.query,
+                    sku_limit=args.sku_limit,
+                )
+            elif args.command == "value-battlefield-graph":
+                result = query_value_battlefield_graph(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -503,6 +553,35 @@ def build_parser() -> argparse.ArgumentParser:
     comparable_pools.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
     comparable_pools.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of candidate SKU codes to include per pool; 0 means all.")
     add_format_arg(comparable_pools)
+
+    value_taxonomy = subparsers.add_parser("value-battlefield-taxonomy", help="Query a product category value battlefield taxonomy.")
+    add_product_category_arg(value_taxonomy, default="tv", allow_auto=False)
+    value_taxonomy.add_argument("--battlefield-code", help="Filter by battlefield code.")
+    value_taxonomy.add_argument("--search", help="Search code/name/tasks/groups/claims/params.")
+    add_format_arg(value_taxonomy)
+
+    value_profile = subparsers.add_parser("sku-value-battlefield", help="Query one SKU/model value battlefield profile.")
+    add_common_args(value_profile)
+    add_product_category_arg(value_profile)
+    value_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    value_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    value_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
+    value_profile.add_argument("--include-scores", action="store_true", help="Include all SKU x battlefield score rows.")
+    add_format_arg(value_profile)
+
+    value_skus = subparsers.add_parser("value-battlefield-skus", help="Query SKUs covered by one value battlefield.")
+    add_common_args(value_skus)
+    add_product_category_arg(value_skus, default="tv", allow_auto=False)
+    value_skus.add_argument("--battlefield-code", help="Battlefield code, such as BF_LARGE_SCREEN_VALUE_UPGRADE.")
+    value_skus.add_argument("--relation-status", choices=("all", "primary_battlefield", "secondary_battlefield", "opportunity_battlefield", "brand_claimed_battlefield", "user_observed_battlefield", "drag_factor_battlefield"), default="all")
+    value_skus.add_argument("--query", help="Natural battlefield query text.")
+    value_skus.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    add_format_arg(value_skus)
+
+    value_graph = subparsers.add_parser("value-battlefield-graph", help="Query the latest value battlefield graph snapshot.")
+    add_common_args(value_graph)
+    add_product_category_arg(value_graph, default="tv", allow_auto=False)
+    add_format_arg(value_graph)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
     add_common_args(ask)
@@ -1538,6 +1617,275 @@ def query_comparable_pools(
     }
 
 
+def query_value_battlefield_taxonomy(
+    *,
+    product_category: str,
+    battlefield_code: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy_factory = config.get("value_battlefield_taxonomy_factory")
+    if taxonomy_factory is None:
+        raise CatForgeInsightError(f"{config['label_cn']}价值战场 taxonomy 尚未发布。")
+    taxonomy: M11CValueBattlefieldTaxonomy = taxonomy_factory()
+    search_norm = normalize_token(search)
+    battlefield_code_norm = str(battlefield_code or "").strip().upper()
+    rows = []
+    for battlefield in taxonomy.battlefields:
+        haystack = normalize_token(
+            " ".join(
+                [
+                    battlefield.battlefield_code,
+                    battlefield.battlefield_name,
+                    battlefield.definition,
+                    " ".join(battlefield.allowed_size_tiers),
+                    " ".join(battlefield.allowed_price_bands),
+                    " ".join(battlefield.primary_task_codes),
+                    " ".join(battlefield.primary_target_group_codes),
+                    " ".join(battlefield.claim_codes),
+                    " ".join(battlefield.param_codes),
+                    " ".join(battlefield.comment_subdimension_codes),
+                ]
+            )
+        )
+        if battlefield_code_norm and battlefield.battlefield_code != battlefield_code_norm:
+            continue
+        if search_norm and search_norm not in haystack:
+            continue
+        rows.append(
+            {
+                "battlefield_code": battlefield.battlefield_code,
+                "battlefield_name": battlefield.battlefield_name,
+                "definition": battlefield.definition,
+                "market_gate": {
+                    "size_tiers": list(battlefield.allowed_size_tiers),
+                    "price_bands": list(battlefield.allowed_price_bands),
+                    "adjacent_size_tiers": list(battlefield.adjacent_size_tiers),
+                    "adjacent_price_bands": list(battlefield.adjacent_price_bands),
+                },
+                "primary_task_codes": list(battlefield.primary_task_codes),
+                "secondary_task_codes": list(battlefield.secondary_task_codes),
+                "primary_target_group_codes": list(battlefield.primary_target_group_codes),
+                "comment_subdimension_codes": list(battlefield.comment_subdimension_codes),
+                "claim_codes": list(battlefield.claim_codes),
+                "param_codes": list(battlefield.param_codes),
+            }
+        )
+    return {
+        "status": "ok",
+        "product_category": taxonomy.product_category,
+        "product_category_label_cn": taxonomy.product_category_label_cn,
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "battlefield_count": len(rows),
+        "total_battlefield_count": len(taxonomy.battlefields),
+        "battlefields": rows,
+    }
+
+
+def query_sku_value_battlefield(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    include_scores: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    resolved_batch_id = resolve_value_battlefield_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["value_battlefield_rule_version"],
+    )
+    profile = find_sku_value_battlefield_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=config["value_battlefield_rule_version"],
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的价值战场画像。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+        }
+    scores = list_sku_value_battlefield_scores(db, profile) if include_scores else []
+    result = {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": profile.rule_version,
+        "taxonomy_version": profile.taxonomy_version,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "market_position": {
+            "size_tier": profile.size_tier,
+            "price_band_in_size_tier": profile.price_band_in_size_tier,
+            "price_percentile_in_size_tier": decimal_to_float(profile.price_percentile_in_size_tier),
+        },
+        "primary_battlefield_code": profile.primary_battlefield_code,
+        "primary_relation_status": profile.primary_relation_status,
+        "secondary_battlefield_codes": profile.secondary_battlefield_codes_json or [],
+        "opportunity_battlefield_codes": profile.opportunity_battlefield_codes_json or [],
+        "drag_factor_battlefield_codes": profile.drag_factor_battlefield_codes_json or [],
+        "battlefield_summary": profile.battlefield_summary_json or {},
+        "quality": {
+            "review_required": profile.review_required,
+            "review_status": profile.review_status,
+            "review_reason": profile.review_reason_json or {},
+            "confidence": decimal_to_float(profile.confidence),
+        },
+        "evidence_id_count": len(profile.evidence_ids_json or []),
+        "profile_hash": profile.profile_hash,
+    }
+    if include_scores:
+        result["scores"] = [value_battlefield_score_payload(row) for row in scores]
+    return result
+
+
+def query_value_battlefield_skus(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    battlefield_code: str | None = None,
+    relation_status: str = "all",
+    query: str | None = None,
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy_factory = config.get("value_battlefield_taxonomy_factory")
+    if taxonomy_factory is None:
+        raise CatForgeInsightError(f"{config['label_cn']}价值战场 taxonomy 尚未发布。")
+    taxonomy: M11CValueBattlefieldTaxonomy = taxonomy_factory()
+    resolved_code = resolve_value_battlefield_code(taxonomy, battlefield_code=battlefield_code, query=query)
+    resolved_batch_id = resolve_value_battlefield_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["value_battlefield_rule_version"],
+    )
+    stmt = (
+        select(entities.Core3SkuValueBattlefieldScore)
+        .where(entities.Core3SkuValueBattlefieldScore.project_id == project_id)
+        .where(entities.Core3SkuValueBattlefieldScore.category_code == category_code)
+        .where(entities.Core3SkuValueBattlefieldScore.batch_id == resolved_batch_id)
+        .where(entities.Core3SkuValueBattlefieldScore.rule_version == config["value_battlefield_rule_version"])
+        .where(entities.Core3SkuValueBattlefieldScore.taxonomy_version == taxonomy.taxonomy_version)
+        .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
+        .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == resolved_code)
+        .where(entities.Core3SkuValueBattlefieldScore.relation_status != "excluded")
+        .order_by(
+            entities.Core3SkuValueBattlefieldScore.battlefield_score.desc(),
+            entities.Core3SkuValueBattlefieldScore.sku_code,
+        )
+    )
+    if relation_status != "all":
+        stmt = stmt.where(entities.Core3SkuValueBattlefieldScore.relation_status == relation_status)
+    rows = list(db.execute(stmt).scalars())
+    visible = rows if sku_limit == 0 else rows[: max(sku_limit, 0)]
+    status_counts = Counter(row.relation_status for row in rows)
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "rule_version": config["value_battlefield_rule_version"],
+        "battlefield_code": resolved_code,
+        "battlefield_name": taxonomy.battlefields_by_code[resolved_code].battlefield_name,
+        "relation_status": relation_status,
+        "sku_count": len(rows),
+        "status_counts": dict(sorted(status_counts.items())),
+        "sku_codes": [row.sku_code for row in visible],
+        "sku_codes_returned": len(visible),
+        "sku_codes_truncated": sku_limit != 0 and len(rows) > len(visible),
+        "skus": [value_battlefield_score_payload(row) for row in visible],
+    }
+
+
+def query_value_battlefield_graph(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    resolved_batch_id = resolve_value_battlefield_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["value_battlefield_rule_version"],
+    )
+    row = db.execute(
+        select(entities.Core3ValueBattlefieldGraphSnapshot)
+        .where(entities.Core3ValueBattlefieldGraphSnapshot.project_id == project_id)
+        .where(entities.Core3ValueBattlefieldGraphSnapshot.category_code == category_code)
+        .where(entities.Core3ValueBattlefieldGraphSnapshot.batch_id == resolved_batch_id)
+        .where(entities.Core3ValueBattlefieldGraphSnapshot.rule_version == config["value_battlefield_rule_version"])
+        .where(entities.Core3ValueBattlefieldGraphSnapshot.is_current.is_(True))
+        .order_by(entities.Core3ValueBattlefieldGraphSnapshot.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if row is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到价值战场图谱，请先执行 run-value-battlefield。",
+            "batch_id": resolved_batch_id,
+        }
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "taxonomy_version": row.taxonomy_version,
+        "rule_version": row.rule_version,
+        "node_count": row.node_count,
+        "edge_count": row.edge_count,
+        "battlefield_count": row.battlefield_count,
+        "sku_count": row.sku_count,
+        "coverage_summary": row.coverage_summary_json or {},
+        "graph": row.graph_json or {},
+        "graph_hash": row.graph_hash,
+    }
+
+
 def answer_natural_language(
     db: Session,
     *,
@@ -1551,6 +1899,51 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if should_route_to_value_battlefield_query(question, normalized):
+        if any(word in question for word in ("标准战场", "战场预设", "价值战场预设", "战场 taxonomy", "战场体系", "战场分类")):
+            result = query_value_battlefield_taxonomy(
+                product_category=resolved_product_category,
+                battlefield_code=None,
+                search=None,
+            )
+            result["routed_command"] = "value-battlefield-taxonomy"
+            return result
+        if "图谱" in question:
+            result = query_value_battlefield_graph(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+            )
+            result["routed_command"] = "value-battlefield-graph"
+            return result
+        if should_route_to_value_battlefield_coverage(question, normalized):
+            result = query_value_battlefield_skus(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                battlefield_code=None,
+                relation_status=value_battlefield_relation_from_question(question),
+                query=question,
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "value-battlefield-skus"
+            return result
+        result = query_sku_value_battlefield(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            query=extract_sku_or_model_query(question) or question,
+            include_scores=output_format == "json",
+        )
+        result["routed_command"] = "sku-value-battlefield"
+        result["question"] = question
+        return result
     if should_route_to_comment_query(question, normalized):
         if any(word in question for word in ("评论维度", "评论事实维度", "标准评论", "评论体系", "评论分类")):
             result = query_comment_taxonomy(
@@ -1812,6 +2205,32 @@ def resolve_market_batch_id(
     return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=CORE3_M07_RULE_VERSION)
 
 
+def resolve_value_battlefield_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3SkuValueBattlefieldProfile.batch_id)
+            .where(entities.Core3SkuValueBattlefieldProfile.project_id == project_id)
+            .where(entities.Core3SkuValueBattlefieldProfile.category_code == category_code)
+            .where(entities.Core3SkuValueBattlefieldProfile.rule_version == rule_version)
+            .where(entities.Core3SkuValueBattlefieldProfile.is_current.is_(True))
+            .order_by(entities.Core3SkuValueBattlefieldProfile.created_at.desc(), entities.Core3SkuValueBattlefieldProfile.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
 def find_sku_profile(
     db: Session,
     *,
@@ -1968,6 +2387,136 @@ def find_sku_comment_profile(
     if len(exact) == 1:
         return exact[0]
     return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
+def find_sku_value_battlefield_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+) -> entities.Core3SkuValueBattlefieldProfile | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 价值战场画像需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3SkuValueBattlefieldProfile.project_id == project_id,
+        entities.Core3SkuValueBattlefieldProfile.category_code == category_code,
+        entities.Core3SkuValueBattlefieldProfile.batch_id == batch_id,
+        entities.Core3SkuValueBattlefieldProfile.rule_version == rule_version,
+        entities.Core3SkuValueBattlefieldProfile.is_current.is_(True),
+    ]
+    if sku_code:
+        filters.append(func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code) == query_norm,
+                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name) == query_norm,
+                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3SkuValueBattlefieldProfile)
+            .where(*filters)
+            .order_by(entities.Core3SkuValueBattlefieldProfile.sku_code)
+            .limit(11)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    if len(exact) == 1:
+        return exact[0]
+    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
+def list_sku_value_battlefield_scores(
+    db: Session,
+    profile: entities.Core3SkuValueBattlefieldProfile,
+) -> list[entities.Core3SkuValueBattlefieldScore]:
+    return list(
+        db.execute(
+            select(entities.Core3SkuValueBattlefieldScore)
+            .where(entities.Core3SkuValueBattlefieldScore.project_id == profile.project_id)
+            .where(entities.Core3SkuValueBattlefieldScore.category_code == profile.category_code)
+            .where(entities.Core3SkuValueBattlefieldScore.batch_id == profile.batch_id)
+            .where(entities.Core3SkuValueBattlefieldScore.sku_code == profile.sku_code)
+            .where(entities.Core3SkuValueBattlefieldScore.rule_version == profile.rule_version)
+            .where(entities.Core3SkuValueBattlefieldScore.taxonomy_version == profile.taxonomy_version)
+            .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
+            .order_by(
+                entities.Core3SkuValueBattlefieldScore.relation_status,
+                entities.Core3SkuValueBattlefieldScore.battlefield_score.desc(),
+            )
+        ).scalars()
+    )
+
+
+def value_battlefield_score_payload(row: entities.Core3SkuValueBattlefieldScore) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "model_name": row.model_name,
+        "brand_name": row.brand_name,
+        "battlefield_code": row.battlefield_code,
+        "battlefield_name": row.battlefield_name,
+        "relation_status": row.relation_status,
+        "value_effect": row.value_effect,
+        "battlefield_score": decimal_to_float(row.battlefield_score),
+        "market_gate_status": row.market_gate_status,
+        "size_tier": row.size_tier,
+        "price_band_in_size_tier": row.price_band_in_size_tier,
+        "user_voice_score": decimal_to_float(row.user_voice_score),
+        "task_group_fit_score": decimal_to_float(row.task_group_fit_score),
+        "claim_alignment_score": decimal_to_float(row.claim_alignment_score),
+        "param_capability_score": decimal_to_float(row.param_capability_score),
+        "market_validation_score": decimal_to_float(row.market_validation_score),
+        "sentiment_polarity": row.sentiment_polarity,
+        "status_reason_cn": row.status_reason_cn,
+        "score_breakdown": row.score_breakdown_json or {},
+        "review_required": row.review_required,
+        "confidence": decimal_to_float(row.confidence),
+    }
+
+
+def resolve_value_battlefield_code(
+    taxonomy: M11CValueBattlefieldTaxonomy,
+    *,
+    battlefield_code: str | None,
+    query: str | None,
+) -> str:
+    if battlefield_code:
+        normalized_code = battlefield_code.strip().upper()
+        if normalized_code in taxonomy.battlefields_by_code:
+            return normalized_code
+        raise CatForgeInsightError(f"未知价值战场 code：{battlefield_code}")
+    query_norm = normalize_token(query)
+    matches = [
+        item
+        for item in taxonomy.battlefields
+        if normalize_token(item.battlefield_code) in query_norm or normalize_token(item.battlefield_name) in query_norm
+    ]
+    if len(matches) == 1:
+        return matches[0].battlefield_code
+    if len(matches) > 1:
+        raise CatForgeInsightError("自然语言匹配到多个价值战场，请补充 battlefield code。")
+    for item in taxonomy.battlefields:
+        tokens = set(extract_match_tokens(query or ""))
+        haystack = normalize_token(" ".join([item.battlefield_name, item.definition, " ".join(item.primary_task_codes), " ".join(item.primary_target_group_codes)]))
+        if any(normalize_token(token) in haystack for token in tokens):
+            return item.battlefield_code
+    raise CatForgeInsightError("没有识别出要查询的价值战场，请提供 --battlefield-code。")
 
 
 def find_sku_market_profile(
@@ -2516,6 +3065,33 @@ def sample_status_from_count(count: int) -> str:
     if count > 0:
         return "insufficient"
     return "unknown"
+
+
+def should_route_to_value_battlefield_query(question: str, normalized: str) -> bool:
+    return "价值战场" in question or "战场图谱" in question or "战场预设" in question or "battlefield" in normalized
+
+
+def should_route_to_value_battlefield_coverage(question: str, normalized: str) -> bool:
+    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+        return True
+    return any(token in normalized for token in ("拖后腿", "机会战场", "主战场sku", "辅战场sku"))
+
+
+def value_battlefield_relation_from_question(question: str) -> str:
+    normalized = normalize_token(question)
+    if "拖后腿" in normalized or "负向" in normalized:
+        return "drag_factor_battlefield"
+    if "主战场" in normalized:
+        return "primary_battlefield"
+    if "辅战场" in normalized:
+        return "secondary_battlefield"
+    if "机会" in normalized:
+        return "opportunity_battlefield"
+    if "厂家" in normalized or "主打" in normalized:
+        return "brand_claimed_battlefield"
+    if "用户观察" in normalized:
+        return "user_observed_battlefield"
+    return "all"
 
 
 def should_route_to_comment_query(question: str, normalized: str) -> bool:

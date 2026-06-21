@@ -1,6 +1,6 @@
 ---
 name: catforge-insight
-description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, market profiles, comparable pools, and coverage using natural language.
+description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, market profiles, comparable pools, comment fact profiles, value battlefield profiles, and coverage using natural language.
 ---
 
 # CatForge Insight Skill
@@ -19,10 +19,16 @@ Use this skill when the user asks about:
 - A SKU/model's comment fact profile, for example "查 100A4F 的评论事实画像", "TV00027354 用户评价事实情况".
 - TV standard comment fact taxonomy, for example "查彩电评论事实维度", "电视评论应该看哪些维度".
 - Comment dimension coverage, for example "品牌力评论覆盖哪些 SKU", "哪些 SKU 评论提到索尼", "游戏用途评论覆盖哪些 SKU".
+- A SKU/model's TV value battlefield profile, for example "查 100A4F 的价值战场", "TV00027354 战场画像".
+- TV value battlefield taxonomy, for example "查彩电价值战场预设", "电视价值战场怎么分".
+- Value battlefield coverage, for example "大屏换新性价比战场有哪些 SKU", "拖后腿战场有哪些 SKU".
+- Value battlefield graph, for example "查彩电价值战场图谱".
 
-Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07 if the user asks for implementation details.
+Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", "价值战场画像", "价值战场预设", "价值战场图谱", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07/M11C if the user asks for implementation details.
 
 M05C-B, sometimes called `m05b` in business discussion, is the LLM-based comment profile generation stage. This skill is M05C-C read-only query and never calls an LLM.
+
+M11C is the deterministic TV value battlefield profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, and M07 `full_observed_window` market profiles. It uses M03B's five size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. This skill only queries M11C outputs and never writes data.
 
 ## Working Directory
 
@@ -98,6 +104,22 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "品牌力评论覆盖哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的价值战场" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电价值战场预设" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "大屏换新性价比战场有哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电价值战场图谱" --format json
 ```
 
 ## Stable Atomic Commands
@@ -214,6 +236,30 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-dimension-coverage --coverage-type competitor --query 索尼 --sku-limit 100 --format json
 ```
 
+Query one SKU/model's value battlefield profile:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-value-battlefield --query 100A4F --include-scores --format json
+```
+
+Query TV value battlefield taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category tv --format json
+```
+
+Query value battlefield SKU coverage:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-skus --query "大屏换新性价比战场有哪些 SKU" --sku-limit 100 --format json
+```
+
+Query value battlefield graph:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-graph --product-category tv --format json
+```
+
 ## Response Rules
 
 For SKU parameter profile results, summarize:
@@ -290,4 +336,18 @@ For comment taxonomy results, summarize taxonomy version, total dimension/subdim
 
 For comment dimension coverage results, summarize coverage type/key, SKU count, polarity counts, returned SKU examples, and evidence examples. Brand-power signals must not be mixed with competitor mentions.
 
-If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding parameter or claim profile job has run for that batch.
+For SKU value battlefield profile results, summarize:
+
+- SKU code, model name, and brand.
+- Size tier and price band within that size tier.
+- Primary value battlefield, secondary battlefields, opportunity battlefields, and drag-factor battlefields.
+- Whether each important battlefield is supported by user comments, seller claims, parameters, and market gate.
+- No-primary reason if no primary battlefield is established.
+
+For value battlefield taxonomy results, summarize taxonomy version and the relevant battlefield definitions, including size-tier gate, price-band gate, task codes, target group codes, comment subdimensions, claim codes, and parameter codes.
+
+For value battlefield SKU coverage results, summarize battlefield name/code, relation status filter, SKU count, returned SKU examples, and whether the list is truncated.
+
+For value battlefield graph results, summarize graph snapshot id, batch id, battlefield count, SKU count, edge count, and top coverage distribution.
+
+If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding generation job has run for that batch.

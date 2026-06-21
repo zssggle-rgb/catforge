@@ -1,6 +1,6 @@
 # CatForge Insight CLI and Claude Skill Manual
 
-This manual documents the read-only insight interface for parameter profiles, claim fact profiles, market profiles, and comment fact profiles.
+This manual documents the read-only insight interface for parameter profiles, claim fact profiles, market profiles, comment fact profiles, and value battlefield profiles.
 
 ## Purpose
 
@@ -18,6 +18,10 @@ This manual documents the read-only insight interface for parameter profiles, cl
 10. One SKU/model's TV comment fact profile.
 11. The TV standard comment fact taxonomy.
 12. SKU coverage for a comment fact dimension, audience/use/brand/competitor signal, parameter support, or claim support.
+13. One SKU/model's TV value battlefield profile.
+14. The TV standard value battlefield taxonomy.
+15. SKU coverage for a value battlefield and relation status.
+16. The latest TV value battlefield graph snapshot.
 
 It does not generate or mutate data. It reads M03B outputs from:
 
@@ -48,6 +52,14 @@ It reads M05C-B outputs from:
 - `core3_comment_fact_review_issue`
 
 M05C-B, also called `m05b` in business discussion, is the LLM-based generation stage. `catforge_insight` is M05C-C read-only query and never calls an LLM.
+
+It reads M11C outputs from:
+
+- `core3_sku_value_battlefield_profile`
+- `core3_sku_value_battlefield_score`
+- `core3_value_battlefield_graph_snapshot`
+
+M11C value battlefield profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices.
 
 Current M07 query note: the updated M07 design adds business absolute price buckets and `core3_market_bucket_coverage`. Until that service/table implementation is complete, `market-bucket-coverage` derives coverage from current M07 profile fields: `price_band_category`, `size_segment`, and their cross bucket.
 
@@ -88,6 +100,10 @@ python -m app.cli.catforge_insight ask "查 100A4F 的评论事实画像" --form
 python -m app.cli.catforge_insight ask "查彩电评论事实维度" --format json
 python -m app.cli.catforge_insight ask "品牌力评论覆盖哪些 SKU" --sku-limit 100 --format json
 python -m app.cli.catforge_insight ask "哪些 SKU 评论里提到索尼" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的价值战场" --format json
+python -m app.cli.catforge_insight ask "查彩电价值战场预设" --format json
+python -m app.cli.catforge_insight ask "大屏换新性价比战场有哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查彩电价值战场图谱" --format json
 ```
 
 The router is deterministic and only maps common user wording to one of the atomic commands.
@@ -281,6 +297,62 @@ Output includes:
 - SKU count and positive/negative/neutral counts.
 - SKU list and evidence examples, limited by `--sku-limit`.
 - Brand-power signals must not be mixed with competitor mentions.
+
+### SKU value battlefield profile
+
+```bash
+python -m app.cli.catforge_insight sku-value-battlefield --query 100A4F --include-scores --format json
+python -m app.cli.catforge_insight sku-value-battlefield --sku-code TV00027354 --format json
+```
+
+Output includes:
+
+- SKU code, model name, and brand name.
+- M03B five-tier size position and M11C price band within that size tier.
+- Primary value battlefield, secondary battlefields, opportunity battlefields, and drag-factor battlefields.
+- No-primary reason when no primary battlefield is established.
+- Optional SKU x battlefield score rows when `--include-scores` is used, including relation status, value effect, market gate, user voice score, claim score, parameter score, and evidence ids.
+
+### Value battlefield taxonomy
+
+```bash
+python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category tv --format json
+python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category tv --search 大屏 --format json
+python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category tv --battlefield-code BF_LARGE_SCREEN_VALUE_UPGRADE --format json
+```
+
+Output includes:
+
+- Value battlefield taxonomy version.
+- Battlefield code, name, definition, size-tier gate, price-band gate, adjacent gates, task codes, target-group codes, comment subdimensions, claim codes, and parameter codes.
+- The 12 confirmed TV value battlefields.
+
+### Value battlefield SKU coverage
+
+```bash
+python -m app.cli.catforge_insight value-battlefield-skus --battlefield-code BF_LARGE_SCREEN_VALUE_UPGRADE --sku-limit 100 --format json
+python -m app.cli.catforge_insight value-battlefield-skus --query "大屏换新性价比战场有哪些 SKU" --relation-status primary_battlefield --sku-limit 100 --format json
+python -m app.cli.catforge_insight value-battlefield-skus --query "拖后腿战场有哪些 SKU" --relation-status drag_factor_battlefield --sku-limit 100 --format json
+```
+
+Output includes:
+
+- Battlefield code, battlefield name, batch id, taxonomy version, and rule version.
+- Relation status filter.
+- SKU count and relation status counts.
+- SKU list with model name, brand name, score, value effect, size tier, price band, and status reason.
+
+### Value battlefield graph
+
+```bash
+python -m app.cli.catforge_insight value-battlefield-graph --product-category tv --format json
+```
+
+Output includes:
+
+- Latest graph snapshot id, batch id, taxonomy version, and rule version.
+- Battlefield node count, SKU node count, edge count, and coverage summary.
+- Top SKUs, primary SKUs, secondary SKUs, opportunity SKUs, and drag-factor SKUs for each battlefield.
 
 ## Claude Code Skill
 
