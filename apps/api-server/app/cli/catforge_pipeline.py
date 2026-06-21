@@ -351,6 +351,7 @@ def ensure_m07_cli_run_records(
     pipeline_run.input_watermark_json = {"batch_id": batch_id}
     pipeline_run.output_summary_json = {}
     pipeline_run.quality_summary_json = {}
+    db.flush()
 
     module_run = db.get(entities.Core3V2ModuleRun, module_run_id)
     if module_run is None:
