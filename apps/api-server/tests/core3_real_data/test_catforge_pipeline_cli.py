@@ -90,3 +90,57 @@ def test_pipeline_cli_natural_language_runs_market_profile(monkeypatch):
     assert module_run is not None
     assert module_run.status == Core3RunStatus.SUCCESS.value
     assert module_run.output_count == 4 * len(M07_ANALYSIS_WINDOWS)
+
+
+def test_pipeline_cli_runs_market_profile_in_sku_chunks(monkeypatch):
+    session = make_session()
+    captured_calls = []
+
+    class FakeMarketProfileRunner:
+        def __init__(self, db):
+            self.db = db
+
+        def run_batch(self, **kwargs):
+            captured_calls.append(kwargs)
+
+            class Result:
+                status = Core3RunStatus.SUCCESS
+                input_count = 2
+                output_count = 4
+                changed_input_count = 4
+                warnings = []
+                review_issues = []
+                downstream_impacts = []
+                summary_json = {
+                    "sku_count": 2,
+                    "processed_sku_count": len(kwargs["sku_scope"]),
+                    "market_profile_count": len(kwargs["sku_scope"]),
+                    "market_signal_count": len(kwargs["sku_scope"]) * 2,
+                    "comparable_pool_count": len(kwargs["sku_scope"]),
+                    "pool_member_count": len(kwargs["sku_scope"]),
+                    "review_required_count": 0,
+                    "created_output_count": 4,
+                    "updated_output_count": 0,
+                    "reused_output_count": 0,
+                    "analysis_windows": list(kwargs["analysis_windows"]),
+                }
+
+            return Result()
+
+    monkeypatch.setattr(catforge_pipeline, "MarketProfileRunner", FakeMarketProfileRunner)
+    monkeypatch.setattr(catforge_pipeline, "resolve_source_batch_id", lambda db, project_id, source_category_code, batch_id: BATCH_ID)
+
+    result = catforge_pipeline.run_market_profile(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id="latest",
+        sku_scope=("TV00027354", "TV00029115", "TV00030000"),
+        analysis_windows=("full_observed_window",),
+        sku_chunk_size=2,
+    )
+
+    assert result["status"] == "ok"
+    assert result["executed_chunk_count"] == 2
+    assert [call["sku_scope"] for call in captured_calls] == [("TV00027354", "TV00029115"), ("TV00030000",)]
+    assert result["summary"]["market_profile_count"] == 3

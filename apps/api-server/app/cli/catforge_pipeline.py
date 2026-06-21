@@ -51,6 +51,7 @@ from app.services.core3_real_data.market_profile_runner import MarketProfileRunn
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
 DEFAULT_CATEGORY_CODE = "TV"
 LATEST_BATCH = "latest"
+DEFAULT_M07_SKU_CHUNK_SIZE = 50
 
 PRODUCT_CATEGORY_CONFIGS = {
     "TV": {
@@ -106,6 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     batch_id=args.batch_id,
                     sku_scope=args.sku_code or (),
                     analysis_windows=args.analysis_window or (),
+                    sku_chunk_size=args.sku_chunk_size,
                 )
             elif args.command == "ask":
                 result = answer_natural_language(
@@ -154,6 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(run_market)
     run_market.add_argument("--analysis-window", action="append", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"), help="Analysis window to run. Repeat for multiple windows. Default runs all M07 windows.")
     run_market.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_market.add_argument("--sku-chunk-size", type=int, default=DEFAULT_M07_SKU_CHUNK_SIZE, help="Number of SKUs per M07 execution chunk. Default keeps 205 memory below the API container limit.")
     add_format_arg(run_market)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language execution request.")
@@ -243,7 +246,10 @@ def run_market_profile(
     batch_id: str,
     sku_scope: Sequence[str] = (),
     analysis_windows: Sequence[str] = (),
+    sku_chunk_size: int = DEFAULT_M07_SKU_CHUNK_SIZE,
 ) -> dict[str, Any]:
+    if sku_chunk_size <= 0:
+        raise CatForgePipelineError("M07 SKU 分批大小必须大于 0。")
     resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
     effective_sku_scope = tuple(sku_scope) or tuple(list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, "TV"))
     if not effective_sku_scope:
@@ -256,6 +262,7 @@ def run_market_profile(
         batch_id=resolved_batch_id,
         sku_scope=effective_sku_scope,
         analysis_windows=analysis_window_values,
+        sku_chunk_size=sku_chunk_size,
     )
     db.commit()
     module_result = run_market_profile_windows(
@@ -267,6 +274,7 @@ def run_market_profile(
         module_run_id=module_run_id,
         sku_scope=effective_sku_scope,
         analysis_windows=analysis_window_values,
+        sku_chunk_size=sku_chunk_size,
     )
     status_value = enum_value(module_result.status)
     if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
@@ -288,6 +296,8 @@ def run_market_profile(
         "sku_scope": list(sku_scope),
         "effective_sku_scope_count": len(effective_sku_scope),
         "sku_scope_mode": "explicit" if sku_scope else "tv_prefix_default",
+        "sku_chunk_size": sku_chunk_size,
+        "executed_chunk_count": module_result.summary_json.get("executed_chunk_count") if isinstance(module_result.summary_json, dict) else None,
         "analysis_windows": list(analysis_windows) or "all",
         "executed_analysis_windows": list(analysis_window_values),
         "rule_version": CORE3_M07_RULE_VERSION,
@@ -312,27 +322,31 @@ def run_market_profile_windows(
     module_run_id: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
+    sku_chunk_size: int,
 ) -> Any:
     results = []
+    executed_chunk_count = 0
     for analysis_window in analysis_windows:
-        module_result = MarketProfileRunner(db).run_batch(
-            project_id=project_id,
-            category_code=source_category_code,
-            batch_id=batch_id,
-            run_id=run_id,
-            module_run_id=module_run_id,
-            rule_version=CORE3_M07_RULE_VERSION,
-            price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
-            pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
-            sku_scope=sku_scope,
-            analysis_windows=(analysis_window,),
-        )
-        status_value = enum_value(module_result.status)
-        if module_result.status not in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} and status_value not in {"success", "warning"}:
-            return module_result
-        results.append(module_result)
-        db.commit()
-        db.expunge_all()
+        for sku_chunk in chunk_sequence(sku_scope, sku_chunk_size):
+            executed_chunk_count += 1
+            module_result = MarketProfileRunner(db).run_batch(
+                project_id=project_id,
+                category_code=source_category_code,
+                batch_id=batch_id,
+                run_id=run_id,
+                module_run_id=module_run_id,
+                rule_version=CORE3_M07_RULE_VERSION,
+                price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
+                pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
+                sku_scope=sku_chunk,
+                analysis_windows=(analysis_window,),
+            )
+            status_value = enum_value(module_result.status)
+            if module_result.status not in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} and status_value not in {"success", "warning"}:
+                return module_result
+            results.append(module_result)
+            db.commit()
+            db.expunge_all()
     return aggregate_m07_module_results(
         results,
         project_id=project_id,
@@ -341,6 +355,8 @@ def run_market_profile_windows(
         run_id=run_id,
         sku_scope=sku_scope,
         analysis_windows=analysis_windows,
+        sku_chunk_size=sku_chunk_size,
+        executed_chunk_count=executed_chunk_count,
     )
 
 
@@ -353,6 +369,8 @@ def aggregate_m07_module_results(
     run_id: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
+    sku_chunk_size: int,
+    executed_chunk_count: int,
 ) -> Any:
     if not results:
         return SimpleNamespace(
@@ -372,6 +390,8 @@ def aggregate_m07_module_results(
                 "run_id": run_id,
                 "target_sku_codes": list(sku_scope),
                 "analysis_windows": list(analysis_windows),
+                "sku_chunk_size": sku_chunk_size,
+                "executed_chunk_count": executed_chunk_count,
             },
             started_at=cli_now(),
             finished_at=cli_now(),
@@ -387,6 +407,8 @@ def aggregate_m07_module_results(
         run_id=run_id,
         sku_scope=sku_scope,
         analysis_windows=analysis_windows,
+        sku_chunk_size=sku_chunk_size,
+        executed_chunk_count=executed_chunk_count,
     )
     return SimpleNamespace(
         module_code=Core3ModuleCode.M07,
@@ -413,6 +435,8 @@ def aggregate_m07_summary(
     run_id: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
+    sku_chunk_size: int,
+    executed_chunk_count: int,
 ) -> dict[str, Any]:
     count_keys = (
         "market_profile_count",
@@ -433,6 +457,9 @@ def aggregate_m07_summary(
         "analysis_windows": list(analysis_windows),
         "processed_sku_count": len(set(sku_scope)),
         "window_execution_mode": "sequential",
+        "sku_execution_mode": "chunked",
+        "sku_chunk_size": sku_chunk_size,
+        "executed_chunk_count": executed_chunk_count,
         "rule_version": CORE3_M07_RULE_VERSION,
         "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
         "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
@@ -480,6 +507,10 @@ def resolve_m07_analysis_windows(analysis_windows: Sequence[str]) -> tuple[str, 
     return tuple(window.value if hasattr(window, "value") else str(window) for window in M07_ANALYSIS_WINDOWS)
 
 
+def chunk_sequence(values: Sequence[str], chunk_size: int) -> list[tuple[str, ...]]:
+    return [tuple(values[index : index + chunk_size]) for index in range(0, len(values), chunk_size)]
+
+
 def unique_strings(values: Iterable[Any]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -508,6 +539,7 @@ def ensure_m07_cli_run_records(
     batch_id: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
+    sku_chunk_size: int,
 ) -> tuple[str, str]:
     run_id = stable_cli_uuid(
         "m07-pipeline-run",
@@ -547,6 +579,7 @@ def ensure_m07_cli_run_records(
         "sku_count": len(sku_scope),
         "sku_scope": list(sku_scope),
         "analysis_windows": list(analysis_windows) or ["all"],
+        "sku_chunk_size": sku_chunk_size,
     }
     pipeline_run.module_version_json = {Core3ModuleCode.M07.value: CORE3_M07_MODULE_VERSION}
     pipeline_run.seed_version_json = {}

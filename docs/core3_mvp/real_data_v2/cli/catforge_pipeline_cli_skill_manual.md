@@ -64,13 +64,14 @@ python -m app.cli.catforge_pipeline run-param-profile --product-category ac --ba
 python -m app.cli.catforge_pipeline run-claim-profile --product-category tv --batch-id latest --input-source auto --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --format json
 python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --analysis-window full_observed_window --sku-code TV00027354 --format json
+python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --sku-chunk-size 50 --format json
 ```
 
 `--force-rebuild` replaces same business-key outputs when output hashes changed. Use it when source data, taxonomy, or rules have changed.
 
 For `run-claim-profile`, use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when raw selling points are current but M01/M02 have not been rerun.
 
-For `run-market-profile`, omit `--analysis-window` to run all M07 windows. The CLI executes those windows sequentially and commits after each window to keep the 205 memory peak lower than a single all-window in-process run. Use repeated `--analysis-window` or repeated `--sku-code` for scoped reruns. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. M07 currently writes existing market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket fields from the updated M07 design require the follow-up M07 service/table implementation.
+For `run-market-profile`, omit `--analysis-window` to run all M07 windows. The CLI executes windows sequentially and splits TV SKUs into chunks, committing after each chunk to keep the 205 memory peak below the API container limit. The default `--sku-chunk-size` is 50; lower it for safer execution, raise it only after observing memory. Use repeated `--analysis-window` or repeated `--sku-code` for scoped reruns. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. M07 currently writes existing market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket fields from the updated M07 design require the follow-up M07 service/table implementation.
 
 ## Outputs
 
