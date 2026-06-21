@@ -16,7 +16,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -582,6 +582,31 @@ class M04CClaimEvidenceReader(Core3BaseRepository):
 
 
 class M04CClaimProfileRepository(Core3BaseRepository):
+    def delete_outputs(
+        self,
+        *,
+        batch_id: str,
+        taxonomy_version: str,
+        rule_version: str,
+        product_category: str,
+    ) -> None:
+        for model_cls in (
+            entities.Core3ClaimPositionCoverage,
+            entities.Core3SkuClaimDimensionPosition,
+            entities.Core3SkuClaimFact,
+            entities.Core3SkuClaimFactProfile,
+        ):
+            self.db.execute(
+                delete(model_cls)
+                .where(model_cls.project_id == self.project_id)
+                .where(model_cls.category_code == self.category_code.value)
+                .where(model_cls.batch_id == batch_id)
+                .where(model_cls.taxonomy_version == taxonomy_version)
+                .where(model_cls.rule_version == rule_version)
+                .where(model_cls.product_category == product_category)
+            )
+        self.db.flush()
+
     def save_profiles(self, profiles: Sequence[Any], *, replace_on_hash_conflict: bool = False) -> ParamRepositoryWriteResult:
         return self._save_many(
             entities.Core3SkuClaimFactProfile,
@@ -838,6 +863,13 @@ class M04CService:
             input_source=source_used,
         ).build(records, param_profiles)
         repository = M04CClaimProfileRepository(self.context)
+        if force_rebuild:
+            repository.delete_outputs(
+                batch_id=batch_id,
+                taxonomy_version=taxonomy.taxonomy_version,
+                rule_version=rule_version,
+                product_category=taxonomy.product_category,
+            )
         write_results = {
             "sku_claim_profiles": repository.save_profiles(profiles, replace_on_hash_conflict=force_rebuild),
             "claim_facts": repository.save_facts(facts, replace_on_hash_conflict=force_rebuild),

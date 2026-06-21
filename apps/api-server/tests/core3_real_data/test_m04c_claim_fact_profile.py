@@ -174,6 +174,18 @@ def test_m04c_runner_generates_claim_fact_profile_and_service_separation():
     assert service_fact.service_separate_flag is True
     assert service_fact.fact_claim_flag is False
 
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+    assert len(session.execute(select(entities.Core3SkuClaimFactProfile)).scalars().all()) == 1
+    assert len(session.execute(select(entities.Core3SkuClaimFact)).scalars().all()) == result.summary_json["claim_fact_count"]
+
 
 def test_m04c_insight_queries_claim_profile_taxonomy_and_coverage():
     session = make_session()
