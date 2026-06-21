@@ -696,6 +696,7 @@ fingerprint 未变化且历史输出 `is_current=true` 时可跳过。
 ```bash
 python -m app.cli.catforge_pipeline ask "生成彩电评论事实画像" --llm-mode required --format json
 python -m app.cli.catforge_pipeline ask "重跑 TV00030054 的评论画像" --llm-mode required --format json
+python -m app.cli.catforge_pipeline ask "继续跑完彩电评论事实画像" --llm-mode required --comment-parallelism 2 --format json
 python -m app.cli.catforge_pipeline ask "新数据来了，把彩电评论事实准备好" --llm-mode required --format json
 ```
 
@@ -708,7 +709,24 @@ python -m app.cli.catforge_pipeline run-comment-profile \
   --llm-mode required \
   --llm-batch-size 20 \
   --format json
+
+python -m app.cli.catforge_pipeline run-comment-profile-batch \
+  --product-category tv \
+  --batch-id latest \
+  --llm-mode required \
+  --parallelism 2 \
+  --limit 10 \
+  --max-sentences-per-sku 500 \
+  --format json
 ```
+
+`run-comment-profile-batch` 用于 205 全量续跑和加速。执行顺序：
+
+1. 读取 M02 当前批次中有 `comment_sentence` 的 SKU。
+2. 默认跳过已有 current M05C SKU profile，只调度未完成 SKU；如需全量重跑，显式使用 `--rerun-existing --force-rebuild`。
+3. 按 SKU 粒度启动有限并行 worker；每个 worker 只处理一个 SKU，并强制使用 `coverage-mode=skip`。
+4. worker 结束后统一执行一次 `coverage-mode=rebuild-only`，从已落库 comment facts 重建批次级覆盖统计。
+5. 如果某些 SKU 失败，已完成 SKU 保留落库结果，CLI 返回 `error` 并列出失败 SKU；下一次执行可继续跳过已完成 SKU 续跑失败部分。
 
 参数：
 
@@ -721,6 +739,10 @@ python -m app.cli.catforge_pipeline run-comment-profile \
 | `--max-sentences-per-sku` | 每个 SKU 读取的 M02 评论句上限，默认 500 |
 | `--llm-mode` | `required`、`auto` 或 `off`；205 实库验证使用 `required` |
 | `--llm-batch-size` | LLM 句子批次大小 |
+| `--parallelism` | 仅 `run-comment-profile-batch` 使用，SKU worker 并发数；205 建议从 2 开始 |
+| `--limit` | 仅 `run-comment-profile-batch` 使用，本次最多调度多少个待处理 SKU，用于压测 |
+| `--rerun-existing` | 仅 `run-comment-profile-batch` 使用，纳入已有 M05C profile 的 SKU；通常与 `--force-rebuild` 联用 |
+| `--skip-final-coverage` | 仅 `run-comment-profile-batch` 使用，跳过末尾 coverage 重建 |
 | `--force-rebuild` | 允许替换现有 current 结果 |
 | `--format` | `json` 或 `text` |
 

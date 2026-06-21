@@ -7,6 +7,7 @@ that natural-language agents can call without asking users to know module codes.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
 import sys
@@ -45,6 +46,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     Core3ModuleCode,
+    Core3EvidenceStatus,
+    Core3EvidenceType,
     Core3PipelineTriggerType,
     Core3ReleaseGateStatus,
     Core3RunMode,
@@ -74,6 +77,7 @@ COMMENT_COVERAGE_AUTO = "auto"
 COMMENT_COVERAGE_INLINE = "inline"
 COMMENT_COVERAGE_SKIP = "skip"
 COMMENT_COVERAGE_REBUILD_ONLY = "rebuild-only"
+DEFAULT_COMMENT_BATCH_PARALLELISM = 2
 
 PRODUCT_CATEGORY_CONFIGS = {
     "TV": {
@@ -161,6 +165,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
                 )
+            elif args.command == "run-comment-profile-batch":
+                result = run_comment_profile_batch(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    sku_scope=args.sku_code or (),
+                    exclude_sku_scope=args.exclude_sku_code or (),
+                    max_sentences_per_sku=args.max_sentences_per_sku,
+                    llm_mode=args.llm_mode,
+                    llm_batch_size=args.llm_batch_size,
+                    force_rebuild=args.force_rebuild,
+                    parallelism=args.parallelism,
+                    limit=args.limit,
+                    rerun_existing=args.rerun_existing,
+                    rebuild_coverage_at_end=not args.skip_final_coverage,
+                )
             elif args.command == "run-user-task":
                 result = run_user_task(
                     db,
@@ -209,6 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
+                    comment_parallelism=args.comment_parallelism,
+                    comment_batch_limit=args.comment_batch_limit,
+                    rerun_existing_comment=args.rerun_existing_comment,
+                    rebuild_comment_coverage_at_end=not args.skip_comment_final_coverage,
                 )
             else:
                 parser.error("missing command")
@@ -258,6 +284,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_comment.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_comment)
 
+    run_comment_batch = subparsers.add_parser("run-comment-profile-batch", help="Run M05C comment fact profiles by SKU with bounded parallel workers.")
+    add_common_args(run_comment_batch)
+    add_product_category_arg(run_comment_batch, default="tv", allow_auto=False)
+    run_comment_batch.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_comment_batch.add_argument("--exclude-sku-code", action="append", help="Optional SKU to exclude from this batch, useful when another worker is already running it.")
+    run_comment_batch.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU to keep memory and LLM cost bounded.")
+    run_comment_batch.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage for comment semantic extraction. Use required on 205 validation to ensure the model is called.")
+    run_comment_batch.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Number of comment sentences per LLM request.")
+    run_comment_batch.add_argument("--parallelism", type=int, default=DEFAULT_COMMENT_BATCH_PARALLELISM, help="Number of SKU workers to run concurrently. Start with 2 on 205 and increase only after observing stability.")
+    run_comment_batch.add_argument("--limit", type=int, help="Maximum number of pending SKUs to schedule in this run. Useful for 205 smoke tests.")
+    run_comment_batch.add_argument("--rerun-existing", action="store_true", help="Include SKUs that already have current M05C profiles. Use with --force-rebuild for full reruns.")
+    run_comment_batch.add_argument("--skip-final-coverage", action="store_true", help="Do not rebuild batch-level M05C coverage after SKU workers finish.")
+    run_comment_batch.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
+    add_format_arg(run_comment_batch)
+
     run_market = subparsers.add_parser("run-market-profile", help="Generate or rerun SKU market profiles and comparable-pool baselines.")
     add_common_args(run_market)
     run_market.add_argument("--analysis-window", action="append", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"), help="Analysis window to run. Repeat for multiple windows. Default runs all M07 windows.")
@@ -298,6 +339,10 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU when routed to comment fact generation.")
     ask.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage when routed to comment fact generation.")
     ask.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Comment sentences per LLM request when routed to comment fact generation.")
+    ask.add_argument("--comment-parallelism", type=int, default=DEFAULT_COMMENT_BATCH_PARALLELISM, help="Parallel SKU worker count when natural language routes to comment batch generation.")
+    ask.add_argument("--comment-batch-limit", type=int, help="Maximum pending SKUs when natural language routes to comment batch generation.")
+    ask.add_argument("--rerun-existing-comment", action="store_true", help="Include existing M05C comment profiles when natural language routes to comment batch generation.")
+    ask.add_argument("--skip-comment-final-coverage", action="store_true", help="Skip final M05C coverage rebuild when natural language routes to comment batch generation.")
     ask.add_argument(
         "--coverage-mode",
         choices=(COMMENT_COVERAGE_AUTO, COMMENT_COVERAGE_INLINE, COMMENT_COVERAGE_SKIP, COMMENT_COVERAGE_REBUILD_ONLY),
@@ -338,6 +383,10 @@ def answer_natural_language(
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
     coverage_mode: str = COMMENT_COVERAGE_AUTO,
+    comment_parallelism: int = DEFAULT_COMMENT_BATCH_PARALLELISM,
+    comment_batch_limit: int | None = None,
+    rerun_existing_comment: bool = False,
+    rebuild_comment_coverage_at_end: bool = True,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
     if should_run_user_task(question):
@@ -384,13 +433,34 @@ def answer_natural_language(
         result["routed_command"] = "run-value-battlefield"
         return result
     if should_run_comment_profile(question):
+        sku_scope = extract_sku_scope(question)
+        if should_run_comment_profile_batch(question) or (not sku_scope and should_continue_unscoped_comment_batch(question)):
+            result = run_comment_profile_batch(
+                db,
+                project_id=project_id,
+                source_category_code=source_category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                sku_scope=sku_scope,
+                max_sentences_per_sku=max_sentences_per_sku,
+                llm_mode=llm_mode,
+                llm_batch_size=llm_batch_size,
+                force_rebuild=force_rebuild,
+                parallelism=comment_parallelism,
+                limit=comment_batch_limit,
+                rerun_existing=rerun_existing_comment,
+                rebuild_coverage_at_end=rebuild_comment_coverage_at_end,
+            )
+            result["question"] = question
+            result["routed_command"] = "run-comment-profile-batch"
+            return result
         result = run_comment_profile(
             db,
             project_id=project_id,
             source_category_code=source_category_code,
             batch_id=batch_id,
             product_category=resolved_product_category,
-            sku_scope=extract_sku_scope(question),
+            sku_scope=sku_scope,
             max_sentences_per_sku=max_sentences_per_sku,
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
@@ -686,6 +756,382 @@ def run_comment_profile(
         "warnings": module_result.warnings,
         "summary": module_result.summary_json,
     }
+
+
+def run_comment_profile_batch(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_scope: Sequence[str] = (),
+    exclude_sku_scope: Sequence[str] = (),
+    max_sentences_per_sku: int = 500,
+    llm_mode: str = LLM_MODE_AUTO,
+    llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    force_rebuild: bool = False,
+    parallelism: int = DEFAULT_COMMENT_BATCH_PARALLELISM,
+    limit: int | None = None,
+    rerun_existing: bool = False,
+    rebuild_coverage_at_end: bool = True,
+    session_factory: Any | None = None,
+) -> dict[str, Any]:
+    if max_sentences_per_sku <= 0:
+        raise CatForgePipelineError("M05C 每个 SKU 的评论句子读取上限必须大于 0。")
+    if llm_batch_size <= 0:
+        raise CatForgePipelineError("M05C LLM 批大小必须大于 0。")
+    if parallelism <= 0:
+        raise CatForgePipelineError("M05C 并发 worker 数必须大于 0。")
+    if limit is not None and limit <= 0:
+        raise CatForgePipelineError("M05C 批量执行 limit 必须大于 0。")
+    config = product_category_config(product_category)
+    if not config.get("comment_taxonomy_version") or not config.get("comment_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能生成 SKU 评论事实画像。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    plan = plan_comment_profile_batch_skus(
+        db,
+        project_id=project_id,
+        source_category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        sku_code_prefix=str(config["sku_code_prefix"]),
+        taxonomy_version=str(config["comment_taxonomy_version"]),
+        rule_version=str(config["comment_rule_version"]),
+        sku_scope=sku_scope,
+        exclude_sku_scope=exclude_sku_scope,
+        rerun_existing=rerun_existing,
+        limit=limit,
+    )
+
+    worker_session_factory = session_factory or SessionLocal
+    scheduled_skus = list(plan["scheduled_sku_codes"])
+    sku_results: list[dict[str, Any]] = []
+    if scheduled_skus:
+        db.rollback()
+        if parallelism == 1 or len(scheduled_skus) == 1:
+            for sku_code in scheduled_skus:
+                sku_results.append(
+                    run_comment_profile_batch_worker(
+                        session_factory=worker_session_factory,
+                        project_id=project_id,
+                        source_category_code=source_category_code,
+                        batch_id=resolved_batch_id,
+                        product_category=product_category,
+                        sku_code=sku_code,
+                        taxonomy_version=str(config["comment_taxonomy_version"]),
+                        rule_version=str(config["comment_rule_version"]),
+                        max_sentences_per_sku=max_sentences_per_sku,
+                        llm_mode=llm_mode,
+                        llm_batch_size=llm_batch_size,
+                        force_rebuild=force_rebuild,
+                        rerun_existing=rerun_existing,
+                    )
+                )
+        else:
+            with ThreadPoolExecutor(max_workers=min(parallelism, len(scheduled_skus))) as executor:
+                futures = {
+                    executor.submit(
+                        run_comment_profile_batch_worker,
+                        session_factory=worker_session_factory,
+                        project_id=project_id,
+                        source_category_code=source_category_code,
+                        batch_id=resolved_batch_id,
+                        product_category=product_category,
+                        sku_code=sku_code,
+                        taxonomy_version=str(config["comment_taxonomy_version"]),
+                        rule_version=str(config["comment_rule_version"]),
+                        max_sentences_per_sku=max_sentences_per_sku,
+                        llm_mode=llm_mode,
+                        llm_batch_size=llm_batch_size,
+                        force_rebuild=force_rebuild,
+                        rerun_existing=rerun_existing,
+                    ): sku_code
+                    for sku_code in scheduled_skus
+                }
+                for future in as_completed(futures):
+                    try:
+                        sku_results.append(future.result())
+                    except Exception as exc:  # pragma: no cover - defensive; worker already catches expected failures.
+                        sku_results.append(
+                            {
+                                "sku_code": futures[future],
+                                "status": "error",
+                                "module_status": "failed",
+                                "error": str(exc),
+                            }
+                        )
+        sku_results.sort(key=lambda item: str(item.get("sku_code") or ""))
+
+    completed_results = [item for item in sku_results if item.get("status") in {"ok", "warning"}]
+    failed_results = [item for item in sku_results if item.get("status") == "error"]
+    skipped_results = [item for item in sku_results if item.get("status") == "skipped"]
+    final_coverage_result: dict[str, Any] | None = None
+    should_rebuild_coverage = rebuild_coverage_at_end and (
+        bool(completed_results)
+        or bool(plan["existing_profile_sku_codes"])
+    )
+    if should_rebuild_coverage:
+        final_coverage_result = run_comment_profile(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=resolved_batch_id,
+            product_category=product_category,
+            max_sentences_per_sku=max_sentences_per_sku,
+            llm_mode=LLM_MODE_OFF,
+            llm_batch_size=llm_batch_size,
+            force_rebuild=True,
+            coverage_mode=COMMENT_COVERAGE_REBUILD_ONLY,
+        )
+
+    child_warnings = [
+        warning
+        for item in completed_results
+        for warning in (item.get("warnings") or [])
+        if warning
+    ]
+    coverage_status = final_coverage_result.get("status") if final_coverage_result else None
+    has_coverage_error = coverage_status == "error"
+    status = "error" if failed_results or has_coverage_error else "warning" if child_warnings or skipped_results else "ok"
+    module_status = "failed" if status == "error" else "warning" if status == "warning" else "success"
+    summary = {
+        "comment_profile_batch": True,
+        "batch_id": resolved_batch_id,
+        "product_category": product_category,
+        "taxonomy_version": config["comment_taxonomy_version"],
+        "rule_version": config["comment_rule_version"],
+        "parallelism": parallelism,
+        "effective_parallelism": min(parallelism, len(scheduled_skus)) if scheduled_skus else 0,
+        "limit": limit,
+        "rerun_existing": rerun_existing,
+        "force_rebuild": force_rebuild,
+        "max_sentences_per_sku": max_sentences_per_sku,
+        "llm_mode": llm_mode,
+        "llm_batch_size": llm_batch_size,
+        "candidate_sku_count": len(plan["candidate_sku_codes"]),
+        "existing_profile_sku_count": len(plan["existing_profile_sku_codes"]),
+        "pending_sku_count_before_limit": len(plan["pending_sku_codes_before_limit"]),
+        "scheduled_sku_count": len(scheduled_skus),
+        "completed_sku_count": len(completed_results),
+        "failed_sku_count": len(failed_results),
+        "skipped_sku_count": len(skipped_results),
+        "excluded_sku_count": len(plan["excluded_sku_codes"]),
+        "ignored_requested_sku_count": len(plan["ignored_requested_sku_codes"]),
+        "final_coverage_rebuilt": final_coverage_result is not None,
+        "final_coverage_status": coverage_status,
+        "final_coverage_summary": final_coverage_result.get("summary") if final_coverage_result else None,
+    }
+    return {
+        "status": status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "taxonomy_version": config["comment_taxonomy_version"],
+        "rule_version": config["comment_rule_version"],
+        "module_status": module_status,
+        "input_count": len(scheduled_skus),
+        "output_count": len(completed_results),
+        "warnings": _unique_string_list(child_warnings),
+        "summary": summary,
+        "candidate_sku_codes": plan["candidate_sku_codes"],
+        "pending_sku_codes_before_limit": plan["pending_sku_codes_before_limit"],
+        "scheduled_sku_codes": scheduled_skus,
+        "excluded_sku_codes": plan["excluded_sku_codes"],
+        "ignored_requested_sku_codes": plan["ignored_requested_sku_codes"],
+        "sku_results": sku_results,
+        "failed_sku_results": failed_results,
+        "final_coverage": final_coverage_result,
+    }
+
+
+def run_comment_profile_batch_worker(
+    *,
+    session_factory: Any,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_code: str,
+    taxonomy_version: str,
+    rule_version: str,
+    max_sentences_per_sku: int,
+    llm_mode: str,
+    llm_batch_size: int,
+    force_rebuild: bool,
+    rerun_existing: bool,
+) -> dict[str, Any]:
+    started_at = datetime.now(timezone.utc)
+    try:
+        with session_factory() as worker_db:
+            if not rerun_existing and comment_profile_exists(
+                worker_db,
+                project_id=project_id,
+                source_category_code=source_category_code,
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_code=sku_code,
+                taxonomy_version=taxonomy_version,
+                rule_version=rule_version,
+            ):
+                return {
+                    "sku_code": sku_code,
+                    "status": "skipped",
+                    "module_status": "skipped_existing_profile",
+                    "started_at": started_at.isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                }
+            result = run_comment_profile(
+                worker_db,
+                project_id=project_id,
+                source_category_code=source_category_code,
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_scope=(sku_code,),
+                max_sentences_per_sku=max_sentences_per_sku,
+                llm_mode=llm_mode,
+                llm_batch_size=llm_batch_size,
+                force_rebuild=force_rebuild,
+                coverage_mode=COMMENT_COVERAGE_SKIP,
+            )
+            return {
+                "sku_code": sku_code,
+                "status": result.get("status"),
+                "module_status": result.get("module_status"),
+                "input_count": result.get("input_count"),
+                "output_count": result.get("output_count"),
+                "changed_input_count": result.get("changed_input_count"),
+                "warnings": result.get("warnings") or [],
+                "summary": result.get("summary") or {},
+                "started_at": started_at.isoformat(),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception as exc:
+        return {
+            "sku_code": sku_code,
+            "status": "error",
+            "module_status": "failed",
+            "error": str(exc),
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+def plan_comment_profile_batch_skus(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_code_prefix: str,
+    taxonomy_version: str,
+    rule_version: str,
+    sku_scope: Sequence[str] = (),
+    exclude_sku_scope: Sequence[str] = (),
+    rerun_existing: bool = False,
+    limit: int | None = None,
+) -> dict[str, list[str]]:
+    requested_sku_codes = normalize_sku_codes(sku_scope)
+    excluded_sku_codes = normalize_sku_codes(exclude_sku_scope)
+    stmt = (
+        select(entities.Core3EvidenceAtom.sku_code)
+        .where(entities.Core3EvidenceAtom.project_id == project_id)
+        .where(entities.Core3EvidenceAtom.category_code == source_category_code)
+        .where(entities.Core3EvidenceAtom.batch_id == batch_id)
+        .where(entities.Core3EvidenceAtom.is_current.is_(True))
+        .where(entities.Core3EvidenceAtom.evidence_status == Core3EvidenceStatus.CURRENT.value)
+        .where(entities.Core3EvidenceAtom.evidence_type == Core3EvidenceType.COMMENT_SENTENCE.value)
+        .where(entities.Core3EvidenceAtom.sku_code.like(f"{sku_code_prefix}%"))
+        .distinct()
+        .order_by(entities.Core3EvidenceAtom.sku_code)
+    )
+    if requested_sku_codes:
+        stmt = stmt.where(entities.Core3EvidenceAtom.sku_code.in_(tuple(requested_sku_codes)))
+    candidate_sku_codes = [str(row) for row in db.execute(stmt).scalars().all() if row]
+    candidate_sku_codes = [sku for sku in candidate_sku_codes if sku not in set(excluded_sku_codes)]
+    existing_profile_sku_codes = list_existing_comment_profile_skus(
+        db,
+        project_id=project_id,
+        source_category_code=source_category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        taxonomy_version=taxonomy_version,
+        rule_version=rule_version,
+        sku_codes=candidate_sku_codes,
+    )
+    existing_set = set(existing_profile_sku_codes)
+    pending_sku_codes = list(candidate_sku_codes) if rerun_existing else [sku for sku in candidate_sku_codes if sku not in existing_set]
+    pending_before_limit = list(pending_sku_codes)
+    scheduled_sku_codes = pending_sku_codes[:limit] if limit else pending_sku_codes
+    candidate_set = set(candidate_sku_codes)
+    ignored_requested_sku_codes = [sku for sku in requested_sku_codes if sku not in candidate_set and sku not in set(excluded_sku_codes)]
+    return {
+        "candidate_sku_codes": candidate_sku_codes,
+        "existing_profile_sku_codes": existing_profile_sku_codes,
+        "pending_sku_codes_before_limit": pending_before_limit,
+        "scheduled_sku_codes": scheduled_sku_codes,
+        "excluded_sku_codes": excluded_sku_codes,
+        "ignored_requested_sku_codes": ignored_requested_sku_codes,
+    }
+
+
+def list_existing_comment_profile_skus(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    taxonomy_version: str,
+    rule_version: str,
+    sku_codes: Sequence[str],
+) -> list[str]:
+    if not sku_codes:
+        return []
+    stmt = (
+        select(entities.Core3SkuCommentFactProfile.sku_code)
+        .where(entities.Core3SkuCommentFactProfile.project_id == project_id)
+        .where(entities.Core3SkuCommentFactProfile.category_code == source_category_code)
+        .where(entities.Core3SkuCommentFactProfile.batch_id == batch_id)
+        .where(entities.Core3SkuCommentFactProfile.product_category == product_category)
+        .where(entities.Core3SkuCommentFactProfile.taxonomy_version == taxonomy_version)
+        .where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
+        .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
+        .where(entities.Core3SkuCommentFactProfile.sku_code.in_(tuple(sku_codes)))
+        .distinct()
+        .order_by(entities.Core3SkuCommentFactProfile.sku_code)
+    )
+    return [str(row) for row in db.execute(stmt).scalars().all() if row]
+
+
+def comment_profile_exists(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_code: str,
+    taxonomy_version: str,
+    rule_version: str,
+) -> bool:
+    stmt = (
+        select(entities.Core3SkuCommentFactProfile.sku_code)
+        .where(entities.Core3SkuCommentFactProfile.project_id == project_id)
+        .where(entities.Core3SkuCommentFactProfile.category_code == source_category_code)
+        .where(entities.Core3SkuCommentFactProfile.batch_id == batch_id)
+        .where(entities.Core3SkuCommentFactProfile.product_category == product_category)
+        .where(entities.Core3SkuCommentFactProfile.taxonomy_version == taxonomy_version)
+        .where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
+        .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
+        .where(entities.Core3SkuCommentFactProfile.sku_code == sku_code)
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none() is not None
 
 
 def run_market_profile(
@@ -1389,6 +1835,23 @@ def should_run_comment_profile(question: str) -> bool:
     )
 
 
+def should_run_comment_profile_batch(question: str) -> bool:
+    normalized = normalize_token(question)
+    if not should_run_comment_profile(question):
+        return False
+    return any(
+        token in question
+        for token in ("并行", "加速", "批量", "继续跑完", "跑完", "剩余", "未完成", "全量")
+    ) or any(token in normalized for token in ("parallel", "batch", "continue", "resume"))
+
+
+def should_continue_unscoped_comment_batch(question: str) -> bool:
+    normalized = normalize_token(question)
+    return any(token in question for token in ("继续", "续跑", "跑完", "剩余", "未完成")) or any(
+        token in normalized for token in ("continue", "resume")
+    )
+
+
 def should_run_claim_profile(question: str) -> bool:
     normalized = normalize_token(question)
     return "卖点" in question and any(
@@ -1409,6 +1872,22 @@ def should_run_claim_profile(question: str) -> bool:
 
 def extract_sku_scope(question: str) -> list[str]:
     return sorted(set(re.findall(r"\b[A-Z]{1,4}\d{4,}\b", question.upper())))
+
+
+def normalize_sku_codes(values: Sequence[str]) -> list[str]:
+    return sorted({str(value).strip().upper() for value in values if str(value).strip()})
+
+
+def _unique_string_list(values: Iterable[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def extract_battlefield_scope(question: str) -> list[str]:
@@ -1490,10 +1969,14 @@ def render_text(result: dict[str, Any]) -> str:
     summary = result.get("summary") or {}
     is_claim_profile = isinstance(summary, dict) and "claim_fact_count" in summary
     is_comment_profile = isinstance(summary, dict) and "comment_fact_count" in summary
+    is_comment_batch = isinstance(summary, dict) and bool(summary.get("comment_profile_batch"))
     is_market_profile = isinstance(summary, dict) and "market_profile_count" in summary
     is_target_group_profile = isinstance(summary, dict) and "target_group_count" in summary
     is_value_battlefield_profile = isinstance(summary, dict) and "battlefield_count" in summary
-    if is_market_profile:
+    if is_comment_batch:
+        job_name = "SKU 评论事实画像批量并行"
+        input_label = "调度 SKU"
+    elif is_market_profile:
         job_name = "SKU 市场画像"
         input_label = "输入周销量价"
     elif is_target_group_profile:
@@ -1524,7 +2007,19 @@ def render_text(result: dict[str, Any]) -> str:
     if result.get("warnings"):
         lines.append("warnings: " + ", ".join(result["warnings"]))
     if isinstance(summary, dict):
-        if is_market_profile:
+        if is_comment_batch:
+            lines.append(
+                "SKU："
+                f"候选 {summary.get('candidate_sku_count', 0)}；已有 {summary.get('existing_profile_sku_count', 0)}；"
+                f"待跑 {summary.get('pending_sku_count_before_limit', 0)}；本次调度 {summary.get('scheduled_sku_count', 0)}；"
+                f"完成 {summary.get('completed_sku_count', 0)}；失败 {summary.get('failed_sku_count', 0)}；"
+                f"worker={summary.get('effective_parallelism', 0)}/{summary.get('parallelism', 0)}"
+            )
+            lines.append(
+                "coverage："
+                f"rebuilt={summary.get('final_coverage_rebuilt')}；status={summary.get('final_coverage_status') or '-'}"
+            )
+        elif is_market_profile:
             lines.append(
                 "画像数："
                 f"{summary.get('market_profile_count', 0)}；市场信号：{summary.get('market_signal_count', 0)}；"

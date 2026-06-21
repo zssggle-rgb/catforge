@@ -163,6 +163,14 @@ Run TV SKU comment fact profiles with LLM:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile --product-category tv --batch-id latest --llm-mode required --force-rebuild --format json
 ```
 
+Continue or accelerate TV SKU comment fact profiles with bounded SKU parallelism:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile-batch --product-category tv --batch-id latest --llm-mode required --parallelism 2 --limit 10 --max-sentences-per-sku 500 --format json
+```
+
+After the 205 smoke run is stable, remove `--limit` and keep `--parallelism 2` or raise to `3-4` only after observing CPU, memory, and LLM timeout behavior. This batch command skips existing M05C SKU profiles by default, runs each pending SKU with coverage skipped, and rebuilds M05C coverage once at the end.
+
 Run one TV SKU comment fact profile with LLM:
 
 ```bash
@@ -227,7 +235,7 @@ Use `--input-source auto` by default. It reads M02 selling-point evidence first,
 
 Use `--batch-id latest` unless the user gives a specific batch id. Use `--force-rebuild` when source data or taxonomy/rules have changed and existing profile business keys should be refreshed.
 For M07 market profiles, omit `--analysis-window` to run all windows. The CLI executes windows sequentially and splits TV SKUs into chunks, committing after each chunk to keep the 205 memory peak below the API container limit. The default `--sku-chunk-size` is 50; lower it for safer execution, raise it only after observing memory. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. The current implementation writes market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket persistence from the updated M07 design requires the follow-up M07 service/table implementation.
-For M05C-B comment fact profiles, use `--llm-mode required` on 205 validation, `--llm-mode off` only for deterministic local tests, and lower `--llm-batch-size` if the LLM provider times out. This command does not generate the category comment taxonomy; it only uses an already published taxonomy.
+For M05C-B comment fact profiles, use `--llm-mode required` on 205 validation, `--llm-mode off` only for deterministic local tests, and lower `--llm-batch-size` if the LLM provider times out. For large batches, prefer `run-comment-profile-batch` over a single unscoped `run-comment-profile`: it schedules pending SKUs with bounded parallelism, skips existing profiles by default, and rebuilds coverage once after SKU workers finish. Do not run multiple workers for the same SKU. This command does not generate the category comment taxonomy; it only uses an already published taxonomy.
 For M09C user task profiles, confirm the same batch already has current M03B, M04C, M05C, and M07 outputs. Use repeated `--sku-code` for scoped reruns and repeated `--user-task-code` for a user-task subset. This stage is deterministic and does not call an LLM.
 For M10C target group profiles, confirm the same batch already has current M03B, M04C, M05C, and M07 outputs. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` for a target-group subset. This stage is deterministic and does not call an LLM.
 For M11C value battlefield profiles, confirm the same batch already has current M03B, M04C, M05C, and M07 outputs. Use `--graph-mode inline` to write the graph snapshot, `--graph-mode skip` to write only SKU profiles and score rows, repeated `--sku-code` for scoped reruns, and repeated `--battlefield-code` for a battlefield subset.

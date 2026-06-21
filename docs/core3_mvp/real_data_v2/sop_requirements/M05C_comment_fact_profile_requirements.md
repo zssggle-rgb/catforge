@@ -389,7 +389,7 @@ M05C 必须按 SKU 分批处理，不能一次把全量评论加载到内存。
 | --- | ---: | --- |
 | `sku_chunk_size` | 运行器内部按 SKU 逐个处理 | 每次只加载当前 SKU 的评论句和上下文 |
 | `llm_batch_size` | 20 | 每次 LLM 输入句子数 |
-| `max_parallel_llm_requests` | 1 | 205 默认串行，避免 CPU/内存和网络压力 |
+| `max_parallel_llm_requests` | 单 SKU 默认 1；批量 CLI 建议 2 起步 | 单个 SKU 内串行调用；全量批处理可按 SKU 并行，205 先用 2，稳定后再升到 3-4 |
 | `commit_every_sku_chunk` | true | 每个 SKU chunk 提交一次 |
 
 100 万级原始评论场景下，M05C 只读取 M02 已过滤后的评论句，不能回扫 M01 全量评论做主处理。

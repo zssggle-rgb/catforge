@@ -2,9 +2,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.cli import catforge_pipeline
 from app.cli import catforge_insight
 from app.models import entities
 from app.services.core3_real_data.constants import (
@@ -24,13 +25,14 @@ SKU_CODE = "TV00077777"
 SKU_CODE_2 = "TV00088888"
 
 
-def make_session() -> Session:
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        future=True,
-    )
+def make_session(*, database_url: str = "sqlite+pysqlite:///:memory:", use_static_pool: bool = True) -> Session:
+    engine_kwargs = {
+        "connect_args": {"check_same_thread": False},
+        "future": True,
+    }
+    if use_static_pool:
+        engine_kwargs["poolclass"] = StaticPool
+    engine = create_engine(database_url, **engine_kwargs)
     for table in [
         entities.CategoryProject.__table__,
         entities.Core3SourceBatch.__table__,
@@ -358,6 +360,56 @@ def test_m05c_sku_scoped_runs_skip_coverage_until_batch_rebuild():
     ).scalars().all()
     assert len(brand_trust_facts) == 1
     assert brand_trust_facts[0].clean_comment_text == "画质清晰，TCL大品牌值得信赖，值得购买"
+
+
+def test_m05c_pipeline_batch_runs_pending_skus_and_skips_existing_profiles(tmp_path):
+    db_path = tmp_path / "m05c_parallel_batch.db"
+    session = make_session(database_url=f"sqlite+pysqlite:///{db_path}", use_static_pool=False)
+    seed_secondary_sku_comments(session)
+    SessionFactory = sessionmaker(bind=session.get_bind(), future=True)
+
+    result = catforge_pipeline.run_comment_profile_batch(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        llm_mode="off",
+        force_rebuild=True,
+        parallelism=1,
+        limit=2,
+        session_factory=SessionFactory,
+    )
+    session.expire_all()
+
+    assert result["status"] in {"ok", "warning"}
+    assert result["summary"]["comment_profile_batch"] is True
+    assert result["summary"]["scheduled_sku_count"] == 2
+    assert result["summary"]["completed_sku_count"] == 2
+    assert result["summary"]["failed_sku_count"] == 0
+    assert result["summary"]["final_coverage_rebuilt"] is True
+    assert result["final_coverage"]["status"] == "ok"
+
+    profiles = session.execute(select(entities.Core3SkuCommentFactProfile.sku_code)).scalars().all()
+    assert set(profiles) == {SKU_CODE, SKU_CODE_2}
+    coverage = session.execute(select(entities.Core3CommentFactCoverage)).scalars().all()
+    assert coverage
+
+    resume_result = catforge_pipeline.run_comment_profile_batch(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        llm_mode="off",
+        parallelism=1,
+        session_factory=SessionFactory,
+    )
+
+    assert resume_result["status"] == "ok"
+    assert resume_result["summary"]["pending_sku_count_before_limit"] == 0
+    assert resume_result["summary"]["scheduled_sku_count"] == 0
+    assert resume_result["summary"]["existing_profile_sku_count"] == 2
 
 
 def test_m05c_insight_queries_comment_profile_taxonomy_and_coverage():
