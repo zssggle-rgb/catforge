@@ -38,6 +38,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M07_POOL_RULE_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M09C_TV_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
@@ -58,6 +60,7 @@ from app.services.core3_real_data.m05c_comment_fact_profile_service import (
     M05C_DEFAULT_LLM_BATCH_SIZE,
     M05CRunner,
 )
+from app.services.core3_real_data.m09c_user_task_service import M09CRunner
 from app.services.core3_real_data.m10c_target_group_service import M10CRunner
 from app.services.core3_real_data.m11c_value_battlefield_service import M11CRunner
 from app.services.core3_real_data.market_profile_runner import MarketProfileRunner
@@ -83,6 +86,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
         "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "user_task_taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
+        "user_task_rule_version": CORE3_M09C_TV_RULE_VERSION,
         "target_group_taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
         "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
@@ -98,6 +103,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": None,
         "comment_taxonomy_version": None,
         "comment_rule_version": None,
+        "user_task_taxonomy_version": None,
+        "user_task_rule_version": None,
         "target_group_taxonomy_version": None,
         "target_group_rule_version": None,
         "value_battlefield_taxonomy_version": None,
@@ -153,6 +160,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
+                )
+            elif args.command == "run-user-task":
+                result = run_user_task(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    sku_scope=args.sku_code or (),
+                    user_task_codes=args.user_task_code or (),
+                    force_rebuild=args.force_rebuild,
                 )
             elif args.command == "run-target-group":
                 result = run_target_group(
@@ -256,6 +274,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_value_battlefield.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_value_battlefield)
 
+    run_user_task = subparsers.add_parser("run-user-task", help="Generate or rerun SKU user-task profiles and coverage.")
+    add_common_args(run_user_task)
+    add_product_category_arg(run_user_task, default="tv", allow_auto=False)
+    run_user_task.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_user_task.add_argument("--user-task-code", action="append", help="Optional user-task scope. Repeat to run selected user tasks only.")
+    run_user_task.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
+    add_format_arg(run_user_task)
+
     run_target_group = subparsers.add_parser("run-target-group", help="Generate or rerun SKU target-group profiles and coverage.")
     add_common_args(run_target_group)
     add_product_category_arg(run_target_group, default="tv", allow_auto=False)
@@ -314,6 +340,20 @@ def answer_natural_language(
     coverage_mode: str = COMMENT_COVERAGE_AUTO,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
+    if should_run_user_task(question):
+        result = run_user_task(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            sku_scope=extract_sku_scope(question),
+            user_task_codes=extract_user_task_scope(question),
+            force_rebuild=force_rebuild,
+        )
+        result["question"] = question
+        result["routed_command"] = "run-user-task"
+        return result
     if should_run_target_group(question):
         result = run_target_group(
             db,
@@ -388,7 +428,7 @@ def answer_natural_language(
         result["routed_command"] = "run-claim-profile"
         return result
     if not should_run_param_profile(question):
-        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、目标客群画像或价值战场画像。请说明要生成或重新生成哪类画像。")
+        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、用户任务画像、目标客群画像或价值战场画像。请说明要生成或重新生成哪类画像。")
     result = run_param_profile(
         db,
         project_id=project_id,
@@ -400,6 +440,60 @@ def answer_natural_language(
     result["question"] = question
     result["routed_command"] = "run-param-profile"
     return result
+
+
+def run_user_task(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_scope: Sequence[str] = (),
+    user_task_codes: Sequence[str] = (),
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    if not config.get("user_task_taxonomy_version") or not config.get("user_task_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}用户任务 taxonomy 尚未发布，不能生成 SKU 用户任务画像。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = M09CRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        taxonomy_version=config["user_task_taxonomy_version"],
+        rule_version=config["user_task_rule_version"],
+        target_sku_codes=sku_scope,
+        user_task_codes=user_task_codes,
+        force_rebuild=force_rebuild,
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "sku_scope": list(sku_scope),
+        "user_task_codes": list(user_task_codes),
+        "taxonomy_version": config["user_task_taxonomy_version"],
+        "rule_version": config["user_task_rule_version"],
+        "force_rebuild": force_rebuild,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
 
 
 def run_target_group(
@@ -1245,6 +1339,27 @@ def should_run_target_group(question: str) -> bool:
     )
 
 
+def should_run_user_task(question: str) -> bool:
+    normalized = normalize_token(question)
+    if not any(word in question for word in ("用户任务", "使用任务", "主任务", "任务画像", "购买目的", "使用目的")) and "usertask" not in normalized:
+        return False
+    return any(
+        word in normalized
+        for word in (
+            "生成",
+            "重跑",
+            "重新",
+            "更新",
+            "执行",
+            "跑",
+            "计算",
+            "准备好可以分析",
+            "画像",
+            "分析",
+        )
+    )
+
+
 def should_run_market_profile(question: str) -> bool:
     normalized = normalize_token(question)
     if "市场画像" in question:
@@ -1302,6 +1417,10 @@ def extract_battlefield_scope(question: str) -> list[str]:
 
 def extract_target_group_scope(question: str) -> list[str]:
     return sorted(set(re.findall(r"\bTG_[A-Z0-9_]+\b", question.upper())))
+
+
+def extract_user_task_scope(question: str) -> list[str]:
+    return sorted(set(re.findall(r"\bTASK_[A-Z0-9_]+\b", question.upper())))
 
 
 def extract_analysis_windows(question: str) -> list[str]:

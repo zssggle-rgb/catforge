@@ -5297,6 +5297,177 @@ class Core3SkuBattlefieldReviewIssue(Base, AuditMixin):
     review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
 
 
+class Core3M09cSkuUserTaskProfile(Base, AuditMixin):
+    __tablename__ = "core3_m09c_sku_user_task_profile"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m09c_profile_current",
+        ),
+        CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_m09c_profile_confidence"),
+        Index("ix_core3_m09c_profile_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m09c_profile_sku", "project_id", "category_code", "batch_id", "sku_code"),
+        Index("ix_core3_m09c_profile_primary", "primary_user_task_code"),
+        Index("ix_core3_m09c_profile_size_price", "size_tier", "price_band_in_size_tier"),
+        Index("ix_core3_m09c_profile_secondary_gin", "secondary_user_task_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_observed_gin", "comment_observed_task_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_claimed_gin", "brand_claimed_task_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_latent_gin", "latent_capability_task_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_drag_gin", "drag_factor_task_codes_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_summary_gin", "user_task_summary_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_profile_evidence_gin", "evidence_ids_json", postgresql_using="gin"),
+    )
+
+    profile_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m09c_tv_user_task_profile_v0.1", index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    size_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown", index=True)
+    price_band_in_size_tier: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    price_percentile_in_size_tier: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    primary_user_task_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    primary_relation_status: Mapped[str | None] = mapped_column(String(80), index=True)
+    secondary_user_task_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    comment_observed_task_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    brand_claimed_task_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    latent_capability_task_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    drag_factor_task_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    user_task_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    no_primary_reason: Mapped[str | None] = mapped_column(Text)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    profile_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3M09cSkuUserTaskScore(Base, AuditMixin):
+    __tablename__ = "core3_m09c_sku_user_task_score"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "user_task_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m09c_score_current",
+        ),
+        CheckConstraint("user_task_score >= 0 and user_task_score <= 1", name="ck_m09c_score_final"),
+        CheckConstraint("comment_task_need_score >= 0 and comment_task_need_score <= 1", name="ck_m09c_score_comment"),
+        CheckConstraint("claim_task_alignment_score >= 0 and claim_task_alignment_score <= 1", name="ck_m09c_score_claim"),
+        CheckConstraint("param_capability_score >= 0 and param_capability_score <= 1", name="ck_m09c_score_param"),
+        CheckConstraint("size_price_fit_score >= 0 and size_price_fit_score <= 1", name="ck_m09c_score_size_price"),
+        CheckConstraint("market_validation_score >= 0 and market_validation_score <= 1", name="ck_m09c_score_market"),
+        CheckConstraint("negative_drag_score >= 0 and negative_drag_score <= 1", name="ck_m09c_score_drag"),
+        CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_m09c_score_confidence"),
+        Index("ix_core3_m09c_score_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m09c_score_sku", "project_id", "category_code", "batch_id", "sku_code"),
+        Index("ix_core3_m09c_score_task", "project_id", "category_code", "batch_id", "user_task_code", "relation_status"),
+        Index("ix_core3_m09c_score_size_price", "size_tier", "price_band_in_size_tier"),
+        Index("ix_core3_m09c_score_breakdown_gin", "score_breakdown_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_score_evidence_gin", "evidence_ids_json", postgresql_using="gin"),
+    )
+
+    score_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m09c_tv_user_task_profile_v0.1", index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    user_task_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    user_task_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    user_task_definition: Mapped[str] = mapped_column(Text, nullable=False)
+    relation_status: Mapped[str] = mapped_column(String(80), nullable=False, default="not_supported", index=True)
+    user_task_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    comment_task_need_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    claim_task_alignment_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    param_capability_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    size_price_fit_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    market_validation_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    negative_drag_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    sentiment_polarity: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    size_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown", index=True)
+    price_band_in_size_tier: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    price_percentile_in_size_tier: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    score_breakdown_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    status_reason_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    result_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3M09cUserTaskCoverage(Base, AuditMixin):
+    __tablename__ = "core3_m09c_user_task_coverage"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "user_task_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m09c_coverage_current",
+        ),
+        Index("ix_core3_m09c_coverage_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m09c_coverage_task", "project_id", "category_code", "batch_id", "user_task_code"),
+        Index("ix_core3_m09c_coverage_status_gin", "relation_status_counts_json", postgresql_using="gin"),
+        Index("ix_core3_m09c_coverage_top_gin", "top_skus_json", postgresql_using="gin"),
+    )
+
+    coverage_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m09c_tv_user_task_profile_v0.1", index=True)
+    user_task_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    user_task_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    relation_status_counts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    primary_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    secondary_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    comment_observed_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    brand_claimed_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    latent_capability_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    drag_factor_sku_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    top_skus_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    coverage_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
 class Core3M10cSkuTargetGroupProfile(Base, AuditMixin):
     __tablename__ = "core3_m10c_sku_target_group_profile"
     __table_args__ = (

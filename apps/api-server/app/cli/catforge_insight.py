@@ -28,6 +28,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M09C_TV_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
@@ -41,6 +43,7 @@ from app.services.core3_real_data.m03b_param_profile_service import (
 )
 from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, tv_claim_taxonomy_v0_1
 from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CCommentTaxonomy, tv_comment_fact_taxonomy_v0_1
+from app.services.core3_real_data.m09c_user_task_service import M09CUserTaskTaxonomy, tv_user_task_taxonomy_v0_1
 from app.services.core3_real_data.m10c_target_group_service import M10CTargetGroupTaxonomy, tv_target_group_taxonomy_v0_1
 from app.services.core3_real_data.m11c_value_battlefield_service import (
     M11CValueBattlefieldTaxonomy,
@@ -65,6 +68,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
         "comment_taxonomy_factory": tv_comment_fact_taxonomy_v0_1,
+        "user_task_rule_version": CORE3_M09C_TV_RULE_VERSION,
+        "user_task_taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
+        "user_task_taxonomy_factory": tv_user_task_taxonomy_v0_1,
         "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
         "target_group_taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
         "target_group_taxonomy_factory": tv_target_group_taxonomy_v0_1,
@@ -83,6 +89,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "comment_rule_version": None,
         "comment_taxonomy_version": None,
         "comment_taxonomy_factory": None,
+        "user_task_rule_version": None,
+        "user_task_taxonomy_version": None,
+        "user_task_taxonomy_factory": None,
         "target_group_rule_version": None,
         "target_group_taxonomy_version": None,
         "target_group_taxonomy_factory": None,
@@ -360,6 +369,36 @@ def main(argv: Sequence[str] | None = None) -> int:
                     analysis_window=args.analysis_window,
                     sku_limit=args.sku_limit,
                 )
+            elif args.command == "user-task-taxonomy":
+                result = query_user_task_taxonomy(
+                    product_category=normalize_product_category_arg(args.product_category),
+                    user_task_code=args.user_task_code,
+                    search=args.search,
+                )
+            elif args.command == "sku-user-task":
+                result = query_sku_user_task(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    include_scores=args.include_scores,
+                )
+            elif args.command == "user-task-skus":
+                result = query_user_task_skus(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    user_task_code=args.user_task_code,
+                    relation_status=args.relation_status,
+                    query=args.query,
+                    sku_limit=args.sku_limit,
+                )
             elif args.command == "target-group-taxonomy":
                 result = query_target_group_taxonomy(
                     product_category=normalize_product_category_arg(args.product_category),
@@ -592,6 +631,34 @@ def build_parser() -> argparse.ArgumentParser:
     comparable_pools.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
     comparable_pools.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of candidate SKU codes to include per pool; 0 means all.")
     add_format_arg(comparable_pools)
+
+    user_task_taxonomy = subparsers.add_parser("user-task-taxonomy", help="Query a product category user-task taxonomy.")
+    add_product_category_arg(user_task_taxonomy, default="tv", allow_auto=False)
+    user_task_taxonomy.add_argument("--user-task-code", help="Filter by user-task code.")
+    user_task_taxonomy.add_argument("--search", help="Search code/name/comments/claims/params.")
+    add_format_arg(user_task_taxonomy)
+
+    user_task_profile = subparsers.add_parser("sku-user-task", help="Query one SKU/model user-task profile.")
+    add_common_args(user_task_profile)
+    add_product_category_arg(user_task_profile)
+    user_task_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    user_task_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    user_task_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
+    user_task_profile.add_argument("--include-scores", action="store_true", help="Include all SKU x user-task score rows.")
+    add_format_arg(user_task_profile)
+
+    user_task_skus = subparsers.add_parser("user-task-skus", help="Query SKUs covered by one user task.")
+    add_common_args(user_task_skus)
+    add_product_category_arg(user_task_skus, default="tv", allow_auto=False)
+    user_task_skus.add_argument("--user-task-code", help="User task code, such as TASK_VALUE_FOR_MONEY_PURCHASE.")
+    user_task_skus.add_argument(
+        "--relation-status",
+        choices=("all", "primary_user_task", "secondary_user_task", "comment_observed_task", "brand_claimed_task", "latent_capability_task", "drag_factor_task"),
+        default="all",
+    )
+    user_task_skus.add_argument("--query", help="Natural user-task query text.")
+    user_task_skus.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    add_format_arg(user_task_skus)
 
     target_group_taxonomy = subparsers.add_parser("target-group-taxonomy", help="Query a product category target-group taxonomy.")
     add_product_category_arg(target_group_taxonomy, default="tv", allow_auto=False)
@@ -1749,6 +1816,225 @@ def query_value_battlefield_taxonomy(
     }
 
 
+def query_user_task_taxonomy(
+    *,
+    product_category: str,
+    user_task_code: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy_factory = config.get("user_task_taxonomy_factory")
+    if taxonomy_factory is None:
+        raise CatForgeInsightError(f"{config['label_cn']}用户任务 taxonomy 尚未发布。")
+    taxonomy: M09CUserTaskTaxonomy = taxonomy_factory()
+    search_norm = normalize_token(search)
+    user_task_code_norm = str(user_task_code or "").strip().upper()
+    rows = []
+    for user_task in taxonomy.user_tasks:
+        haystack = normalize_token(
+            " ".join(
+                [
+                    user_task.user_task_code,
+                    user_task.user_task_name,
+                    user_task.definition,
+                    " ".join(user_task.allowed_size_tiers),
+                    " ".join(user_task.allowed_price_bands),
+                    " ".join(user_task.claim_codes),
+                    " ".join(user_task.param_codes),
+                    " ".join(user_task.comment_subdimension_codes),
+                    " ".join(user_task.comment_keywords),
+                ]
+            )
+        )
+        if user_task_code_norm and user_task.user_task_code != user_task_code_norm:
+            continue
+        if search_norm and search_norm not in haystack:
+            continue
+        rows.append(
+            {
+                "user_task_code": user_task.user_task_code,
+                "user_task_name": user_task.user_task_name,
+                "definition": user_task.definition,
+                "market_fit": {
+                    "size_tiers": list(user_task.allowed_size_tiers),
+                    "price_bands": list(user_task.allowed_price_bands),
+                    "adjacent_size_tiers": list(user_task.adjacent_size_tiers),
+                    "adjacent_price_bands": list(user_task.adjacent_price_bands),
+                },
+                "comment_subdimension_codes": list(user_task.comment_subdimension_codes),
+                "comment_keywords": list(user_task.comment_keywords),
+                "claim_codes": list(user_task.claim_codes),
+                "param_codes": list(user_task.param_codes),
+            }
+        )
+    return {
+        "status": "ok",
+        "product_category": taxonomy.product_category,
+        "product_category_label_cn": taxonomy.product_category_label_cn,
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "user_task_count": len(rows),
+        "total_user_task_count": len(taxonomy.user_tasks),
+        "user_tasks": rows,
+    }
+
+
+def query_sku_user_task(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    include_scores: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    if not config.get("user_task_taxonomy_factory") or not config.get("user_task_rule_version"):
+        raise CatForgeInsightError(f"{config['label_cn']}用户任务 taxonomy 尚未发布。")
+    resolved_batch_id = resolve_user_task_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["user_task_rule_version"],
+    )
+    profile = find_sku_user_task_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=config["user_task_rule_version"],
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的用户任务画像。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+        }
+    scores = list_sku_user_task_scores(db, profile) if include_scores else []
+    result = {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": profile.rule_version,
+        "taxonomy_version": profile.taxonomy_version,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "market_position": {
+            "size_tier": profile.size_tier,
+            "price_band_in_size_tier": profile.price_band_in_size_tier,
+            "price_percentile_in_size_tier": decimal_to_float(profile.price_percentile_in_size_tier),
+        },
+        "primary_user_task_code": profile.primary_user_task_code,
+        "primary_relation_status": profile.primary_relation_status,
+        "secondary_user_task_codes": profile.secondary_user_task_codes_json or [],
+        "comment_observed_task_codes": profile.comment_observed_task_codes_json or [],
+        "brand_claimed_task_codes": profile.brand_claimed_task_codes_json or [],
+        "latent_capability_task_codes": profile.latent_capability_task_codes_json or [],
+        "drag_factor_task_codes": profile.drag_factor_task_codes_json or [],
+        "user_task_summary": profile.user_task_summary_json or {},
+        "no_primary_reason": profile.no_primary_reason,
+        "quality": {
+            "review_required": profile.review_required,
+            "review_status": profile.review_status,
+            "review_reason": profile.review_reason_json or {},
+            "confidence": decimal_to_float(profile.confidence),
+        },
+        "evidence_id_count": len(profile.evidence_ids_json or []),
+        "profile_hash": profile.profile_hash,
+    }
+    if include_scores:
+        result["scores"] = [user_task_score_payload(row) for row in scores]
+    return result
+
+
+def query_user_task_skus(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    user_task_code: str | None = None,
+    relation_status: str = "all",
+    query: str | None = None,
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy_factory = config.get("user_task_taxonomy_factory")
+    if taxonomy_factory is None:
+        raise CatForgeInsightError(f"{config['label_cn']}用户任务 taxonomy 尚未发布。")
+    taxonomy: M09CUserTaskTaxonomy = taxonomy_factory()
+    resolved_code = resolve_user_task_code(taxonomy, user_task_code=user_task_code, query=query)
+    resolved_batch_id = resolve_user_task_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["user_task_rule_version"],
+    )
+    stmt = (
+        select(entities.Core3M09cSkuUserTaskScore)
+        .where(entities.Core3M09cSkuUserTaskScore.project_id == project_id)
+        .where(entities.Core3M09cSkuUserTaskScore.category_code == category_code)
+        .where(entities.Core3M09cSkuUserTaskScore.batch_id == resolved_batch_id)
+        .where(entities.Core3M09cSkuUserTaskScore.rule_version == config["user_task_rule_version"])
+        .where(entities.Core3M09cSkuUserTaskScore.taxonomy_version == taxonomy.taxonomy_version)
+        .where(entities.Core3M09cSkuUserTaskScore.is_current.is_(True))
+        .where(entities.Core3M09cSkuUserTaskScore.user_task_code == resolved_code)
+        .where(entities.Core3M09cSkuUserTaskScore.relation_status != "not_supported")
+        .order_by(
+            entities.Core3M09cSkuUserTaskScore.user_task_score.desc(),
+            entities.Core3M09cSkuUserTaskScore.sku_code,
+        )
+    )
+    if relation_status != "all":
+        stmt = stmt.where(entities.Core3M09cSkuUserTaskScore.relation_status == relation_status)
+    rows = list(db.execute(stmt).scalars())
+    visible = rows if sku_limit == 0 else rows[: max(sku_limit, 0)]
+    status_counts = Counter(row.relation_status for row in rows)
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "rule_version": config["user_task_rule_version"],
+        "user_task_code": resolved_code,
+        "user_task_name": taxonomy.user_tasks_by_code[resolved_code].user_task_name,
+        "relation_status": relation_status,
+        "sku_count": len(rows),
+        "status_counts": dict(sorted(status_counts.items())),
+        "sku_codes": [row.sku_code for row in visible],
+        "sku_codes_returned": len(visible),
+        "sku_codes_truncated": sku_limit != 0 and len(rows) > len(visible),
+        "skus": [user_task_score_payload(row) for row in visible],
+    }
+
+
 def query_target_group_taxonomy(
     *,
     product_category: str,
@@ -2186,6 +2472,41 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if should_route_to_user_task_query(question, normalized):
+        if any(word in question for word in ("用户任务预设", "任务预设", "用户任务体系", "任务体系", "用户任务分类", "用户任务 taxonomy")):
+            result = query_user_task_taxonomy(
+                product_category=resolved_product_category,
+                user_task_code=None,
+                search=None,
+            )
+            result["routed_command"] = "user-task-taxonomy"
+            return result
+        if should_route_to_user_task_coverage(question, normalized):
+            result = query_user_task_skus(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                user_task_code=None,
+                relation_status=user_task_relation_from_question(question),
+                query=question,
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "user-task-skus"
+            return result
+        result = query_sku_user_task(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            query=extract_sku_or_model_query(question) or question,
+            include_scores=output_format == "json",
+        )
+        result["routed_command"] = "sku-user-task"
+        result["question"] = question
+        return result
     if should_route_to_target_group_query(question, normalized):
         if any(word in question for word in ("目标客群预设", "目标客户预设", "目标用户预设", "客群预设", "客群体系", "客群分类", "目标客群 taxonomy")):
             result = query_target_group_taxonomy(
@@ -2553,6 +2874,32 @@ def resolve_value_battlefield_batch_id(
     return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
 
 
+def resolve_user_task_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3M09cSkuUserTaskProfile.batch_id)
+            .where(entities.Core3M09cSkuUserTaskProfile.project_id == project_id)
+            .where(entities.Core3M09cSkuUserTaskProfile.category_code == category_code)
+            .where(entities.Core3M09cSkuUserTaskProfile.rule_version == rule_version)
+            .where(entities.Core3M09cSkuUserTaskProfile.is_current.is_(True))
+            .order_by(entities.Core3M09cSkuUserTaskProfile.created_at.desc(), entities.Core3M09cSkuUserTaskProfile.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
 def resolve_target_group_batch_id(
     db: Session,
     project_id: str,
@@ -2790,6 +3137,59 @@ def find_sku_value_battlefield_profile(
     return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
 
 
+def find_sku_user_task_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+) -> entities.Core3M09cSkuUserTaskProfile | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 用户任务画像需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3M09cSkuUserTaskProfile.project_id == project_id,
+        entities.Core3M09cSkuUserTaskProfile.category_code == category_code,
+        entities.Core3M09cSkuUserTaskProfile.batch_id == batch_id,
+        entities.Core3M09cSkuUserTaskProfile.rule_version == rule_version,
+        entities.Core3M09cSkuUserTaskProfile.is_current.is_(True),
+    ]
+    if sku_code:
+        filters.append(func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code) == query_norm,
+                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name) == query_norm,
+                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3M09cSkuUserTaskProfile)
+            .where(*filters)
+            .order_by(entities.Core3M09cSkuUserTaskProfile.sku_code)
+            .limit(11)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    if len(exact) == 1:
+        return exact[0]
+    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
 def find_sku_target_group_profile(
     db: Session,
     *,
@@ -2841,6 +3241,93 @@ def find_sku_target_group_profile(
     if len(exact) == 1:
         return exact[0]
     return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
+def list_sku_user_task_scores(
+    db: Session,
+    profile: entities.Core3M09cSkuUserTaskProfile,
+) -> list[entities.Core3M09cSkuUserTaskScore]:
+    return list(
+        db.execute(
+            select(entities.Core3M09cSkuUserTaskScore)
+            .where(entities.Core3M09cSkuUserTaskScore.project_id == profile.project_id)
+            .where(entities.Core3M09cSkuUserTaskScore.category_code == profile.category_code)
+            .where(entities.Core3M09cSkuUserTaskScore.batch_id == profile.batch_id)
+            .where(entities.Core3M09cSkuUserTaskScore.sku_code == profile.sku_code)
+            .where(entities.Core3M09cSkuUserTaskScore.rule_version == profile.rule_version)
+            .where(entities.Core3M09cSkuUserTaskScore.taxonomy_version == profile.taxonomy_version)
+            .where(entities.Core3M09cSkuUserTaskScore.is_current.is_(True))
+            .order_by(
+                entities.Core3M09cSkuUserTaskScore.relation_status,
+                entities.Core3M09cSkuUserTaskScore.user_task_score.desc(),
+            )
+        ).scalars()
+    )
+
+
+def user_task_score_payload(row: entities.Core3M09cSkuUserTaskScore) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "model_name": row.model_name,
+        "brand_name": row.brand_name,
+        "user_task_code": row.user_task_code,
+        "user_task_name": row.user_task_name,
+        "relation_status": row.relation_status,
+        "user_task_score": decimal_to_float(row.user_task_score),
+        "size_tier": row.size_tier,
+        "price_band_in_size_tier": row.price_band_in_size_tier,
+        "comment_task_need_score": decimal_to_float(row.comment_task_need_score),
+        "claim_task_alignment_score": decimal_to_float(row.claim_task_alignment_score),
+        "param_capability_score": decimal_to_float(row.param_capability_score),
+        "size_price_fit_score": decimal_to_float(row.size_price_fit_score),
+        "market_validation_score": decimal_to_float(row.market_validation_score),
+        "negative_drag_score": decimal_to_float(row.negative_drag_score),
+        "sentiment_polarity": row.sentiment_polarity,
+        "status_reason_cn": row.status_reason_cn,
+        "score_breakdown": row.score_breakdown_json or {},
+        "review_required": row.review_required,
+        "confidence": decimal_to_float(row.confidence),
+    }
+
+
+def resolve_user_task_code(
+    taxonomy: M09CUserTaskTaxonomy,
+    *,
+    user_task_code: str | None,
+    query: str | None,
+) -> str:
+    if user_task_code:
+        normalized_code = user_task_code.strip().upper()
+        if normalized_code in taxonomy.user_tasks_by_code:
+            return normalized_code
+        raise CatForgeInsightError(f"未知用户任务 code：{user_task_code}")
+    query_norm = normalize_token(query)
+    matches = [
+        item
+        for item in taxonomy.user_tasks
+        if normalize_token(item.user_task_code) in query_norm or normalize_token(item.user_task_name) in query_norm
+    ]
+    if len(matches) == 1:
+        return matches[0].user_task_code
+    if len(matches) > 1:
+        raise CatForgeInsightError("自然语言匹配到多个用户任务，请补充 user task code。")
+    for item in taxonomy.user_tasks:
+        tokens = set(extract_match_tokens(query or ""))
+        haystack = normalize_token(
+            " ".join(
+                [
+                    item.user_task_name,
+                    item.definition,
+                    " ".join(item.comment_keywords),
+                    " ".join(item.comment_subdimension_codes),
+                    " ".join(item.claim_codes),
+                    " ".join(item.param_codes),
+                ]
+            )
+        )
+        if any(normalize_token(token) in haystack for token in tokens):
+            return item.user_task_code
+    raise CatForgeInsightError("没有识别出要查询的用户任务，请提供 --user-task-code。")
 
 
 def list_sku_target_group_scores(
@@ -3557,6 +4044,33 @@ def sample_status_from_count(count: int) -> str:
 
 def should_route_to_target_group_query(question: str, normalized: str) -> bool:
     return any(word in question for word in ("目标客群", "目标客户", "目标用户", "客群画像", "客户画像", "人群画像", "客群预设")) or "targetgroup" in normalized
+
+
+def should_route_to_user_task_query(question: str, normalized: str) -> bool:
+    return any(word in question for word in ("用户任务", "使用任务", "主任务", "任务画像", "任务预设", "购买目的", "使用目的")) or "usertask" in normalized
+
+
+def should_route_to_user_task_coverage(question: str, normalized: str) -> bool:
+    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+        return True
+    return any(token in normalized for token in ("主任务sku", "次任务sku", "拖后腿", "厂家主打", "潜在任务", "评论观察"))
+
+
+def user_task_relation_from_question(question: str) -> str:
+    normalized = normalize_token(question)
+    if "拖后腿" in normalized or "负向" in normalized:
+        return "drag_factor_task"
+    if "主任务" in normalized or "主要任务" in normalized:
+        return "primary_user_task"
+    if "次任务" in normalized or "辅助任务" in normalized:
+        return "secondary_user_task"
+    if "厂家" in normalized or "主打" in normalized:
+        return "brand_claimed_task"
+    if "潜在" in normalized:
+        return "latent_capability_task"
+    if "观察" in normalized or "评论" in normalized:
+        return "comment_observed_task"
+    return "all"
 
 
 def should_route_to_target_group_coverage(question: str, normalized: str) -> bool:

@@ -272,7 +272,7 @@ M09C 输出关系状态必须包括：
 每个 SKU：
 
 - 最多 1 个 `primary_user_task`。
-- 最多 3 个 `secondary_user_task`。
+- 最多 2 个 `secondary_user_task`。
 - 可以有多个 `comment_observed_task`、`brand_claimed_task`、`latent_capability_task` 和 `drag_factor_task`。
 - 可以没有主用户任务，但必须写明原因。
 
@@ -333,7 +333,7 @@ user_task_score =
 | 字段 | 含义 |
 | --- | --- |
 | `primary_user_task_code` | 主用户任务，可空 |
-| `secondary_user_task_codes` | 次用户任务，最多 3 个 |
+| `secondary_user_task_codes` | 次用户任务，最多 2 个 |
 | `comment_observed_task_codes` | 评论观察任务 |
 | `brand_claimed_task_codes` | 厂家主打任务 |
 | `latent_capability_task_codes` | 潜在能力任务 |
@@ -396,10 +396,11 @@ python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-
 | `--product-category` | 品类，首版 `tv` |
 | `--batch-id` | 批次，默认支持 `latest` |
 | `--sku-code` | 只跑单 SKU |
-| `--task-code` | 只跑指定任务，可重复 |
+| `--user-task-code` | 只跑指定任务，可重复 |
 | `--force-rebuild` | 清理并重算当前范围 |
-| `--coverage-mode` | `inline`、`skip`、`rebuild-only` |
 | `--format` | `json`、`text` |
+
+当前实现每次生成画像后同步重建本批次用户任务覆盖统计，保证跨 SKU 维度统计完整。
 
 自然语言入口必须识别：
 
@@ -421,7 +422,7 @@ python -m app.cli.catforge_insight sku-user-task --sku-code TV00000000 --format 
 ```
 
 ```bash
-python -m app.cli.catforge_insight user-task-skus --task-code TASK_LARGE_SCREEN_UPGRADE --sku-limit 100 --format json
+python -m app.cli.catforge_insight user-task-skus --user-task-code TASK_LARGE_SCREEN_UPGRADE --sku-limit 100 --format json
 ```
 
 必须支持自然语言查询：
@@ -447,7 +448,7 @@ python -m app.cli.catforge_insight user-task-skus --task-code TASK_LARGE_SCREEN_
 
 1. TV 用户任务 taxonomy 覆盖 12 个预设任务。
 2. 每个任务都有评论规则、卖点规则、参数规则、尺寸价格规则和市场验证规则。
-3. 每个 SKU 能输出 0-1 个主用户任务、0-3 个次用户任务和若干观察/厂家主打/潜在/拖后腿任务。
+3. 每个 SKU 能输出 0-1 个主用户任务、0-2 个次用户任务和若干观察/厂家主打/潜在/拖后腿任务。
 4. 评论负向集中时，不得简单排除；必须输出 `drag_factor_task` 或未满足任务需求。
 5. 卖点强但评论弱时，不得直接判主任务；应输出 `brand_claimed_task` 或潜在任务。
 6. 参数强但无评论/卖点时，不得直接判主任务；应输出 `latent_capability_task`。

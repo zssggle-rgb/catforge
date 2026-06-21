@@ -304,7 +304,7 @@ confidence =
 每个 SKU：
 
 - 最多 1 个 `primary_user_task`。
-- 最多 3 个 `secondary_user_task`。
+- 最多 2 个 `secondary_user_task`。
 - 可以有多个 `comment_observed_task`、`brand_claimed_task`、`latent_capability_task` 和 `drag_factor_task`。
 - 可以没有主任务，但必须写入 `no_primary_reason`。
 
@@ -458,20 +458,13 @@ def run_user_task_profile(
     category_code: str,
     batch_id: str,
     sku_codes: list[str] | None = None,
-    task_codes: list[str] | None = None,
+    user_task_codes: list[str] | None = None,
     force_rebuild: bool = False,
-    coverage_mode: str = "inline",
 ) -> UserTaskRunResult:
     ...
 ```
 
-`coverage_mode`：
-
-| 值 | 行为 |
-| --- | --- |
-| `inline` | SKU 分析后重建当前范围覆盖统计 |
-| `skip` | 只写 SKU 画像和分数，不重建覆盖 |
-| `rebuild-only` | 不重跑 SKU，只按当前分数重建覆盖 |
+当前实现每次 SKU 分析后重建本批次用户任务覆盖统计。覆盖统计不单独提供 `rebuild-only` 模式，避免跨 SKU 维度统计和最新画像不一致。
 
 ### 9.3 增量策略
 
@@ -508,22 +501,21 @@ python -m app.cli.catforge_pipeline run-user-task \
 | `--product-category` | 品类，首版 `tv` |
 | `--batch-id` | 批次，支持 `latest` |
 | `--sku-code` | 可重复，限定 SKU |
-| `--task-code` | 可重复，限定任务 |
+| `--user-task-code` | 可重复，限定任务 |
 | `--force-rebuild` | 清理并重算当前范围 |
-| `--coverage-mode` | `inline`、`skip`、`rebuild-only` |
 | `--format` | `json`、`text` |
 
 输出摘要：
 
 | 字段 | 含义 |
 | --- | --- |
-| `processed_sku_count` | 处理 SKU 数 |
-| `score_count` | 写入 SKU x 任务分数 |
+| `sku_count` | 处理 SKU 数 |
 | `profile_count` | 写入 SKU 画像 |
+| `score_count` | 写入 SKU x 任务分数 |
 | `coverage_count` | 覆盖统计行数 |
-| `primary_task_missing_count` | 无主任务 SKU 数 |
-| `drag_factor_task_count` | 拖后腿任务关系数 |
-| `review_required_count` | 需复核结果数 |
+| `user_task_count` | 本次 taxonomy 中的任务数 |
+| `relation_status_counts` | 各任务关系状态分布 |
+| `primary_user_task_counts` | 主用户任务分布 |
 
 ### 10.2 Insight CLI
 
@@ -543,7 +535,7 @@ python -m app.cli.catforge_insight sku-user-task \
 
 ```bash
 python -m app.cli.catforge_insight user-task-skus \
-  --task-code TASK_LARGE_SCREEN_UPGRADE \
+  --user-task-code TASK_LARGE_SCREEN_UPGRADE \
   --relation-status primary_user_task \
   --sku-limit 100 \
   --format json
@@ -581,14 +573,14 @@ CLI 实现后更新：
 | `test_param_only_is_latent_capability` | 只有参数强只能潜在能力 |
 | `test_service_comment_excluded` | 服务履约不得进入产品任务 |
 | `test_primary_task_can_be_empty` | 允许没有主任务并写原因 |
-| `test_max_one_primary_three_secondary` | 主/次任务数量约束 |
+| `test_max_one_primary_two_secondary` | 主/次任务数量约束 |
 
 ### 12.2 CLI 测试
 
 | 测试 | 验证 |
 | --- | --- |
 | `test_run_user_task_cli_single_sku` | 单 SKU 执行写画像和分数 |
-| `test_run_user_task_cli_rebuild_coverage_only` | 只重建覆盖 |
+| `test_run_user_task_cli_scoped_task` | 限定用户任务执行 |
 | `test_sku_user_task_insight_cli` | 查询 SKU 用户任务 |
 | `test_user_task_skus_insight_cli` | 查询任务覆盖 SKU |
 
@@ -602,8 +594,8 @@ CLI 实现后更新：
 
 - TV 首版按 `SKU x 12 tasks` 计算，当前 100 多个 SKU 可以一次执行。
 - 不读取评论原文大表，只读取 M05C 聚合画像和事实 atom 摘要。
-- 支持 `--sku-code` 和 `--task-code` 限定范围。
-- 覆盖统计可独立 `rebuild-only`，避免重复算分。
+- 支持 `--sku-code` 和 `--user-task-code` 限定范围。
+- 当前实现每次生成画像后重建本批次用户任务覆盖统计，保证跨 SKU 维度统计完整。
 
 复核触发：
 
