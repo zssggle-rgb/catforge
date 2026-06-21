@@ -41,6 +41,7 @@ def make_session() -> Session:
         entities.Core3SourceBatch.__table__,
         entities.Core3SkuParamProfile.__table__,
         entities.Core3SkuMarketProfile.__table__,
+        entities.Core3CleanMarketWeekly.__table__,
         entities.Core3SkuClaimFactProfile.__table__,
         entities.Core3SkuClaimFact.__table__,
         entities.Core3SkuCommentFactProfile.__table__,
@@ -188,6 +189,42 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
             result_hash=f"sha256:market-{sku_code}",
         )
     )
+    weekly_volume = volume / Decimal("12")
+    weekly_amount = amount / Decimal("12")
+    for week in range(1, 13):
+        session.add(
+            entities.Core3CleanMarketWeekly(
+                project_id=PROJECT_ID,
+                category_code="TV",
+                batch_id=BATCH_ID,
+                source_table="week_sales_data",
+                source_pk=f"market-week-{sku_code}-{week}",
+                source_row_id=f"market-week-{sku_code}-{week}",
+                source_operation_type="insert",
+                sku_code=sku_code,
+                model_name=model_name,
+                brand_name=brand_name,
+                period_raw=f"26W{week:02d}",
+                period_type="week",
+                period_week_index=week,
+                period_parse_status="ok",
+                channel_type="online",
+                platform_type="test_platform",
+                sales_volume=weekly_volume,
+                sales_amount=weekly_amount,
+                avg_price=price,
+                price_check_status="ok",
+                clean_record_key=f"market-week-{sku_code}-{week}",
+                clean_hash=f"sha256:market-week-{sku_code}-{week}",
+                clean_version="test",
+                hash_version="test",
+                record_status="active",
+                quality_status="ok",
+                quality_flags=[],
+                review_required=False,
+                review_status="auto_pass",
+            )
+        )
 
 
 def seed_claims(session: Session, sku_code: str, model_name: str, brand_name: str, claim_codes: list[str]) -> None:

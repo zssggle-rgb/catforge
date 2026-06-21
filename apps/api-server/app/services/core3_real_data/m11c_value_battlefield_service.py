@@ -51,6 +51,7 @@ M11C_GRAPH_HASH_VERSION = "m11c-value-battlefield-graph-v1"
 PRICE_BANDS = ("low", "mid_low", "mid", "mid_high", "high")
 CANONICAL_SIZE_TIERS = ("small_32_45", "medium_46_59", "large_60_69", "xlarge_70_85", "giant_98_plus")
 SIZE_TIER_ORDER = {tier: index for index, tier in enumerate(CANONICAL_SIZE_TIERS)}
+COMPARABLE_MARKET_POLICY_VERSION = "m11c_comparable_weekly_overlap_v1"
 
 REL_PRIMARY = "primary_battlefield"
 REL_SECONDARY = "secondary_battlefield"
@@ -113,6 +114,7 @@ class M11CSkuInput:
     size_tier: str
     price_band_in_size_tier: str
     price_percentile_in_size_tier: Decimal | None
+    comparable_market_context: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -416,6 +418,22 @@ class M11CInputReader(Core3BaseRepository):
         )
         return list(self.db.execute(stmt).scalars())
 
+    def list_clean_market_weekly(self, batch_id: str, sku_codes: Sequence[str]) -> list[entities.Core3CleanMarketWeekly]:
+        if not sku_codes:
+            return []
+        stmt = (
+            select(entities.Core3CleanMarketWeekly)
+            .where(entities.Core3CleanMarketWeekly.project_id == self.project_id)
+            .where(entities.Core3CleanMarketWeekly.category_code == self.category_code.value)
+            .where(entities.Core3CleanMarketWeekly.batch_id == batch_id)
+            .where(entities.Core3CleanMarketWeekly.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3CleanMarketWeekly.period_week_index.is_not(None))
+            .where(entities.Core3CleanMarketWeekly.record_status == "active")
+            .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
+            .order_by(entities.Core3CleanMarketWeekly.sku_code, entities.Core3CleanMarketWeekly.period_week_index)
+        )
+        return list(self.db.execute(stmt).scalars())
+
     def list_claim_profiles(self, batch_id: str, sku_codes: Sequence[str]) -> list[entities.Core3SkuClaimFactProfile]:
         if not sku_codes:
             return []
@@ -636,6 +654,7 @@ class M11CService:
         )
         sku_codes = [profile.sku_code for profile in param_profiles]
         market_profiles = _by_sku(reader.list_market_profiles(batch_id, sku_codes))
+        market_weekly_rows = reader.list_clean_market_weekly(batch_id, sku_codes)
         claim_profiles = _by_sku(reader.list_claim_profiles(batch_id, sku_codes))
         claim_facts = _group_by_sku(reader.list_claim_facts(batch_id, sku_codes))
         comment_profiles = _by_sku(reader.list_comment_profiles(batch_id, sku_codes))
@@ -643,6 +662,7 @@ class M11CService:
         sku_inputs = _build_sku_inputs(
             param_profiles=param_profiles,
             market_profiles=market_profiles,
+            market_weekly_rows=market_weekly_rows,
             claim_profiles=claim_profiles,
             claim_facts=claim_facts,
             comment_profiles=comment_profiles,
@@ -675,6 +695,8 @@ class M11CService:
             warnings.append("M11C 没有读取到 M03B 参数画像，无法生成 SKU 价值战场画像。")
         if sku_inputs and not any(item.market_profile for item in sku_inputs):
             warnings.append("M11C 没有读取到 M07 full_observed_window 市场画像，价格带和市场验证降级。")
+        if sku_inputs and not any(item.comparable_market_context for item in sku_inputs):
+            warnings.append("M11C 没有读取到 M01 周度量价事实，市场验证降级为 M07 累计窗口兼容口径。")
         if sku_inputs and not any(item.comment_profile for item in sku_inputs):
             warnings.append("M11C 没有读取到 M05C 评论事实画像，用户声音降级为弱证据。")
         return M11CServiceResult(
@@ -751,6 +773,7 @@ class M11CProfileBuilder:
             "taxonomy_codes": [battlefield.battlefield_code for battlefield in self.battlefields],
             "size_tier_policy": "M03B canonical five-tier size policy; 86-97 inch gap remains unknown for M11C until business approves a bucket.",
             "price_band_policy": "Derived within M11C size_tier from M07 full_observed_window weighted price percentile.",
+            "market_validation_policy": "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context.",
         }
         return profiles, scores, graph_snapshot, summary
 
@@ -767,7 +790,7 @@ class M11CProfileBuilder:
             market_gate_status,
             Decimal("0.0000"),
         )
-        market_validation_score = _market_validation_score(sku_input.market_profile)
+        market_validation_score = _market_validation_score(sku_input.market_profile, sku_input.comparable_market_context)
         battlefield_score = _clamp_decimal(
             user_voice_score * Decimal("0.30")
             + task_group_fit_score * Decimal("0.20")
@@ -843,7 +866,7 @@ class M11CProfileBuilder:
                 "user_voice": comment_match,
                 "claim_alignment": claim_match,
                 "param_capability": param_match,
-                "market": _market_snapshot(sku_input.market_profile),
+                "market": _market_snapshot(sku_input.market_profile, sku_input.comparable_market_context),
             }),
             "status_reason_cn": status_reason_cn,
             "evidence_ids_json": evidence_ids[:80],
@@ -1103,6 +1126,7 @@ def _build_sku_inputs(
     *,
     param_profiles: Sequence[entities.Core3SkuParamProfile],
     market_profiles: Mapping[str, entities.Core3SkuMarketProfile],
+    market_weekly_rows: Sequence[entities.Core3CleanMarketWeekly],
     claim_profiles: Mapping[str, entities.Core3SkuClaimFactProfile],
     claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
     comment_profiles: Mapping[str, entities.Core3SkuCommentFactProfile],
@@ -1113,6 +1137,7 @@ def _build_sku_inputs(
         for profile in param_profiles
     ]
     price_bands = _derive_price_bands(base_inputs, market_profiles)
+    comparable_market_contexts = _derive_comparable_market_contexts(base_inputs, market_weekly_rows)
     result: list[M11CSkuInput] = []
     for profile, size_tier in base_inputs:
         market_profile = market_profiles.get(profile.sku_code)
@@ -1131,6 +1156,7 @@ def _build_sku_inputs(
                 size_tier=size_tier,
                 price_band_in_size_tier=price_band,
                 price_percentile_in_size_tier=percentile,
+                comparable_market_context=comparable_market_contexts.get(profile.sku_code),
             )
         )
     return result
@@ -1179,6 +1205,119 @@ def _derive_price_bands(
             percentile = Decimal(index) / Decimal(n - 1)
             result[sku_code] = (_price_band(percentile), _quantize4(percentile))
     return result
+
+
+def _derive_comparable_market_contexts(
+    base_inputs: Sequence[tuple[entities.Core3SkuParamProfile, str]],
+    weekly_rows: Sequence[entities.Core3CleanMarketWeekly],
+) -> dict[str, dict[str, Any]]:
+    sku_size_tiers = {profile.sku_code: size_tier for profile, size_tier in base_inputs if size_tier in CANONICAL_SIZE_TIERS}
+    if not sku_size_tiers or not weekly_rows:
+        return {}
+
+    weekly_by_sku: dict[str, dict[int, dict[str, Decimal]]] = defaultdict(dict)
+    for row in weekly_rows:
+        sku_code = str(row.sku_code or "")
+        if sku_code not in sku_size_tiers:
+            continue
+        week_index = row.period_week_index
+        if week_index is None:
+            continue
+        volume = _decimal(row.sales_volume) or Decimal("0")
+        amount = _decimal(row.sales_amount) or Decimal("0")
+        bucket = weekly_by_sku[sku_code].setdefault(int(week_index), {"volume": Decimal("0"), "amount": Decimal("0")})
+        bucket["volume"] += volume
+        bucket["amount"] += amount
+
+    skus_by_tier: dict[str, list[str]] = defaultdict(list)
+    for sku_code, size_tier in sku_size_tiers.items():
+        if sku_code in weekly_by_sku:
+            skus_by_tier[size_tier].append(sku_code)
+
+    result: dict[str, dict[str, Any]] = {}
+    for size_tier, sku_codes in skus_by_tier.items():
+        for sku_code in sku_codes:
+            target_weeks = set(weekly_by_sku.get(sku_code, {}))
+            if not target_weeks:
+                continue
+            target_volume_total = sum((weekly_by_sku[sku_code][week]["volume"] for week in target_weeks), Decimal("0"))
+            target_amount_total = sum((weekly_by_sku[sku_code][week]["amount"] for week in target_weeks), Decimal("0"))
+            pairwise_volume_positions: list[Decimal] = []
+            pairwise_amount_positions: list[Decimal] = []
+            overlap_week_counts: list[int] = []
+            sample_peers: list[dict[str, Any]] = []
+
+            for peer_code in sku_codes:
+                if peer_code == sku_code:
+                    continue
+                peer_weeks = set(weekly_by_sku.get(peer_code, {}))
+                overlap_weeks = sorted(target_weeks & peer_weeks)
+                if not overlap_weeks:
+                    continue
+                overlap_count = len(overlap_weeks)
+                target_overlap_volume = _avg_decimal_raw(
+                    [weekly_by_sku[sku_code][week]["volume"] for week in overlap_weeks]
+                )
+                peer_overlap_volume = _avg_decimal_raw(
+                    [weekly_by_sku[peer_code][week]["volume"] for week in overlap_weeks]
+                )
+                target_overlap_amount = _avg_decimal_raw(
+                    [weekly_by_sku[sku_code][week]["amount"] for week in overlap_weeks]
+                )
+                peer_overlap_amount = _avg_decimal_raw(
+                    [weekly_by_sku[peer_code][week]["amount"] for week in overlap_weeks]
+                )
+                pairwise_volume_positions.append(_pairwise_position(target_overlap_volume, peer_overlap_volume))
+                pairwise_amount_positions.append(_pairwise_position(target_overlap_amount, peer_overlap_amount))
+                overlap_week_counts.append(overlap_count)
+                if len(sample_peers) < 8:
+                    sample_peers.append(
+                        {
+                            "peer_sku_code": peer_code,
+                            "overlap_week_count": overlap_count,
+                            "target_avg_weekly_volume_on_overlap": _decimal_to_float(_quantize4(target_overlap_volume)),
+                            "peer_avg_weekly_volume_on_overlap": _decimal_to_float(_quantize4(peer_overlap_volume)),
+                            "target_avg_weekly_amount_on_overlap": _decimal_to_float(_quantize4(target_overlap_amount)),
+                            "peer_avg_weekly_amount_on_overlap": _decimal_to_float(_quantize4(peer_overlap_amount)),
+                        }
+                    )
+
+            result[sku_code] = {
+                "policy_version": COMPARABLE_MARKET_POLICY_VERSION,
+                "method": "pairwise_peer_overlap_active_week_average",
+                "size_tier": size_tier,
+                "size_tier_peer_count": max(0, len(sku_codes) - 1),
+                "qualified_peer_count": len(pairwise_volume_positions),
+                "target_observed_week_count": len(target_weeks),
+                "target_week_start": min(target_weeks),
+                "target_week_end": max(target_weeks),
+                "target_sales_volume_total_display_only": _decimal_to_float(_quantize4(target_volume_total)),
+                "target_sales_amount_total_display_only": _decimal_to_float(_quantize4(target_amount_total)),
+                "target_avg_weekly_volume": _decimal_to_float(_quantize4(target_volume_total / Decimal(len(target_weeks)))),
+                "target_avg_weekly_amount": _decimal_to_float(_quantize4(target_amount_total / Decimal(len(target_weeks)))),
+                "comparable_volume_percentile": _decimal_to_float(_avg_decimal(pairwise_volume_positions)),
+                "comparable_amount_percentile": _decimal_to_float(_avg_decimal(pairwise_amount_positions)),
+                "min_overlap_week_count": min(overlap_week_counts) if overlap_week_counts else 0,
+                "avg_overlap_week_count": _decimal_to_float(_avg_decimal([Decimal(item) for item in overlap_week_counts])),
+                "max_overlap_week_count": max(overlap_week_counts) if overlap_week_counts else 0,
+                "sample_peer_comparisons": sample_peers,
+                "note_cn": "销量/销额验证使用同尺寸 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
+            }
+    return result
+
+
+def _avg_decimal_raw(values: Sequence[Decimal]) -> Decimal:
+    if not values:
+        return Decimal("0")
+    return sum(values, Decimal("0")) / Decimal(len(values))
+
+
+def _pairwise_position(target_value: Decimal, peer_value: Decimal) -> Decimal:
+    if target_value > peer_value:
+        return Decimal("1.0000")
+    if target_value == peer_value:
+        return Decimal("0.5000")
+    return Decimal("0.0000")
 
 
 def _price_band(percentile: Decimal) -> str:
@@ -1342,7 +1481,23 @@ def _param_entry_supported(param_code: str, entry: Mapping[str, Any]) -> bool:
     return str(value or "").strip().lower() not in {"", "-", "unknown", "none", "false", "否", "无", "不支持"}
 
 
-def _market_validation_score(market_profile: entities.Core3SkuMarketProfile | None) -> Decimal:
+def _market_validation_score(
+    market_profile: entities.Core3SkuMarketProfile | None,
+    comparable_market_context: Mapping[str, Any] | None = None,
+) -> Decimal:
+    if comparable_market_context:
+        percentiles = [
+            _decimal(comparable_market_context.get("comparable_volume_percentile")),
+            _decimal(comparable_market_context.get("comparable_amount_percentile")),
+        ]
+        present = [item for item in percentiles if item is not None]
+        if present:
+            score = _clamp_decimal(max(present))
+            qualified_peer_count = int(comparable_market_context.get("qualified_peer_count") or 0)
+            avg_overlap_week_count = _decimal(comparable_market_context.get("avg_overlap_week_count")) or Decimal("0")
+            if qualified_peer_count < 2 or avg_overlap_week_count < Decimal("2"):
+                return min(score, Decimal("0.4500"))
+            return score
     if market_profile is None:
         return Decimal("0.0000")
     percentiles = [
@@ -1493,18 +1648,27 @@ def _sentiment_polarity(positive_count: int, negative_count: int, mixed_count: i
     return "unknown"
 
 
-def _market_snapshot(market_profile: entities.Core3SkuMarketProfile | None) -> dict[str, Any]:
+def _market_snapshot(
+    market_profile: entities.Core3SkuMarketProfile | None,
+    comparable_market_context: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     if market_profile is None:
-        return {}
-    return {
+        return {"comparable_market_context": _json_safe(comparable_market_context or {})} if comparable_market_context else {}
+    snapshot = {
         "analysis_window": market_profile.analysis_window,
         "price_wavg": _decimal_to_float(market_profile.price_wavg),
-        "sales_volume_total": _decimal_to_float(market_profile.sales_volume_total),
-        "sales_amount_total": _decimal_to_float(market_profile.sales_amount_total),
+        "sales_volume_total_display_only": _decimal_to_float(market_profile.sales_volume_total),
+        "sales_amount_total_display_only": _decimal_to_float(market_profile.sales_amount_total),
         "volume_percentile_in_size": _decimal_to_float(market_profile.volume_percentile_in_size),
         "amount_percentile_in_size": _decimal_to_float(market_profile.amount_percentile_in_size),
         "sample_status": market_profile.sample_status,
     }
+    if comparable_market_context:
+        snapshot["market_validation_policy"] = COMPARABLE_MARKET_POLICY_VERSION
+        snapshot["comparable_market_context"] = _json_safe(comparable_market_context)
+    else:
+        snapshot["market_validation_policy"] = "legacy_full_observed_window_fallback"
+    return snapshot
 
 
 def _compact_score(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:

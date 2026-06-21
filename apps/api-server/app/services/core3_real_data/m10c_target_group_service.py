@@ -40,6 +40,7 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     _clamp_decimal,
     _decimal,
     _decimal_to_float,
+    _derive_comparable_market_contexts,
     _derive_price_bands,
     _group_by_sku,
     _json_safe,
@@ -122,6 +123,7 @@ class M10CSkuInput:
     size_tier: str
     price_band_in_size_tier: str
     price_percentile_in_size_tier: Decimal | None
+    comparable_market_context: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -492,6 +494,7 @@ class M10CService:
         )
         sku_codes = [profile.sku_code for profile in param_profiles]
         market_profiles = _by_sku(reader.list_market_profiles(batch_id, sku_codes))
+        market_weekly_rows = reader.list_clean_market_weekly(batch_id, sku_codes)
         claim_profiles = _by_sku(reader.list_claim_profiles(batch_id, sku_codes))
         claim_facts = _group_by_sku(reader.list_claim_facts(batch_id, sku_codes))
         comment_profiles = _by_sku(reader.list_comment_profiles(batch_id, sku_codes))
@@ -499,6 +502,7 @@ class M10CService:
         sku_inputs = _build_sku_inputs(
             param_profiles=param_profiles,
             market_profiles=market_profiles,
+            market_weekly_rows=market_weekly_rows,
             claim_profiles=claim_profiles,
             claim_facts=claim_facts,
             comment_profiles=comment_profiles,
@@ -526,6 +530,8 @@ class M10CService:
             warnings.append("M10C 没有读取到 M03B 参数画像，无法生成 SKU 目标客群画像。")
         if sku_inputs and not any(item.market_profile for item in sku_inputs):
             warnings.append("M10C 没有读取到 M07 full_observed_window 市场画像，价格带和市场验证降级。")
+        if sku_inputs and not any(item.comparable_market_context for item in sku_inputs):
+            warnings.append("M10C 没有读取到 M01 周度量价事实，市场验证降级为 M07 累计窗口兼容口径。")
         if sku_inputs and not any(item.comment_profile for item in sku_inputs):
             warnings.append("M10C 没有读取到 M05C 评论事实画像，真实用户客群证据降级。")
         return M10CServiceResult(
@@ -599,6 +605,7 @@ class M10CProfileBuilder:
             "taxonomy_codes": [target_group.target_group_code for target_group in self.target_groups],
             "size_tier_policy": "M03B canonical five-tier size policy.",
             "price_band_policy": "Derived within M10C size_tier from M07 full_observed_window weighted price percentile.",
+            "market_validation_policy": "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context.",
         }
         return profiles, scores, coverages, summary
 
@@ -620,7 +627,7 @@ class M10CProfileBuilder:
             direct_comment_count=comment_match["direct_count"],
             use_case_count=comment_match["use_case_count"],
         )
-        market_validation_score = _market_validation_score(sku_input.market_profile)
+        market_validation_score = _market_validation_score(sku_input.market_profile, sku_input.comparable_market_context)
         target_group_score = _clamp_decimal(
             comment_score * Decimal("0.30")
             + task_support_score * Decimal("0.20")
@@ -703,7 +710,7 @@ class M10CProfileBuilder:
                 "claim_alignment": claim_match,
                 "param_capability": param_match,
                 "brand_trust_boost": brand_trust_boost,
-                "market": _market_snapshot(sku_input.market_profile),
+                "market": _market_snapshot(sku_input.market_profile, sku_input.comparable_market_context),
             }),
             "status_reason_cn": _status_reason_cn(
                 target_group,
@@ -935,6 +942,7 @@ def _build_sku_inputs(
     *,
     param_profiles: Sequence[entities.Core3SkuParamProfile],
     market_profiles: Mapping[str, entities.Core3SkuMarketProfile],
+    market_weekly_rows: Sequence[entities.Core3CleanMarketWeekly],
     claim_profiles: Mapping[str, entities.Core3SkuClaimFactProfile],
     claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
     comment_profiles: Mapping[str, entities.Core3SkuCommentFactProfile],
@@ -942,6 +950,7 @@ def _build_sku_inputs(
 ) -> list[M10CSkuInput]:
     base_inputs = [(profile, _canonical_size_tier(profile)) for profile in param_profiles]
     price_bands = _derive_price_bands(base_inputs, market_profiles)
+    comparable_market_contexts = _derive_comparable_market_contexts(base_inputs, market_weekly_rows)
     result: list[M10CSkuInput] = []
     for profile, size_tier in base_inputs:
         market_profile = market_profiles.get(profile.sku_code)
@@ -961,6 +970,7 @@ def _build_sku_inputs(
                 size_tier=size_tier,
                 price_band_in_size_tier=price_band,
                 price_percentile_in_size_tier=percentile,
+                comparable_market_context=comparable_market_contexts.get(profile.sku_code),
             )
         )
     return result

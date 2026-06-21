@@ -20,7 +20,11 @@ from app.services.core3_real_data.constants import (
     Core3RunStatus,
     Core3SourceBatchStatus,
 )
-from app.services.core3_real_data.m11c_value_battlefield_service import M11CRunner
+from app.services.core3_real_data.m11c_value_battlefield_service import (
+    M11CRunner,
+    _derive_comparable_market_contexts,
+    _market_validation_score,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -42,6 +46,7 @@ def make_session() -> Session:
         entities.Core3SourceBatch.__table__,
         entities.Core3SkuParamProfile.__table__,
         entities.Core3SkuMarketProfile.__table__,
+        entities.Core3CleanMarketWeekly.__table__,
         entities.Core3SkuClaimFactProfile.__table__,
         entities.Core3SkuClaimFact.__table__,
         entities.Core3SkuCommentFactProfile.__table__,
@@ -150,6 +155,42 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
             result_hash=f"sha256:market-{sku_code}",
         )
     )
+    weekly_volume = volume / Decimal("12")
+    weekly_amount = amount / Decimal("12")
+    for week in range(1, 13):
+        session.add(
+            entities.Core3CleanMarketWeekly(
+                project_id=PROJECT_ID,
+                category_code="TV",
+                batch_id=BATCH_ID,
+                source_table="week_sales_data",
+                source_pk=f"market-week-{sku_code}-{week}",
+                source_row_id=f"market-week-{sku_code}-{week}",
+                source_operation_type="insert",
+                sku_code=sku_code,
+                model_name=model_name,
+                brand_name=brand_name,
+                period_raw=f"26W{week:02d}",
+                period_type="week",
+                period_week_index=week,
+                period_parse_status="ok",
+                channel_type="online",
+                platform_type="test_platform",
+                sales_volume=weekly_volume,
+                sales_amount=weekly_amount,
+                avg_price=price,
+                price_check_status="ok",
+                clean_record_key=f"market-week-{sku_code}-{week}",
+                clean_hash=f"sha256:market-week-{sku_code}-{week}",
+                clean_version="test",
+                hash_version="test",
+                record_status="active",
+                quality_status="ok",
+                quality_flags=[],
+                review_required=False,
+                review_status="auto_pass",
+            )
+        )
 
 
 def seed_value_sku_claims(session: Session) -> None:
@@ -399,3 +440,68 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
     assert natural["primary_battlefield_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE"
     assert taxonomy["battlefield_count"] == 12
     assert taxonomy["taxonomy_version"] == CORE3_M11C_TV_TAXONOMY_VERSION
+
+
+def test_comparable_market_validation_uses_overlap_week_average_not_cumulative_sales() -> None:
+    legacy_sku = "TV000LEGACY"
+    new_sku = "TV000NEW"
+    peer_sku = "TV000PEER"
+    base_inputs = [
+        (_param_profile_for_small_sku(legacy_sku), "small_32_45"),
+        (_param_profile_for_small_sku(new_sku), "small_32_45"),
+        (_param_profile_for_small_sku(peer_sku), "small_32_45"),
+    ]
+    weekly_rows = [
+        *_weekly_rows(legacy_sku, start=1, end=13, weekly_volume=Decimal("100"), price=Decimal("1500")),
+        *_weekly_rows(legacy_sku, start=14, end=24, weekly_volume=Decimal("50"), price=Decimal("1500")),
+        *_weekly_rows(new_sku, start=14, end=24, weekly_volume=Decimal("150"), price=Decimal("1400")),
+        *_weekly_rows(peer_sku, start=14, end=24, weekly_volume=Decimal("100"), price=Decimal("1300")),
+    ]
+
+    contexts = _derive_comparable_market_contexts(base_inputs, weekly_rows)
+
+    assert contexts[legacy_sku]["target_sales_volume_total_display_only"] > contexts[new_sku]["target_sales_volume_total_display_only"]
+    assert contexts[legacy_sku]["comparable_volume_percentile"] == 0.0
+    assert contexts[new_sku]["comparable_volume_percentile"] == 1.0
+    assert _market_validation_score(_market_profile_with_legacy_cumulative_rank(), contexts[new_sku]) > _market_validation_score(
+        _market_profile_with_legacy_cumulative_rank(),
+        contexts[legacy_sku],
+    )
+
+
+def _param_profile_for_small_sku(sku_code: str) -> entities.Core3SkuParamProfile:
+    return entities.Core3SkuParamProfile(
+        sku_code=sku_code,
+        param_values_json={"dimension_tier_profile": {"size": "small_32_45"}},
+    )
+
+
+def _weekly_rows(
+    sku_code: str,
+    *,
+    start: int,
+    end: int,
+    weekly_volume: Decimal,
+    price: Decimal,
+) -> list[entities.Core3CleanMarketWeekly]:
+    return [
+        entities.Core3CleanMarketWeekly(
+            sku_code=sku_code,
+            period_week_index=week,
+            sales_volume=weekly_volume,
+            sales_amount=weekly_volume * price,
+            record_status="active",
+            quality_status="ok",
+        )
+        for week in range(start, end + 1)
+    ]
+
+
+def _market_profile_with_legacy_cumulative_rank() -> entities.Core3SkuMarketProfile:
+    return entities.Core3SkuMarketProfile(
+        sales_volume_total=Decimal("9999"),
+        sales_amount_total=Decimal("9999999"),
+        volume_percentile_in_size=Decimal("1.000000"),
+        amount_percentile_in_size=Decimal("1.000000"),
+        sample_status="sufficient",
+    )
