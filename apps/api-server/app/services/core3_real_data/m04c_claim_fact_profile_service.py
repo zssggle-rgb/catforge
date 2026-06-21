@@ -463,6 +463,30 @@ class M04CClaimEvidenceReader(Core3BaseRepository):
         sku_code_prefix: str | None = "TV",
         target_sku_codes: Sequence[str] = (),
     ) -> list[M04CClaimRecord]:
+        rows = self._list_promo_evidence_rows(
+            batch_id,
+            evidence_types=(Core3EvidenceType.PROMO_SENTENCE.value,),
+            sku_code_prefix=sku_code_prefix,
+            target_sku_codes=target_sku_codes,
+        )
+        if not rows:
+            rows = self._list_promo_evidence_rows(
+                batch_id,
+                evidence_types=(Core3EvidenceType.PROMO_RAW.value,),
+                sku_code_prefix=sku_code_prefix,
+                target_sku_codes=target_sku_codes,
+            )
+        records = [_record_from_evidence(row) for row in rows if _present_text(row.clean_value or row.text_value or row.raw_value)]
+        return _dedupe_claim_records(records)
+
+    def _list_promo_evidence_rows(
+        self,
+        batch_id: str,
+        *,
+        evidence_types: Sequence[str],
+        sku_code_prefix: str | None,
+        target_sku_codes: Sequence[str],
+    ) -> list[entities.Core3EvidenceAtom]:
         stmt = (
             select(entities.Core3EvidenceAtom)
             .where(entities.Core3EvidenceAtom.project_id == self.project_id)
@@ -470,7 +494,7 @@ class M04CClaimEvidenceReader(Core3BaseRepository):
             .where(entities.Core3EvidenceAtom.batch_id == batch_id)
             .where(entities.Core3EvidenceAtom.is_current.is_(True))
             .where(entities.Core3EvidenceAtom.evidence_status == Core3EvidenceStatus.CURRENT.value)
-            .where(entities.Core3EvidenceAtom.evidence_type.in_((Core3EvidenceType.PROMO_SENTENCE.value, Core3EvidenceType.PROMO_RAW.value)))
+            .where(entities.Core3EvidenceAtom.evidence_type.in_(tuple(evidence_types)))
             .order_by(
                 entities.Core3EvidenceAtom.sku_code,
                 entities.Core3EvidenceAtom.evidence_type,
@@ -483,8 +507,7 @@ class M04CClaimEvidenceReader(Core3BaseRepository):
             stmt = stmt.where(entities.Core3EvidenceAtom.sku_code.like(f"{sku_code_prefix}%"))
         if target_sku_codes:
             stmt = stmt.where(entities.Core3EvidenceAtom.sku_code.in_(tuple(target_sku_codes)))
-        rows = list(self.db.execute(stmt).scalars())
-        return [_record_from_evidence(row) for row in rows if _present_text(row.clean_value or row.text_value or row.raw_value)]
+        return list(self.db.execute(stmt).scalars())
 
     def list_clean_claims(
         self,
@@ -512,7 +535,7 @@ class M04CClaimEvidenceReader(Core3BaseRepository):
         if target_sku_codes:
             stmt = stmt.where(entities.Core3CleanClaim.sku_code.in_(tuple(target_sku_codes)))
         rows = list(self.db.execute(stmt).scalars())
-        return [_record_from_clean_claim(row) for row in rows if _present_text(row.clean_claim_text)]
+        return _dedupe_claim_records([_record_from_clean_claim(row) for row in rows if _present_text(row.clean_claim_text)])
 
     def list_raw_selling_points(
         self,
@@ -1646,6 +1669,18 @@ def _record_from_clean_claim(row: entities.Core3CleanClaim) -> M04CClaimRecord:
         source_claim_key=f"clean:{row.clean_claim_id}",
         claim_seq=row.claim_seq,
     )
+
+
+def _dedupe_claim_records(records: Sequence[M04CClaimRecord]) -> list[M04CClaimRecord]:
+    seen = set()
+    result = []
+    for record in records:
+        key = (record.sku_code, _normalize_claim_text(record.claim_text))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(record)
+    return result
 
 
 def _normalize_input_source(value: str) -> str:

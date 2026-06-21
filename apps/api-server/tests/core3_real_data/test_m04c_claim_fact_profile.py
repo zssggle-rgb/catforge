@@ -103,12 +103,13 @@ def seed_foundation(session: Session) -> None:
             promo_evidence("ev_claim_picture", "MiniLED 千级分区 HDR 高亮 AI画质引擎 144Hz 游戏"),
             promo_evidence("ev_claim_smart", "AI大模型语音控制"),
             promo_evidence("ev_claim_service", "送货安装售后服务"),
+            promo_evidence("ev_claim_picture_raw_duplicate", "MiniLED 千级分区 HDR 高亮 AI画质引擎 144Hz 游戏", evidence_type="promo_raw"),
         ]
     )
     session.commit()
 
 
-def promo_evidence(evidence_id: str, claim_text: str) -> entities.Core3EvidenceAtom:
+def promo_evidence(evidence_id: str, claim_text: str, *, evidence_type: str = "promo_sentence") -> entities.Core3EvidenceAtom:
     return entities.Core3EvidenceAtom(
         evidence_id=evidence_id,
         evidence_key=evidence_id,
@@ -118,7 +119,7 @@ def promo_evidence(evidence_id: str, claim_text: str) -> entities.Core3EvidenceA
         sku_code=SKU_CODE,
         model_name="75X-Test",
         brand_name="测试品牌",
-        evidence_type="promo_sentence",
+        evidence_type=evidence_type,
         evidence_grain="sentence",
         evidence_field="卖点",
         source_table="selling_points_data",
@@ -157,6 +158,7 @@ def test_m04c_runner_generates_claim_fact_profile_and_service_separation():
     session.commit()
 
     assert result.status == "success"
+    assert result.summary_json["input_claim_text_count"] == 3
     assert result.summary_json["sku_profile_count"] == 1
     assert result.summary_json["service_separate_claim_count"] == 1
     assert result.summary_json["fact_claim_count"] >= 6
