@@ -78,3 +78,13 @@ def test_pipeline_cli_natural_language_runs_market_profile(monkeypatch):
     assert result["routed_command"] == "run-market-profile"
     assert captured["sku_scope"] == ("TV00027354",)
     assert captured["batch_id"] == BATCH_ID
+    assert captured["run_id"] == result["run_id"]
+    assert captured["module_run_id"] == result["module_run_id"]
+
+    pipeline_run = session.get(entities.Core3V2PipelineRun, result["run_id"])
+    module_run = session.get(entities.Core3V2ModuleRun, result["module_run_id"])
+    assert pipeline_run is not None
+    assert pipeline_run.status == Core3RunStatus.SUCCESS.value
+    assert module_run is not None
+    assert module_run.status == Core3RunStatus.SUCCESS.value
+    assert module_run.output_count == 4

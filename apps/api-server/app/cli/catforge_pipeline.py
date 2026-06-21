@@ -10,7 +10,9 @@ import argparse
 import json
 import re
 import sys
+import uuid
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -20,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_DEFAULT_RULESET_VERSION,
     CORE3_M03B_AC_PARSER_VERSION,
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
@@ -28,9 +31,14 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M07_MODULE_VERSION,
     CORE3_M07_POOL_RULE_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    Core3ModuleCode,
+    Core3PipelineTriggerType,
+    Core3ReleaseGateStatus,
+    Core3RunMode,
     Core3RunStatus,
 )
 from app.services.core3_real_data.m03b_param_profile_service import M03BRunner
@@ -238,20 +246,29 @@ def run_market_profile(
     effective_sku_scope = tuple(sku_scope) or tuple(list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, "TV"))
     if not effective_sku_scope:
         raise CatForgePipelineError(f"批次 {resolved_batch_id} 没有可用于 M07 市场画像的 TV 前缀 SKU。")
-    run_id = f"m07-cli-{resolved_batch_id}"
+    run_id, module_run_id = ensure_m07_cli_run_records(
+        db,
+        project_id=project_id,
+        source_category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        sku_scope=effective_sku_scope,
+        analysis_windows=analysis_windows,
+    )
     module_result = MarketProfileRunner(db).run_batch(
         project_id=project_id,
         category_code=source_category_code,
         batch_id=resolved_batch_id,
         run_id=run_id,
+        module_run_id=module_run_id,
         rule_version=CORE3_M07_RULE_VERSION,
         price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
         pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
         sku_scope=effective_sku_scope,
         analysis_windows=tuple(analysis_windows),
     )
-    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    status_value = enum_value(module_result.status)
     if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        finish_m07_cli_run_records(db, run_id=run_id, module_run_id=module_run_id, module_result=module_result)
         db.commit()
     else:
         db.rollback()
@@ -263,6 +280,8 @@ def run_market_profile(
         "product_category": "TV",
         "product_category_label_cn": "彩电",
         "batch_id": resolved_batch_id,
+        "run_id": run_id,
+        "module_run_id": module_run_id,
         "sku_scope": list(sku_scope),
         "effective_sku_scope_count": len(effective_sku_scope),
         "sku_scope_mode": "explicit" if sku_scope else "tv_prefix_default",
@@ -277,6 +296,167 @@ def run_market_profile(
         "warnings": module_result.warnings,
         "summary": module_result.summary_json,
     }
+
+
+def ensure_m07_cli_run_records(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    sku_scope: Sequence[str],
+    analysis_windows: Sequence[str],
+) -> tuple[str, str]:
+    run_id = stable_cli_uuid(
+        "m07-pipeline-run",
+        {
+            "project_id": project_id,
+            "category_code": source_category_code,
+            "batch_id": batch_id,
+            "sku_scope": sorted(str(sku_code) for sku_code in sku_scope),
+            "analysis_windows": list(analysis_windows) or ["all"],
+        },
+    )
+    module_run_id = stable_cli_uuid("m07-module-run", {"run_id": run_id, "module_code": Core3ModuleCode.M07.value})
+    now = cli_now()
+    pipeline_run = db.get(entities.Core3V2PipelineRun, run_id)
+    if pipeline_run is None:
+        pipeline_run = entities.Core3V2PipelineRun(
+            run_id=run_id,
+            project_id=project_id,
+            category_code=source_category_code,
+            run_mode=Core3RunMode.DAILY_INCREMENTAL.value,
+            trigger_type=Core3PipelineTriggerType.MANUAL.value,
+            triggered_by="catforge-cli",
+            data_batch_id=batch_id,
+            ruleset_version=CORE3_DEFAULT_RULESET_VERSION,
+        )
+        db.add(pipeline_run)
+    pipeline_run.status = Core3RunStatus.RUNNING.value
+    pipeline_run.release_status = Core3ReleaseGateStatus.NOT_READY.value
+    pipeline_run.started_at = now
+    pipeline_run.finished_at = None
+    pipeline_run.error_code = None
+    pipeline_run.error_message_cn = None
+    pipeline_run.data_batch_id = batch_id
+    pipeline_run.target_scope_json = {
+        "scope_type": "cli_market_profile",
+        "module_code": Core3ModuleCode.M07.value,
+        "sku_count": len(sku_scope),
+        "sku_scope": list(sku_scope),
+        "analysis_windows": list(analysis_windows) or ["all"],
+    }
+    pipeline_run.module_version_json = {Core3ModuleCode.M07.value: CORE3_M07_MODULE_VERSION}
+    pipeline_run.seed_version_json = {}
+    pipeline_run.input_watermark_json = {"batch_id": batch_id}
+    pipeline_run.output_summary_json = {}
+    pipeline_run.quality_summary_json = {}
+
+    module_run = db.get(entities.Core3V2ModuleRun, module_run_id)
+    if module_run is None:
+        module_run = entities.Core3V2ModuleRun(module_run_id=module_run_id)
+        db.add(module_run)
+    module_run.run_id = run_id
+    module_run.project_id = project_id
+    module_run.category_code = source_category_code
+    module_run.module_code = Core3ModuleCode.M07.value
+    module_run.target_scope = "sku_scope"
+    module_run.target_id = batch_id
+    module_run.batch_id = batch_id
+    module_run.status = Core3RunStatus.RUNNING.value
+    module_run.input_count = 0
+    module_run.changed_input_count = 0
+    module_run.output_count = 0
+    module_run.output_hash = None
+    module_run.warnings_json = []
+    module_run.review_issue_summary_json = {"count": 0, "items": []}
+    module_run.downstream_impact_json = {"items": []}
+    module_run.summary_json = {"note_cn": "CLI 触发 M07 市场画像生成中。"}
+    module_run.started_at = now
+    module_run.finished_at = None
+    module_run.error_code = None
+    module_run.error_message_cn = None
+    db.flush()
+    return run_id, module_run_id
+
+
+def finish_m07_cli_run_records(db: Session, *, run_id: str, module_run_id: str, module_result: Any) -> None:
+    status_value = enum_value(module_result.status)
+    finished_at = getattr(module_result, "finished_at", None) or cli_now()
+    warnings = list(getattr(module_result, "warnings", []) or [])
+    review_issues = list(getattr(module_result, "review_issues", []) or [])
+    downstream_impacts = list(getattr(module_result, "downstream_impacts", []) or [])
+    summary_json = dict(getattr(module_result, "summary_json", {}) or {})
+    issue_items = [
+        item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(item)
+        for item in review_issues[:20]
+    ]
+    issue_summary = {"count": len(review_issues), "items": issue_items}
+    error_message_cn = result_error_message_cn(module_result)
+
+    module_run = db.get(entities.Core3V2ModuleRun, module_run_id)
+    if module_run is not None:
+        module_run.status = status_value
+        module_run.input_count = module_result.input_count
+        module_run.changed_input_count = module_result.changed_input_count
+        module_run.output_count = module_result.output_count
+        module_run.output_hash = getattr(module_result, "output_hash", None)
+        module_run.warnings_json = warnings
+        module_run.review_issue_summary_json = issue_summary
+        module_run.downstream_impact_json = {"items": downstream_impacts}
+        module_run.summary_json = summary_json
+        module_run.started_at = getattr(module_result, "started_at", None) or module_run.started_at
+        module_run.finished_at = finished_at
+        module_run.error_code = "m07_market_profile_failed" if status_value == Core3RunStatus.FAILED.value else None
+        module_run.error_message_cn = error_message_cn
+
+    pipeline_run = db.get(entities.Core3V2PipelineRun, run_id)
+    if pipeline_run is not None:
+        pipeline_run.status = status_value
+        pipeline_run.finished_at = finished_at
+        pipeline_run.output_summary_json = {
+            "module_code": Core3ModuleCode.M07.value,
+            "input_count": module_result.input_count,
+            "changed_input_count": module_result.changed_input_count,
+            "output_count": module_result.output_count,
+            "warnings": warnings,
+            "review_issue_count": len(review_issues),
+            "summary": summary_json,
+        }
+        pipeline_run.quality_summary_json = {
+            "warning_count": len(warnings),
+            "review_issue_count": len(review_issues),
+            "status": status_value,
+        }
+        pipeline_run.release_status = (
+            Core3ReleaseGateStatus.BLOCKED.value
+            if status_value in {Core3RunStatus.FAILED.value, Core3RunStatus.BLOCKED.value}
+            else Core3ReleaseGateStatus.NOT_READY.value
+        )
+        pipeline_run.error_code = "m07_market_profile_failed" if status_value == Core3RunStatus.FAILED.value else None
+        pipeline_run.error_message_cn = error_message_cn
+    db.flush()
+
+
+def stable_cli_uuid(kind: str, payload: Any) -> str:
+    key = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"catforge:{kind}:{key}"))
+
+
+def cli_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def enum_value(value: Any) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def result_error_message_cn(module_result: Any) -> str | None:
+    status_value = enum_value(module_result.status)
+    if status_value not in {Core3RunStatus.FAILED.value, Core3RunStatus.BLOCKED.value}:
+        return None
+    warnings = list(getattr(module_result, "warnings", []) or [])
+    return "；".join(warnings[:3]) if warnings else "M07 市场画像生成未完成。"
 
 
 def list_sku_codes_with_prefix(
