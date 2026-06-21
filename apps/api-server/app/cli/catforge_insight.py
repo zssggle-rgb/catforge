@@ -153,8 +153,6 @@ CLAIM_DIMENSION_ALIASES = {
 }
 
 COMMENT_DIMENSION_ALIASES = {
-    "评论": "dimension",
-    "评价": "dimension",
     "画质": "picture_screen_experience",
     "屏幕": "picture_screen_experience",
     "清晰": "picture_screen_experience",
@@ -1557,8 +1555,8 @@ def answer_natural_language(
         if any(word in question for word in ("评论维度", "评论事实维度", "标准评论", "评论体系", "评论分类")):
             result = query_comment_taxonomy(
                 product_category=resolved_product_category,
-                dimension=None,
-                search=question,
+                dimension=question,
+                search=None,
             )
             result["routed_command"] = "comment-taxonomy"
             return result

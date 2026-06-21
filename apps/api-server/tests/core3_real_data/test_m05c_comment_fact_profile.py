@@ -321,6 +321,16 @@ def test_m05c_insight_queries_comment_profile_taxonomy_and_coverage():
         output_format="json",
         sku_limit=10,
     )
+    natural_taxonomy = catforge_insight.answer_natural_language(
+        session,
+        question="查彩电评论事实维度",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
 
     assert profile["status"] == "ok"
     assert profile["comment_summary"]["service_excluded_sentence_count"] == 1
@@ -331,6 +341,8 @@ def test_m05c_insight_queries_comment_profile_taxonomy_and_coverage():
     assert coverage["coverages"][0]["sku_codes"] == [SKU_CODE]
     assert natural["routed_command"] == "sku-comment-profile"
     assert natural["sku"]["sku_code"] == SKU_CODE
+    assert natural_taxonomy["routed_command"] == "comment-taxonomy"
+    assert natural_taxonomy["subdimension_count"] == natural_taxonomy["total_subdimension_count"]
 
 
 def test_m05c_blocks_unpublished_comment_taxonomy_for_other_category():
