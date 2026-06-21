@@ -15,7 +15,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_TAXONOMY_VERSION,
     Core3SourceBatchStatus,
 )
-from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CRunner
+from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CRunner, _parse_llm_json_object
 
 
 PROJECT_ID = "core3_mvp"
@@ -46,6 +46,18 @@ def make_session() -> Session:
     session = Session(engine)
     seed_foundation(session)
     return session
+
+
+def test_m05c_llm_json_parser_accepts_common_model_wrappers():
+    array_payload = _parse_llm_json_object('[{"source_comment_key":"a","subdimension_codes":["brand_trust"]}]')
+    facts_payload = _parse_llm_json_object('{"facts":[{"source_comment_key":"b","subdimension_codes":["audio_quality"]}]}')
+    fenced_payload = _parse_llm_json_object(
+        '```json\n{"items":[{"source_comment_key":"c","subdimension_codes":["value_price"]}]}\n```'
+    )
+
+    assert array_payload["items"][0]["source_comment_key"] == "a"
+    assert facts_payload["items"][0]["source_comment_key"] == "b"
+    assert fenced_payload["items"][0]["source_comment_key"] == "c"
 
 
 def seed_foundation(session: Session) -> None:

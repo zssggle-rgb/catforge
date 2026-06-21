@@ -1648,17 +1648,34 @@ def _parse_llm_json_object(content: str) -> dict[str, Any]:
     if text_value.startswith("```"):
         text_value = re.sub(r"^```(?:json)?", "", text_value, flags=re.IGNORECASE).strip()
         text_value = re.sub(r"```$", "", text_value).strip()
-    try:
-        parsed = json.loads(text_value)
-    except json.JSONDecodeError:
-        start = text_value.find("{")
-        end = text_value.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("LLM response is not JSON")
-        parsed = json.loads(text_value[start : end + 1])
+    parsed = _load_llm_json_value(text_value)
+    if isinstance(parsed, str):
+        parsed = _load_llm_json_value(parsed.strip())
+    if isinstance(parsed, list):
+        return {"items": parsed}
     if not isinstance(parsed, dict):
-        raise ValueError("LLM response JSON root must be an object")
+        raise ValueError("LLM response JSON root must be an object or array")
+    if "items" not in parsed and isinstance(parsed.get("facts"), list):
+        parsed = {**parsed, "items": parsed["facts"]}
     return parsed
+
+
+def _load_llm_json_value(text_value: str) -> Any:
+    try:
+        return json.loads(text_value)
+    except json.JSONDecodeError:
+        candidates: list[tuple[int, str]] = []
+        for start_char, end_char in (("{", "}"), ("[", "]")):
+            start = text_value.find(start_char)
+            end = text_value.rfind(end_char)
+            if start >= 0 and end > start:
+                candidates.append((start, text_value[start : end + 1]))
+        for _, candidate in sorted(candidates, key=lambda item: item[0]):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+    raise ValueError("LLM response is not JSON")
 
 
 def _normalize_polarity(value: Any) -> str | None:
