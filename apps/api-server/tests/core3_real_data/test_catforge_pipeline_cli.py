@@ -2,7 +2,7 @@ from sqlalchemy import select
 
 from app.cli import catforge_pipeline
 from app.models import entities
-from app.services.core3_real_data.constants import CORE3_M03B_AC_RULE_VERSION, Core3RunStatus
+from app.services.core3_real_data.constants import CORE3_M03B_AC_RULE_VERSION, Core3RunStatus, M07_ANALYSIS_WINDOWS
 from tests.core3_real_data.test_m03b_sku_param_profile_runner import BATCH_ID, PROJECT_ID, make_session, seed_ac_param_evidence
 
 
@@ -35,14 +35,14 @@ def test_pipeline_cli_natural_language_runs_ac_param_profile():
 
 def test_pipeline_cli_natural_language_runs_market_profile(monkeypatch):
     session = make_session()
-    captured = {}
+    captured_calls = []
 
     class FakeMarketProfileRunner:
         def __init__(self, db):
             self.db = db
 
         def run_batch(self, **kwargs):
-            captured.update(kwargs)
+            captured_calls.append(kwargs)
 
             class Result:
                 status = Core3RunStatus.SUCCESS
@@ -76,10 +76,12 @@ def test_pipeline_cli_natural_language_runs_market_profile(monkeypatch):
 
     assert result["status"] == "ok"
     assert result["routed_command"] == "run-market-profile"
-    assert captured["sku_scope"] == ("TV00027354",)
-    assert captured["batch_id"] == BATCH_ID
-    assert captured["run_id"] == result["run_id"]
-    assert captured["module_run_id"] == result["module_run_id"]
+    assert len(captured_calls) == len(M07_ANALYSIS_WINDOWS)
+    assert [call["analysis_windows"][0] for call in captured_calls] == [window.value for window in M07_ANALYSIS_WINDOWS]
+    assert {call["sku_scope"] for call in captured_calls} == {("TV00027354",)}
+    assert {call["batch_id"] for call in captured_calls} == {BATCH_ID}
+    assert {call["run_id"] for call in captured_calls} == {result["run_id"]}
+    assert {call["module_run_id"] for call in captured_calls} == {result["module_run_id"]}
 
     pipeline_run = session.get(entities.Core3V2PipelineRun, result["run_id"])
     module_run = session.get(entities.Core3V2ModuleRun, result["module_run_id"])
@@ -87,4 +89,4 @@ def test_pipeline_cli_natural_language_runs_market_profile(monkeypatch):
     assert pipeline_run.status == Core3RunStatus.SUCCESS.value
     assert module_run is not None
     assert module_run.status == Core3RunStatus.SUCCESS.value
-    assert module_run.output_count == 4
+    assert module_run.output_count == 4 * len(M07_ANALYSIS_WINDOWS)

@@ -100,7 +100,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 Use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when the current deployment has new raw selling points but M01/M02 have not been rerun yet.
 
 Use `--batch-id latest` unless the user gives a specific batch id. Use `--force-rebuild` when source data or taxonomy/rules have changed and existing profile business keys should be refreshed.
-For M07 market profiles, omit `--analysis-window` to run all windows. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. The current implementation writes market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket persistence from the updated M07 design requires the follow-up M07 service/table implementation.
+For M07 market profiles, omit `--analysis-window` to run all windows. The CLI executes those windows sequentially and commits after each window to keep the 205 memory peak lower than a single all-window in-process run. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. The current implementation writes market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket persistence from the updated M07 design requires the follow-up M07 service/table implementation.
 
 ## Response Rules
 

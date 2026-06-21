@@ -14,7 +14,8 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Iterable, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,6 +41,7 @@ from app.services.core3_real_data.constants import (
     Core3ReleaseGateStatus,
     Core3RunMode,
     Core3RunStatus,
+    M07_ANALYSIS_WINDOWS,
 )
 from app.services.core3_real_data.m03b_param_profile_service import M03BRunner
 from app.services.core3_real_data.m04c_claim_fact_profile_service import INPUT_SOURCE_AUTO, M04CRunner
@@ -246,32 +248,33 @@ def run_market_profile(
     effective_sku_scope = tuple(sku_scope) or tuple(list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, "TV"))
     if not effective_sku_scope:
         raise CatForgePipelineError(f"批次 {resolved_batch_id} 没有可用于 M07 市场画像的 TV 前缀 SKU。")
+    analysis_window_values = resolve_m07_analysis_windows(analysis_windows)
     run_id, module_run_id = ensure_m07_cli_run_records(
         db,
         project_id=project_id,
         source_category_code=source_category_code,
         batch_id=resolved_batch_id,
         sku_scope=effective_sku_scope,
-        analysis_windows=analysis_windows,
+        analysis_windows=analysis_window_values,
     )
-    module_result = MarketProfileRunner(db).run_batch(
+    db.commit()
+    module_result = run_market_profile_windows(
+        db,
         project_id=project_id,
-        category_code=source_category_code,
+        source_category_code=source_category_code,
         batch_id=resolved_batch_id,
         run_id=run_id,
         module_run_id=module_run_id,
-        rule_version=CORE3_M07_RULE_VERSION,
-        price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
-        pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
         sku_scope=effective_sku_scope,
-        analysis_windows=tuple(analysis_windows),
+        analysis_windows=analysis_window_values,
     )
     status_value = enum_value(module_result.status)
     if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
         finish_m07_cli_run_records(db, run_id=run_id, module_run_id=module_run_id, module_result=module_result)
         db.commit()
     else:
-        db.rollback()
+        finish_m07_cli_run_records(db, run_id=run_id, module_run_id=module_run_id, module_result=module_result)
+        db.commit()
     result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
     return {
         "status": result_status,
@@ -286,6 +289,7 @@ def run_market_profile(
         "effective_sku_scope_count": len(effective_sku_scope),
         "sku_scope_mode": "explicit" if sku_scope else "tv_prefix_default",
         "analysis_windows": list(analysis_windows) or "all",
+        "executed_analysis_windows": list(analysis_window_values),
         "rule_version": CORE3_M07_RULE_VERSION,
         "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
         "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
@@ -296,6 +300,204 @@ def run_market_profile(
         "warnings": module_result.warnings,
         "summary": module_result.summary_json,
     }
+
+
+def run_market_profile_windows(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    run_id: str,
+    module_run_id: str,
+    sku_scope: Sequence[str],
+    analysis_windows: Sequence[str],
+) -> Any:
+    results = []
+    for analysis_window in analysis_windows:
+        module_result = MarketProfileRunner(db).run_batch(
+            project_id=project_id,
+            category_code=source_category_code,
+            batch_id=batch_id,
+            run_id=run_id,
+            module_run_id=module_run_id,
+            rule_version=CORE3_M07_RULE_VERSION,
+            price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
+            pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
+            sku_scope=sku_scope,
+            analysis_windows=(analysis_window,),
+        )
+        status_value = enum_value(module_result.status)
+        if module_result.status not in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} and status_value not in {"success", "warning"}:
+            return module_result
+        results.append(module_result)
+        db.commit()
+        db.expunge_all()
+    return aggregate_m07_module_results(
+        results,
+        project_id=project_id,
+        source_category_code=source_category_code,
+        batch_id=batch_id,
+        run_id=run_id,
+        sku_scope=sku_scope,
+        analysis_windows=analysis_windows,
+    )
+
+
+def aggregate_m07_module_results(
+    results: Sequence[Any],
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    run_id: str,
+    sku_scope: Sequence[str],
+    analysis_windows: Sequence[str],
+) -> Any:
+    if not results:
+        return SimpleNamespace(
+            module_code=Core3ModuleCode.M07,
+            status=Core3RunStatus.BLOCKED,
+            input_count=0,
+            changed_input_count=0,
+            output_count=0,
+            output_hash=None,
+            warnings=["M07 没有可执行的分析窗口。"],
+            review_issues=[],
+            downstream_impacts=[],
+            summary_json={
+                "project_id": project_id,
+                "category_code": source_category_code,
+                "batch_id": batch_id,
+                "run_id": run_id,
+                "target_sku_codes": list(sku_scope),
+                "analysis_windows": list(analysis_windows),
+            },
+            started_at=cli_now(),
+            finished_at=cli_now(),
+        )
+    warnings = unique_strings(item for result in results for item in list(getattr(result, "warnings", []) or []))
+    review_issues = [issue for result in results for issue in list(getattr(result, "review_issues", []) or [])]
+    downstream_impacts = [impact for result in results for impact in list(getattr(result, "downstream_impacts", []) or [])]
+    summary_json = aggregate_m07_summary(
+        results,
+        project_id=project_id,
+        source_category_code=source_category_code,
+        batch_id=batch_id,
+        run_id=run_id,
+        sku_scope=sku_scope,
+        analysis_windows=analysis_windows,
+    )
+    return SimpleNamespace(
+        module_code=Core3ModuleCode.M07,
+        status=Core3RunStatus.WARNING if warnings else Core3RunStatus.SUCCESS,
+        input_count=max(int(getattr(result, "input_count", 0) or 0) for result in results),
+        changed_input_count=sum(int(getattr(result, "changed_input_count", 0) or 0) for result in results),
+        output_count=sum(int(getattr(result, "output_count", 0) or 0) for result in results),
+        output_hash=stable_cli_uuid("m07-aggregate-output", summary_json),
+        warnings=warnings,
+        review_issues=review_issues,
+        downstream_impacts=downstream_impacts,
+        summary_json=summary_json,
+        started_at=min(getattr(result, "started_at", cli_now()) for result in results),
+        finished_at=max(getattr(result, "finished_at", cli_now()) for result in results),
+    )
+
+
+def aggregate_m07_summary(
+    results: Sequence[Any],
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    run_id: str,
+    sku_scope: Sequence[str],
+    analysis_windows: Sequence[str],
+) -> dict[str, Any]:
+    count_keys = (
+        "market_profile_count",
+        "market_signal_count",
+        "comparable_pool_count",
+        "pool_member_count",
+        "review_required_count",
+        "created_output_count",
+        "updated_output_count",
+        "reused_output_count",
+    )
+    summary: dict[str, Any] = {
+        "project_id": project_id,
+        "category_code": source_category_code,
+        "batch_id": batch_id,
+        "run_id": run_id,
+        "target_sku_codes": list(sku_scope),
+        "analysis_windows": list(analysis_windows),
+        "processed_sku_count": len(set(sku_scope)),
+        "window_execution_mode": "sequential",
+        "rule_version": CORE3_M07_RULE_VERSION,
+        "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
+        "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
+    }
+    for key in count_keys:
+        summary[key] = sum(int((getattr(result, "summary_json", {}) or {}).get(key) or 0) for result in results)
+    summary["sku_count"] = max(int((getattr(result, "summary_json", {}) or {}).get("sku_count") or 0) for result in results)
+    summary["scope_notes"] = unique_strings(
+        note
+        for result in results
+        for note in list((getattr(result, "summary_json", {}) or {}).get("scope_notes") or [])
+    )
+    summary["quality_notes"] = unique_strings(
+        note
+        for result in results
+        for note in list((getattr(result, "summary_json", {}) or {}).get("quality_notes") or [])
+    )
+    summary["sample_status_counts"] = merge_count_dicts(
+        (getattr(result, "summary_json", {}) or {}).get("sample_status_counts") or {} for result in results
+    )
+    summary["pool_status_counts"] = merge_count_dicts(
+        (getattr(result, "summary_json", {}) or {}).get("pool_status_counts") or {} for result in results
+    )
+    first_summary = getattr(results[0], "summary_json", {}) or {}
+    for key in ("boundary_note", "downstream_support"):
+        if key in first_summary:
+            summary[key] = first_summary[key]
+    summary["window_summaries"] = [
+        {
+            "analysis_windows": list((getattr(result, "summary_json", {}) or {}).get("analysis_windows") or []),
+            "market_profile_count": (getattr(result, "summary_json", {}) or {}).get("market_profile_count", 0),
+            "market_signal_count": (getattr(result, "summary_json", {}) or {}).get("market_signal_count", 0),
+            "comparable_pool_count": (getattr(result, "summary_json", {}) or {}).get("comparable_pool_count", 0),
+            "pool_member_count": (getattr(result, "summary_json", {}) or {}).get("pool_member_count", 0),
+            "review_required_count": (getattr(result, "summary_json", {}) or {}).get("review_required_count", 0),
+        }
+        for result in results
+    ]
+    return summary
+
+
+def resolve_m07_analysis_windows(analysis_windows: Sequence[str]) -> tuple[str, ...]:
+    if analysis_windows:
+        return tuple(str(window) for window in analysis_windows)
+    return tuple(window.value if hasattr(window, "value") else str(window) for window in M07_ANALYSIS_WINDOWS)
+
+
+def unique_strings(values: Iterable[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def merge_count_dicts(dicts: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    merged: dict[str, int] = {}
+    for count_dict in dicts:
+        for key, value in count_dict.items():
+            merged[str(key)] = merged.get(str(key), 0) + int(value or 0)
+    return merged
 
 
 def ensure_m07_cli_run_records(
