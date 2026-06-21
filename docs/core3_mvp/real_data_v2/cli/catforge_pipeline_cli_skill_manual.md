@@ -70,7 +70,7 @@ python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --analy
 
 For `run-claim-profile`, use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when raw selling points are current but M01/M02 have not been rerun.
 
-For `run-market-profile`, omit `--analysis-window` to run all M07 windows. Use repeated `--analysis-window` or repeated `--sku-code` for scoped reruns. M07 currently writes existing market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket fields from the updated M07 design require the follow-up M07 service/table implementation.
+For `run-market-profile`, omit `--analysis-window` to run all M07 windows. Use repeated `--analysis-window` or repeated `--sku-code` for scoped reruns. Because the current 205 source batch can contain mixed TV/AC evidence under source `category_code=TV`, the CLI defaults to TV-prefixed SKU scope when no `--sku-code` is supplied. M07 currently writes existing market profiles, market signals, comparable pools, and pool members. Business absolute price-bucket fields from the updated M07 design require the follow-up M07 service/table implementation.
 
 ## Outputs
 

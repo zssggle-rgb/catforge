@@ -235,14 +235,19 @@ def run_market_profile(
     analysis_windows: Sequence[str] = (),
 ) -> dict[str, Any]:
     resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    effective_sku_scope = tuple(sku_scope) or tuple(list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, "TV"))
+    if not effective_sku_scope:
+        raise CatForgePipelineError(f"批次 {resolved_batch_id} 没有可用于 M07 市场画像的 TV 前缀 SKU。")
+    run_id = f"m07-cli-{resolved_batch_id}"
     module_result = MarketProfileRunner(db).run_batch(
         project_id=project_id,
         category_code=source_category_code,
         batch_id=resolved_batch_id,
+        run_id=run_id,
         rule_version=CORE3_M07_RULE_VERSION,
         price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
         pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
-        sku_scope=tuple(sku_scope),
+        sku_scope=effective_sku_scope,
         analysis_windows=tuple(analysis_windows),
     )
     status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
@@ -259,6 +264,8 @@ def run_market_profile(
         "product_category_label_cn": "彩电",
         "batch_id": resolved_batch_id,
         "sku_scope": list(sku_scope),
+        "effective_sku_scope_count": len(effective_sku_scope),
+        "sku_scope_mode": "explicit" if sku_scope else "tv_prefix_default",
         "analysis_windows": list(analysis_windows) or "all",
         "rule_version": CORE3_M07_RULE_VERSION,
         "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
@@ -270,6 +277,40 @@ def run_market_profile(
         "warnings": module_result.warnings,
         "summary": module_result.summary_json,
     }
+
+
+def list_sku_codes_with_prefix(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    sku_prefix: str,
+) -> list[str]:
+    pattern = f"{sku_prefix}%"
+    sku_codes = list(
+        db.execute(
+            select(entities.Core3CleanSku.sku_code)
+            .where(entities.Core3CleanSku.project_id == project_id)
+            .where(entities.Core3CleanSku.category_code == category_code)
+            .where(entities.Core3CleanSku.batch_id == batch_id)
+            .where(entities.Core3CleanSku.sku_code.like(pattern))
+            .order_by(entities.Core3CleanSku.sku_code)
+        ).scalars()
+    )
+    if sku_codes:
+        return [str(code) for code in sku_codes]
+    return [
+        str(code)
+        for code in db.execute(
+            select(entities.Core3CleanMarketWeekly.sku_code)
+            .where(entities.Core3CleanMarketWeekly.project_id == project_id)
+            .where(entities.Core3CleanMarketWeekly.category_code == category_code)
+            .where(entities.Core3CleanMarketWeekly.batch_id == batch_id)
+            .where(entities.Core3CleanMarketWeekly.sku_code.like(pattern))
+            .distinct()
+            .order_by(entities.Core3CleanMarketWeekly.sku_code)
+        ).scalars()
+    ]
 
 
 def run_claim_profile(
