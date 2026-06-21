@@ -1012,7 +1012,7 @@ class M04CProfileBuilder:
         records: list[M04CClaimRecord],
         param_profile: entities.Core3SkuParamProfile | None,
     ) -> dict[str, Any]:
-        model_name = _first_present(record.model_name for record in records)
+        model_name = _first_present(record.model_name for record in records) or getattr(param_profile, "model_name", None)
         brand_name = _first_present(record.brand_name for record in records)
         facts: list[M04CWritePayload] = []
         unmatched_claim_text_count = 0
