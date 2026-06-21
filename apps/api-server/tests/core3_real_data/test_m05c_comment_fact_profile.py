@@ -21,6 +21,7 @@ from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CR
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606210001"
 SKU_CODE = "TV00077777"
+SKU_CODE_2 = "TV00088888"
 
 
 def make_session() -> Session:
@@ -208,16 +209,16 @@ def claim_fact(
     )
 
 
-def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int) -> entities.Core3EvidenceAtom:
+def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int, *, sku_code: str = SKU_CODE, model_name: str = "75X-Test", brand_name: str = "创维") -> entities.Core3EvidenceAtom:
     return entities.Core3EvidenceAtom(
         evidence_id=evidence_id,
         evidence_key=evidence_id,
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id=BATCH_ID,
-        sku_code=SKU_CODE,
-        model_name="75X-Test",
-        brand_name="创维",
+        sku_code=sku_code,
+        model_name=model_name,
+        brand_name=brand_name,
         evidence_type="comment_sentence",
         evidence_grain="sentence",
         evidence_field="评论",
@@ -233,7 +234,7 @@ def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int) -> en
         clean_field="comment_sentence",
         clean_value=text_value,
         text_value=text_value,
-        comment_id=f"c-{sentence_seq}",
+        comment_id=f"{sku_code}-c-{sentence_seq}",
         sentence_seq=sentence_seq,
         quality_status="ok",
         quality_flags=[],
@@ -243,6 +244,16 @@ def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int) -> en
         evidence_payload_json={},
         evidence_status="current",
     )
+
+
+def seed_secondary_sku_comments(session: Session) -> None:
+    session.add_all(
+        [
+            comment_evidence("comment-2-1", "TCL电视 55V8M 2026款 144Hz高刷 MEMC防抖 护眼电视", 1, sku_code=SKU_CODE_2, model_name="55V8M", brand_name="TCL"),
+            comment_evidence("comment-2-2", "画质清晰，TCL大品牌值得信赖，值得购买", 2, sku_code=SKU_CODE_2, model_name="55V8M", brand_name="TCL"),
+        ]
+    )
+    session.commit()
 
 
 def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
@@ -292,6 +303,61 @@ def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
 
     review_issue = session.execute(select(entities.Core3CommentFactReviewIssue)).scalar_one()
     assert review_issue.issue_type == "comment_contradicts_existing_param_or_claim"
+
+
+def test_m05c_sku_scoped_runs_skip_coverage_until_batch_rebuild():
+    session = make_session()
+    seed_secondary_sku_comments(session)
+
+    M05CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        target_sku_codes=[SKU_CODE],
+        llm_mode="off",
+        force_rebuild=True,
+        build_coverage=False,
+    )
+    M05CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        target_sku_codes=[SKU_CODE_2],
+        llm_mode="off",
+        force_rebuild=True,
+        build_coverage=False,
+    )
+    session.commit()
+
+    assert session.execute(select(entities.Core3CommentFactCoverage)).scalars().all() == []
+
+    result = M05CRunner(session).rebuild_coverage(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status == "success"
+    picture_coverage = session.execute(
+        select(entities.Core3CommentFactCoverage)
+        .where(entities.Core3CommentFactCoverage.coverage_type == "dimension")
+        .where(entities.Core3CommentFactCoverage.coverage_key == "picture_screen_experience")
+    ).scalar_one()
+    assert picture_coverage.sku_count == 2
+    assert set(picture_coverage.sku_codes) == {SKU_CODE, SKU_CODE_2}
+
+    brand_trust_facts = session.execute(
+        select(entities.Core3CommentFactAtom)
+        .where(entities.Core3CommentFactAtom.sku_code == SKU_CODE_2)
+        .where(entities.Core3CommentFactAtom.subdimension_code == "brand_trust")
+    ).scalars().all()
+    assert len(brand_trust_facts) == 1
+    assert brand_trust_facts[0].clean_comment_text == "画质清晰，TCL大品牌值得信赖，值得购买"
 
 
 def test_m05c_insight_queries_comment_profile_taxonomy_and_coverage():

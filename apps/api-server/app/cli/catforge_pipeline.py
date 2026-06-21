@@ -61,6 +61,10 @@ DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
 DEFAULT_CATEGORY_CODE = "TV"
 LATEST_BATCH = "latest"
 DEFAULT_M07_SKU_CHUNK_SIZE = 50
+COMMENT_COVERAGE_AUTO = "auto"
+COMMENT_COVERAGE_INLINE = "inline"
+COMMENT_COVERAGE_SKIP = "skip"
+COMMENT_COVERAGE_REBUILD_ONLY = "rebuild-only"
 
 PRODUCT_CATEGORY_CONFIGS = {
     "TV": {
@@ -134,6 +138,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm_mode=args.llm_mode,
                     llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
+                    coverage_mode=args.coverage_mode,
                 )
             elif args.command == "ask":
                 result = answer_natural_language(
@@ -148,6 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     llm_mode=args.llm_mode,
                     llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
+                    coverage_mode=args.coverage_mode,
                 )
             else:
                 parser.error("missing command")
@@ -188,6 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_comment.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU to keep memory bounded.")
     run_comment.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage for comment semantic extraction. Use required on 205 validation to ensure the model is called.")
     run_comment.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Number of comment sentences per LLM request.")
+    run_comment.add_argument(
+        "--coverage-mode",
+        choices=(COMMENT_COVERAGE_AUTO, COMMENT_COVERAGE_INLINE, COMMENT_COVERAGE_SKIP, COMMENT_COVERAGE_REBUILD_ONLY),
+        default=COMMENT_COVERAGE_AUTO,
+        help="Comment coverage handling. auto skips coverage for SKU-scoped runs; rebuild-only recomputes batch coverage from saved comment facts.",
+    )
     run_comment.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_comment)
 
@@ -206,6 +218,12 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU when routed to comment fact generation.")
     ask.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage when routed to comment fact generation.")
     ask.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Comment sentences per LLM request when routed to comment fact generation.")
+    ask.add_argument(
+        "--coverage-mode",
+        choices=(COMMENT_COVERAGE_AUTO, COMMENT_COVERAGE_INLINE, COMMENT_COVERAGE_SKIP, COMMENT_COVERAGE_REBUILD_ONLY),
+        default=COMMENT_COVERAGE_AUTO,
+        help="Comment coverage handling when routed to comment fact generation.",
+    )
     ask.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(ask)
     return parser
@@ -239,6 +257,7 @@ def answer_natural_language(
     max_sentences_per_sku: int = 500,
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    coverage_mode: str = COMMENT_COVERAGE_AUTO,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
     if should_run_comment_profile(question):
@@ -253,6 +272,7 @@ def answer_natural_language(
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
             force_rebuild=force_rebuild,
+            coverage_mode=coverage_mode,
         )
         result["question"] = question
         result["routed_command"] = "run-comment-profile"
@@ -311,6 +331,7 @@ def run_comment_profile(
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
     force_rebuild: bool = False,
+    coverage_mode: str = COMMENT_COVERAGE_AUTO,
 ) -> dict[str, Any]:
     if max_sentences_per_sku <= 0:
         raise CatForgePipelineError("M05C 每个 SKU 的评论句子读取上限必须大于 0。")
@@ -320,19 +341,34 @@ def run_comment_profile(
     if not config.get("comment_taxonomy_version") or not config.get("comment_rule_version"):
         raise CatForgePipelineError(f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能生成 SKU 评论事实画像。")
     resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
-    module_result = M05CRunner(db).run_batch(
-        project_id=project_id,
-        category_code=source_category_code,
-        batch_id=resolved_batch_id,
-        product_category=product_category,
-        taxonomy_version=config["comment_taxonomy_version"],
-        rule_version=config["comment_rule_version"],
-        target_sku_codes=sku_scope,
-        max_sentences_per_sku=max_sentences_per_sku,
-        llm_mode=llm_mode,
-        llm_batch_size=llm_batch_size,
-        force_rebuild=force_rebuild,
-    )
+    if coverage_mode == COMMENT_COVERAGE_REBUILD_ONLY:
+        module_result = M05CRunner(db).rebuild_coverage(
+            project_id=project_id,
+            category_code=source_category_code,
+            batch_id=resolved_batch_id,
+            product_category=product_category,
+            taxonomy_version=config["comment_taxonomy_version"],
+            rule_version=config["comment_rule_version"],
+            force_rebuild=True,
+        )
+    else:
+        build_coverage = coverage_mode == COMMENT_COVERAGE_INLINE or (
+            coverage_mode == COMMENT_COVERAGE_AUTO and not sku_scope
+        )
+        module_result = M05CRunner(db).run_batch(
+            project_id=project_id,
+            category_code=source_category_code,
+            batch_id=resolved_batch_id,
+            product_category=product_category,
+            taxonomy_version=config["comment_taxonomy_version"],
+            rule_version=config["comment_rule_version"],
+            target_sku_codes=sku_scope,
+            max_sentences_per_sku=max_sentences_per_sku,
+            llm_mode=llm_mode,
+            llm_batch_size=llm_batch_size,
+            force_rebuild=force_rebuild,
+            build_coverage=build_coverage,
+        )
     status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
     if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
         db.commit()
@@ -351,6 +387,7 @@ def run_comment_profile(
         "max_sentences_per_sku": max_sentences_per_sku,
         "llm_mode": llm_mode,
         "llm_batch_size": llm_batch_size,
+        "coverage_mode": coverage_mode,
         "taxonomy_version": config["comment_taxonomy_version"],
         "rule_version": config["comment_rule_version"],
         "force_rebuild": force_rebuild,

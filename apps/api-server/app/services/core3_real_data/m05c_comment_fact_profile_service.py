@@ -316,7 +316,7 @@ def tv_comment_fact_taxonomy_v0_1() -> M05CCommentTaxonomy:
         _sub("use_bedroom", "卧室使用", "use_case_signal", "用途信号", DIMENSION_TYPE_USE_CASE, ("卧室", "房间", "睡前", "床")),
         _sub("use_gaming_sports", "游戏/体育", "use_case_signal", "用途信号", DIMENSION_TYPE_USE_CASE, ("游戏", "电竞", "switch", "ps5", "球赛", "体育", "世界杯")),
         _sub("use_casting_online", "投屏/在线视频", "use_case_signal", "用途信号", DIMENSION_TYPE_USE_CASE, ("投屏", "网课", "视频", "会员", "电视盒子")),
-        _sub("brand_trust", "本品牌信任", "brand_power_signal", "品牌力信号", DIMENSION_TYPE_BRAND, ("品牌", "牌子", "老牌", "信赖", "相信", "海信", "创维", "tcl", "小米", "索尼", "长虹")),
+        _sub("brand_trust", "本品牌信任", "brand_power_signal", "品牌力信号", DIMENSION_TYPE_BRAND, ("大品牌", "老品牌", "老牌", "信赖", "信任", "相信", "质量有保证", "质量保证", "值得购买", "放心购买", "靠谱")),
         _sub("brand_repurchase", "复购/再次购买", "brand_power_signal", "品牌力信号", DIMENSION_TYPE_BRAND, ("复购", "再次购买", "第二台", "一直用", "用了很多年", "回购")),
         _sub("brand_recommendation", "推荐/口碑", "brand_power_signal", "品牌力信号", DIMENSION_TYPE_BRAND, ("推荐", "朋友推荐", "口碑", "值得推荐", "种草")),
         _sub("competitor_compare", "竞品比较", "competitor_comparison_signal", "竞品对比信号", DIMENSION_TYPE_COMPETITOR, ("比索尼", "比三星", "比小米", "比tcl", "比海信", "比创维", "对比", "竞品")),
@@ -673,12 +673,14 @@ class M05CCommentFactRepository(Core3BaseRepository):
         target_sku_codes: Sequence[str] = (),
     ) -> None:
         sku_codes = tuple(str(code) for code in target_sku_codes if code)
-        for model_cls in (
+        model_classes = [
             entities.Core3CommentFactReviewIssue,
-            entities.Core3CommentFactCoverage,
             entities.Core3SkuCommentFactProfile,
             entities.Core3CommentFactAtom,
-        ):
+        ]
+        if not sku_codes:
+            model_classes.insert(1, entities.Core3CommentFactCoverage)
+        for model_cls in model_classes:
             stmt = (
                 delete(model_cls)
                 .where(model_cls.project_id == self.project_id)
@@ -691,6 +693,26 @@ class M05CCommentFactRepository(Core3BaseRepository):
             if sku_codes and hasattr(model_cls, "sku_code"):
                 stmt = stmt.where(model_cls.sku_code.in_(sku_codes))
             self.db.execute(stmt)
+        self.db.flush()
+
+    def delete_coverages(
+        self,
+        *,
+        batch_id: str,
+        taxonomy_version: str,
+        rule_version: str,
+        product_category: str,
+    ) -> None:
+        stmt = (
+            delete(entities.Core3CommentFactCoverage)
+            .where(entities.Core3CommentFactCoverage.project_id == self.project_id)
+            .where(entities.Core3CommentFactCoverage.category_code == self.category_code.value)
+            .where(entities.Core3CommentFactCoverage.batch_id == batch_id)
+            .where(entities.Core3CommentFactCoverage.taxonomy_version == taxonomy_version)
+            .where(entities.Core3CommentFactCoverage.rule_version == rule_version)
+            .where(entities.Core3CommentFactCoverage.product_category == product_category)
+        )
+        self.db.execute(stmt)
         self.db.flush()
 
     def save_profiles(self, profiles: Sequence[Any], *, replace_on_hash_conflict: bool = False) -> ParamRepositoryWriteResult:
@@ -819,6 +841,7 @@ class M05CRunner:
             llm_mode=str(target.metadata.get("llm_mode") or LLM_MODE_AUTO),
             llm_batch_size=int(target.metadata.get("llm_batch_size") or M05C_DEFAULT_LLM_BATCH_SIZE),
             force_rebuild=bool(target.metadata.get("force_rebuild")),
+            build_coverage=bool(target.metadata.get("build_coverage", True)),
         )
 
     def run_batch(
@@ -837,6 +860,7 @@ class M05CRunner:
         llm_mode: str = LLM_MODE_AUTO,
         llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
         force_rebuild: bool = False,
+        build_coverage: bool = True,
     ) -> Core3ModuleRunResultSchema:
         started_at = datetime.now(timezone.utc)
         repository_context = Core3RepositoryContext(db=self.db, project_id=project_id, category_code=category_code)
@@ -866,6 +890,7 @@ class M05CRunner:
                     llm_mode=llm_mode,
                     llm_batch_size=llm_batch_size,
                     force_rebuild=force_rebuild,
+                    build_coverage=build_coverage,
                 )
         except ParamRepositoryHashConflictError as exc:
             return _failed_result(
@@ -900,6 +925,7 @@ class M05CRunner:
             "max_sentences_per_sku": max_sentences_per_sku,
             "llm_mode": _normalize_llm_mode(llm_mode),
             "llm_batch_size": llm_batch_size,
+            "build_coverage": build_coverage,
             **service_result.summary,
         }
         status = Core3RunStatus.WARNING if service_result.warnings else Core3RunStatus.SUCCESS
@@ -915,6 +941,93 @@ class M05CRunner:
             downstream_impacts=[
                 {"module_code": "M08", "reason": "SKU 评论事实变化会影响综合事实画像、目标客群和用户任务判断。"},
                 {"module_code": "M12", "reason": "评论支撑/反证变化会影响价值战场和竞品证据展示。"},
+            ],
+            summary_json=summary_json,
+            started_at=started_at,
+            finished_at=datetime.now(timezone.utc),
+        )
+
+    def rebuild_coverage(
+        self,
+        *,
+        project_id: str,
+        batch_id: str,
+        category_code: str = "TV",
+        run_id: str | None = None,
+        module_run_id: str | None = None,
+        product_category: str = "TV",
+        taxonomy_version: str = CORE3_M05C_TV_TAXONOMY_VERSION,
+        rule_version: str = CORE3_M05C_TV_RULE_VERSION,
+        force_rebuild: bool = True,
+    ) -> Core3ModuleRunResultSchema:
+        started_at = datetime.now(timezone.utc)
+        repository_context = Core3RepositoryContext(db=self.db, project_id=project_id, category_code=category_code)
+        try:
+            SourceBatchReader(repository_context).get_consumable_batch(batch_id)
+        except ValueError as exc:
+            return _blocked_result(
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                run_id=run_id,
+                message_cn=str(exc),
+                started_at=started_at,
+                finished_at=datetime.now(timezone.utc),
+            )
+        try:
+            with self.db.begin_nested():
+                service_result = M05CService(repository_context).rebuild_coverages(
+                    batch_id=batch_id,
+                    run_id=run_id,
+                    module_run_id=module_run_id,
+                    product_category=product_category,
+                    taxonomy_version=taxonomy_version,
+                    rule_version=rule_version,
+                    force_rebuild=force_rebuild,
+                )
+        except ParamRepositoryHashConflictError as exc:
+            return _failed_result(
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                run_id=run_id,
+                started_at=started_at,
+                error_code="m05c_comment_coverage_hash_conflict",
+                message_cn="M05C 评论事实覆盖统计与既有同批次业务键结果 hash 不一致，已停止以避免覆盖旧结果。",
+                error_message=str(exc),
+            )
+        except ValueError as exc:
+            return _failed_result(
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                run_id=run_id,
+                started_at=started_at,
+                error_code="m05c_comment_coverage_rebuild_failed",
+                message_cn="M05C 评论事实覆盖统计重算失败，请检查已落库的评论事实原子。",
+                error_message=str(exc),
+            )
+
+        summary_json = {
+            "batch_id": batch_id,
+            "module_version": CORE3_M05C_MODULE_VERSION,
+            "taxonomy_version": taxonomy_version,
+            "rule_version": rule_version,
+            "product_category": product_category,
+            "coverage_rebuild": True,
+            **service_result.summary,
+        }
+        return Core3ModuleRunResultSchema(
+            module_code=Core3ModuleCode.M05C,
+            status=Core3RunStatus.SUCCESS,
+            input_count=service_result.input_count,
+            changed_input_count=service_result.created_output_count,
+            output_count=service_result.comment_coverage_count,
+            output_hash=stable_hash(summary_json, version="m05c_comment_coverage_rebuild_summary_v1"),
+            warnings=service_result.warnings,
+            review_issues=[],
+            downstream_impacts=[
+                {"module_code": "M08", "reason": "批次级评论事实覆盖统计变化会影响综合事实画像和后续竞品证据展示。"},
             ],
             summary_json=summary_json,
             started_at=started_at,
@@ -940,6 +1053,7 @@ class M05CService:
         llm_mode: str = LLM_MODE_AUTO,
         llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
         force_rebuild: bool = False,
+        build_coverage: bool = True,
     ) -> M05CServiceResult:
         taxonomy = M05CCommentTaxonomyLoader().load(taxonomy_version, product_category=product_category)
         records = M05CCommentEvidenceReader(self.context).list_comment_records(
@@ -961,7 +1075,7 @@ class M05CService:
             rule_version=rule_version,
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
-        ).build(records, param_profiles, claim_facts)
+        ).build(records, param_profiles, claim_facts, build_coverage=build_coverage)
         repository = M05CCommentFactRepository(self.context)
         if force_rebuild:
             repository.delete_outputs(
@@ -974,9 +1088,10 @@ class M05CService:
         write_results = {
             "sku_comment_profiles": repository.save_profiles(profiles, replace_on_hash_conflict=force_rebuild),
             "comment_facts": repository.save_facts(facts, replace_on_hash_conflict=force_rebuild),
-            "comment_coverages": repository.save_coverages(coverages, replace_on_hash_conflict=force_rebuild),
             "review_issues": repository.save_review_issues(review_issues, replace_on_hash_conflict=force_rebuild),
         }
+        if build_coverage:
+            write_results["comment_coverages"] = repository.save_coverages(coverages, replace_on_hash_conflict=force_rebuild)
         write_summary = {name: _write_summary(result) for name, result in write_results.items()}
         warnings = _warnings(summary, param_profiles=param_profiles, claim_facts=claim_facts, sku_codes=sku_codes)
         return M05CServiceResult(
@@ -991,6 +1106,105 @@ class M05CService:
             warnings=warnings,
             write_summary=write_summary,
             summary={**summary, "write_summary": write_summary, "category_boundary_filter": f"sku_code_prefix_{taxonomy.sku_code_prefix}"},
+        )
+
+    def rebuild_coverages(
+        self,
+        *,
+        batch_id: str,
+        run_id: str | None = None,
+        module_run_id: str | None = None,
+        product_category: str = "TV",
+        taxonomy_version: str = CORE3_M05C_TV_TAXONOMY_VERSION,
+        rule_version: str = CORE3_M05C_TV_RULE_VERSION,
+        force_rebuild: bool = True,
+    ) -> M05CServiceResult:
+        taxonomy = M05CCommentTaxonomyLoader().load(taxonomy_version, product_category=product_category)
+        fact_rows = list(
+            self.context.db.execute(
+                select(entities.Core3CommentFactAtom)
+                .where(entities.Core3CommentFactAtom.project_id == self.context.project_id)
+                .where(entities.Core3CommentFactAtom.category_code == self.context.category_code.value)
+                .where(entities.Core3CommentFactAtom.batch_id == batch_id)
+                .where(entities.Core3CommentFactAtom.product_category == taxonomy.product_category)
+                .where(entities.Core3CommentFactAtom.taxonomy_version == taxonomy.taxonomy_version)
+                .where(entities.Core3CommentFactAtom.rule_version == rule_version)
+                .where(entities.Core3CommentFactAtom.is_current.is_(True))
+                .order_by(
+                    entities.Core3CommentFactAtom.sku_code,
+                    entities.Core3CommentFactAtom.source_comment_key,
+                    entities.Core3CommentFactAtom.subdimension_code,
+                )
+            ).scalars()
+        )
+        facts = [M05CWritePayload(_fact_row_payload(row)) for row in fact_rows]
+        profile_sku_count = (
+            self.context.db.execute(
+                select(func.count(func.distinct(entities.Core3SkuCommentFactProfile.sku_code)))
+                .where(entities.Core3SkuCommentFactProfile.project_id == self.context.project_id)
+                .where(entities.Core3SkuCommentFactProfile.category_code == self.context.category_code.value)
+                .where(entities.Core3SkuCommentFactProfile.batch_id == batch_id)
+                .where(entities.Core3SkuCommentFactProfile.product_category == taxonomy.product_category)
+                .where(entities.Core3SkuCommentFactProfile.taxonomy_version == taxonomy.taxonomy_version)
+                .where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
+                .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
+            ).scalar()
+            or 0
+        )
+        total_sku_count = max(int(profile_sku_count), len({fact.payload["sku_code"] for fact in facts}))
+        coverages = M05CProfileBuilder(
+            project_id=self.context.project_id,
+            category_code=self.context.category_code.value,
+            batch_id=batch_id,
+            run_id=run_id,
+            module_run_id=module_run_id,
+            taxonomy=taxonomy,
+            rule_version=rule_version,
+            llm_mode=LLM_MODE_OFF,
+        )._build_coverages(facts, total_sku_count=total_sku_count)
+        repository = M05CCommentFactRepository(self.context)
+        if force_rebuild:
+            repository.delete_coverages(
+                batch_id=batch_id,
+                taxonomy_version=taxonomy.taxonomy_version,
+                rule_version=rule_version,
+                product_category=taxonomy.product_category,
+            )
+        write_results = {"comment_coverages": repository.save_coverages(coverages, replace_on_hash_conflict=force_rebuild)}
+        write_summary = {name: _write_summary(result) for name, result in write_results.items()}
+        polarity_distribution = Counter(fact.payload["polarity"] for fact in facts)
+        dimension_distribution = Counter(fact.payload["dimension_code"] for fact in facts)
+        relation_distribution = Counter(fact.payload["support_relation"] for fact in facts)
+        summary = {
+            "input_comment_sentence_count": 0,
+            "sku_profile_count": total_sku_count,
+            "comment_fact_count": len(facts),
+            "comment_coverage_count": len(coverages),
+            "review_issue_count": 0,
+            "matched_sentence_count": len({fact.payload["source_comment_key"] for fact in facts}),
+            "service_excluded_sentence_count": len({fact.payload["source_comment_key"] for fact in facts if fact.payload["dimension_type"] == DIMENSION_TYPE_SERVICE}),
+            "contradicted_fact_count": sum(1 for fact in facts if fact.payload["support_relation"] == RELATION_CONTRADICTS),
+            "polarity_distribution": dict(sorted(polarity_distribution.items())),
+            "dimension_distribution": dict(sorted(dimension_distribution.items())),
+            "support_relation_distribution": dict(sorted(relation_distribution.items())),
+            "taxonomy_hash": stable_hash(_taxonomy_summary(taxonomy), version="m05c_comment_taxonomy_asset_hash_v1"),
+            "extraction_method": "coverage_rebuild_from_existing_comment_facts",
+            "coverage_build_mode": "rebuild_only",
+            "write_summary": write_summary,
+            "category_boundary_filter": f"sku_code_prefix_{taxonomy.sku_code_prefix}",
+        }
+        return M05CServiceResult(
+            input_count=len(facts),
+            sku_profile_count=0,
+            comment_fact_count=len(facts),
+            comment_coverage_count=len(coverages),
+            review_issue_count=0,
+            matched_sentence_count=int(summary["matched_sentence_count"]),
+            service_excluded_sentence_count=int(summary["service_excluded_sentence_count"]),
+            contradicted_fact_count=int(summary["contradicted_fact_count"]),
+            warnings=[],
+            write_summary=write_summary,
+            summary=summary,
         )
 
     def _read_param_profiles(self, batch_id: str, *, sku_codes: Sequence[str]) -> dict[str, entities.Core3SkuParamProfile]:
@@ -1059,6 +1273,8 @@ class M05CProfileBuilder:
         records: Iterable[M05CCommentRecord],
         param_profiles: Mapping[str, entities.Core3SkuParamProfile],
         claim_facts_by_sku: Mapping[str, Mapping[str, Sequence[entities.Core3SkuClaimFact]]],
+        *,
+        build_coverage: bool = True,
     ) -> tuple[list[M05CWritePayload], list[M05CWritePayload], list[M05CWritePayload], list[M05CWritePayload], dict[str, Any]]:
         clean_records = [record for record in records if _sku_allowed(record.sku_code, self.taxonomy.sku_code_prefix) and _present_text(record.comment_text)]
         records_by_sku: dict[str, list[M05CCommentRecord]] = defaultdict(list)
@@ -1103,7 +1319,7 @@ class M05CProfileBuilder:
             service_sentence_keys.update(sku_result["service_sentence_keys"])
             contradiction_count += int(sku_result["contradicted_fact_count"])
 
-        coverages = self._build_coverages(facts, total_sku_count=len(records_by_sku))
+        coverages = self._build_coverages(facts, total_sku_count=len(records_by_sku)) if build_coverage else []
         polarity_distribution = Counter(fact.payload["polarity"] for fact in facts)
         dimension_distribution = Counter(fact.payload["dimension_code"] for fact in facts)
         relation_distribution = Counter(fact.payload["support_relation"] for fact in facts)
@@ -1121,6 +1337,7 @@ class M05CProfileBuilder:
             "support_relation_distribution": dict(sorted(relation_distribution.items())),
             "taxonomy_hash": stable_hash(_taxonomy_summary(self.taxonomy), version="m05c_comment_taxonomy_asset_hash_v1"),
             "extraction_method": "llm_classification_with_rule_candidates" if self.llm_mode != LLM_MODE_OFF else "taxonomy_rule_only",
+            "coverage_build_mode": "inline" if build_coverage else "skipped",
             "llm_stats": {**llm_detail_stats, **dict(sorted(llm_stats.items()))},
             "llm_warnings": _unique_preserve_order(llm_warnings),
         }
@@ -1145,7 +1362,7 @@ class M05CProfileBuilder:
         for index, record in enumerate(records, start=1):
             source_comment_key = _record_source_comment_key(record, sku_code, index)
             annotation = annotations.get(source_comment_key)
-            matches = self._annotation_subdimensions(annotation)
+            matches = self._annotation_subdimensions(annotation, record.comment_text)
             if not matches:
                 continue
             matched_sentence_keys.add(source_comment_key)
@@ -1204,7 +1421,7 @@ class M05CProfileBuilder:
                 matches.append(definition)
         return matches
 
-    def _annotation_subdimensions(self, annotation: M05CLlmAnnotation | None) -> list[M05CSubdimensionDefinition]:
+    def _annotation_subdimensions(self, annotation: M05CLlmAnnotation | None, text_value: str) -> list[M05CSubdimensionDefinition]:
         if annotation is None:
             return []
         result = []
@@ -1212,6 +1429,8 @@ class M05CProfileBuilder:
         for code in annotation.subdimension_codes:
             definition = by_code.get(code)
             if definition is not None:
+                if definition.subdimension_code == "brand_trust" and not _brand_trust_supported(text_value):
+                    continue
                 result.append(definition)
         return result
 
@@ -1599,6 +1818,50 @@ def _record_from_evidence(row: entities.Core3EvidenceAtom) -> M05CCommentRecord:
         sentence_seq=row.sentence_seq,
         sample_status=row.sample_status,
     )
+
+
+def _fact_row_payload(row: entities.Core3CommentFactAtom) -> dict[str, Any]:
+    return {
+        "comment_fact_id": row.comment_fact_id,
+        "project_id": row.project_id,
+        "category_code": row.category_code,
+        "batch_id": row.batch_id,
+        "run_id": row.run_id,
+        "module_run_id": row.module_run_id,
+        "product_category": row.product_category,
+        "taxonomy_version": row.taxonomy_version,
+        "sku_code": row.sku_code,
+        "model_name": row.model_name,
+        "brand_name": row.brand_name,
+        "source_comment_key": row.source_comment_key,
+        "source_comment_id": row.source_comment_id,
+        "sentence_seq": row.sentence_seq,
+        "raw_comment_text": row.raw_comment_text,
+        "clean_comment_text": row.clean_comment_text,
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "subdimension_code": row.subdimension_code,
+        "subdimension_name": row.subdimension_name,
+        "dimension_type": row.dimension_type,
+        "polarity": row.polarity,
+        "evidence_strength": row.evidence_strength,
+        "support_relation": row.support_relation,
+        "support_target_type": row.support_target_type,
+        "supported_param_codes": row.supported_param_codes or [],
+        "contradicted_param_codes": row.contradicted_param_codes or [],
+        "supported_claim_codes": row.supported_claim_codes or [],
+        "contradicted_claim_codes": row.contradicted_claim_codes or [],
+        "param_snapshot_json": row.param_snapshot_json or {},
+        "claim_snapshot_json": row.claim_snapshot_json or {},
+        "signal_payload_json": row.signal_payload_json or {},
+        "extraction_payload_json": row.extraction_payload_json or {},
+        "evidence_ids": row.evidence_ids or [],
+        "quality_flags": row.quality_flags or [],
+        "confidence": row.confidence,
+        "fact_hash": row.fact_hash,
+        "is_current": row.is_current,
+        "rule_version": row.rule_version,
+    }
 
 
 def _dedupe_comment_records(records: Sequence[M05CCommentRecord]) -> list[M05CCommentRecord]:
@@ -2016,6 +2279,26 @@ def _example_payload(row: Mapping[str, Any]) -> dict[str, Any]:
 def _matched_patterns(text_value: str, patterns: Sequence[str]) -> list[str]:
     normalized = _normalize_comment_text(text_value)
     return [pattern for pattern in patterns if re.search(pattern, normalized, flags=re.IGNORECASE)]
+
+
+def _brand_trust_supported(text_value: str) -> bool:
+    normalized = _normalize_comment_text(text_value)
+    return any(
+        re.search(pattern, normalized, flags=re.IGNORECASE)
+        for pattern in (
+            "大品牌",
+            "老品牌",
+            "老牌",
+            "信赖",
+            "信任",
+            "相信",
+            "质量.{0,4}保证",
+            "值得购买",
+            "放心购买",
+            "放心入",
+            "靠谱",
+        )
+    )
 
 
 def _warnings(
