@@ -593,6 +593,18 @@ def test_market_profile_bucket_and_pool_queries_are_routed_by_natural_language()
     assert bucket["coverage_count"] >= 1
     assert any("TV00027354" in item["sku_codes"] for item in bucket["coverages"])
 
+    price_position_bucket = catforge_insight.answer_natural_language(
+        session,
+        question="查高价位覆盖哪些 SKU",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+    assert price_position_bucket["routed_command"] == "market-bucket-coverage"
+
     assert pools["routed_command"] == "comparable-pools"
     assert pools["pool_count"] == 1
     assert pools["pools"][0]["pool_type"] == "same_price_band"

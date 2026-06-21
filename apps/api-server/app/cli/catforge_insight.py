@@ -1935,6 +1935,7 @@ def should_route_to_market_query(question: str, normalized: str) -> bool:
             "价格区间",
             "尺寸区间",
             "价格带",
+            "价位",
             "同价位",
             "可比池",
             "市场池",
@@ -1943,7 +1944,7 @@ def should_route_to_market_query(question: str, normalized: str) -> bool:
 
 
 def should_route_to_market_bucket_coverage(question: str, normalized: str) -> bool:
-    if any(token in normalized for token in ("价格区间", "尺寸区间", "价格带", "同价位", "销量位置")):
+    if any(token in normalized for token in ("价格区间", "尺寸区间", "价格带", "价位", "同价位", "销量位置")):
         return True
     return any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")) and any(
         token in normalized for token in ("市场", "价格", "尺寸", "量价")
