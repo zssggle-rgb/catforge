@@ -1913,6 +1913,238 @@ class Core3ClaimPositionCoverage(Base, AuditMixin):
     rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m04c_tv_claim_fact_profile_v0.1")
 
 
+class Core3CommentFactAtom(Base, AuditMixin):
+    __tablename__ = "core3_comment_fact_atom"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "source_comment_key",
+            "subdimension_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_comment_fact_atom_current",
+        ),
+        Index("ix_core3_comment_fact_atom_project_category_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_comment_fact_atom_sku_dimension", "sku_code", "dimension_code"),
+        Index("ix_core3_comment_fact_atom_subdimension", "dimension_code", "subdimension_code"),
+        Index("ix_core3_comment_fact_atom_params_gin", "supported_param_codes", postgresql_using="gin"),
+        Index("ix_core3_comment_fact_atom_claims_gin", "supported_claim_codes", postgresql_using="gin"),
+        Index("ix_core3_comment_fact_atom_evidence_gin", "evidence_ids", postgresql_using="gin"),
+    )
+
+    comment_fact_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    source_comment_key: Mapped[str] = mapped_column(String(220), nullable=False, index=True)
+    source_comment_id: Mapped[str | None] = mapped_column(String(180), index=True)
+    sentence_seq: Mapped[int | None] = mapped_column(Integer)
+    raw_comment_text: Mapped[str | None] = mapped_column(Text)
+    clean_comment_text: Mapped[str] = mapped_column(Text, nullable=False)
+    dimension_code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    dimension_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    subdimension_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    subdimension_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    dimension_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    polarity: Mapped[str] = mapped_column(String(40), nullable=False, default="neutral", index=True)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False, default="medium", index=True)
+    support_relation: Mapped[str] = mapped_column(String(80), nullable=False, default="comment_signal_only", index=True)
+    support_target_type: Mapped[str] = mapped_column(String(80), nullable=False, default="signal", index=True)
+    supported_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supported_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    param_snapshot_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    claim_snapshot_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    signal_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    extraction_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_ids: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    quality_flags: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    fact_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m05c_tv_comment_fact_profile_v0.1")
+
+
+class Core3SkuCommentFactProfile(Base, AuditMixin):
+    __tablename__ = "core3_sku_comment_fact_profile"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_sku_comment_fact_profile_current",
+        ),
+        Index("ix_core3_sku_comment_profile_project_category_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_sku_comment_profile_dimension_gin", "dimension_summary_json", postgresql_using="gin"),
+        Index("ix_core3_sku_comment_profile_signal_gin", "signal_summary_json", postgresql_using="gin"),
+        Index("ix_core3_sku_comment_profile_param_support_gin", "supported_param_codes", postgresql_using="gin"),
+        Index("ix_core3_sku_comment_profile_claim_support_gin", "supported_claim_codes", postgresql_using="gin"),
+    )
+
+    comment_profile_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    comment_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    matched_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fact_atom_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    product_fact_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    positive_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    negative_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mixed_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    neutral_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    service_excluded_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dimension_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    signal_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    param_comment_support_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    claim_comment_support_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    polarity_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_examples_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supported_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    unmentioned_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supported_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    unmentioned_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    evidence_ids: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    quality_flags: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    review_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    profile_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m05c_tv_comment_fact_profile_v0.1")
+
+
+class Core3CommentFactCoverage(Base, AuditMixin):
+    __tablename__ = "core3_comment_fact_coverage"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "product_category",
+            "taxonomy_version",
+            "coverage_type",
+            "coverage_key",
+            "rule_version",
+            "is_current",
+            name="uq_core3_comment_fact_coverage_current",
+        ),
+        Index("ix_core3_comment_fact_coverage_project_category_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_comment_fact_coverage_type_key", "coverage_type", "coverage_key"),
+        Index("ix_core3_comment_fact_coverage_dimension", "dimension_code", "subdimension_code"),
+        Index("ix_core3_comment_fact_coverage_sku_count", "sku_count"),
+        Index("ix_core3_comment_fact_coverage_skus_gin", "sku_codes", postgresql_using="gin"),
+        Index("ix_core3_comment_fact_coverage_sample_gin", "sample_evidence_json", postgresql_using="gin"),
+    )
+
+    comment_coverage_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    coverage_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    coverage_key: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    coverage_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    dimension_code: Mapped[str | None] = mapped_column(String(120), index=True)
+    subdimension_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    rule_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    fact_atom_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    positive_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    negative_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mixed_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    neutral_sentence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    strong_evidence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    supported_param_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    contradicted_param_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    supported_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    contradicted_claim_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_ratio: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    sku_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    sample_sku_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    top_skus_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supported_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_param_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supported_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    contradicted_claim_codes: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    sample_evidence_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    sample_status_counts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    review_flags: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    coverage_status: Mapped[str] = mapped_column(String(80), nullable=False, default="covered", index=True)
+    coverage_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m05c_tv_comment_fact_profile_v0.1")
+
+
+class Core3CommentFactReviewIssue(Base, AuditMixin):
+    __tablename__ = "core3_comment_fact_review_issue"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "taxonomy_version",
+            "sku_code",
+            "issue_type",
+            "issue_hash",
+            "rule_version",
+            "is_current",
+            name="uq_core3_comment_fact_review_issue_current",
+        ),
+        Index("ix_core3_comment_fact_review_project_category_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_comment_fact_review_sku_type", "sku_code", "issue_type"),
+    )
+
+    review_issue_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    issue_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False, default="medium", index=True)
+    issue_detail: Mapped[str] = mapped_column(Text, nullable=False)
+    issue_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_ids: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="review_required", index=True)
+    issue_hash: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m05c_tv_comment_fact_profile_v0.1")
+
+
 class Core3ParamTaxonomyVersion(Base, AuditMixin):
     __tablename__ = "core3_param_taxonomy_version"
     __table_args__ = (

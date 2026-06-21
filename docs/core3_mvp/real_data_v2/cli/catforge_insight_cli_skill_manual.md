@@ -1,6 +1,6 @@
 # CatForge Insight CLI and Claude Skill Manual
 
-This manual documents the read-only insight interface for parameter profiles, claim fact profiles, and market profiles.
+This manual documents the read-only insight interface for parameter profiles, claim fact profiles, market profiles, and comment fact profiles.
 
 ## Purpose
 
@@ -15,6 +15,9 @@ This manual documents the read-only insight interface for parameter profiles, cl
 7. One SKU/model's market profile.
 8. Price-band, size-segment, and size-price market bucket coverage.
 9. Comparable-pool baselines for one SKU/model.
+10. One SKU/model's TV comment fact profile.
+11. The TV standard comment fact taxonomy.
+12. SKU coverage for a comment fact dimension, audience/use/brand/competitor signal, parameter support, or claim support.
 
 It does not generate or mutate data. It reads M03B outputs from:
 
@@ -36,6 +39,15 @@ It reads M07 outputs from:
 - `core3_market_signal`
 - `core3_comparable_pool_baseline`
 - `core3_market_pool_member`
+
+It reads M05C-B outputs from:
+
+- `core3_comment_fact_atom`
+- `core3_sku_comment_fact_profile`
+- `core3_comment_fact_coverage`
+- `core3_comment_fact_review_issue`
+
+M05C-B, also called `m05b` in business discussion, is the LLM-based generation stage. `catforge_insight` is M05C-C read-only query and never calls an LLM.
 
 Current M07 query note: the updated M07 design adds business absolute price buckets and `core3_market_bucket_coverage`. Until that service/table implementation is complete, `market-bucket-coverage` derives coverage from current M07 profile fields: `price_band_category`, `size_segment`, and their cross bucket.
 
@@ -72,6 +84,10 @@ python -m app.cli.catforge_insight ask "查 MiniLED 复合画质旗舰型覆盖�
 python -m app.cli.catforge_insight ask "查 100A4F 的市场画像" --format json
 python -m app.cli.catforge_insight ask "查高价格带覆盖哪些 SKU" --sku-limit 100 --format json
 python -m app.cli.catforge_insight ask "查 100A4F 的可比池" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "查 100A4F 的评论事实画像" --format json
+python -m app.cli.catforge_insight ask "查彩电评论事实维度" --format json
+python -m app.cli.catforge_insight ask "品牌力评论覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight ask "哪些 SKU 评论里提到索尼" --sku-limit 100 --format json
 ```
 
 The router is deterministic and only maps common user wording to one of the atomic commands.
@@ -222,6 +238,49 @@ Output includes:
 - Pool SKU count and valid member count.
 - Median price, median volume, and median amount.
 - Candidate SKU list, limited by `--sku-limit`.
+
+### SKU comment fact profile
+
+```bash
+python -m app.cli.catforge_insight sku-comment-profile --query 100A4F --include-comment-facts --format json
+python -m app.cli.catforge_insight sku-comment-profile --sku-code TV00027354 --format json
+```
+
+Output includes:
+
+- SKU code, model name, brand, comment sentence count, usable sentence count, comment fact count, and review issue count.
+- Positive and negative product experience dimensions.
+- Parameters and claims supported or contradicted by this SKU's own comments.
+- Audience, use-case, size/space, price/value, brand-power, and competitor signals.
+- Optional matched comment fact rows when `--include-comment-facts` is used.
+
+### Standard comment taxonomy
+
+```bash
+python -m app.cli.catforge_insight comment-taxonomy --product-category tv --format json
+python -m app.cli.catforge_insight comment-taxonomy --product-category tv --search 品牌 --format json
+```
+
+Output includes:
+
+- Comment taxonomy version.
+- Dimension and subdimension definitions.
+- Keyword rules, polarity examples, related standard parameters, and related standard claims.
+
+### Comment dimension coverage
+
+```bash
+python -m app.cli.catforge_insight comment-dimension-coverage --query "品牌力覆盖哪些 SKU" --sku-limit 100 --format json
+python -m app.cli.catforge_insight comment-dimension-coverage --dimension-code picture_screen_experience --sku-limit 100 --format json
+python -m app.cli.catforge_insight comment-dimension-coverage --coverage-type competitor --query 索尼 --sku-limit 100 --format json
+```
+
+Output includes:
+
+- Coverage type/key and taxonomy version.
+- SKU count and positive/negative/neutral counts.
+- SKU list and evidence examples, limited by `--sku-limit`.
+- Brand-power signals must not be mixed with competitor mentions.
 
 ## Claude Code Skill
 

@@ -25,6 +25,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
 )
 from app.services.core3_real_data.m03b_param_profile_service import (
@@ -34,6 +36,7 @@ from app.services.core3_real_data.m03b_param_profile_service import (
     tv_param_taxonomy_v0_1,
 )
 from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, tv_claim_taxonomy_v0_1
+from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CCommentTaxonomy, tv_comment_fact_taxonomy_v0_1
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -50,6 +53,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
         "claim_taxonomy_version": CORE3_M04C_TV_TAXONOMY_VERSION,
         "claim_taxonomy_factory": tv_claim_taxonomy_v0_1,
+        "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
+        "comment_taxonomy_factory": tv_comment_fact_taxonomy_v0_1,
     },
     "AC": {
         "label_cn": "空调",
@@ -59,6 +65,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": None,
         "claim_taxonomy_version": None,
         "claim_taxonomy_factory": None,
+        "comment_rule_version": None,
+        "comment_taxonomy_version": None,
+        "comment_taxonomy_factory": None,
     },
 }
 
@@ -141,6 +150,37 @@ CLAIM_DIMENSION_ALIASES = {
     "appearance_installation": "appearance_installation",
     "system_performance": "system_performance",
     "energy_value": "energy_value",
+}
+
+COMMENT_DIMENSION_ALIASES = {
+    "评论": "dimension",
+    "评价": "dimension",
+    "画质": "picture_screen_experience",
+    "屏幕": "picture_screen_experience",
+    "清晰": "picture_screen_experience",
+    "音质": "audio_cinema_experience",
+    "影音": "audio_cinema_experience",
+    "系统": "system_interaction_experience",
+    "交互": "system_interaction_experience",
+    "投屏": "system_interaction_experience",
+    "游戏": "gaming_motion_experience",
+    "高刷": "gaming_motion_experience",
+    "外观": "appearance_installation_space",
+    "安装": "appearance_installation_space",
+    "价格": "price_value_perception",
+    "性价比": "price_value_perception",
+    "人群": "audience_signal",
+    "客群": "audience_signal",
+    "用途": "use_case_signal",
+    "任务": "use_case_signal",
+    "品牌力": "brand_power_signal",
+    "品牌": "brand_power_signal",
+    "复购": "brand_power_signal",
+    "推荐": "brand_power_signal",
+    "竞品": "competitor_comparison_signal",
+    "对比": "competitor_comparison_signal",
+    "服务": "service_fulfillment_excluded",
+    "履约": "service_fulfillment_excluded",
 }
 
 
@@ -228,6 +268,39 @@ def main(argv: Sequence[str] | None = None) -> int:
                     position=args.position_code,
                     query=args.query,
                     position_source=args.position_source,
+                    sku_limit=args.sku_limit,
+                )
+            elif args.command == "comment-taxonomy":
+                result = query_comment_taxonomy(
+                    product_category=normalize_product_category_arg(args.product_category),
+                    dimension=args.dimension,
+                    search=args.search,
+                )
+            elif args.command == "sku-comment-profile":
+                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
+                result = query_sku_comment_profile(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=product_category,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    include_comment_facts=args.include_comment_facts,
+                )
+            elif args.command == "comment-dimension-coverage":
+                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.coverage_key)
+                result = query_comment_dimension_coverage(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=product_category,
+                    coverage_type=args.coverage_type,
+                    coverage_key=args.coverage_key,
+                    dimension=args.dimension_code,
+                    query=args.query,
                     sku_limit=args.sku_limit,
                 )
             elif args.command == "sku-market-profile":
@@ -360,6 +433,49 @@ def build_parser() -> argparse.ArgumentParser:
     claim_coverage.add_argument("--query", help="Natural position query text.")
     claim_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
     add_format_arg(claim_coverage)
+
+    comment_taxonomy = subparsers.add_parser("comment-taxonomy", help="Query a product category comment fact taxonomy.")
+    add_product_category_arg(comment_taxonomy, default="tv", allow_auto=False)
+    comment_taxonomy.add_argument("--dimension", help="Filter by comment dimension.")
+    comment_taxonomy.add_argument("--search", help="Search dimension/subdimension code, name, linked params, or linked claims.")
+    add_format_arg(comment_taxonomy)
+
+    comment_profile = subparsers.add_parser("sku-comment-profile", help="Query one SKU/model comment fact profile.")
+    add_common_args(comment_profile)
+    add_product_category_arg(comment_profile)
+    comment_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    comment_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    comment_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
+    comment_profile.add_argument("--include-comment-facts", action="store_true", help="Include matched comment fact atom rows.")
+    add_format_arg(comment_profile)
+
+    comment_coverage = subparsers.add_parser("comment-dimension-coverage", help="Query SKU coverage for comment fact dimensions, signals, params, or claims.")
+    add_common_args(comment_coverage)
+    add_product_category_arg(comment_coverage)
+    comment_coverage.add_argument(
+        "--coverage-type",
+        choices=(
+            "all",
+            "dimension",
+            "subdimension",
+            "audience_signal",
+            "use_case_signal",
+            "brand_power_signal",
+            "competitor_comparison_signal",
+            "service_fulfillment_excluded",
+            "param_support",
+            "param_contradiction",
+            "claim_support",
+            "claim_contradiction",
+        ),
+        default="all",
+        help="Coverage type to query.",
+    )
+    comment_coverage.add_argument("--dimension-code", help="Comment dimension code or alias, such as brand_power_signal or 品牌力.")
+    comment_coverage.add_argument("--coverage-key", help="Coverage key, such as brand_trust, declared_refresh_rate_hz, or tv_claim_high_refresh_rate.")
+    comment_coverage.add_argument("--query", help="Natural coverage query text.")
+    comment_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    add_format_arg(comment_coverage)
 
     market_profile = subparsers.add_parser("sku-market-profile", help="Query one SKU/model market profile.")
     add_common_args(market_profile)
@@ -937,6 +1053,265 @@ def query_claim_position_coverage(
     }
 
 
+def query_comment_taxonomy(
+    *,
+    product_category: str,
+    dimension: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy = comment_taxonomy_for_product_category(product_category)
+    dimension_code = resolve_comment_dimension(dimension, search)
+    search_norm = normalize_token(search)
+    subdimensions = []
+    dimension_counts: dict[str, int] = defaultdict(int)
+    param_mapping: dict[str, list[str]] = defaultdict(list)
+    claim_mapping: dict[str, list[str]] = defaultdict(list)
+    for item in taxonomy.subdimensions:
+        dimension_counts[item.dimension_code] += 1
+        for param_code in item.linked_param_codes:
+            param_mapping[param_code].append(item.subdimension_code)
+        for claim_code in item.linked_claim_codes:
+            claim_mapping[claim_code].append(item.subdimension_code)
+        haystack = normalize_token(
+            " ".join(
+                [
+                    item.subdimension_code,
+                    item.subdimension_name,
+                    item.dimension_code,
+                    item.dimension_name,
+                    item.dimension_type,
+                    " ".join(item.linked_param_codes),
+                    " ".join(item.linked_claim_codes),
+                    " ".join(item.patterns),
+                ]
+            )
+        )
+        if dimension_code and item.dimension_code != dimension_code:
+            continue
+        if search_norm and search_norm not in haystack:
+            continue
+        subdimensions.append(
+            {
+                "dimension_code": item.dimension_code,
+                "dimension_name": item.dimension_name,
+                "dimension_type": item.dimension_type,
+                "subdimension_code": item.subdimension_code,
+                "subdimension_name": item.subdimension_name,
+                "linked_param_codes": list(item.linked_param_codes),
+                "linked_claim_codes": list(item.linked_claim_codes),
+                "patterns": list(item.patterns),
+                "rule_summary": item.rule_summary,
+            }
+        )
+    return {
+        "status": "ok",
+        "category_code": taxonomy.product_category,
+        "product_category_label_cn": config["label_cn"],
+        "taxonomy_version": taxonomy.taxonomy_version,
+        "dimension_count": len(taxonomy.dimensions),
+        "subdimension_count": len(subdimensions),
+        "total_subdimension_count": len(taxonomy.subdimensions),
+        "dimension_counts": dict(sorted(dimension_counts.items())),
+        "dimensions": [
+            {
+                "dimension_code": dimension_item.dimension_code,
+                "dimension_name": dimension_item.dimension_name,
+                "dimension_type": dimension_item.dimension_type,
+                "rule_summary": dimension_item.rule_summary,
+            }
+            for dimension_item in taxonomy.dimensions
+            if not dimension_code or dimension_item.dimension_code == dimension_code
+        ],
+        "subdimensions": subdimensions,
+        "param_mapping": {code: items for code, items in sorted(param_mapping.items())},
+        "claim_mapping": {code: items for code, items in sorted(claim_mapping.items())},
+    }
+
+
+def query_sku_comment_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    include_comment_facts: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    ensure_comment_taxonomy_available(product_category)
+    resolved_batch_id = resolve_comment_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["comment_rule_version"])
+    profile = find_sku_comment_profile(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=config["comment_rule_version"],
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+    )
+    if isinstance(profile, list):
+        return {
+            "status": "ambiguous",
+            "message_cn": "找到多个可能的 SKU，请补充完整 SKU 编码或型号。",
+            "batch_id": resolved_batch_id,
+            "candidates": profile,
+        }
+    if profile is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU/型号的评论事实画像。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+        }
+    facts = list_sku_comment_facts(db, profile) if include_comment_facts else []
+    result = {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": profile.rule_version,
+        "taxonomy_version": profile.taxonomy_version,
+        "sku": {
+            "sku_code": profile.sku_code,
+            "model_name": profile.model_name,
+            "brand_name": profile.brand_name,
+        },
+        "comment_summary": {
+            "comment_sentence_count": profile.comment_sentence_count,
+            "matched_sentence_count": profile.matched_sentence_count,
+            "fact_atom_count": profile.fact_atom_count,
+            "product_fact_sentence_count": profile.product_fact_sentence_count,
+            "positive_sentence_count": profile.positive_sentence_count,
+            "negative_sentence_count": profile.negative_sentence_count,
+            "mixed_sentence_count": profile.mixed_sentence_count,
+            "neutral_sentence_count": profile.neutral_sentence_count,
+            "service_excluded_sentence_count": profile.service_excluded_sentence_count,
+            "review_required_count": profile.review_required_count,
+            "confidence": decimal_to_float(profile.confidence),
+        },
+        "dimension_summary": profile.dimension_summary_json or {},
+        "signal_summary": profile.signal_summary_json or {},
+        "param_comment_support": profile.param_comment_support_json or {},
+        "claim_comment_support": profile.claim_comment_support_json or {},
+        "polarity_summary": profile.polarity_summary_json or {},
+        "supported_param_codes": profile.supported_param_codes or [],
+        "contradicted_param_codes": profile.contradicted_param_codes or [],
+        "unmentioned_param_codes": profile.unmentioned_param_codes or [],
+        "supported_claim_codes": profile.supported_claim_codes or [],
+        "contradicted_claim_codes": profile.contradicted_claim_codes or [],
+        "unmentioned_claim_codes": profile.unmentioned_claim_codes or [],
+        "evidence_examples": profile.evidence_examples_json or [],
+        "quality_flags": profile.quality_flags or [],
+        "profile_hash": profile.profile_hash,
+    }
+    if include_comment_facts:
+        result["comment_facts"] = [comment_fact_payload(row) for row in facts]
+    return result
+
+
+def query_comment_dimension_coverage(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    coverage_type: str = "all",
+    coverage_key: str | None = None,
+    dimension: str | None = None,
+    query: str | None = None,
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    taxonomy = comment_taxonomy_for_product_category(product_category)
+    resolved_batch_id = resolve_comment_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["comment_rule_version"])
+    matched_dimension = resolve_comment_dimension(dimension, query)
+    matched_type = resolve_comment_coverage_type(coverage_type, query)
+    matched_key = resolve_comment_coverage_key(taxonomy, coverage_key=coverage_key, query=query, dimension=matched_dimension)
+    stmt = (
+        select(entities.Core3CommentFactCoverage)
+        .where(entities.Core3CommentFactCoverage.project_id == project_id)
+        .where(entities.Core3CommentFactCoverage.category_code == category_code)
+        .where(entities.Core3CommentFactCoverage.batch_id == resolved_batch_id)
+        .where(entities.Core3CommentFactCoverage.rule_version == config["comment_rule_version"])
+        .where(entities.Core3CommentFactCoverage.taxonomy_version == taxonomy.taxonomy_version)
+        .where(entities.Core3CommentFactCoverage.product_category == product_category)
+        .where(entities.Core3CommentFactCoverage.is_current.is_(True))
+        .order_by(
+            entities.Core3CommentFactCoverage.coverage_type,
+            entities.Core3CommentFactCoverage.dimension_code,
+            entities.Core3CommentFactCoverage.coverage_key,
+        )
+    )
+    if matched_type != "all":
+        stmt = stmt.where(entities.Core3CommentFactCoverage.coverage_type == matched_type)
+    if matched_dimension:
+        stmt = stmt.where(entities.Core3CommentFactCoverage.dimension_code == matched_dimension)
+    if matched_key:
+        stmt = stmt.where(entities.Core3CommentFactCoverage.coverage_key == matched_key)
+    rows = list(db.execute(stmt).scalars())
+    coverages = []
+    for row in rows:
+        sku_codes = list(row.sku_codes or [])
+        visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
+        coverages.append(
+            {
+                "coverage_type": row.coverage_type,
+                "coverage_key": row.coverage_key,
+                "coverage_name": row.coverage_name,
+                "dimension_code": row.dimension_code,
+                "subdimension_code": row.subdimension_code,
+                "rule_summary": row.rule_summary,
+                "fact_atom_count": row.fact_atom_count,
+                "positive_sentence_count": row.positive_sentence_count,
+                "negative_sentence_count": row.negative_sentence_count,
+                "mixed_sentence_count": row.mixed_sentence_count,
+                "neutral_sentence_count": row.neutral_sentence_count,
+                "strong_evidence_count": row.strong_evidence_count,
+                "supported_param_count": row.supported_param_count,
+                "contradicted_param_count": row.contradicted_param_count,
+                "supported_claim_count": row.supported_claim_count,
+                "contradicted_claim_count": row.contradicted_claim_count,
+                "sku_count": row.sku_count,
+                "sku_ratio": decimal_to_float(row.sku_ratio),
+                "coverage_status": row.coverage_status,
+                "supported_param_codes": row.supported_param_codes or [],
+                "contradicted_param_codes": row.contradicted_param_codes or [],
+                "supported_claim_codes": row.supported_claim_codes or [],
+                "contradicted_claim_codes": row.contradicted_claim_codes or [],
+                "sku_codes": visible_skus,
+                "sku_codes_returned": len(visible_skus),
+                "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+                "sample_sku_codes": row.sample_sku_codes or [],
+                "top_skus": row.top_skus_json or [],
+                "sample_evidence": row.sample_evidence_json or [],
+                "sample_status_counts": row.sample_status_counts_json or {},
+                "review_flags": row.review_flags or [],
+            }
+        )
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "query": query,
+        "coverage_type": matched_type,
+        "matched_dimension": matched_dimension,
+        "matched_coverage_key": matched_key,
+        "coverage_count": len(coverages),
+        "coverages": coverages,
+    }
+
+
 def query_sku_market_profile(
     db: Session,
     *,
@@ -1178,6 +1553,43 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if should_route_to_comment_query(question, normalized):
+        if any(word in question for word in ("评论维度", "评论事实维度", "标准评论", "评论体系", "评论分类")):
+            result = query_comment_taxonomy(
+                product_category=resolved_product_category,
+                dimension=None,
+                search=question,
+            )
+            result["routed_command"] = "comment-taxonomy"
+            return result
+        if should_route_to_comment_coverage(question, normalized):
+            result = query_comment_dimension_coverage(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                coverage_type="all",
+                coverage_key=None,
+                dimension=None,
+                query=question,
+                sku_limit=sku_limit,
+            )
+            result["routed_command"] = "comment-dimension-coverage"
+            return result
+        query = extract_sku_or_model_query(question)
+        result = query_sku_comment_profile(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            query=query or question,
+            include_comment_facts=output_format == "json",
+        )
+        result["routed_command"] = "sku-comment-profile"
+        result["question"] = question
+        return result
     if should_route_to_market_query(question, normalized):
         if should_route_to_market_bucket_coverage(question, normalized):
             result = query_market_bucket_coverage(
@@ -1351,6 +1763,32 @@ def resolve_claim_batch_id(
     return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
 
 
+def resolve_comment_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3SkuCommentFactProfile.batch_id)
+            .where(entities.Core3SkuCommentFactProfile.project_id == project_id)
+            .where(entities.Core3SkuCommentFactProfile.category_code == category_code)
+            .where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
+            .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
+            .order_by(entities.Core3SkuCommentFactProfile.created_at.desc(), entities.Core3SkuCommentFactProfile.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
 def resolve_market_batch_id(
     db: Session,
     project_id: str,
@@ -1481,6 +1919,59 @@ def find_sku_claim_profile(
     return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
 
 
+def find_sku_comment_profile(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+) -> entities.Core3SkuCommentFactProfile | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 评论事实画像需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3SkuCommentFactProfile.project_id == project_id,
+        entities.Core3SkuCommentFactProfile.category_code == category_code,
+        entities.Core3SkuCommentFactProfile.batch_id == batch_id,
+        entities.Core3SkuCommentFactProfile.rule_version == rule_version,
+        entities.Core3SkuCommentFactProfile.is_current.is_(True),
+    ]
+    if sku_code:
+        filters.append(func.lower(entities.Core3SkuCommentFactProfile.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3SkuCommentFactProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3SkuCommentFactProfile.sku_code) == query_norm,
+                func.lower(entities.Core3SkuCommentFactProfile.model_name) == query_norm,
+                func.lower(entities.Core3SkuCommentFactProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3SkuCommentFactProfile)
+            .where(*filters)
+            .order_by(entities.Core3SkuCommentFactProfile.sku_code)
+            .limit(11)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0]
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    if len(exact) == 1:
+        return exact[0]
+    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+
+
 def find_sku_market_profile(
     db: Session,
     *,
@@ -1580,6 +2071,26 @@ def list_sku_claim_positions(db: Session, profile: entities.Core3SkuClaimFactPro
             .where(entities.Core3SkuClaimDimensionPosition.taxonomy_version == profile.taxonomy_version)
             .where(entities.Core3SkuClaimDimensionPosition.is_current.is_(True))
             .order_by(entities.Core3SkuClaimDimensionPosition.position_source, entities.Core3SkuClaimDimensionPosition.dimension_code)
+        ).scalars()
+    )
+
+
+def list_sku_comment_facts(db: Session, profile: entities.Core3SkuCommentFactProfile) -> list[entities.Core3CommentFactAtom]:
+    return list(
+        db.execute(
+            select(entities.Core3CommentFactAtom)
+            .where(entities.Core3CommentFactAtom.project_id == profile.project_id)
+            .where(entities.Core3CommentFactAtom.category_code == profile.category_code)
+            .where(entities.Core3CommentFactAtom.batch_id == profile.batch_id)
+            .where(entities.Core3CommentFactAtom.sku_code == profile.sku_code)
+            .where(entities.Core3CommentFactAtom.rule_version == profile.rule_version)
+            .where(entities.Core3CommentFactAtom.taxonomy_version == profile.taxonomy_version)
+            .where(entities.Core3CommentFactAtom.is_current.is_(True))
+            .order_by(
+                entities.Core3CommentFactAtom.dimension_code,
+                entities.Core3CommentFactAtom.subdimension_code,
+                entities.Core3CommentFactAtom.source_comment_key,
+            )
         ).scalars()
     )
 
@@ -1735,6 +2246,91 @@ def resolve_claim_positions(
             and (normalize_token(item.position_code) == position_norm or normalize_token(item.position_name) == position_norm)
         ]
     return matches
+
+
+def resolve_comment_dimension(dimension: str | None, query: str | None) -> str | None:
+    candidates = [dimension] if dimension else []
+    if query:
+        candidates.append(query)
+    for candidate in candidates:
+        candidate_norm = normalize_token(candidate)
+        for alias, code in COMMENT_DIMENSION_ALIASES.items():
+            if normalize_token(alias) in candidate_norm:
+                return code
+        if candidate_norm in {normalize_token(code) for code in COMMENT_DIMENSION_ALIASES.values()}:
+            return candidate_norm
+    return None
+
+
+def resolve_comment_coverage_type(coverage_type: str, query: str | None) -> str:
+    if coverage_type and coverage_type != "all":
+        return coverage_type
+    query_norm = normalize_token(query)
+    if not query_norm:
+        return "all"
+    if any(token in query_norm for token in ("品牌力", "复购", "品牌信任", "回购")):
+        return "brand_power_signal"
+    if any(token in query_norm for token in ("人群", "客群", "老人", "儿童", "家庭")):
+        return "audience_signal"
+    if any(token in query_norm for token in ("用途", "任务", "客厅", "卧室", "游戏", "投屏")):
+        return "use_case_signal"
+    if any(token in query_norm for token in ("竞品", "对比", "替换")):
+        return "competitor_comparison_signal"
+    if any(token in query_norm for token in ("参数支撑", "参数支持")):
+        return "param_support"
+    if any(token in query_norm for token in ("参数反证", "参数负面", "参数矛盾")):
+        return "param_contradiction"
+    if any(token in query_norm for token in ("卖点支撑", "卖点支持")):
+        return "claim_support"
+    if any(token in query_norm for token in ("卖点反证", "卖点负面", "卖点矛盾")):
+        return "claim_contradiction"
+    return "all"
+
+
+def resolve_comment_coverage_key(
+    taxonomy: M05CCommentTaxonomy,
+    *,
+    coverage_key: str | None,
+    query: str | None,
+    dimension: str | None,
+) -> str | None:
+    if coverage_key:
+        return coverage_key
+    if not query:
+        return None
+    query_norm = normalize_token(query)
+    for item in taxonomy.subdimensions:
+        if dimension and item.dimension_code != dimension:
+            continue
+        haystack = normalize_token(" ".join([item.subdimension_code, item.subdimension_name, item.dimension_code, item.dimension_name]))
+        if normalize_token(item.subdimension_code) in query_norm or normalize_token(item.subdimension_name) in query_norm:
+            return item.subdimension_code
+        if any(token and token in haystack for token in extract_match_tokens(query)):
+            return item.subdimension_code
+    return None
+
+
+def comment_fact_payload(row: entities.Core3CommentFactAtom) -> dict[str, Any]:
+    return {
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "subdimension_code": row.subdimension_code,
+        "subdimension_name": row.subdimension_name,
+        "dimension_type": row.dimension_type,
+        "polarity": row.polarity,
+        "evidence_strength": row.evidence_strength,
+        "support_relation": row.support_relation,
+        "support_target_type": row.support_target_type,
+        "supported_param_codes": row.supported_param_codes or [],
+        "contradicted_param_codes": row.contradicted_param_codes or [],
+        "supported_claim_codes": row.supported_claim_codes or [],
+        "contradicted_claim_codes": row.contradicted_claim_codes or [],
+        "clean_comment_text": row.clean_comment_text,
+        "source_comment_key": row.source_comment_key,
+        "evidence_ids": row.evidence_ids or [],
+        "quality_flags": row.quality_flags or [],
+        "confidence": decimal_to_float(row.confidence),
+    }
 
 
 def market_signal_payload(row: entities.Core3MarketSignal) -> dict[str, Any]:
@@ -1924,6 +2520,44 @@ def sample_status_from_count(count: int) -> str:
     return "unknown"
 
 
+def should_route_to_comment_query(question: str, normalized: str) -> bool:
+    return any(
+        token in normalized
+        for token in (
+            "评论画像",
+            "评论事实",
+            "用户评价",
+            "评价画像",
+            "评价事实",
+            "评论维度",
+            "品牌力",
+            "复购",
+            "口碑",
+        )
+    ) or ("评论" in question and any(token in normalized for token in ("sku", "画像", "覆盖", "维度", "评价")))
+
+
+def should_route_to_comment_coverage(question: str, normalized: str) -> bool:
+    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+        return True
+    return any(
+        token in normalized
+        for token in (
+            "品牌力",
+            "复购",
+            "本品牌信任",
+            "用户任务",
+            "目标客群",
+            "人群",
+            "用途",
+            "竞品对比",
+            "参数支撑",
+            "卖点支撑",
+            "负面评价",
+        )
+    )
+
+
 def should_route_to_market_query(question: str, normalized: str) -> bool:
     return any(
         token in normalized
@@ -2086,6 +2720,17 @@ def claim_taxonomy_for_product_category(product_category: str) -> M04CClaimTaxon
     return product_category_config(product_category)["claim_taxonomy_factory"]()
 
 
+def ensure_comment_taxonomy_available(product_category: str) -> None:
+    config = product_category_config(product_category)
+    if not config.get("comment_taxonomy_factory") or not config.get("comment_rule_version"):
+        raise CatForgeInsightError(f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能查询 SKU 评论事实画像。")
+
+
+def comment_taxonomy_for_product_category(product_category: str) -> M05CCommentTaxonomy:
+    ensure_comment_taxonomy_available(product_category)
+    return product_category_config(product_category)["comment_taxonomy_factory"]()
+
+
 def taxonomy_for_product_category(product_category: str) -> M03BTaxonomy:
     return product_category_config(product_category)["taxonomy_factory"]()
 
@@ -2172,6 +2817,21 @@ def render_text(result: dict[str, Any]) -> str:
         if result.get("quality_flags"):
             lines.append("质量标记：" + ", ".join(result["quality_flags"]))
         return "\n".join(lines)
+    if "comment_summary" in result:
+        sku = result["sku"]
+        summary = result["comment_summary"]
+        lines = [
+            f"SKU 评论事实画像：{sku.get('model_name') or '-'} / {sku.get('sku_code')}",
+            f"批次：{result['batch_id']}；评论句：{summary['comment_sentence_count']}；命中句：{summary['matched_sentence_count']}；事实 atom：{summary['fact_atom_count']}；正向：{summary['positive_sentence_count']}；负向：{summary['negative_sentence_count']}；服务排除：{summary['service_excluded_sentence_count']}；需复核：{summary['review_required_count']}",
+            "评论维度：",
+        ]
+        for dimension_code, item in (result.get("dimension_summary") or {}).items():
+            lines.append(
+                f"- {dimension_code}: {item.get('fact_atom_count', 0)} 条；正负={item.get('polarity_counts', {})}；子维度={', '.join(item.get('subdimension_codes', []))}"
+            )
+        if result.get("quality_flags"):
+            lines.append("质量标记：" + ", ".join(result["quality_flags"]))
+        return "\n".join(lines)
     if "market_metrics" in result:
         sku = result["sku"]
         metrics = result["market_metrics"]
@@ -2243,6 +2903,19 @@ def render_text(result: dict[str, Any]) -> str:
         if len(result["claims"]) > 80:
             lines.append(f"... 还有 {len(result['claims']) - 80} 个卖点，使用 --format json 查看完整结果。")
         return "\n".join(lines)
+    if "subdimensions" in result:
+        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
+        lines = [
+            f"{label}评论事实维度：{result['subdimension_count']}/{result['total_subdimension_count']} 个；taxonomy={result['taxonomy_version']}",
+            "维度数量：" + ", ".join(f"{key}={value}" for key, value in result["dimension_counts"].items()),
+        ]
+        for item in result["subdimensions"][:80]:
+            params = ", ".join(item["linked_param_codes"]) or "-"
+            claims = ", ".join(item["linked_claim_codes"]) or "-"
+            lines.append(f"- {item['dimension_code']} / {item['subdimension_code']} / {item['subdimension_name']} / 参数：{params} / 卖点：{claims}")
+        if len(result["subdimensions"]) > 80:
+            lines.append(f"... 还有 {len(result['subdimensions']) - 80} 个评论子维度，使用 --format json 查看完整结果。")
+        return "\n".join(lines)
     if result.get("bucket_source"):
         lines = [f"市场区间覆盖：批次 {result['batch_id']}，窗口 {result['analysis_window']}，命中 {result['coverage_count']} 个区间"]
         for item in result["coverages"]:
@@ -2254,6 +2927,16 @@ def render_text(result: dict[str, Any]) -> str:
             )
         lines.append(result.get("bucket_source_note_cn", ""))
         return "\n".join(line for line in lines if line)
+    if result.get("coverage_type") is not None:
+        lines = [f"评论事实覆盖：批次 {result['batch_id']}，命中 {result['coverage_count']} 个覆盖项"]
+        for item in result["coverages"]:
+            sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
+            suffix = "（已截断）" if item["sku_codes_truncated"] else ""
+            lines.append(
+                f"- {item['coverage_type']} / {item['coverage_name']} ({item['coverage_key']}): "
+                f"{item['sku_count']} 个 SKU；正向 {item['positive_sentence_count']}；负向 {item['negative_sentence_count']}；SKU：{sku_codes}{suffix}"
+            )
+        return "\n".join(lines)
     if "coverages" in result:
         is_claim_coverage = "position_source" in result
         unit_name = "位置" if is_claim_coverage else "档位"

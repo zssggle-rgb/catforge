@@ -48,18 +48,21 @@
 10. [M06 评论下游信号抽取层](M06_comment_downstream_signal_requirements.md)
 11. [M04b 评论验证增强](M04b_claim_comment_enhancement_requirements.md)
 12. [M07 市场画像与可比池基线](M07_market_profile_requirements.md)
-13. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
-14. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
+13. [M05C 评论事实画像](M05C_comment_fact_profile_requirements.md)
+14. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
+15. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
     - [M08.6 参数-卖点-评论分层产品锚点校准](M08_6_product_anchor_evidence_layer_requirements.md)
-15. [M09 用户任务模块](M09_user_task_requirements.md)
-16. [M10 目标客群模块](M10_target_group_requirements.md)
-17. [M11 价值战场模块](M11_battlefield_requirements.md)
-18. [M11.5 战场内卖点价值分层](M11_5_claim_value_layer_requirements.md)
-19. [M12 候选池召回模块](M12_candidate_recall_requirements.md)
-20. [M13 竞品组件评分模块](M13_component_scoring_requirements.md)
-21. [M14 三槽位核心竞品选择](M14_core3_selection_requirements.md)
-22. [M15 证据卡与高层报告](M15_evidence_report_requirements.md)
-23. [M16 增量任务编排、复核和验收](M16_incremental_review_acceptance_requirements.md)
+16. [M09 用户任务模块](M09_user_task_requirements.md)
+17. [M10 目标客群模块](M10_target_group_requirements.md)
+18. [M11 价值战场模块](M11_battlefield_requirements.md)
+19. [M11.5 战场内卖点价值分层](M11_5_claim_value_layer_requirements.md)
+20. [M12 候选池召回模块](M12_candidate_recall_requirements.md)
+21. [M13 竞品组件评分模块](M13_component_scoring_requirements.md)
+22. [M14 三槽位核心竞品选择](M14_core3_selection_requirements.md)
+23. [M15 证据卡与高层报告](M15_evidence_report_requirements.md)
+24. [M16 增量任务编排、复核和验收](M16_incremental_review_acceptance_requirements.md)
+
+新分层链路落地后，旧 M05/M06 只作为历史兼容和对照验证；常规新链路由 M02 直接进入 M05C 评论事实画像。
 
 ## 共同约束
 

@@ -16,8 +16,13 @@ Use this skill when the user asks about:
 - A SKU/model's market profile, for example "查 100A4F 的市场画像", "TV00027354 量价情况", "这个 SKU 在市场里什么位置".
 - Market bucket coverage, for example "高价格带覆盖哪些 SKU", "85 寸尺寸区间有哪些 SKU", "价格区间销量头部是谁".
 - Comparable-pool baselines, for example "查 100A4F 的可比池", "TV00027354 同价格带池".
+- A SKU/model's comment fact profile, for example "查 100A4F 的评论事实画像", "TV00027354 用户评价事实情况".
+- TV standard comment fact taxonomy, for example "查彩电评论事实维度", "电视评论应该看哪些维度".
+- Comment dimension coverage, for example "品牌力评论覆盖哪些 SKU", "哪些 SKU 评论提到索尼", "游戏用途评论覆盖哪些 SKU".
 
-Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", and "覆盖 SKU"; only mention M03B/M04C/M07 if the user asks for implementation details.
+Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07 if the user asks for implementation details.
+
+M05C-B, sometimes called `m05b` in business discussion, is the LLM-based comment profile generation stage. This skill is M05C-C read-only query and never calls an LLM.
 
 ## Working Directory
 
@@ -81,6 +86,18 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的可比池" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的评论事实画像" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电评论事实维度" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "品牌力评论覆盖哪些 SKU" --sku-limit 100 --format json
 ```
 
 ## Stable Atomic Commands
@@ -175,6 +192,28 @@ Query comparable pools:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comparable-pools --query 100A4F --sku-limit 100 --format json
 ```
 
+Query one SKU/model's comment fact profile:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-comment-profile --query 100A4F --include-comment-facts --format json
+```
+
+Query TV comment fact taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-taxonomy --product-category tv --format json
+```
+
+Query comment dimension or signal coverage:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-dimension-coverage --query "品牌力覆盖哪些 SKU" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-dimension-coverage --coverage-type competitor --query 索尼 --sku-limit 100 --format json
+```
+
 ## Response Rules
 
 For SKU parameter profile results, summarize:
@@ -238,5 +277,17 @@ For market bucket coverage results, summarize:
 For comparable-pool results, summarize:
 
 - Target SKU/model, pool count, pool type, sample status, SKU count, median price/volume/amount, and candidate SKUs.
+
+For SKU comment fact profile results, summarize:
+
+- SKU code, model name, brand, comment sentence count, usable sentence count, comment fact count, and review issue count.
+- Positive and negative product experience dimensions.
+- Parameters and claims supported or contradicted by this SKU's own comments.
+- Audience, use-case, size/space, price/value, brand-power, and competitor signals.
+- Typical evidence sentences when returned.
+
+For comment taxonomy results, summarize taxonomy version, total dimension/subdimension counts, and relevant dimension definitions.
+
+For comment dimension coverage results, summarize coverage type/key, SKU count, polarity counts, returned SKU examples, and evidence examples. Brand-power signals must not be mixed with competitor mentions.
 
 If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding parameter or claim profile job has run for that batch.

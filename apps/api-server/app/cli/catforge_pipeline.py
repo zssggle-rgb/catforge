@@ -32,6 +32,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_MODULE_VERSION,
     CORE3_M07_POOL_RULE_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
@@ -45,6 +47,13 @@ from app.services.core3_real_data.constants import (
 )
 from app.services.core3_real_data.m03b_param_profile_service import M03BRunner
 from app.services.core3_real_data.m04c_claim_fact_profile_service import INPUT_SOURCE_AUTO, M04CRunner
+from app.services.core3_real_data.m05c_comment_fact_profile_service import (
+    LLM_MODE_AUTO,
+    LLM_MODE_OFF,
+    LLM_MODE_REQUIRED,
+    M05C_DEFAULT_LLM_BATCH_SIZE,
+    M05CRunner,
+)
 from app.services.core3_real_data.market_profile_runner import MarketProfileRunner
 
 
@@ -62,6 +71,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "rule_version": CORE3_M03B_RULE_VERSION,
         "claim_taxonomy_version": CORE3_M04C_TV_TAXONOMY_VERSION,
         "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
+        "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
+        "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -71,6 +82,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "rule_version": CORE3_M03B_AC_RULE_VERSION,
         "claim_taxonomy_version": None,
         "claim_rule_version": None,
+        "comment_taxonomy_version": None,
+        "comment_rule_version": None,
     },
 }
 
@@ -109,6 +122,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                     analysis_windows=args.analysis_window or (),
                     sku_chunk_size=args.sku_chunk_size,
                 )
+            elif args.command == "run-comment-profile":
+                result = run_comment_profile(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    sku_scope=args.sku_code or (),
+                    max_sentences_per_sku=args.max_sentences_per_sku,
+                    llm_mode=args.llm_mode,
+                    llm_batch_size=args.llm_batch_size,
+                    force_rebuild=args.force_rebuild,
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -118,6 +144,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     batch_id=args.batch_id,
                     product_category=args.product_category,
                     input_source=args.input_source,
+                    max_sentences_per_sku=args.max_sentences_per_sku,
+                    llm_mode=args.llm_mode,
+                    llm_batch_size=args.llm_batch_size,
                     force_rebuild=args.force_rebuild,
                 )
             else:
@@ -152,6 +181,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_claim.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_claim)
 
+    run_comment = subparsers.add_parser("run-comment-profile", help="Generate or rerun SKU comment fact profiles for a product category.")
+    add_common_args(run_comment)
+    add_product_category_arg(run_comment, default="tv", allow_auto=False)
+    run_comment.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_comment.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU to keep memory bounded.")
+    run_comment.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage for comment semantic extraction. Use required on 205 validation to ensure the model is called.")
+    run_comment.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Number of comment sentences per LLM request.")
+    run_comment.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
+    add_format_arg(run_comment)
+
     run_market = subparsers.add_parser("run-market-profile", help="Generate or rerun SKU market profiles and comparable-pool baselines.")
     add_common_args(run_market)
     run_market.add_argument("--analysis-window", action="append", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"), help="Analysis window to run. Repeat for multiple windows. Default runs all M07 windows.")
@@ -164,6 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_product_category_arg(ask)
     ask.add_argument("question", nargs="+", help="Natural-language execution request.")
     ask.add_argument("--input-source", choices=("auto", "evidence", "clean", "raw"), default=INPUT_SOURCE_AUTO, help="Claim input source when the natural-language request routes to claim profile generation.")
+    ask.add_argument("--max-sentences-per-sku", type=int, default=500, help="Maximum M02 comment sentences read per SKU when routed to comment fact generation.")
+    ask.add_argument("--llm-mode", choices=(LLM_MODE_AUTO, LLM_MODE_REQUIRED, LLM_MODE_OFF), default=LLM_MODE_AUTO, help="LLM usage when routed to comment fact generation.")
+    ask.add_argument("--llm-batch-size", type=int, default=M05C_DEFAULT_LLM_BATCH_SIZE, help="Comment sentences per LLM request when routed to comment fact generation.")
     ask.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(ask)
     return parser
@@ -194,8 +236,27 @@ def answer_natural_language(
     product_category: str,
     force_rebuild: bool,
     input_source: str = INPUT_SOURCE_AUTO,
+    max_sentences_per_sku: int = 500,
+    llm_mode: str = LLM_MODE_AUTO,
+    llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
+    if should_run_comment_profile(question):
+        result = run_comment_profile(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            sku_scope=extract_sku_scope(question),
+            max_sentences_per_sku=max_sentences_per_sku,
+            llm_mode=llm_mode,
+            llm_batch_size=llm_batch_size,
+            force_rebuild=force_rebuild,
+        )
+        result["question"] = question
+        result["routed_command"] = "run-comment-profile"
+        return result
     if should_run_market_profile(question):
         if resolved_product_category != "TV":
             raise CatForgePipelineError("M07 市场画像 CLI 当前只支持彩电/TV；其他品类需要先完成对应市场尺寸轴和规则。")
@@ -224,7 +285,7 @@ def answer_natural_language(
         result["routed_command"] = "run-claim-profile"
         return result
     if not should_run_param_profile(question):
-        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像或卖点事实画像。请说明要生成或重新生成哪类画像。")
+        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像或市场画像。请说明要生成或重新生成哪类画像。")
     result = run_param_profile(
         db,
         project_id=project_id,
@@ -236,6 +297,70 @@ def answer_natural_language(
     result["question"] = question
     result["routed_command"] = "run-param-profile"
     return result
+
+
+def run_comment_profile(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    sku_scope: Sequence[str] = (),
+    max_sentences_per_sku: int = 500,
+    llm_mode: str = LLM_MODE_AUTO,
+    llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    if max_sentences_per_sku <= 0:
+        raise CatForgePipelineError("M05C 每个 SKU 的评论句子读取上限必须大于 0。")
+    if llm_batch_size <= 0:
+        raise CatForgePipelineError("M05C LLM 批大小必须大于 0。")
+    config = product_category_config(product_category)
+    if not config.get("comment_taxonomy_version") or not config.get("comment_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能生成 SKU 评论事实画像。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = M05CRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        taxonomy_version=config["comment_taxonomy_version"],
+        rule_version=config["comment_rule_version"],
+        target_sku_codes=sku_scope,
+        max_sentences_per_sku=max_sentences_per_sku,
+        llm_mode=llm_mode,
+        llm_batch_size=llm_batch_size,
+        force_rebuild=force_rebuild,
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "sku_scope": list(sku_scope),
+        "max_sentences_per_sku": max_sentences_per_sku,
+        "llm_mode": llm_mode,
+        "llm_batch_size": llm_batch_size,
+        "taxonomy_version": config["comment_taxonomy_version"],
+        "rule_version": config["comment_rule_version"],
+        "force_rebuild": force_rebuild,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
 
 
 def run_market_profile(
@@ -856,6 +981,26 @@ def should_run_market_profile(question: str) -> bool:
     )
 
 
+def should_run_comment_profile(question: str) -> bool:
+    normalized = normalize_token(question)
+    if any(word in question for word in ("评论事实画像", "评论画像", "用户评价画像", "评价事实画像")):
+        return any(word in normalized for word in ("生成", "重跑", "重新", "更新", "执行", "跑", "计算", "准备好可以分析"))
+    return any(word in question for word in ("评论", "评价", "品牌力")) and any(
+        word in normalized
+        for word in (
+            "生成",
+            "重跑",
+            "重新",
+            "更新",
+            "评论事实",
+            "评论画像",
+            "用户评价",
+            "品牌力",
+            "准备好可以分析",
+        )
+    )
+
+
 def should_run_claim_profile(question: str) -> bool:
     normalized = normalize_token(question)
     return "卖点" in question and any(
@@ -944,10 +1089,14 @@ def render_text(result: dict[str, Any]) -> str:
     label = result.get("product_category_label_cn") or result.get("product_category")
     summary = result.get("summary") or {}
     is_claim_profile = isinstance(summary, dict) and "claim_fact_count" in summary
+    is_comment_profile = isinstance(summary, dict) and "comment_fact_count" in summary
     is_market_profile = isinstance(summary, dict) and "market_profile_count" in summary
     if is_market_profile:
         job_name = "SKU 市场画像"
         input_label = "输入周销量价"
+    elif is_comment_profile:
+        job_name = "SKU 评论事实画像"
+        input_label = "输入评论句子"
     elif is_claim_profile:
         job_name = "SKU 卖点事实画像"
         input_label = "输入卖点"
@@ -973,6 +1122,19 @@ def render_text(result: dict[str, Any]) -> str:
                 f"{summary.get('market_profile_count', 0)}；市场信号：{summary.get('market_signal_count', 0)}；"
                 f"可比池：{summary.get('comparable_pool_count', 0)}；池成员：{summary.get('pool_member_count', 0)}；"
                 f"需复核：{summary.get('review_required_count', 0)}"
+            )
+        elif is_comment_profile:
+            llm_stats = summary.get("llm_stats") or {}
+            lines.append(
+                "画像数："
+                f"{summary.get('sku_profile_count', 0)}；评论事实：{summary.get('comment_fact_count', 0)}；"
+                f"覆盖：{summary.get('comment_coverage_count', 0)}；服务排除句：{summary.get('service_excluded_sentence_count', 0)}；"
+                f"需复核：{summary.get('review_issue_count', 0)}"
+            )
+            lines.append(
+                "LLM："
+                f"mode={llm_stats.get('llm_mode', result.get('llm_mode'))}；called={llm_stats.get('llm_called')}；"
+                f"model={llm_stats.get('llm_model', '-')}"
             )
         elif is_claim_profile:
             lines.append(
