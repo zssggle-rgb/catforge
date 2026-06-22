@@ -135,6 +135,11 @@ For "这款和谁比":
 
 1. `competitor-set`
 2. If the user asks for deeper reasoning, run `why-sales-diff` on the chosen pair.
+3. Preserve the `competitor-set` candidate order in the answer unless the user
+   explicitly asks for a different sorting criterion. The CLI order is already a
+   business SOP order, not just raw score order. If you reorder by
+   `competitor_score`, semantic overlap, price gap, or sales closeness, label it
+   as a secondary view and keep the original CLI order visible.
 
 For "这款和某竞品有什么区别":
 
@@ -198,6 +203,7 @@ Follow these rules exactly when CLI results are incomplete or not decisive.
 Every business conclusion must be tied to CLI evidence:
 
 - For competitor conclusions, cite same-size/price pool, semantic overlap, parameter/claim overlap, and overlapping-week sales validation when available.
+- For competitor lists, do not invent, drop, or reorder candidates outside CLI output. Use the returned `competitor_set.candidates` order as the default Top N.
 - For sales-difference conclusions, use overlapping active-week average sales/amount. Do not use cumulative sales as the win/loss basis.
 - For premium-claim conclusions, require support from primary/secondary battlefield, user task or target group, plus parameter or comment validation.
 - For battlefield-space conclusions, use M11D semantic market graph fields such as estimated sales volume, estimated average weekly sales, SKU contributions, allocation coverage, and distribution.
