@@ -858,8 +858,8 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
         identity.append(f"均价分别约 {target_price} / {candidate_price}")
     if target_sales and candidate_sales:
         identity.append(f"周均销量约 {target_sales} 台 / {candidate_sales} 台")
-    segment = "、".join(part for part in (f"{size} 英寸" if size else "", price_band) if part)
-    segment_text = f"同为 {segment} 产品，" if segment else ""
+    segment = "、".join(part for part in (f"{size}英寸" if size else "", price_band) if part)
+    segment_text = f"同为{segment}产品，" if segment else ""
 
     lines = [
         f"结论：{candidate_name} 被列为 {target_name} 的第一竞品是合理的。它们{segment_text}价格非常接近，目标用户和使用场景高度重合，且重叠在售周销量处在同一竞争量级。",
