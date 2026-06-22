@@ -79,9 +79,9 @@ M11C 可以读取 M07 的加权价格、价格/英寸、周期等指标，但必
 | 旧 M06 下游信号 | 旧 seed 与新任务/客群/战场口径不一致 |
 | 旧 M11 战场结果 | 新 M11C 需要独立生成，不继承旧结果 |
 
-## 3. TV 首版价值战场预设
+## 3. TV 价值战场预设
 
-TV 首版 M11C 价值战场 taxonomy 建议为 12 个。
+TV M11C 价值战场 taxonomy `m11c_tv_value_battlefield_taxonomy_v0.2` 为 13 个。`v0.2` 在原 12 个战场基础上新增“巨幕下探性价比战场”，避免把低价/中价 98 寸以上巨幕都归入旗舰巨幕。
 
 | battlefield_code | 名称 | 尺寸价格基础 | 主用户任务 | 主目标客群 | 核心产品价值 |
 | --- | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ TV 首版 M11C 价值战场 taxonomy 建议为 12 个。
 | `BF_GAMING_SPORTS_FLUENCY` | 游戏体育流畅战场 | 中大尺寸 × `mid` 以上 | 主机游戏、体育赛事 | 游戏体育用户 | 高刷、HDMI2.1、VRR、MEMC、低延迟 |
 | `BF_EYE_CARE_FAMILY_COMFORT` | 家庭护眼舒适战场 | 小/中/大尺寸 × `mid_low` 以上 | 长时间护眼观看 | 儿童家庭、主流家庭、长辈家庭 | 护眼、低蓝光、无频闪、舒适评论 |
 | `BF_SMART_CONNECTED_EXPERIENCE` | 智能互联体验战场 | 中尺寸及以上 × `mid` 以上 | 投屏互联与智能控制 | 智能互联用户、年轻家庭 | AI 语音、投屏、家电联动、摄像头 |
+| `BF_GIANT_SCREEN_VALUE_DOWNTRADE` | 巨幕下探性价比战场 | `giant_98_plus × low/mid/mid_high` | 大屏换新升级、影院沉浸观影、预算内高性价比购买 | 巨幕家庭影院用户、大屏换新升级用户、性价比理性用户 | 98/100 寸、价格/英寸、家庭影院入门、巨幕换新、非旗舰但大屏 |
 | `BF_GIANT_HOME_THEATER_FLAGSHIP` | 巨幕家庭影院旗舰战场 | `giant_98_plus × mid_high/high` | 巨幕影院、新家空间融合 | 巨幕家庭影院用户、新家装修/大户型用户 | 巨幕、旗舰画质、音画沉浸、贴墙空间适配 |
 
 ## 4. 匹配优先级
@@ -250,7 +251,7 @@ python -m app.cli.catforge_insight value-battlefield-graph --product-category tv
 
 ## 7. 验收标准
 
-1. TV 价值战场 taxonomy 覆盖 12 个预设战场。
+1. TV 价值战场 taxonomy 覆盖 13 个预设战场。
 2. 每个战场都有尺寸价格门槛、评论规则、卖点规则、参数规则、任务/客群映射。
 3. 每个 SKU 能输出 0-1 个主战场、0-2 个辅战场和若干机会/拖后腿战场。
 4. 评论负向集中时，不得简单排除；必须能输出 `drag_factor_battlefield` 或 `unmet_need`。

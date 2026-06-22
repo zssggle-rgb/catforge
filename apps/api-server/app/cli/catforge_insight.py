@@ -47,7 +47,7 @@ from app.services.core3_real_data.m09c_user_task_service import M09CUserTaskTaxo
 from app.services.core3_real_data.m10c_target_group_service import M10CTargetGroupTaxonomy, tv_target_group_taxonomy_v0_1
 from app.services.core3_real_data.m11c_value_battlefield_service import (
     M11CValueBattlefieldTaxonomy,
-    tv_value_battlefield_taxonomy_v0_1,
+    tv_value_battlefield_taxonomy_v0_2,
 )
 
 
@@ -76,7 +76,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "target_group_taxonomy_factory": tv_target_group_taxonomy_v0_1,
         "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
-        "value_battlefield_taxonomy_factory": tv_value_battlefield_taxonomy_v0_1,
+        "value_battlefield_taxonomy_factory": tv_value_battlefield_taxonomy_v0_2,
     },
     "AC": {
         "label_cn": "空调",

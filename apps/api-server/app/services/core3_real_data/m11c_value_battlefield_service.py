@@ -140,7 +140,7 @@ class M11CServiceResult:
         return sum(item["created_count"] for item in self.write_summary.values())
 
 
-def tv_value_battlefield_taxonomy_v0_1() -> M11CValueBattlefieldTaxonomy:
+def tv_value_battlefield_taxonomy_v0_2() -> M11CValueBattlefieldTaxonomy:
     """Published TV M11C taxonomy confirmed in the business design thread."""
 
     return M11CValueBattlefieldTaxonomy(
@@ -326,6 +326,21 @@ def tv_value_battlefield_taxonomy_v0_1() -> M11CValueBattlefieldTaxonomy:
                 adjacent_price_bands=("mid_low",),
             ),
             _bf(
+                "BF_GIANT_SCREEN_VALUE_DOWNTRADE",
+                "巨幕下探性价比战场",
+                "98 寸以上巨幕但非旗舰定价，强调巨幕入门、价格/英寸、大屏换新和家庭影院下探。",
+                ("giant_98_plus",),
+                ("low", "mid", "mid_high"),
+                ("TASK_LARGE_SCREEN_UPGRADE", "TASK_CINEMA_IMMERSION", "TASK_VALUE_FOR_MONEY_PURCHASE"),
+                ("TASK_HOME_DECOR_SPACE_FIT",),
+                ("TG_GIANT_HOME_THEATER_BUYER", "TG_LARGE_SCREEN_UPGRADER", "TG_VALUE_MAXIMIZER"),
+                ("use_living_room_cinema", "appearance_size_fit", "value_price", "replacement_source"),
+                ("tv_claim_theater_scene", "tv_claim_value_price", "tv_claim_full_screen_design"),
+                ("screen_size_inch", "resolution_class", "price_per_inch", "hdr_support_flag"),
+                adjacent_size_tiers=("xlarge_70_85",),
+                adjacent_price_bands=("mid_low", "high"),
+            ),
+            _bf(
                 "BF_GIANT_HOME_THEATER_FLAGSHIP",
                 "巨幕家庭影院旗舰战场",
                 "98 寸以上巨幕旗舰，强调大客厅/新家、影院感、旗舰画质和空间融合。",
@@ -344,11 +359,17 @@ def tv_value_battlefield_taxonomy_v0_1() -> M11CValueBattlefieldTaxonomy:
     )
 
 
+def tv_value_battlefield_taxonomy_v0_1() -> M11CValueBattlefieldTaxonomy:
+    """Backward-compatible alias for callers that import the old factory name."""
+
+    return tv_value_battlefield_taxonomy_v0_2()
+
+
 class M11CValueBattlefieldTaxonomyLoader:
     def load(self, taxonomy_version: str, *, product_category: str) -> M11CValueBattlefieldTaxonomy:
         normalized_category = str(product_category or "").upper()
         if normalized_category == "TV" and taxonomy_version == CORE3_M11C_TV_TAXONOMY_VERSION:
-            return tv_value_battlefield_taxonomy_v0_1()
+            return tv_value_battlefield_taxonomy_v0_2()
         raise ValueError(f"{normalized_category or product_category} 价值战场 taxonomy 未发布，不能生成 M11C 价值战场画像。")
 
 

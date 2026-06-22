@@ -78,7 +78,7 @@ M10C target group profiles currently have a published TV taxonomy only. It is de
 
 M11C value battlefield profiles currently have a published TV taxonomy only. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for battlefield judgment.
 
-- TV value battlefield profile: `taxonomy_version=m11c_tv_value_battlefield_taxonomy_v0.1`, `rule_version=m11c_tv_value_battlefield_profile_v0.1`
+- TV value battlefield profile: `taxonomy_version=m11c_tv_value_battlefield_taxonomy_v0.2`, `rule_version=m11c_tv_value_battlefield_profile_v0.2`
 - AC value battlefield profile: not available until AC task/group/battlefield taxonomies are published.
 
 LLM credentials must come from environment variables. Never write API keys into skill files, committed docs, or command transcripts. On 205 validation, use `--llm-mode required` so failure to call the LLM is visible.

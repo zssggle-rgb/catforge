@@ -119,6 +119,7 @@ M11C 在 `size_tier` 内按 SKU 加权均价计算价格分位：
 | `BF_GAMING_SPORTS_FLUENCY` | 中大尺寸 × `mid` 以上 | 游戏、主机、PS5、Xbox、看球、运动流畅、不卡、低延迟；卡顿/拖影为反证 | `tv_claim_high_refresh_rate`、`tv_claim_gaming_low_latency`、`tv_claim_hdmi21_connectivity` | 刷新率 >=120Hz，HDMI2.1/VRR/ALLM/MEMC，系统性能辅助 |
 | `BF_EYE_CARE_FAMILY_COMFORT` | 小/中/大尺寸 × `mid_low` 以上 | 孩子、老人、长时间看、不刺眼、不累眼；反光/刺眼/疲劳为拖后腿 | `tv_claim_eye_care_display` | 护眼、低蓝光、无频闪、防眩、亮度控制、刷新率等 |
 | `BF_SMART_CONNECTED_EXPERIENCE` | 中尺寸及以上 × `mid` 以上 | 投屏、联网、语音、智能家居、连接稳定、系统流畅；广告多/卡顿为反证 | `tv_claim_casting_connectivity`、`tv_claim_voice_control`、`tv_claim_ai_large_model`、`tv_claim_smart_home_iot`、`tv_claim_camera_interaction` | WiFi、网络电视、智能电视、AI、语音、全屋智控、摄像头、RAM/ROM |
+| `BF_GIANT_SCREEN_VALUE_DOWNTRADE` | `giant_98_plus × low/mid/mid_high` | 98/100 寸、巨幕、客厅影院、换大屏、价格/英寸划算、非旗舰但够大；高价旗舰表达不足时不得进入该战场 | `tv_claim_theater_scene`、`tv_claim_value_price`、`tv_claim_full_screen_design` | 98 寸以上、4K/HDR/价格/英寸成立，核心是巨幕入门和性价比，不要求旗舰控光/音频 |
 | `BF_GIANT_HOME_THEATER_FLAGSHIP` | `giant_98_plus × mid_high/high` | 98/100 寸、巨幕、别墅/大客厅、新家、影院感、上墙效果、旗舰体验 | `tv_claim_theater_scene`、`tv_claim_hdr_high_brightness`、`tv_claim_local_dimming`、`tv_claim_dolby_audio_video`、`tv_claim_flush_wall_mount` | 98 寸以上，旗舰画质、音频、贴墙/外观空间适配 |
 
 ## 4. 评分与状态判定
@@ -468,7 +469,7 @@ CLI 实现后更新两个 skill。
 
 ## 10. 测试计划
 
-1. Taxonomy 校验：12 个战场 code 稳定，规则字段完整。
+1. Taxonomy 校验：13 个战场 code 稳定，规则字段完整。
 2. 尺寸价格派生：五档尺寸内价格带正确，不使用旧四档市场带。
 3. 小屏门槛测试：43 寸不得进入大屏换新主战场。
 4. 大屏价值测试：85 寸低价且评论/卖点支撑时进入大屏换新性价比。
@@ -481,7 +482,7 @@ CLI 实现后更新两个 skill。
 
 ## 11. 增量与性能
 
-M11C 首版是轻量确定性评分，不调用 LLM，也不直接扫描原始评论文本。当前实现默认在一次执行中读取目标 SKU 集合、生成 SKU × 12 个战场分数，并在执行末尾重建一次图谱。全量 TV SKU 规模下风险主要来自上游 M05C/M07，而不是 M11C 本身。
+M11C 首版是轻量确定性评分，不调用 LLM，也不直接扫描原始评论文本。当前实现默认在一次执行中读取目标 SKU 集合、生成 SKU × 13 个战场分数，并在执行末尾重建一次图谱。全量 TV SKU 规模下风险主要来自上游 M05C/M07，而不是 M11C 本身。
 
 执行范围控制：
 

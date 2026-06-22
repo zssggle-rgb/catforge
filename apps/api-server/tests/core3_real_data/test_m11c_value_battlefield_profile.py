@@ -32,6 +32,8 @@ BATCH_ID = "m00_202606210011"
 SKU_VALUE = "TV00090001"
 SKU_MID = "TV00090002"
 SKU_HIGH = "TV00090003"
+SKU_GIANT_VALUE = "TV00090004"
+SKU_GIANT_FLAGSHIP = "TV00090005"
 
 
 def make_session() -> Session:
@@ -82,13 +84,18 @@ def seed_foundation(session: Session) -> None:
     seed_sku(session, SKU_VALUE, "75X-Value", "海信", size=75, price=Decimal("2999"), volume=Decimal("900"))
     seed_sku(session, SKU_MID, "75X-Mid", "TCL", size=75, price=Decimal("5999"), volume=Decimal("300"))
     seed_sku(session, SKU_HIGH, "85X-High", "索尼", size=85, price=Decimal("9999"), volume=Decimal("100"))
-    seed_value_sku_claims(session)
-    seed_value_sku_comments(session)
+    seed_sku(session, SKU_GIANT_VALUE, "100X-Value", "海信", size=100, price=Decimal("8999"), volume=Decimal("480"))
+    seed_sku(session, SKU_GIANT_FLAGSHIP, "100X-Flagship", "索尼", size=100, price=Decimal("39999"), volume=Decimal("60"))
+    seed_value_sku_claims(session, sku_code=SKU_VALUE, model_name="75X-Value", brand_name="海信")
+    seed_value_sku_comments(session, sku_code=SKU_VALUE, model_name="75X-Value", brand_name="海信")
+    seed_value_sku_claims(session, sku_code=SKU_GIANT_VALUE, model_name="100X-Value", brand_name="海信")
+    seed_value_sku_comments(session, sku_code=SKU_GIANT_VALUE, model_name="100X-Value", brand_name="海信")
     session.commit()
 
 
 def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, *, size: int, price: Decimal, volume: Decimal) -> None:
     amount = price * volume
+    size_tier = "giant_98_plus" if size >= 98 else "xlarge_70_85"
     session.add(
         entities.Core3SkuParamProfile(
             sku_param_profile_id=f"param-{sku_code}",
@@ -103,7 +110,7 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
                 "hdr_support_flag": {"normalized_value": True, "value_presence": "present"},
                 "declared_brightness_nit_or_band": {"normalized_value": 600, "numeric_value": 600, "value_presence": "present"},
                 "full_screen_design_flag": {"normalized_value": True, "value_presence": "present"},
-                "dimension_tier_profile": {"size": "xlarge_70_85"},
+                "dimension_tier_profile": {"size": size_tier},
             },
             core_picture_params_json={},
             core_gaming_params_json={},
@@ -193,18 +200,18 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
         )
 
 
-def seed_value_sku_claims(session: Session) -> None:
+def seed_value_sku_claims(session: Session, *, sku_code: str, model_name: str, brand_name: str) -> None:
     session.add(
         entities.Core3SkuClaimFactProfile(
-            claim_profile_id=f"claim-profile-{SKU_VALUE}",
+            claim_profile_id=f"claim-profile-{sku_code}",
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
             product_category="TV",
             taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
-            sku_code=SKU_VALUE,
-            model_name="75X-Value",
-            brand_name="海信",
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
             raw_claim_count=3,
             matched_claim_count=3,
             fact_claim_count=3,
@@ -222,7 +229,7 @@ def seed_value_sku_claims(session: Session) -> None:
             evidence_ids=["ev-claim-profile"],
             quality_flags=[],
             confidence=Decimal("0.9000"),
-            profile_hash="sha256:claim-profile-value",
+            profile_hash=f"sha256:claim-profile-{sku_code}",
             rule_version=CORE3_M04C_TV_RULE_VERSION,
         )
     )
@@ -231,20 +238,20 @@ def seed_value_sku_claims(session: Session) -> None:
         ("tv_claim_value_price", "高性价比"),
         ("tv_claim_full_screen_design", "全面屏设计"),
     ]:
-        session.add(claim_fact(claim_code, claim_name))
+        session.add(claim_fact(sku_code, model_name, brand_name, claim_code, claim_name))
 
 
-def claim_fact(claim_code: str, claim_name: str) -> entities.Core3SkuClaimFact:
+def claim_fact(sku_code: str, model_name: str, brand_name: str, claim_code: str, claim_name: str) -> entities.Core3SkuClaimFact:
     return entities.Core3SkuClaimFact(
-        claim_fact_id=f"claim-fact-{claim_code}",
+        claim_fact_id=f"claim-fact-{sku_code}-{claim_code}",
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id=BATCH_ID,
         product_category="TV",
         taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
-        sku_code=SKU_VALUE,
-        model_name="75X-Value",
-        brand_name="海信",
+        sku_code=sku_code,
+        model_name=model_name,
+        brand_name=brand_name,
         source_claim_key=f"seed:{claim_code}",
         raw_claim_text=claim_name,
         clean_claim_text=claim_name,
@@ -264,23 +271,23 @@ def claim_fact(claim_code: str, claim_name: str) -> entities.Core3SkuClaimFact:
         evidence_ids=[f"ev-claim-{claim_code}"],
         quality_flags=[],
         confidence=Decimal("0.9000"),
-        fact_hash=f"sha256:{claim_code}",
+        fact_hash=f"sha256:{sku_code}:{claim_code}",
         rule_version=CORE3_M04C_TV_RULE_VERSION,
     )
 
 
-def seed_value_sku_comments(session: Session) -> None:
+def seed_value_sku_comments(session: Session, *, sku_code: str, model_name: str, brand_name: str) -> None:
     session.add(
         entities.Core3SkuCommentFactProfile(
-            comment_profile_id=f"comment-profile-{SKU_VALUE}",
+            comment_profile_id=f"comment-profile-{sku_code}",
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
             product_category="TV",
             taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
-            sku_code=SKU_VALUE,
-            model_name="75X-Value",
-            brand_name="海信",
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
             comment_sentence_count=3,
             matched_sentence_count=3,
             fact_atom_count=3,
@@ -302,7 +309,7 @@ def seed_value_sku_comments(session: Session) -> None:
             evidence_ids=["ev-comment-profile"],
             quality_flags=[],
             confidence=Decimal("0.9000"),
-            profile_hash="sha256:comment-profile-value",
+            profile_hash=f"sha256:comment-profile-{sku_code}",
             rule_version=CORE3_M05C_TV_RULE_VERSION,
         )
     )
@@ -312,21 +319,30 @@ def seed_value_sku_comments(session: Session) -> None:
         ("value_price", "价格划算，补贴后性价比很高", "price_value_perception", "价格价值感知"),
     ]
     for index, (subdimension_code, text, dimension_code, dimension_name) in enumerate(comments, start=1):
-        session.add(comment_fact(index, subdimension_code, text, dimension_code, dimension_name))
+        session.add(comment_fact(sku_code, model_name, brand_name, index, subdimension_code, text, dimension_code, dimension_name))
 
 
-def comment_fact(index: int, subdimension_code: str, text: str, dimension_code: str, dimension_name: str) -> entities.Core3CommentFactAtom:
+def comment_fact(
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    index: int,
+    subdimension_code: str,
+    text: str,
+    dimension_code: str,
+    dimension_name: str,
+) -> entities.Core3CommentFactAtom:
     return entities.Core3CommentFactAtom(
-        comment_fact_id=f"comment-fact-{index}",
+        comment_fact_id=f"comment-fact-{sku_code}-{index}",
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id=BATCH_ID,
         product_category="TV",
         taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
-        sku_code=SKU_VALUE,
-        model_name="75X-Value",
-        brand_name="海信",
-        source_comment_key=f"comment-{index}",
+        sku_code=sku_code,
+        model_name=model_name,
+        brand_name=brand_name,
+        source_comment_key=f"comment-{sku_code}-{index}",
         clean_comment_text=text,
         dimension_code=dimension_code,
         dimension_name=dimension_name,
@@ -345,10 +361,10 @@ def comment_fact(index: int, subdimension_code: str, text: str, dimension_code: 
         claim_snapshot_json={},
         signal_payload_json={},
         extraction_payload_json={},
-        evidence_ids=[f"ev-comment-{index}"],
+        evidence_ids=[f"ev-comment-{sku_code}-{index}"],
         quality_flags=[],
         confidence=Decimal("0.9000"),
-        fact_hash=f"sha256:comment-{index}",
+        fact_hash=f"sha256:comment-{sku_code}-{index}",
         rule_version=CORE3_M05C_TV_RULE_VERSION,
     )
 
@@ -366,8 +382,8 @@ def test_m11c_runner_generates_value_battlefield_profile_and_graph():
     session.commit()
 
     assert result.status == Core3RunStatus.SUCCESS
-    assert result.summary_json["sku_count"] == 3
-    assert result.summary_json["battlefield_count"] == 12
+    assert result.summary_json["sku_count"] == 5
+    assert result.summary_json["battlefield_count"] == 13
 
     profile = session.execute(
         select(entities.Core3SkuValueBattlefieldProfile).where(entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_VALUE)
@@ -386,8 +402,45 @@ def test_m11c_runner_generates_value_battlefield_profile_and_graph():
     assert score.user_voice_score > Decimal("0.9000")
 
     graph = session.execute(select(entities.Core3ValueBattlefieldGraphSnapshot)).scalar_one()
-    assert graph.battlefield_count == 12
+    assert graph.battlefield_count == 13
     assert "BF_LARGE_SCREEN_VALUE_UPGRADE" in graph.coverage_summary_json
+    assert "BF_GIANT_SCREEN_VALUE_DOWNTRADE" in graph.coverage_summary_json
+
+
+def test_m11c_splits_giant_value_downtrade_from_flagship():
+    session = make_session()
+
+    result = M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status == Core3RunStatus.SUCCESS
+    profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_GIANT_VALUE)
+    ).scalar_one()
+    assert profile.size_tier == "giant_98_plus"
+    assert profile.price_band_in_size_tier == "low"
+    assert profile.primary_battlefield_code == "BF_GIANT_SCREEN_VALUE_DOWNTRADE"
+
+    downtrade_score = session.execute(
+        select(entities.Core3SkuValueBattlefieldScore)
+        .where(entities.Core3SkuValueBattlefieldScore.sku_code == SKU_GIANT_VALUE)
+        .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == "BF_GIANT_SCREEN_VALUE_DOWNTRADE")
+    ).scalar_one()
+    flagship_score = session.execute(
+        select(entities.Core3SkuValueBattlefieldScore)
+        .where(entities.Core3SkuValueBattlefieldScore.sku_code == SKU_GIANT_VALUE)
+        .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == "BF_GIANT_HOME_THEATER_FLAGSHIP")
+    ).scalar_one()
+
+    assert downtrade_score.relation_status == "primary_battlefield"
+    assert downtrade_score.market_gate_status == "matched"
+    assert flagship_score.relation_status == "excluded"
 
 
 def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
@@ -402,7 +455,7 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
         force_rebuild=True,
     )
     assert pipeline_result["status"] == "ok"
-    assert pipeline_result["summary"]["profile_count"] == 3
+    assert pipeline_result["summary"]["profile_count"] == 5
 
     sku_profile = catforge_insight.query_sku_value_battlefield(
         session,
@@ -418,6 +471,7 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
         category_code="TV",
         batch_id="latest",
         battlefield_code="BF_LARGE_SCREEN_VALUE_UPGRADE",
+        relation_status="primary_battlefield",
         sku_limit=10,
     )
     natural = catforge_insight.answer_natural_language(
@@ -438,8 +492,9 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
     assert coverage["sku_codes"] == [SKU_VALUE]
     assert natural["routed_command"] == "sku-value-battlefield"
     assert natural["primary_battlefield_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE"
-    assert taxonomy["battlefield_count"] == 12
+    assert taxonomy["battlefield_count"] == 13
     assert taxonomy["taxonomy_version"] == CORE3_M11C_TV_TAXONOMY_VERSION
+    assert any(item["battlefield_code"] == "BF_GIANT_SCREEN_VALUE_DOWNTRADE" for item in taxonomy["battlefields"])
 
 
 def test_comparable_market_validation_uses_overlap_week_average_not_cumulative_sales() -> None:
