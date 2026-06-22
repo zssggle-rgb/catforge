@@ -87,6 +87,16 @@ class CatForgeAnalystService:
             return self.atomic_handlers.resolve_sku(context, **kwargs)
         if command == "sku-fact-brief":
             return self.atomic_handlers.sku_fact_brief(context, **kwargs)
+        if command == "same-size-price-candidates":
+            return self.atomic_handlers.same_size_price_candidates(context, **kwargs)
+        if command == "semantic-overlap":
+            return self.atomic_handlers.semantic_overlap(context, **kwargs)
+        if command == "sales-overlap":
+            return self.atomic_handlers.sales_overlap(context, **kwargs)
+        if command == "param-claim-overlap":
+            return self.atomic_handlers.param_claim_overlap(context, **kwargs)
+        if command == "comment-support":
+            return self.atomic_handlers.comment_support(context, **kwargs)
         if command == "semantic-dimension-space":
             return self.atomic_handlers.semantic_dimension_space(context, **kwargs)
         if command in ATOM_COMMANDS:

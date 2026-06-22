@@ -300,6 +300,243 @@ class AnalystRepository:
             for row in summaries
         ]
 
+    def same_size_price_candidates(
+        self,
+        *,
+        batch_id: str,
+        target_sku_code: str,
+        product_category: str,
+        market_window: str,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        target_market = self._market_profile(batch_id=batch_id, sku_code=target_sku_code, market_window=market_window)
+        if target_market is None:
+            return {"target_market": {}, "candidates": [], "match_policy": "m07_same_size_price_band"}
+        stmt = (
+            select(entities.Core3SkuMarketProfile)
+            .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
+            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .where(entities.Core3SkuMarketProfile.sku_code != target_sku_code)
+            .where(entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category.upper())}%"))
+            .where(entities.Core3SkuMarketProfile.size_segment == target_market.size_segment)
+            .where(entities.Core3SkuMarketProfile.price_band_size == target_market.price_band_size)
+            .order_by(
+                func.abs(entities.Core3SkuMarketProfile.price_wavg - target_market.price_wavg),
+                entities.Core3SkuMarketProfile.sales_volume_total.desc(),
+                entities.Core3SkuMarketProfile.sku_code,
+            )
+        )
+        if limit != 0:
+            stmt = stmt.limit(max(limit, 0))
+        rows = list(self.db.execute(stmt).scalars())
+        return {
+            "target_market": _candidate_market_payload(target_market, target_market=target_market),
+            "match_policy": "m07_same_size_price_band",
+            "candidates": [_candidate_market_payload(row, target_market=target_market) for row in rows],
+        }
+
+    def semantic_overlap(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        target_sku_code: str,
+        candidate_sku_code: str,
+    ) -> dict[str, Any]:
+        target_task = self._user_task_profile(batch_id=batch_id, product_category=product_category, sku_code=target_sku_code)
+        candidate_task = self._user_task_profile(batch_id=batch_id, product_category=product_category, sku_code=candidate_sku_code)
+        target_group = self._target_group_profile(batch_id=batch_id, product_category=product_category, sku_code=target_sku_code)
+        candidate_group = self._target_group_profile(batch_id=batch_id, product_category=product_category, sku_code=candidate_sku_code)
+        target_battlefield = self._battlefield_profile(batch_id=batch_id, product_category=product_category, sku_code=target_sku_code)
+        candidate_battlefield = self._battlefield_profile(batch_id=batch_id, product_category=product_category, sku_code=candidate_sku_code)
+        overlap = {
+            "user_task": _code_overlap(
+                _user_task_code_roles(target_task),
+                _user_task_code_roles(candidate_task),
+                primary_key="primary_user_task_code",
+            ),
+            "target_group": _code_overlap(
+                _target_group_code_roles(target_group),
+                _target_group_code_roles(candidate_group),
+                primary_key="primary_target_group_code",
+            ),
+            "value_battlefield": _code_overlap(
+                _battlefield_code_roles(target_battlefield),
+                _battlefield_code_roles(candidate_battlefield),
+                primary_key="primary_battlefield_code",
+            ),
+        }
+        scores = [_decimal(item["overlap_score"]) or Decimal("0") for item in overlap.values() if item["union_count"]]
+        return {
+            "target_sku_code": target_sku_code,
+            "candidate_sku_code": candidate_sku_code,
+            "semantic_overlap_score": _number(_avg_decimal(scores)),
+            "overlap": overlap,
+            "source_modules": ["M09C", "M10C", "M11C"],
+        }
+
+    def sales_overlap(
+        self,
+        *,
+        batch_id: str,
+        target_sku_code: str,
+        candidate_sku_code: str,
+        market_window: str,
+    ) -> dict[str, Any]:
+        weekly_rows = self._market_weekly_rows(batch_id=batch_id, sku_codes=(target_sku_code, candidate_sku_code))
+        weekly_by_sku = _weekly_market_by_sku(weekly_rows)
+        target_weeks = set(weekly_by_sku.get(target_sku_code, {}))
+        candidate_weeks = set(weekly_by_sku.get(candidate_sku_code, {}))
+        overlap_weeks = sorted(target_weeks & candidate_weeks)
+        if overlap_weeks:
+            target_values = [weekly_by_sku[target_sku_code][week] for week in overlap_weeks]
+            candidate_values = [weekly_by_sku[candidate_sku_code][week] for week in overlap_weeks]
+            target_avg_volume = _avg_decimal([item["sales_volume"] for item in target_values])
+            candidate_avg_volume = _avg_decimal([item["sales_volume"] for item in candidate_values])
+            target_avg_amount = _avg_decimal([item["sales_amount"] for item in target_values])
+            candidate_avg_amount = _avg_decimal([item["sales_amount"] for item in candidate_values])
+            return {
+                "method": "pairwise_overlap_active_week_average",
+                "policy_note_cn": "销量/销额对比使用两款 SKU 重叠在售周的周均表现；累计销量仅作为展示上下文。",
+                "target_sku_code": target_sku_code,
+                "candidate_sku_code": candidate_sku_code,
+                "overlap_weeks": overlap_weeks,
+                "overlap_week_count": len(overlap_weeks),
+                "target": _sales_overlap_side(target_sku_code, target_values, target_avg_volume, target_avg_amount),
+                "candidate": _sales_overlap_side(candidate_sku_code, candidate_values, candidate_avg_volume, candidate_avg_amount),
+                "comparison": _sales_comparison(target_avg_volume, candidate_avg_volume, target_avg_amount, candidate_avg_amount),
+            }
+        return self._sales_overlap_market_fallback(
+            batch_id=batch_id,
+            target_sku_code=target_sku_code,
+            candidate_sku_code=candidate_sku_code,
+            market_window=market_window,
+        )
+
+    def param_claim_overlap(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        target_sku_code: str,
+        candidate_sku_code: str,
+    ) -> dict[str, Any]:
+        target_param = self._param_profile(batch_id=batch_id, product_category=product_category, sku_code=target_sku_code)
+        candidate_param = self._param_profile(batch_id=batch_id, product_category=product_category, sku_code=candidate_sku_code)
+        target_claim = self._claim_profile(batch_id=batch_id, product_category=product_category, sku_code=target_sku_code)
+        candidate_claim = self._claim_profile(batch_id=batch_id, product_category=product_category, sku_code=candidate_sku_code)
+        param_overlap = _code_overlap(_param_code_roles(target_param), _param_code_roles(candidate_param), primary_key=None)
+        claim_overlap = _code_overlap(_claim_code_roles(target_claim), _claim_code_roles(candidate_claim), primary_key=None)
+        position_overlap = _code_overlap(
+            _claim_position_roles(target_claim),
+            _claim_position_roles(candidate_claim),
+            primary_key=None,
+        )
+        scores = [_decimal(item["overlap_score"]) or Decimal("0") for item in (param_overlap, claim_overlap, position_overlap) if item["union_count"]]
+        return {
+            "target_sku_code": target_sku_code,
+            "candidate_sku_code": candidate_sku_code,
+            "param_claim_overlap_score": _number(_avg_decimal(scores)),
+            "parameter_overlap": param_overlap,
+            "claim_overlap": claim_overlap,
+            "claim_position_overlap": position_overlap,
+            "source_modules": ["M03B", "M04C"],
+        }
+
+    def comment_support(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        claim_code: str | None = None,
+        param_code: str | None = None,
+        user_task_code: str | None = None,
+        target_group_code: str | None = None,
+        battlefield_code: str | None = None,
+    ) -> dict[str, Any]:
+        comment = self._comment_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        task = self._user_task_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        group = self._target_group_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        battlefield = self._battlefield_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        if comment is None:
+            return {"sku_code": sku_code, "comment_profile": {}, "support_items": [], "available_summary": {}}
+        support_items: list[dict[str, Any]] = []
+        if param_code:
+            support_items.append(_comment_param_support(comment, param_code))
+        if claim_code:
+            support_items.append(_comment_claim_support(comment, claim_code))
+        if user_task_code:
+            support_items.append(_comment_profile_code_support("user_task", user_task_code, _user_task_code_roles(task)))
+        if target_group_code:
+            support_items.append(_comment_profile_code_support("target_group", target_group_code, _target_group_code_roles(group)))
+        if battlefield_code:
+            support_items.append(_comment_profile_code_support("battlefield", battlefield_code, _battlefield_code_roles(battlefield)))
+        return {
+            "sku_code": sku_code,
+            "comment_profile": _comment_payload(comment),
+            "support_items": support_items,
+            "available_summary": {
+                "supported_param_codes": comment.supported_param_codes or [],
+                "contradicted_param_codes": comment.contradicted_param_codes or [],
+                "supported_claim_codes": comment.supported_claim_codes or [],
+                "contradicted_claim_codes": comment.contradicted_claim_codes or [],
+                "comment_observed_task_codes": (task.comment_observed_task_codes_json or []) if task else [],
+                "comment_observed_group_codes": (group.comment_observed_group_codes_json or []) if group else [],
+                "drag_factor_battlefield_codes": (battlefield.drag_factor_battlefield_codes_json or []) if battlefield else [],
+            },
+        }
+
+    def _sales_overlap_market_fallback(
+        self,
+        *,
+        batch_id: str,
+        target_sku_code: str,
+        candidate_sku_code: str,
+        market_window: str,
+    ) -> dict[str, Any]:
+        target_market = self._market_profile(batch_id=batch_id, sku_code=target_sku_code, market_window=market_window)
+        candidate_market = self._market_profile(batch_id=batch_id, sku_code=candidate_sku_code, market_window=market_window)
+        target_avg_volume = _safe_avg(_decimal(target_market.sales_volume_total) if target_market else None, target_market.active_week_count if target_market else None)
+        candidate_avg_volume = _safe_avg(
+            _decimal(candidate_market.sales_volume_total) if candidate_market else None,
+            candidate_market.active_week_count if candidate_market else None,
+        )
+        target_avg_amount = _safe_avg(_decimal(target_market.sales_amount_total) if target_market else None, target_market.active_week_count if target_market else None)
+        candidate_avg_amount = _safe_avg(
+            _decimal(candidate_market.sales_amount_total) if candidate_market else None,
+            candidate_market.active_week_count if candidate_market else None,
+        )
+        return {
+            "method": "market_profile_active_week_average_fallback",
+            "policy_note_cn": "未找到两款 SKU 的 M01 周度明细重叠，退回 M07 活跃周均；不能作为精确重叠周判断。",
+            "target_sku_code": target_sku_code,
+            "candidate_sku_code": candidate_sku_code,
+            "overlap_weeks": [],
+            "overlap_week_count": 0,
+            "target": _sales_market_fallback_side(target_market, target_avg_volume, target_avg_amount),
+            "candidate": _sales_market_fallback_side(candidate_market, candidate_avg_volume, candidate_avg_amount),
+            "comparison": _sales_comparison(target_avg_volume, candidate_avg_volume, target_avg_amount, candidate_avg_amount),
+        }
+
+    def _market_weekly_rows(self, *, batch_id: str, sku_codes: Sequence[str]) -> list[entities.Core3CleanMarketWeekly]:
+        stmt = (
+            select(entities.Core3CleanMarketWeekly)
+            .where(entities.Core3CleanMarketWeekly.project_id == self.project_id)
+            .where(entities.Core3CleanMarketWeekly.category_code == self.category_code)
+            .where(entities.Core3CleanMarketWeekly.batch_id == batch_id)
+            .where(entities.Core3CleanMarketWeekly.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3CleanMarketWeekly.period_week_index.is_not(None))
+            .where(entities.Core3CleanMarketWeekly.record_status == "active")
+            .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
+            .order_by(entities.Core3CleanMarketWeekly.sku_code, entities.Core3CleanMarketWeekly.period_week_index)
+        )
+        return list(self.db.execute(stmt).scalars())
+
     def _market_profile(self, *, batch_id: str, sku_code: str, market_window: str) -> entities.Core3SkuMarketProfile | None:
         stmt = (
             select(entities.Core3SkuMarketProfile)
@@ -839,3 +1076,332 @@ def _number(value: object) -> float | None:
     if decimal_value is None:
         return None
     return float(decimal_value)
+
+
+def _avg_decimal(values: Sequence[Decimal | None]) -> Decimal | None:
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    return sum(present, Decimal("0")) / Decimal(len(present))
+
+
+def _safe_ratio(numerator: Decimal | None, denominator: Decimal | None) -> Decimal | None:
+    if numerator is None or denominator in (None, Decimal("0")):
+        return None
+    return numerator / denominator
+
+
+def _candidate_market_payload(
+    row: entities.Core3SkuMarketProfile,
+    *,
+    target_market: entities.Core3SkuMarketProfile,
+) -> dict[str, Any]:
+    price = _decimal(row.price_wavg)
+    target_price = _decimal(target_market.price_wavg)
+    price_gap = price - target_price if price is not None and target_price is not None else None
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "screen_size_inch": _number(row.screen_size_inch),
+        "size_tier": row.size_segment,
+        "price_band_in_size_tier": row.price_band_size,
+        "price_wavg": _number(row.price_wavg),
+        "sales_volume_total": _number(row.sales_volume_total),
+        "avg_weekly_sales_volume": _number(_safe_avg(_decimal(row.sales_volume_total), row.active_week_count)),
+        "same_pool_sku_count": row.same_pool_sku_count,
+        "price_gap_to_target": _number(price_gap),
+        "price_gap_pct_to_target": _number(_safe_ratio(price_gap, target_price)),
+        "evidence_id_count": len(row.evidence_ids or []),
+    }
+
+
+def _weekly_market_by_sku(rows: Sequence[entities.Core3CleanMarketWeekly]) -> dict[str, dict[int, dict[str, Any]]]:
+    grouped: dict[str, dict[int, dict[str, Any]]] = {}
+    for row in rows:
+        if not row.sku_code or row.period_week_index is None:
+            continue
+        sku_weeks = grouped.setdefault(row.sku_code, {})
+        bucket = sku_weeks.setdefault(
+            row.period_week_index,
+            {
+                "period_week_index": row.period_week_index,
+                "period_raw": row.period_raw,
+                "sales_volume": Decimal("0"),
+                "sales_amount": Decimal("0"),
+                "platforms": set(),
+                "row_count": 0,
+            },
+        )
+        bucket["sales_volume"] += _decimal(row.sales_volume) or Decimal("0")
+        bucket["sales_amount"] += _decimal(row.sales_amount) or Decimal("0")
+        if row.platform_type:
+            bucket["platforms"].add(row.platform_type)
+        bucket["row_count"] += 1
+    for sku_weeks in grouped.values():
+        for bucket in sku_weeks.values():
+            volume = bucket["sales_volume"]
+            amount = bucket["sales_amount"]
+            bucket["avg_price"] = _safe_ratio(amount, volume)
+            bucket["platforms"] = sorted(bucket["platforms"])
+    return grouped
+
+
+def _sales_overlap_side(
+    sku_code: str,
+    weekly_values: Sequence[dict[str, Any]],
+    avg_volume: Decimal | None,
+    avg_amount: Decimal | None,
+) -> dict[str, Any]:
+    total_volume = sum((_decimal(item.get("sales_volume")) or Decimal("0")) for item in weekly_values)
+    total_amount = sum((_decimal(item.get("sales_amount")) or Decimal("0")) for item in weekly_values)
+    return {
+        "sku_code": sku_code,
+        "overlap_sales_volume": _number(total_volume),
+        "overlap_sales_amount": _number(total_amount),
+        "avg_weekly_sales_volume_on_overlap_weeks": _number(avg_volume),
+        "avg_weekly_sales_amount_on_overlap_weeks": _number(avg_amount),
+        "avg_price_on_overlap_weeks": _number(_safe_ratio(total_amount, total_volume)),
+        "weekly_points": [
+            {
+                "period_week_index": item["period_week_index"],
+                "period_raw": item.get("period_raw"),
+                "sales_volume": _number(item.get("sales_volume")),
+                "sales_amount": _number(item.get("sales_amount")),
+                "avg_price": _number(item.get("avg_price")),
+                "platforms": item.get("platforms") or [],
+                "row_count": item.get("row_count"),
+            }
+            for item in weekly_values
+        ],
+    }
+
+
+def _sales_market_fallback_side(
+    row: entities.Core3SkuMarketProfile | None,
+    avg_volume: Decimal | None,
+    avg_amount: Decimal | None,
+) -> dict[str, Any]:
+    if row is None:
+        return {}
+    return {
+        "sku_code": row.sku_code,
+        "sales_volume_total": _number(row.sales_volume_total),
+        "sales_amount_total": _number(row.sales_amount_total),
+        "active_week_count": row.active_week_count,
+        "avg_weekly_sales_volume": _number(avg_volume),
+        "avg_weekly_sales_amount": _number(avg_amount),
+        "price_wavg": _number(row.price_wavg),
+    }
+
+
+def _sales_comparison(
+    target_avg_volume: Decimal | None,
+    candidate_avg_volume: Decimal | None,
+    target_avg_amount: Decimal | None,
+    candidate_avg_amount: Decimal | None,
+) -> dict[str, Any]:
+    volume_gap = target_avg_volume - candidate_avg_volume if target_avg_volume is not None and candidate_avg_volume is not None else None
+    amount_gap = target_avg_amount - candidate_avg_amount if target_avg_amount is not None and candidate_avg_amount is not None else None
+    return {
+        "target_vs_candidate_avg_weekly_volume_gap": _number(volume_gap),
+        "target_vs_candidate_avg_weekly_volume_ratio": _number(_safe_ratio(target_avg_volume, candidate_avg_volume)),
+        "target_vs_candidate_avg_weekly_amount_gap": _number(amount_gap),
+        "target_vs_candidate_avg_weekly_amount_ratio": _number(_safe_ratio(target_avg_amount, candidate_avg_amount)),
+    }
+
+
+def _add_role(roles: dict[str, set[str]], code: str | None, role: str) -> None:
+    if not code:
+        return
+    normalized = str(code).strip()
+    if not normalized:
+        return
+    roles.setdefault(normalized, set()).add(role)
+
+
+def _add_role_list(roles: dict[str, set[str]], codes: Sequence[Any] | None, role: str) -> None:
+    for code in codes or []:
+        _add_role(roles, str(code), role)
+
+
+def _code_overlap(
+    target_roles: dict[str, set[str]],
+    candidate_roles: dict[str, set[str]],
+    *,
+    primary_key: str | None,
+) -> dict[str, Any]:
+    del primary_key
+    target_codes = set(target_roles)
+    candidate_codes = set(candidate_roles)
+    matched = target_codes & candidate_codes
+    union = target_codes | candidate_codes
+    score = Decimal(len(matched)) / Decimal(len(union)) if union else Decimal("0")
+    return {
+        "target_codes": sorted(target_codes),
+        "candidate_codes": sorted(candidate_codes),
+        "matched_codes": sorted(matched),
+        "target_only_codes": sorted(target_codes - candidate_codes),
+        "candidate_only_codes": sorted(candidate_codes - target_codes),
+        "matched_items": [
+            {
+                "code": code,
+                "target_roles": sorted(target_roles.get(code, set())),
+                "candidate_roles": sorted(candidate_roles.get(code, set())),
+            }
+            for code in sorted(matched)
+        ],
+        "target_count": len(target_codes),
+        "candidate_count": len(candidate_codes),
+        "matched_count": len(matched),
+        "union_count": len(union),
+        "overlap_score": _number(score),
+    }
+
+
+def _user_task_code_roles(row: entities.Core3M09cSkuUserTaskProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    _add_role(roles, row.primary_user_task_code, "primary")
+    _add_role_list(roles, row.secondary_user_task_codes_json, "secondary")
+    _add_role_list(roles, row.comment_observed_task_codes_json, "comment_observed")
+    _add_role_list(roles, row.brand_claimed_task_codes_json, "brand_claimed")
+    _add_role_list(roles, row.latent_capability_task_codes_json, "latent_capability")
+    _add_role_list(roles, row.drag_factor_task_codes_json, "drag_factor")
+    return roles
+
+
+def _target_group_code_roles(row: entities.Core3M10cSkuTargetGroupProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    _add_role(roles, row.primary_target_group_code, "primary")
+    _add_role_list(roles, row.secondary_target_group_codes_json, "secondary")
+    _add_role_list(roles, row.comment_observed_group_codes_json, "comment_observed")
+    _add_role_list(roles, row.brand_claimed_group_codes_json, "brand_claimed")
+    _add_role_list(roles, row.latent_group_codes_json, "latent")
+    _add_role_list(roles, row.unmet_group_need_codes_json, "unmet_need")
+    return roles
+
+
+def _battlefield_code_roles(row: entities.Core3SkuValueBattlefieldProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    _add_role(roles, row.primary_battlefield_code, "primary")
+    _add_role_list(roles, row.secondary_battlefield_codes_json, "secondary")
+    _add_role_list(roles, row.opportunity_battlefield_codes_json, "opportunity")
+    _add_role_list(roles, row.drag_factor_battlefield_codes_json, "drag_factor")
+    return roles
+
+
+def _param_code_roles(row: entities.Core3SkuParamProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    for code in (row.param_values_json or {}):
+        if code != "dimension_tier_profile":
+            _add_role(roles, code, "param_value")
+    for role, values in (
+        ("picture", row.core_picture_params_json),
+        ("gaming", row.core_gaming_params_json),
+        ("system", row.core_system_params_json),
+        ("eye_care", row.core_eye_care_params_json),
+    ):
+        for code in (values or {}):
+            _add_role(roles, code, f"core_{role}")
+    return roles
+
+
+def _claim_code_roles(row: entities.Core3SkuClaimFactProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    _add_role_list(roles, row.fact_claim_codes, "fact_claim")
+    _add_role_list(roles, row.claim_codes, "claim")
+    _add_role_list(roles, row.unsupported_claim_codes, "unsupported")
+    return roles
+
+
+def _claim_position_roles(row: entities.Core3SkuClaimFactProfile | None) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = {}
+    if row is None:
+        return roles
+    for code, source_path in _flatten_position_codes(row.dimension_position_profile_json or {}):
+        _add_role(roles, code, source_path)
+    return roles
+
+
+def _flatten_position_codes(value: Any, *, path: str = "dimension_position") -> list[tuple[str, str]]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [(value, path)] if value.strip() else []
+    if isinstance(value, list):
+        result: list[tuple[str, str]] = []
+        for item in value:
+            result.extend(_flatten_position_codes(item, path=path))
+        return result
+    if isinstance(value, dict):
+        result = []
+        for key, item in value.items():
+            result.extend(_flatten_position_codes(item, path=f"{path}:{key}"))
+        return result
+    return []
+
+
+def _comment_param_support(row: entities.Core3SkuCommentFactProfile, param_code: str) -> dict[str, Any]:
+    details = (row.param_comment_support_json or {}).get(param_code) or {}
+    return {
+        "source_type": "param_code",
+        "code": param_code,
+        "support_status": _support_status(
+            code=param_code,
+            positive_codes=row.supported_param_codes,
+            negative_codes=row.contradicted_param_codes,
+        ),
+        "details": details,
+    }
+
+
+def _comment_claim_support(row: entities.Core3SkuCommentFactProfile, claim_code: str) -> dict[str, Any]:
+    details = (row.claim_comment_support_json or {}).get(claim_code) or {}
+    return {
+        "source_type": "claim_code",
+        "code": claim_code,
+        "support_status": _support_status(
+            code=claim_code,
+            positive_codes=row.supported_claim_codes,
+            negative_codes=row.contradicted_claim_codes,
+        ),
+        "details": details,
+    }
+
+
+def _comment_profile_code_support(source_type: str, code: str, roles: dict[str, set[str]]) -> dict[str, Any]:
+    role_set = roles.get(code, set())
+    if not role_set:
+        support_status = "not_observed"
+    elif role_set & {"comment_observed", "primary", "secondary"}:
+        support_status = "supported_or_established"
+    elif role_set & {"drag_factor", "unmet_need"}:
+        support_status = "negative_or_unmet_need"
+    elif role_set & {"brand_claimed", "latent", "latent_capability", "opportunity"}:
+        support_status = "claimed_or_latent"
+    else:
+        support_status = "mentioned"
+    return {
+        "source_type": source_type,
+        "code": code,
+        "support_status": support_status,
+        "roles": sorted(role_set),
+    }
+
+
+def _support_status(*, code: str, positive_codes: Sequence[Any] | None, negative_codes: Sequence[Any] | None) -> str:
+    if code in {str(item) for item in positive_codes or []}:
+        return "supported"
+    if code in {str(item) for item in negative_codes or []}:
+        return "contradicted"
+    return "unmentioned"

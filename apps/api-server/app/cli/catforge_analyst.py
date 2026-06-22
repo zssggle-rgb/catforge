@@ -81,6 +81,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 brand_name=getattr(args, "brand_name", None),
                 size_tier=getattr(args, "size_tier", None),
                 price_band=getattr(args, "price_band", None),
+                claim_code=getattr(args, "claim_code", None),
+                param_code=getattr(args, "param_code", None),
+                user_task_code=getattr(args, "user_task_code", None),
+                target_group_code=getattr(args, "target_group_code", None),
+                battlefield_code=getattr(args, "battlefield_code", None),
                 limit=getattr(args, "limit", DEFAULT_CANDIDATE_LIMIT),
             )
     except CatForgeAnalystError as exc:
@@ -167,6 +172,11 @@ def add_dimension_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--brand-name", help="Optional brand filter for dimension-space commands.")
     parser.add_argument("--size-tier", help="Optional five-tier size filter.")
     parser.add_argument("--price-band", help="Optional size-tier price band filter.")
+    parser.add_argument("--claim-code", help="Optional claim code filter for comment-support.")
+    parser.add_argument("--param-code", help="Optional param code filter for comment-support.")
+    parser.add_argument("--user-task-code", help="Optional user task code filter for comment-support.")
+    parser.add_argument("--target-group-code", help="Optional target group code filter for comment-support.")
+    parser.add_argument("--battlefield-code", help="Optional battlefield code filter for comment-support.")
 
 
 def add_format_arg(parser: argparse.ArgumentParser) -> None:
@@ -242,6 +252,148 @@ def sku_fact_brief(
         sku_code=sku_code,
         model_name=model_name,
         limit=limit,
+    )
+
+
+def same_size_price_candidates(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="same-size-price-candidates",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
+def semantic_overlap(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="semantic-overlap",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+    )
+
+
+def sales_overlap(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="sales-overlap",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+    )
+
+
+def param_claim_overlap(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="param-claim-overlap",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+    )
+
+
+def comment_support(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    claim_code: str | None = None,
+    param_code: str | None = None,
+    user_task_code: str | None = None,
+    target_group_code: str | None = None,
+    battlefield_code: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="comment-support",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        claim_code=claim_code,
+        param_code=param_code,
+        user_task_code=user_task_code,
+        target_group_code=target_group_code,
+        battlefield_code=battlefield_code,
     )
 
 

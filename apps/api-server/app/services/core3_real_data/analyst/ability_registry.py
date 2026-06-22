@@ -49,10 +49,11 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="same-size-price-candidates",
         ability_type="atom",
-        description_cn="按同尺寸、同价格带和邻近价格带找可比 SKU 候选。",
+        description_cn="按同尺寸、同尺寸内价格带找可比 SKU 候选。",
         required_inputs=("sku_code|query",),
-        optional_inputs=("price_band_expand", "candidate_limit"),
-        source_modules=("M03B", "M07", "M11D"),
+        optional_inputs=("candidate_limit",),
+        source_modules=("M07",),
+        status="implemented",
     ),
     AbilityDefinition(
         code="semantic-overlap",
@@ -60,6 +61,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="计算 SKU 之间的用户任务、目标客群和价值战场重合。",
         required_inputs=("sku_code", "candidate_sku_code"),
         source_modules=("M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="sales-overlap",
@@ -67,6 +69,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="计算两个 SKU 在重叠在售周内的周均销量、周均销额、价格和平台结构差异。",
         required_inputs=("sku_code", "candidate_sku_code"),
         source_modules=("M01", "M07"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="param-claim-overlap",
@@ -74,6 +77,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="计算两个 SKU 的参数、卖点、卖点位置和参数档位的重合与差异。",
         required_inputs=("sku_code", "candidate_sku_code"),
         source_modules=("M03B", "M04C"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="comment-support",
@@ -82,6 +86,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         required_inputs=("sku_code|query",),
         optional_inputs=("claim_code", "param_code", "user_task_code", "target_group_code", "battlefield_code"),
         source_modules=("M05C",),
+        status="implemented",
     ),
     AbilityDefinition(
         code="semantic-dimension-space",
