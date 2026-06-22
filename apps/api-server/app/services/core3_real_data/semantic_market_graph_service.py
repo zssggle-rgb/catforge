@@ -20,6 +20,15 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
+    CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
+    CORE3_M07_RULE_VERSION,
+    CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M09C_TV_TAXONOMY_VERSION,
+    CORE3_M10C_TV_RULE_VERSION,
+    CORE3_M10C_TV_TAXONOMY_VERSION,
+    CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_MODULE_VERSION,
     CORE3_M11D_RULE_VERSION,
     Core3ModuleCode,
@@ -36,6 +45,20 @@ ANALYSIS_POPULATION_ALL_SEMANTIC = "all_semantic_profiles"
 SUPPORTED_ANALYSIS_POPULATIONS = (ANALYSIS_POPULATION_FACT_COMPLETE, ANALYSIS_POPULATION_ALL_SEMANTIC)
 MARKET_WINDOW_FULL_OBSERVED = "full_observed_window"
 SUPPORTED_MARKET_WINDOWS = (MARKET_WINDOW_FULL_OBSERVED, "recent_12w", "custom_week_range")
+
+PRODUCT_CATEGORY_INPUT_RULES = {
+    "TV": {
+        "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
+        "user_task_rule_version": CORE3_M09C_TV_RULE_VERSION,
+        "user_task_taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
+        "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
+        "target_group_taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
+        "battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
+        "battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+        "market_rule_version": CORE3_M07_RULE_VERSION,
+    }
+}
 
 DIM_USER_TASK = "user_task"
 DIM_TARGET_GROUP = "target_group"
@@ -231,15 +254,79 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         target_sku_codes: Sequence[str] = (),
     ) -> M11DSemanticInputs:
         sku_scope = tuple(sorted({code for code in target_sku_codes if code}))
+        input_rules = PRODUCT_CATEGORY_INPUT_RULES.get(product_category.upper(), {})
         return M11DSemanticInputs(
-            user_task_profiles=tuple(self._list_current(entities.Core3M09cSkuUserTaskProfile, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            user_task_scores=tuple(self._list_current(entities.Core3M09cSkuUserTaskScore, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            target_group_profiles=tuple(self._list_current(entities.Core3M10cSkuTargetGroupProfile, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            target_group_scores=tuple(self._list_current(entities.Core3M10cSkuTargetGroupScore, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            battlefield_profiles=tuple(self._list_current(entities.Core3SkuValueBattlefieldProfile, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            battlefield_scores=tuple(self._list_current(entities.Core3SkuValueBattlefieldScore, batch_id, product_category=product_category, sku_scope=sku_scope)),
-            market_profiles=tuple(self._list_market_profiles(batch_id, market_window=market_window, sku_scope=sku_scope)),
-            comment_profiles=tuple(self._list_current(entities.Core3SkuCommentFactProfile, batch_id, product_category=product_category, sku_scope=sku_scope)),
+            user_task_profiles=tuple(
+                self._list_current(
+                    entities.Core3M09cSkuUserTaskProfile,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("user_task_rule_version"),
+                    taxonomy_version=input_rules.get("user_task_taxonomy_version"),
+                )
+            ),
+            user_task_scores=tuple(
+                self._list_current(
+                    entities.Core3M09cSkuUserTaskScore,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("user_task_rule_version"),
+                    taxonomy_version=input_rules.get("user_task_taxonomy_version"),
+                )
+            ),
+            target_group_profiles=tuple(
+                self._list_current(
+                    entities.Core3M10cSkuTargetGroupProfile,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("target_group_rule_version"),
+                    taxonomy_version=input_rules.get("target_group_taxonomy_version"),
+                )
+            ),
+            target_group_scores=tuple(
+                self._list_current(
+                    entities.Core3M10cSkuTargetGroupScore,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("target_group_rule_version"),
+                    taxonomy_version=input_rules.get("target_group_taxonomy_version"),
+                )
+            ),
+            battlefield_profiles=tuple(
+                self._list_current(
+                    entities.Core3SkuValueBattlefieldProfile,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("battlefield_rule_version"),
+                    taxonomy_version=input_rules.get("battlefield_taxonomy_version"),
+                )
+            ),
+            battlefield_scores=tuple(
+                self._list_current(
+                    entities.Core3SkuValueBattlefieldScore,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("battlefield_rule_version"),
+                    taxonomy_version=input_rules.get("battlefield_taxonomy_version"),
+                )
+            ),
+            market_profiles=tuple(self._list_market_profiles(batch_id, market_window=market_window, sku_scope=sku_scope, rule_version=input_rules.get("market_rule_version"))),
+            comment_profiles=tuple(
+                self._list_current(
+                    entities.Core3SkuCommentFactProfile,
+                    batch_id,
+                    product_category=product_category,
+                    sku_scope=sku_scope,
+                    rule_version=input_rules.get("comment_rule_version"),
+                    taxonomy_version=input_rules.get("comment_taxonomy_version"),
+                )
+            ),
         )
 
     def mark_outputs_stale(
@@ -349,10 +436,16 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         *,
         product_category: str,
         sku_scope: Sequence[str],
+        rule_version: str | None = None,
+        taxonomy_version: str | None = None,
     ) -> list[Any]:
         stmt = self._current_query(model_cls, batch_id)
         if hasattr(model_cls, "product_category"):
             stmt = stmt.where(model_cls.product_category == product_category)
+        if rule_version and hasattr(model_cls, "rule_version"):
+            stmt = stmt.where(model_cls.rule_version == rule_version)
+        if taxonomy_version and hasattr(model_cls, "taxonomy_version"):
+            stmt = stmt.where(model_cls.taxonomy_version == taxonomy_version)
         if sku_scope:
             stmt = stmt.where(model_cls.sku_code.in_(tuple(sku_scope)))
         return self._paged_scalars(stmt.order_by(model_cls.sku_code), limit=100000, offset=0)
@@ -363,12 +456,15 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         *,
         market_window: str,
         sku_scope: Sequence[str],
+        rule_version: str | None = None,
     ) -> list[entities.Core3SkuMarketProfile]:
         stmt = (
             self._current_query(entities.Core3SkuMarketProfile, batch_id)
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .order_by(entities.Core3SkuMarketProfile.sku_code)
         )
+        if rule_version:
+            stmt = stmt.where(entities.Core3SkuMarketProfile.rule_version == rule_version)
         if sku_scope:
             stmt = stmt.where(entities.Core3SkuMarketProfile.sku_code.in_(tuple(sku_scope)))
         return self._paged_scalars(stmt, limit=100000, offset=0)
@@ -1218,6 +1314,7 @@ def _build_summaries_and_contributions(
         dimension_name = (dimension_allocations[0]["dimension_name"] if dimension_allocations else dimension_candidates[0].dimension_name)
         taxonomy_version = dimension_candidates[0].taxonomy_version if dimension_candidates else "unknown"
         relation_skus = {item.sku_code for item in dimension_candidates}
+        allocated_skus = {item["sku_code"] for item in dimension_allocations}
         role_skus: dict[str, set[str]] = defaultdict(set)
         status_counts: Counter[str] = Counter()
         brand_counts: Counter[str] = Counter()
@@ -1277,7 +1374,7 @@ def _build_summaries_and_contributions(
             "dimension_name": dimension_name,
             "taxonomy_version": taxonomy_version,
             "sku_relation_count": len(relation_skus),
-            "allocated_sku_count": len({item["sku_code"] for item in dimension_allocations}),
+            "allocated_sku_count": len(allocated_skus),
             "primary_sku_count": len(role_skus[ROLE_PRIMARY]),
             "secondary_sku_count": len(role_skus[ROLE_SECONDARY]),
             "observed_need_sku_count": len(role_skus[ROLE_OBSERVED]),
@@ -1306,7 +1403,7 @@ def _build_summaries_and_contributions(
             "relation_status_counts_json": dict(sorted(status_counts.items())),
             "top_skus_json": top_skus,
             "confidence_avg": confidence_avg,
-            "business_summary_cn": _summary_text(dimension_name, dimension_type, len(relation_skus), len(dimension_allocations), estimated_volume + observed_volume),
+            "business_summary_cn": _summary_text(dimension_name, dimension_type, len(relation_skus), len(allocated_skus), estimated_volume + observed_volume),
             "rule_version": rule_version,
             "input_fingerprint": stable_hash(
                 {

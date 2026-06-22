@@ -104,6 +104,7 @@ def seed_foundation(session: Session) -> None:
         size_tier="large_60_69",
         price_band="mid_low",
     )
+    seed_stale_current_battlefield_outputs(session)
     session.commit()
 
 
@@ -478,6 +479,71 @@ def seed_battlefield_score(
     )
 
 
+def seed_stale_current_battlefield_outputs(session: Session) -> None:
+    session.add(
+        entities.Core3SkuValueBattlefieldProfile(
+            profile_id=f"m11c-profile-stale-{SKU_STRONG}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version="m11c_tv_value_battlefield_taxonomy_v0.1",
+            rule_version="m11c_tv_value_battlefield_profile_v0.1",
+            sku_code=SKU_STRONG,
+            model_name="75A-Pro",
+            brand_name="海信",
+            size_tier="xlarge_70_85",
+            price_band_in_size_tier="mid",
+            price_percentile_in_size_tier=Decimal("0.520000"),
+            primary_battlefield_code="BF_LARGE_SCREEN_VALUE_UPGRADE",
+            primary_relation_status="primary_battlefield",
+            secondary_battlefield_codes_json=[],
+            opportunity_battlefield_codes_json=[],
+            drag_factor_battlefield_codes_json=[],
+            battlefield_summary_json={"fixture": "stale_current_row"},
+            confidence=Decimal("0.5000"),
+            evidence_ids_json=["ev-stale-m11c-profile"],
+            profile_hash="hash-stale-m11c-profile",
+        )
+    )
+    session.add(
+        entities.Core3SkuValueBattlefieldScore(
+            score_id=f"m11c-score-stale-{SKU_STRONG}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version="m11c_tv_value_battlefield_taxonomy_v0.1",
+            rule_version="m11c_tv_value_battlefield_profile_v0.1",
+            sku_code=SKU_STRONG,
+            model_name="75A-Pro",
+            brand_name="海信",
+            battlefield_code="BF_LARGE_SCREEN_VALUE_UPGRADE",
+            battlefield_name="旧版大屏换新战场",
+            battlefield_definition="stale fixture",
+            relation_status="primary_battlefield",
+            value_effect="premium_driver",
+            battlefield_score=Decimal("0.9900"),
+            market_gate_status="passed",
+            market_pool_fit_score=Decimal("1.0000"),
+            user_voice_score=Decimal("1.0000"),
+            task_group_fit_score=Decimal("1.0000"),
+            claim_alignment_score=Decimal("1.0000"),
+            param_capability_score=Decimal("1.0000"),
+            market_validation_score=Decimal("1.0000"),
+            sentiment_polarity="positive",
+            size_tier="xlarge_70_85",
+            price_band_in_size_tier="mid",
+            price_percentile_in_size_tier=Decimal("0.520000"),
+            score_breakdown_json={"fixture": "stale_current_row"},
+            status_reason_cn="旧版本 current 行应该被 M11D 过滤。",
+            evidence_ids_json=["ev-stale-m11c-score"],
+            confidence=Decimal("0.5000"),
+            result_hash="hash-stale-m11c-score",
+        )
+    )
+
+
 def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
     session = make_session()
 
@@ -492,6 +558,7 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
 
     assert result["status"] == "ok"
     assert result["summary"]["population_summary"]["included_sku_count"] == 2
+    assert result["summary"]["population_summary"]["input_counts"]["battlefield_profiles"] == 2
     assert result["summary"]["allocation_count"] > 0
     assert result["summary"]["summary_count"] > 0
     assert result["summary"]["graph_snapshot_count"] == 1
@@ -543,8 +610,10 @@ def test_m11d_insight_queries_market_map_and_sku_sales_allocation() -> None:
     )
     assert market_map["status"] == "ok"
     assert market_map["items"][0]["dimension_code"] == "BF_LARGE_SCREEN_VALUE_UPGRADE"
+    assert market_map["items"][0]["allocated_sku_count"] == 1
     assert market_map["items"][0]["estimated_sales_volume"] > 0
     assert market_map["items"][0]["contributions"][0]["sku_code"] == SKU_STRONG
+    assert len(market_map["items"][0]["contributions"]) == 1
 
     sku_allocation = catforge_insight.query_sku_sales_allocation(
         session,
