@@ -1,6 +1,6 @@
 ---
 name: catforge-insight
-description: Query CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, market profiles, comparable pools, comment fact profiles, user task profiles, target group profiles, value battlefield profiles, and coverage using natural language.
+description: Query read-only CatForge SKU parameter fact profiles, standard parameters, SKU claim fact profiles, standard claims, market profiles, comparable pools, comment fact profiles, user task profiles, target group profiles, value battlefield profiles, semantic market maps, sales allocation, and coverage using natural language.
 ---
 
 # CatForge Insight Skill
@@ -31,7 +31,28 @@ Use this skill when the user asks about:
 - Value battlefield graph, for example "查彩电价值战场图谱".
 - Semantic market map and sales allocation, for example "某个价值战场有多少销量", "目标客群图谱有哪些 SKU", "用户任务图谱销量怎么分", "查 100A4F 的销量分配", "这个 SKU 在多个战场里销量怎么切".
 
+This is a read-only fact and coverage query skill. It should return facts, taxonomy, coverage, profiles, maps, and allocation records. It should not produce higher-level business reasoning by itself.
+
+Use XiaoAo / `catforge_analyst` instead when the user asks:
+
+- "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品".
+- "A 为什么比 B 卖得好/差", "销量差异原因".
+- "哪些卖点支撑用户选择", "哪些卖点是溢价卖点".
+- "这个 SKU 能不能进入更多价值战场", "怎么扩大销量", "怎么抢竞品市场".
+- "这个 SKU 的综合业务画像", "目标客户是什么", "商业机会是什么".
+- Any question that asks for business conclusion, competitor reasoning, sales-difference reasoning, premium-claim reasoning, battlefield opportunity, or recommended action.
+
+In Claude Code, the stable handoff command is:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst ask "海信65E7Q和谁竞争？" --batch-id latest --product-category tv --format json
+```
+
+In OpenClaw, use `xiaoao-home-appliance-market-analysis` and the XiaoAo agent when available.
+
 Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", "用户任务画像", "用户任务预设", "目标客群画像", "目标客群预设", "价值战场画像", "价值战场预设", "价值战场图谱", "语义市场图谱", "销量分配", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D if the user asks for implementation details.
+
+If you do use this skill to answer a factual question, do not over-interpret the result. For example, semantic market graph `estimated_sales_volume` and `allocated_sales_volume` are explanatory allocation values, not causal attribution; cumulative sales are context only and must not be used as the basis for pairwise sales winner/loser conclusions.
 
 M05C-B, sometimes called `m05b` in business discussion, is the LLM-based comment profile generation stage. This skill is M05C-C read-only query and never calls an LLM.
 

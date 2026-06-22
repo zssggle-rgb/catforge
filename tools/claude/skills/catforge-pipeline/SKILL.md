@@ -1,6 +1,6 @@
 ---
 name: catforge-pipeline
-description: Run CatForge data-preparation, SKU parameter profile, SKU claim fact profile, SKU market profile, SKU comment fact profile, SKU user task, SKU target group, SKU value battlefield, and semantic market graph jobs from natural language.
+description: Run CatForge execution jobs for data preparation, SKU parameter profiles, SKU claim fact profiles, SKU market profiles, SKU comment fact profiles, SKU user tasks, SKU target groups, SKU value battlefields, and semantic market graphs from natural language. This skill is for rebuild and rerun work, not read-only query or business analysis.
 ---
 
 # CatForge Pipeline Skill
@@ -33,13 +33,33 @@ Use this skill when the user asks Claude Code to execute preparation/profile wor
 - "更新彩电用户任务、目标客群、价值战场的市场空间"
 - "重新生成彩电语义市场图谱"
 
-This is an execution skill. For read-only questions like "查某个 SKU 的参数画像", "查彩电标准卖点", or "查某个 SKU 的卖点画像", use `catforge-insight` instead.
+This is an execution skill. Use it only when the user asks to prepare, generate, rerun, rebuild, update, or process data.
+
+For read-only questions like "查某个 SKU 的参数画像", "查彩电标准卖点", or "查某个 SKU 的卖点画像", use `catforge-insight` instead.
 For read-only market questions like "查某个 SKU 的市场画像", "查价格区间覆盖哪些 SKU", or "查某个 SKU 的可比池", also use `catforge-insight`.
 For read-only comment questions like "查某个 SKU 的评论事实画像", "查品牌力覆盖哪些 SKU", or "评论里是否提到索尼", use `catforge-insight` instead.
 For read-only user-task questions like "查某个 SKU 的用户任务", "查彩电用户任务预设", or "大屏换新升级有哪些 SKU", use `catforge-insight` instead.
 For read-only target-group questions like "查某个 SKU 的目标客群", "查彩电目标客群预设", or "性价比理性用户有哪些 SKU", use `catforge-insight` instead.
 For read-only value battlefield questions like "查某个 SKU 的价值战场", "查彩电价值战场预设", or "大屏换新战场有哪些 SKU", use `catforge-insight` instead.
 For read-only semantic-market questions like "查某个 SKU 的销量分配", "某个价值战场有多少销量", or "用户任务图谱有哪些 SKU", use `catforge-insight` instead.
+
+For business-analysis questions, use XiaoAo / `catforge_analyst` instead of this pipeline skill. Examples:
+
+- "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品".
+- "A 为什么比 B 卖得好/差", "销量差异原因".
+- "哪些卖点支撑用户选择", "哪些卖点是溢价卖点".
+- "这个 SKU 能不能进入更多价值战场", "怎么扩大销量", "怎么抢竞品市场".
+- "这个 SKU 的综合业务画像", "目标客户是什么", "商业机会是什么".
+
+In Claude Code, the stable handoff command is:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst ask "海信65E7Q哪些卖点是溢价卖点？" --batch-id latest --product-category tv --format json
+```
+
+In OpenClaw, use `xiaoao-home-appliance-market-analysis` and the XiaoAo agent when available.
+
+After a pipeline command finishes, report execution status, counts, and limitations. Do not turn a successful rerun into a business conclusion unless you call `catforge_analyst` or `catforge_insight` afterward and cite their JSON output.
 
 ## Working Directory
 
