@@ -108,6 +108,28 @@ M11C `m11c_tv_value_battlefield_taxonomy_v0.2` 已补齐“次级巨幕 / 巨幕
 - Skill 应该负责“调用和解释”，不应该承担长时间计算、全量扫描和归一化逻辑。
 - CLI 可以提供执行入口和查询入口，但计算结果应先被程序固化，避免 OpenClaw 每次问答重复跑重任务。
 
+### 2.7 两级 CLI 和开放问题处理口径
+
+小奥不能被设计成只能回答固定问题，也不能让 OpenClaw 每次自由拼 SQL 或自由推理。最终口径是“两级 CLI”：
+
+1. 原子能力：完成单个稳定分析动作，例如解析 SKU、查综合事实、找同尺寸价格候选、算语义重合、算重叠周销量、查参数/卖点重合、查评论支撑、查战场空间、查机会缺口。
+2. SOP 编排能力：把多个原子能力按固定步骤串起来，回答高频问题，例如竞品是谁、为什么卖得好、哪些卖点溢价、能否进入更多战场。
+
+问题处理规则：
+
+| 问题类型 | 处理方式 |
+| --- | --- |
+| 命中固定 SOP | 直接调用 `catforge_analyst` SOP 子命令。 |
+| 未命中固定 SOP，但能拆成已有原子能力 | 小奥 Skill 生成分析计划，组合调用原子能力。 |
+| 当前原子能力也不支持 | 输出边界回答，说明缺少什么数据、当前能替代分析什么。 |
+| 高频新问题 | 沉淀为新的 `catforge_analyst` SOP 子命令。 |
+
+因此，SOP 不是只写进 Skill。正确分工是：
+
+- SOP 执行逻辑和核心计算固化在 `catforge_analyst` CLI。
+- SOP 使用说明、路由规则、开放问题组合策略写进 Skill。
+- Agent 负责业务语言表达，不绕过 CLI 自己下结论。
+
 ## 3. 典型问题集
 
 ### 3.1 SKU 事实画像
@@ -273,6 +295,9 @@ SOP：
 | 战场扩张建议 | `catforge_analyst battlefield-opportunity` 查询和解释结果 |
 | 战场空间测算 | `catforge_analyst battlefield-space` 查询新版图谱结果 |
 | 任务/客群/战场市场图谱 | `catforge_insight semantic-market-map` 查询新版图谱结果 |
+| 开放问题组合分析 | `catforge_analyst` 原子能力注册表和 atom 子命令 |
+| 高频问题稳定 SOP | `catforge_analyst` SOP 编排子命令 |
+| 超出数据边界的问题 | 小奥 Skill 边界回答规则 |
 | 小奥 Agent 提示词 | `tools/openclaw/agents/xiaoao-home-appliance-market-analyst/AGENTS.md` |
 | 小奥分析 Skill | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` |
 
@@ -302,17 +327,27 @@ SOP：
 ### 阶段 3：分析 CLI
 
 1. 新增 `catforge_analyst` CLI。
-2. 实现查询和解释命令：
+2. 先实现原子分析能力：
+   - `resolve-sku`
+   - `sku-fact-brief`
+   - `same-size-price-candidates`
+   - `semantic-overlap`
+   - `sales-overlap`
+   - `param-claim-overlap`
+   - `comment-support`
+   - `semantic-dimension-space`
+   - `opportunity-gaps`
+3. 再实现 SOP 编排命令：
    - `competitor-set`
    - `why-sales-diff`
    - `premium-claim-drivers`
    - `battlefield-space`
    - `battlefield-opportunity`
-   - `semantic-market-map`
-   - `sku-sales-allocation`
+   - `sku-business-brief`
    - `ask`
-3. CLI 默认输出 JSON，必要时支持 text。
-4. CLI 不直接调用 LLM，不临时跑全量 allocation；长任务只调用已实现的批处理程序。
+4. `ask` 只负责自然语言路由，不做核心计算。
+5. CLI 默认输出 JSON，必要时支持 text。
+6. CLI 不直接调用 LLM，不临时跑全量 allocation；长任务只调用已实现的批处理程序。
 
 ### 阶段 4：小奥 Skill 和 Agent 提示词
 
@@ -323,6 +358,8 @@ SOP：
    - 跑流程：调用 `catforge_pipeline`。
    - 复合分析：调用 `catforge_analyst`。
    - 查图谱和 allocation：调用 `catforge_insight semantic-market-map`、`catforge_insight sku-sales-allocation`。
+   - 非固定 SOP 问题：先拆解成 `catforge_analyst` 原子能力组合。
+   - 不支持问题：按边界规则回答，不编造数据。
 4. 提示词要求：
    - 用业务语言回答。
    - 必须引用 CLI 返回的证据字段。
