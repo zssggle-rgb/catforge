@@ -509,6 +509,8 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         normalized_payload = self._normalize_payload(model_cls, payload)
         existing = self._find_by_unique(model_cls, normalized_payload, unique_fields)
         if existing is None:
+            existing = self._find_by_primary_key(model_cls, normalized_payload)
+        if existing is None:
             record = model_cls(**_jsonable_payload(normalized_payload))
             self.db.add(record)
             self.db.flush()
@@ -527,6 +529,18 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         raw_payload.setdefault("category_code", self.category_code.value)
         model_fields = set(model_cls.__table__.columns.keys())
         return {key: value for key, value in raw_payload.items() if key in model_fields}
+
+    def _find_by_primary_key(self, model_cls: Any, payload: Mapping[str, Any]) -> Any | None:
+        primary_keys = tuple(model_cls.__mapper__.primary_key)
+        if not primary_keys:
+            return None
+        stmt = select(model_cls)
+        for column in primary_keys:
+            value = payload.get(column.name)
+            if value is None:
+                return None
+            stmt = stmt.where(column == value)
+        return self.db.execute(stmt).scalars().first()
 
     def _find_by_unique(self, model_cls: Any, payload: Mapping[str, Any], unique_fields: tuple[str, ...]) -> Any | None:
         stmt = select(model_cls).where(model_cls.project_id == self.project_id).where(model_cls.category_code == self.category_code.value)
@@ -1421,7 +1435,7 @@ def _build_summaries_and_contributions(
                         "amount": str(estimated_amount),
                         "observed_volume": str(observed_volume),
                         "sku_count": len(relation_skus),
-                        "allocated_count": len(dimension_allocations),
+                        "allocated_count": len(allocated_skus),
                     }
                 },
                 version="m11d-summary-result-v1",

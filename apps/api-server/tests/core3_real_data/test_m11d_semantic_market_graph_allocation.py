@@ -586,6 +586,24 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
     assert graph.dimension_count >= 4
     assert graph.unallocated_summary_json["no_allocation_count"] == 1
 
+    rerun = catforge_pipeline.run_semantic_market_graph(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    assert rerun["status"] == "ok"
+    assert session.execute(select(entities.Core3SemanticMarketGraphSnapshot)).scalar_one().is_current is True
+    summary = session.execute(
+        select(entities.Core3SemanticMarketDimensionSummary).where(
+            entities.Core3SemanticMarketDimensionSummary.dimension_code == "BF_LARGE_SCREEN_VALUE_UPGRADE"
+        )
+    ).scalar_one()
+    assert summary.allocated_sku_count == 1
+    assert "其中 1 个 SKU" in summary.business_summary_cn
+
 
 def test_m11d_insight_queries_market_map_and_sku_sales_allocation() -> None:
     session = make_session()
