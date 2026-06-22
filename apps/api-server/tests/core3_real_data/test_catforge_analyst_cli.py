@@ -894,6 +894,29 @@ def test_resolve_sku_preserves_pro_suffix_priority() -> None:
     assert result["target"]["model_name"] == "65E7Q Pro"
 
 
+def test_resolve_sku_does_not_fallback_to_base_when_pro_is_requested() -> None:
+    session = make_session()
+    session.query(entities.Core3SkuMarketProfile).filter(
+        entities.Core3SkuMarketProfile.sku_code == "TV00030001"
+    ).delete(synchronize_session=False)
+    session.query(entities.Core3SkuParamProfile).filter(
+        entities.Core3SkuParamProfile.sku_code == "TV00030001"
+    ).delete(synchronize_session=False)
+    session.commit()
+
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q Pro",
+    )
+
+    assert result["status"] == "not_found"
+    assert result["result"]["candidates"] == []
+
+
 def test_resolve_sku_returns_candidates_for_partial_model() -> None:
     session = make_session()
     result = catforge_analyst.resolve_sku(

@@ -994,7 +994,7 @@ def _model_match_rank(model_name: Any, requested_model: str) -> int:
     requested_has_pro = _has_suffix(requested_key, "PRO")
     model_has_pro = _has_suffix(model_key, "PRO")
     if requested_has_pro and not model_has_pro:
-        return 80
+        return 100
     if not requested_has_pro and model_has_pro and model_key.startswith(requested_key):
         return 30 + min(len(model_key) - len(requested_key), 20)
     if model_key.startswith(requested_key):
