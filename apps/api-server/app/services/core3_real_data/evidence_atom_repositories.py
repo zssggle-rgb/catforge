@@ -46,6 +46,10 @@ class EvidenceAtomRepository(Core3BaseRepository):
     def skip_existing_lookup_when_empty(self) -> None:
         self._skip_existing_lookup = True
 
+    def clear_save_cache(self) -> None:
+        self._atom_by_id.clear()
+        self._current_by_key.clear()
+
     def count_current_atoms(self) -> int:
         stmt = (
             select(func.count())
@@ -253,29 +257,30 @@ class EvidenceAtomRepository(Core3BaseRepository):
         source_row_id_set = {str(source_row_id) for source_row_id in source_row_ids if source_row_id}
         if not source_row_id_set:
             return []
-        stmt = (
-            select(Core3EvidenceAtom)
-            .where(Core3EvidenceAtom.project_id == self.project_id)
-            .where(Core3EvidenceAtom.category_code == self.category_code.value)
-            .where(Core3EvidenceAtom.batch_id == batch_id)
-            .where(Core3EvidenceAtom.source_row_id.in_(tuple(source_row_id_set)))
-            .where(Core3EvidenceAtom.clean_table.in_(tuple(clean_tables)))
-            .where(Core3EvidenceAtom.is_current.is_(True))
-            .where(Core3EvidenceAtom.evidence_status == Core3EvidenceStatus.CURRENT.value)
-        )
-        if evidence_types is not None:
-            stmt = stmt.where(Core3EvidenceAtom.evidence_type.in_(tuple(evidence_types)))
-        if evidence_fields is not None:
-            stmt = stmt.where(Core3EvidenceAtom.evidence_field.in_(tuple(evidence_fields)))
         inactive_evidence_ids: list[str] = []
-        for record in self.db.execute(stmt).scalars():
-            record.evidence_status = Core3EvidenceStatus.INACTIVE.value
-            record.is_current = False
-            record.inactive_reason = inactive_reason
-            record.updated_at = self.now_utc()
-            inactive_evidence_ids.append(record.evidence_id)
-            self._atom_by_id[record.evidence_id] = record
-            self._current_by_key[record.evidence_key] = None
+        for source_row_chunk in _chunks(sorted(source_row_id_set), 1000):
+            stmt = (
+                select(Core3EvidenceAtom)
+                .where(Core3EvidenceAtom.project_id == self.project_id)
+                .where(Core3EvidenceAtom.category_code == self.category_code.value)
+                .where(Core3EvidenceAtom.batch_id == batch_id)
+                .where(Core3EvidenceAtom.source_row_id.in_(tuple(source_row_chunk)))
+                .where(Core3EvidenceAtom.clean_table.in_(tuple(clean_tables)))
+                .where(Core3EvidenceAtom.is_current.is_(True))
+                .where(Core3EvidenceAtom.evidence_status == Core3EvidenceStatus.CURRENT.value)
+            )
+            if evidence_types is not None:
+                stmt = stmt.where(Core3EvidenceAtom.evidence_type.in_(tuple(evidence_types)))
+            if evidence_fields is not None:
+                stmt = stmt.where(Core3EvidenceAtom.evidence_field.in_(tuple(evidence_fields)))
+            for record in self.db.execute(stmt).scalars():
+                record.evidence_status = Core3EvidenceStatus.INACTIVE.value
+                record.is_current = False
+                record.inactive_reason = inactive_reason
+                record.updated_at = self.now_utc()
+                inactive_evidence_ids.append(record.evidence_id)
+                self._atom_by_id[record.evidence_id] = record
+                self._current_by_key[record.evidence_key] = None
         if inactive_evidence_ids:
             self.db.flush()
         return inactive_evidence_ids
@@ -419,6 +424,9 @@ class EvidenceLinkRepository(Core3BaseRepository):
 
     def skip_existing_lookup_for_batch(self, batch_id: str) -> None:
         self._skip_existing_lookup_batches.add(batch_id)
+
+    def clear_save_cache(self) -> None:
+        self._link_by_key.clear()
 
     def count_batch_links(self, batch_id: str) -> int:
         stmt = (

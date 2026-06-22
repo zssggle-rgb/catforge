@@ -192,7 +192,7 @@ Boundary:
 
 | CLI | Responsibility | Writes data | Typical caller | Current branch state |
 | --- | --- | --- | --- | --- |
-| `catforge_data` | Raw-to-clean preparation: M00 + M01 + M02 | Yes | Claude Code / OpenClaw for new data preparation | Implemented on `hotfix/data-preprocess-20260618`, missing from current branch and 205 as of 2026-06-22 |
+| `catforge_data` | Raw-to-clean preparation: M00 + M01 + M02 | Yes | Claude Code / OpenClaw for new data preparation | Present in current branch after consolidation |
 | `catforge_pipeline` | Generate/rebuild fact and semantic profiles | Yes | Claude Code / OpenClaw for reruns and rebuilds | Present in current branch |
 | `catforge_insight` | Query generated profiles, taxonomies, coverage, and graph outputs | No | Claude Code / OpenClaw for factual lookup | Present in current branch |
 | `catforge_analyst` | Business analyst atoms, SOPs, and natural-language business answers | No for normal questions | XiaoAo | Present in current branch |
@@ -314,23 +314,20 @@ catforge_pipeline run-semantic-market-graph
 
 5. Let XiaoAo answer business questions with `catforge_analyst`.
 
-## 6. 205 Current State and Required Consolidation
+## 6. Consolidated Current State
 
 As of 2026-06-22:
 
 - Current working branch: `new/m00-safe-import-hotfix`.
-- Current 205 repository also lacks `apps/api-server/app/cli/catforge_data.py`.
-- `python -m app.cli.catforge_data --help` fails on 205 with `No module named app.cli.catforge_data`.
-- The implemented `catforge_data` CLI and `catforge-data` skill are on `hotfix/data-preprocess-20260618` and `new/data-preprocess-20260618`.
+- `catforge_data` has been consolidated into the current branch from the data-preprocess hotfix line.
+- `catforge-data` skills are available under both `tools/claude/skills/` and `tools/openclaw/skills/`.
 - `catforge_pipeline`, `catforge_insight`, `catforge_analyst`, and XiaoAo OpenClaw skill/agent are present in the current branch.
 
-Required consolidation before saying "new data can be cleaned by natural language":
+Deployment requirements before saying "205 can clean new data by natural language":
 
-1. Merge or cherry-pick `catforge_data.py`, `catforge-data` skill, tests, and current-implementation docs from `hotfix/data-preprocess-20260618`.
-2. Update `catforge-pipeline` skill so generic "data preparation" does not steal raw-data cleaning requests.
-3. Update XiaoAo/OpenClaw instructions so "清洗新数据/先处理一下/准备好分析" routes to `catforge_data`, not `catforge_pipeline`.
-4. Deploy to 205 and install the `catforge-data` skill for Claude Code/OpenClaw.
-5. Smoke test:
+1. Deploy the current branch to 205.
+2. Install or refresh the `catforge-data` skill for Claude Code and OpenClaw.
+3. Smoke test:
 
 ```bash
 python -m app.cli.catforge_data prepare-new-data --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --evidence-sku-batch-size 1 --format json
@@ -381,14 +378,15 @@ Do not mix:
 
 ## 9. Branch Source of Truth
 
-Known branch split:
+Known source history:
 
 ```text
 hotfix/data-preprocess-20260618
-  contains catforge_data CLI, catforge-data Skill, and M00/M01/M02 data-preparation docs.
+  original source for catforge_data CLI, catforge-data Skill, and M00/M01/M02 data-preparation docs.
 
 new/m00-safe-import-hotfix
-  contains current XiaoAo, catforge_analyst, catforge_insight, catforge_pipeline, and semantic-market graph work.
+  consolidated current branch containing catforge_data plus XiaoAo, catforge_analyst, catforge_insight,
+  catforge_pipeline, and semantic-market graph work.
 ```
 
 The next engineering step is to consolidate these branches so the runtime has both:
