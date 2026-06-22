@@ -848,6 +848,21 @@ def test_resolve_sku_uses_market_profile_and_size_tier() -> None:
     assert resolved["price_band_in_size_tier"] == "mid_high"
 
 
+def test_resolve_sku_prefers_exact_model_before_fuzzy_suffix() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        model_name="65E7Q",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["sku_code"] == "TV00029112"
+
+
 def test_sku_fact_brief_returns_core_fact_sections() -> None:
     session = make_session()
     result = catforge_analyst.sku_fact_brief(
@@ -1169,14 +1184,119 @@ def test_ask_routes_competitor_question_to_sop() -> None:
         batch_id=BATCH_ID,
         product_category="tv",
         question="海信65E7Q和谁竞争？",
-        sku_code="TV00029112",
     )
 
     assert result["status"] == "ok"
     assert result["routed_command"] == "competitor-set"
+    assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
+    assert result["target"]["sku_code"] == "TV00029112"
     assert result["result"]["competitor_set"]["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
     assert [step["step_code"] for step in result["sop_steps"]][:3] == [
         "resolve-sku",
         "sku-fact-brief",
         "same-size-price-candidates",
     ]
+
+
+def test_ask_routes_pairwise_sales_diff_from_sku_codes() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="TV00029112 和 TV00030001 为什么销量差？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "why-sales-diff"
+    assert result["routing"]["extracted_params"]["sku_code"] == "TV00029112"
+    assert result["routing"]["extracted_params"]["candidate_sku_code"] == "TV00030001"
+    assert result["result"]["why_sales_diff"]["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+
+
+def test_ask_routes_battlefield_space_from_chinese_name() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="高端画质升级战场有哪些SKU？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "battlefield-space"
+    assert result["routing"]["extracted_params"]["query"] == "高端画质升级战场"
+    assert result["result"]["battlefield_space"]["items"][0]["summary"]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+
+
+def test_ask_routes_premium_claim_question_to_sop() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="TV00029112 的哪些卖点是溢价卖点？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "premium-claim-drivers"
+    assert result["result"]["premium_claim_drivers"]["premium_driver_claim_codes"] == ["tv_claim_miniled"]
+
+
+def test_ask_routes_comment_support_with_explicit_code_filter() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="TV00029112 的评论是否支撑这个卖点？",
+        claim_code="tv_claim_miniled",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "comment-support"
+    support = result["result"]["comment_support"]["support_items"][0]
+    assert support["code"] == "tv_claim_miniled"
+    assert support["support_status"] == "supported"
+
+
+def test_ask_routes_battlefield_opportunity_question_to_sop() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="TV00029112 有没有机会进入更多战场？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "battlefield-opportunity"
+    assert result["result"]["battlefield_opportunity"]["opportunity_gaps"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+
+
+def test_ask_keeps_explicit_sku_over_extracted_model() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="海信65E7Q的业务画像",
+        sku_code="TV00030001",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "sku-business-brief"
+    assert result["routing"]["applied_params"]["sku_code"] == "TV00030001"
+    assert result["target"]["sku_code"] == "TV00030001"

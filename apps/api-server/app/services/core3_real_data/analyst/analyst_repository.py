@@ -87,7 +87,7 @@ class AnalystRepository:
         model_name: str | None,
         limit: int,
     ) -> list[ResolvedSku]:
-        stmt = (
+        base_stmt = (
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
@@ -97,20 +97,30 @@ class AnalystRepository:
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
         )
         if sku_code:
-            stmt = stmt.where(entities.Core3SkuMarketProfile.sku_code == sku_code.upper())
+            stmt = base_stmt.where(entities.Core3SkuMarketProfile.sku_code == sku_code.upper())
+            rows = list(self.db.execute(stmt.order_by(entities.Core3SkuMarketProfile.sku_code).limit(limit)).scalars())
         elif model_name:
-            like_value = f"%{model_name}%"
-            stmt = stmt.where(
-                or_(
-                    entities.Core3SkuMarketProfile.model_name == model_name,
-                    entities.Core3SkuMarketProfile.model_name.ilike(like_value),
-                )
+            sku_prefix_filter = entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
+            exact_stmt = (
+                base_stmt.where(entities.Core3SkuMarketProfile.model_name == model_name)
+                .where(sku_prefix_filter)
+                .order_by(entities.Core3SkuMarketProfile.sku_code)
+                .limit(limit)
             )
-            stmt = stmt.where(entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category)}%"))
+            exact_rows = list(self.db.execute(exact_stmt).scalars())
+            if exact_rows:
+                rows = exact_rows
+            else:
+                like_value = f"%{model_name}%"
+                stmt = (
+                    base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(like_value))
+                    .where(sku_prefix_filter)
+                    .order_by(entities.Core3SkuMarketProfile.sku_code)
+                    .limit(limit)
+                )
+                rows = list(self.db.execute(stmt).scalars())
         else:
             return []
-        stmt = stmt.order_by(entities.Core3SkuMarketProfile.sku_code).limit(limit)
-        rows = list(self.db.execute(stmt).scalars())
         return [
             ResolvedSku(
                 sku_code=row.sku_code,
@@ -137,7 +147,7 @@ class AnalystRepository:
         limit: int,
     ) -> list[ResolvedSku]:
         rule_version = CORE3_M03B_AC_RULE_VERSION if product_category == "AC" else CORE3_M03B_RULE_VERSION
-        stmt = (
+        base_stmt = (
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.category_code)
@@ -145,20 +155,30 @@ class AnalystRepository:
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
         )
         if sku_code:
-            stmt = stmt.where(entities.Core3SkuParamProfile.sku_code == sku_code.upper())
+            stmt = base_stmt.where(entities.Core3SkuParamProfile.sku_code == sku_code.upper())
+            rows = list(self.db.execute(stmt.order_by(entities.Core3SkuParamProfile.sku_code).limit(limit)).scalars())
         elif model_name:
-            like_value = f"%{model_name}%"
-            stmt = stmt.where(
-                or_(
-                    entities.Core3SkuParamProfile.model_name == model_name,
-                    entities.Core3SkuParamProfile.model_name.ilike(like_value),
-                )
+            sku_prefix_filter = entities.Core3SkuParamProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
+            exact_stmt = (
+                base_stmt.where(entities.Core3SkuParamProfile.model_name == model_name)
+                .where(sku_prefix_filter)
+                .order_by(entities.Core3SkuParamProfile.sku_code)
+                .limit(limit)
             )
-            stmt = stmt.where(entities.Core3SkuParamProfile.sku_code.like(f"{self._sku_prefix(product_category)}%"))
+            exact_rows = list(self.db.execute(exact_stmt).scalars())
+            if exact_rows:
+                rows = exact_rows
+            else:
+                like_value = f"%{model_name}%"
+                stmt = (
+                    base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(like_value))
+                    .where(sku_prefix_filter)
+                    .order_by(entities.Core3SkuParamProfile.sku_code)
+                    .limit(limit)
+                )
+                rows = list(self.db.execute(stmt).scalars())
         else:
             return []
-        stmt = stmt.order_by(entities.Core3SkuParamProfile.sku_code).limit(limit)
-        rows = list(self.db.execute(stmt).scalars())
         return [
             ResolvedSku(
                 sku_code=row.sku_code,
