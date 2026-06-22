@@ -45,6 +45,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
+    CORE3_M11D_RULE_VERSION,
     Core3ModuleCode,
     Core3EvidenceStatus,
     Core3EvidenceType,
@@ -67,6 +68,11 @@ from app.services.core3_real_data.m09c_user_task_service import M09CRunner
 from app.services.core3_real_data.m10c_target_group_service import M10CRunner
 from app.services.core3_real_data.m11c_value_battlefield_service import M11CRunner
 from app.services.core3_real_data.market_profile_runner import MarketProfileRunner
+from app.services.core3_real_data.semantic_market_graph_service import (
+    ANALYSIS_POPULATION_FACT_COMPLETE,
+    MARKET_WINDOW_FULL_OBSERVED,
+    M11DSemanticMarketRunner,
+)
 
 
 DEFAULT_PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -96,6 +102,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
         "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
+        "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -113,6 +120,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "target_group_rule_version": None,
         "value_battlefield_taxonomy_version": None,
         "value_battlefield_rule_version": None,
+        "semantic_market_rule_version": None,
     },
 }
 
@@ -215,6 +223,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                     sku_scope=args.sku_code or (),
                     battlefield_codes=args.battlefield_code or (),
                     graph_mode=args.graph_mode,
+                    force_rebuild=args.force_rebuild,
+                )
+            elif args.command == "run-semantic-market-graph":
+                result = run_semantic_market_graph(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    analysis_population=args.analysis_population,
+                    market_window=args.market_window,
+                    sku_scope=args.sku_code or (),
+                    dimension_types=args.dimension_type or (),
                     force_rebuild=args.force_rebuild,
                 )
             elif args.command == "ask":
@@ -331,6 +352,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_target_group.add_argument("--force-rebuild", action="store_true", help="Replace same business-key outputs if hashes changed.")
     add_format_arg(run_target_group)
 
+    run_semantic_market = subparsers.add_parser("run-semantic-market-graph", help="Generate M11D task/group/battlefield market graph and sales allocation results.")
+    add_common_args(run_semantic_market)
+    add_product_category_arg(run_semantic_market, default="tv", allow_auto=False)
+    run_semantic_market.add_argument("--analysis-population", choices=("fact_complete_with_comment", "all_semantic_profiles"), default=ANALYSIS_POPULATION_FACT_COMPLETE, help="SKU population for semantic market graph.")
+    run_semantic_market.add_argument("--market-window", choices=("full_observed_window", "recent_12w", "custom_week_range"), default=MARKET_WINDOW_FULL_OBSERVED, help="Market window for volume/amount allocation. v0.1 reads matching M07 market profiles.")
+    run_semantic_market.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    run_semantic_market.add_argument("--dimension-type", action="append", choices=("user_task", "target_group", "battlefield"), help="Optional dimension type scope. Repeat to run selected dimensions only.")
+    run_semantic_market.add_argument("--force-rebuild", action="store_true", help="Mark current M11D outputs stale and write a fresh result set.")
+    add_format_arg(run_semantic_market)
+
     ask = subparsers.add_parser("ask", help="Route a natural-language execution request.")
     add_common_args(ask)
     add_product_category_arg(ask)
@@ -389,6 +420,22 @@ def answer_natural_language(
     rebuild_comment_coverage_at_end: bool = True,
 ) -> dict[str, Any]:
     resolved_product_category = resolve_product_category(product_category, question=question)
+    if should_run_semantic_market_graph(question):
+        result = run_semantic_market_graph(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            analysis_population=ANALYSIS_POPULATION_FACT_COMPLETE,
+            market_window=MARKET_WINDOW_FULL_OBSERVED,
+            sku_scope=extract_sku_scope(question),
+            dimension_types=extract_semantic_dimension_types(question),
+            force_rebuild=force_rebuild,
+        )
+        result["question"] = question
+        result["routed_command"] = "run-semantic-market-graph"
+        return result
     if should_run_user_task(question):
         result = run_user_task(
             db,
@@ -498,7 +545,7 @@ def answer_natural_language(
         result["routed_command"] = "run-claim-profile"
         return result
     if not should_run_param_profile(question):
-        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、用户任务画像、目标客群画像或价值战场画像。请说明要生成或重新生成哪类画像。")
+        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、用户任务画像、目标客群画像、价值战场画像或 M11D 语义市场图谱。请说明要生成或重新生成哪类画像。")
     result = run_param_profile(
         db,
         project_id=project_id,
@@ -667,6 +714,64 @@ def run_value_battlefield(
         "graph_mode": graph_mode,
         "taxonomy_version": config["value_battlefield_taxonomy_version"],
         "rule_version": config["value_battlefield_rule_version"],
+        "force_rebuild": force_rebuild,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
+
+
+def run_semantic_market_graph(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    analysis_population: str = ANALYSIS_POPULATION_FACT_COMPLETE,
+    market_window: str = MARKET_WINDOW_FULL_OBSERVED,
+    sku_scope: Sequence[str] = (),
+    dimension_types: Sequence[str] = (),
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    if not config.get("semantic_market_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}语义市场图谱规则尚未发布，不能生成 M11D 结果。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = M11DSemanticMarketRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        analysis_population=analysis_population,
+        market_window=market_window,
+        target_sku_codes=sku_scope,
+        dimension_types=dimension_types,
+        rule_version=config["semantic_market_rule_version"],
+        force_rebuild=force_rebuild,
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "analysis_population": analysis_population,
+        "market_window": market_window,
+        "sku_scope": list(sku_scope),
+        "dimension_types": list(dimension_types),
+        "rule_version": config["semantic_market_rule_version"],
         "force_rebuild": force_rebuild,
         "module_status": status_value,
         "input_count": module_result.input_count,
@@ -1741,6 +1846,28 @@ def resolve_source_batch_id(db: Session, project_id: str, source_category_code: 
 
 def should_run_param_profile(question: str) -> bool:
     return any(word in question for word in ("参数画像", "参数事实", "标准参数", "生成", "重跑", "重新", "更新", "数据准备", "准备好可以分析"))
+
+
+def should_run_semantic_market_graph(question: str) -> bool:
+    normalized = normalize_token(question)
+    if "m11d" in normalized or "semanticmarket" in normalized:
+        return True
+    graph_terms = ("语义市场图谱", "市场图谱", "销量分配", "销量切分", "销额分配", "销额切分", "市场空间")
+    dimension_graph_terms = ("用户任务图谱", "目标客群图谱", "目标客户图谱", "目标用户图谱", "价值战场市场图谱", "战场市场图谱")
+    if any(term in question for term in graph_terms + dimension_graph_terms):
+        return any(word in normalized for word in ("生成", "重跑", "重新", "更新", "执行", "跑", "计算", "准备"))
+    return False
+
+
+def extract_semantic_dimension_types(question: str) -> tuple[str, ...]:
+    result: list[str] = []
+    if "用户任务" in question or "任务图谱" in question:
+        result.append("user_task")
+    if any(term in question for term in ("目标客群", "目标客户", "目标用户", "客群图谱", "客户图谱")):
+        result.append("target_group")
+    if "价值战场" in question or "战场图谱" in question or "战场市场" in question:
+        result.append("battlefield")
+    return tuple(dict.fromkeys(result))
 
 
 def should_run_value_battlefield(question: str) -> bool:

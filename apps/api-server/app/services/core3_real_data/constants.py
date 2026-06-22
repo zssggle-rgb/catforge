@@ -31,6 +31,7 @@ class Core3ModuleCode(StrEnum):
     M10C = "M10C"
     M11 = "M11"
     M11C = "M11C"
+    M11D = "M11D"
     M11_5 = "M11.5"
     M11_6 = "M11.6"
     M11_7 = "M11.7"
@@ -405,6 +406,8 @@ CORE3_M11_6_MODULE_VERSION = "m11-6-sku-business-profile-0.1.0"
 CORE3_M11_6_RULE_VERSION = "core3_mvp_real_data_v2_m11_6_v2"
 CORE3_M11_7_MODULE_VERSION = "m11-7-dimension-sales-reconciliation-0.1.0"
 CORE3_M11_7_RULE_VERSION = "core3_mvp_real_data_v2_m11_7_v1"
+CORE3_M11D_MODULE_VERSION = "m11d-semantic-market-graph-allocation-0.1.0"
+CORE3_M11D_RULE_VERSION = "m11d_semantic_market_allocation_v0.1"
 CORE3_M12_MODULE_VERSION = "m12-candidate-recall-0.1.0"
 CORE3_M12_RULE_VERSION = "core3_mvp_real_data_v2_m12_v1"
 CORE3_M13_MODULE_VERSION = "m13-component-scoring-0.1.0"
@@ -1958,7 +1961,9 @@ CORE3_MODULE_LABEL_CN: dict[Core3ModuleCode, str] = {
     Core3ModuleCode.M03: "参数字段画像与标准参数抽取",
     Core3ModuleCode.M03B: "SKU 参数事实画像与参数档位覆盖",
     Core3ModuleCode.M04A: "基础卖点激活",
+    Core3ModuleCode.M04C: "SKU 卖点事实画像与卖点档位覆盖",
     Core3ModuleCode.M05: "评论基础证据层",
+    Core3ModuleCode.M05C: "SKU 评论事实画像与评论维度覆盖",
     Core3ModuleCode.M06: "评论下游信号抽取",
     Core3ModuleCode.M04B: "评论验证增强",
     Core3ModuleCode.M07: "市场画像与可比池基线",
@@ -1966,8 +1971,12 @@ CORE3_MODULE_LABEL_CN: dict[Core3ModuleCode, str] = {
     Core3ModuleCode.M08_4: "评论原生业务维度发现",
     Core3ModuleCode.M08_5: "业务维度本体校准",
     Core3ModuleCode.M09: "用户任务模块",
+    Core3ModuleCode.M09C: "SKU 用户任务画像与任务覆盖",
     Core3ModuleCode.M10: "目标客群模块",
+    Core3ModuleCode.M10C: "SKU 目标客群画像与客群覆盖",
     Core3ModuleCode.M11: "价值战场模块",
+    Core3ModuleCode.M11C: "SKU 价值战场画像与战场图谱",
+    Core3ModuleCode.M11D: "语义市场图谱与销量分配",
     Core3ModuleCode.M11_5: "战场内卖点价值分层",
     Core3ModuleCode.M11_6: "SKU 业务画像聚合",
     Core3ModuleCode.M11_7: "销量分配对账与市场结构校验",

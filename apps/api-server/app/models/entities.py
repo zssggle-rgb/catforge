@@ -5801,6 +5801,323 @@ class Core3ValueBattlefieldGraphSnapshot(Base, AuditMixin):
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
 
+class Core3SemanticMarketAllocation(Base, AuditMixin):
+    __tablename__ = "core3_semantic_market_allocation"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "analysis_population",
+            "market_window",
+            "dimension_type",
+            "sku_code",
+            "dimension_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11d_allocation_current",
+        ),
+        CheckConstraint("allocation_weight >= 0 and allocation_weight <= 1", name="ck_m11d_allocation_weight"),
+        CheckConstraint("allocation_confidence >= 0 and allocation_confidence <= 1", name="ck_m11d_allocation_confidence"),
+        CheckConstraint("final_score >= 0 and final_score <= 1", name="ck_m11d_allocation_final_score"),
+        Index("ix_core3_m11d_allocation_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11d_allocation_sku", "project_id", "category_code", "batch_id", "sku_code"),
+        Index("ix_core3_m11d_allocation_dimension", "project_id", "category_code", "batch_id", "dimension_type", "dimension_code"),
+        Index("ix_core3_m11d_allocation_population_window", "analysis_population", "market_window"),
+        Index("ix_core3_m11d_allocation_basis_gin", "allocation_basis_json", postgresql_using="gin"),
+        Index("ix_core3_m11d_allocation_evidence_gin", "evidence_ids_json", postgresql_using="gin"),
+    )
+
+    allocation_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    analysis_population: Mapped[str] = mapped_column(String(80), nullable=False, default="fact_complete_with_comment", index=True)
+    market_window: Mapped[str] = mapped_column(String(80), nullable=False, default="full_observed_window", index=True)
+    window_start_week: Mapped[int | None] = mapped_column(Integer)
+    window_end_week: Mapped[int | None] = mapped_column(Integer)
+    active_week_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dimension_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    dimension_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    dimension_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    size_tier: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown", index=True)
+    price_band_in_size_tier: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
+    price_percentile_in_size_tier: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    relation_status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    allocation_role: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    allocation_value_type: Mapped[str] = mapped_column(String(80), nullable=False, default="positive_value", index=True)
+    source_profile_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    source_score_id: Mapped[str | None] = mapped_column(String(120), index=True)
+    final_score: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    allocation_basis: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    relation_factor: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    allocation_weight: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    sales_volume_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    sales_amount_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    avg_weekly_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    avg_weekly_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    allocated_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_avg_weekly_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    allocated_avg_weekly_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    allocation_confidence: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    allocation_basis_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    market_source_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11d_semantic_market_allocation_v0.1", index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success", index=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SemanticMarketDimensionSummary(Base, AuditMixin):
+    __tablename__ = "core3_semantic_market_dimension_summary"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "analysis_population",
+            "market_window",
+            "dimension_type",
+            "dimension_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11d_summary_current",
+        ),
+        CheckConstraint("sales_volume_share >= 0 and sales_volume_share <= 1", name="ck_m11d_summary_volume_share"),
+        CheckConstraint("sales_amount_share >= 0 and sales_amount_share <= 1", name="ck_m11d_summary_amount_share"),
+        CheckConstraint("allocation_coverage_rate >= 0 and allocation_coverage_rate <= 1", name="ck_m11d_summary_coverage"),
+        CheckConstraint("confidence_avg >= 0 and confidence_avg <= 1", name="ck_m11d_summary_confidence"),
+        Index("ix_core3_m11d_summary_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11d_summary_dimension", "project_id", "category_code", "batch_id", "dimension_type", "dimension_code"),
+        Index("ix_core3_m11d_summary_window", "analysis_population", "market_window"),
+        Index("ix_core3_m11d_summary_top_gin", "top_skus_json", postgresql_using="gin"),
+        Index("ix_core3_m11d_summary_distribution_gin", "size_price_distribution_json", postgresql_using="gin"),
+    )
+
+    summary_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    analysis_population: Mapped[str] = mapped_column(String(80), nullable=False, default="fact_complete_with_comment", index=True)
+    market_window: Mapped[str] = mapped_column(String(80), nullable=False, default="full_observed_window", index=True)
+    dimension_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    dimension_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    dimension_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    taxonomy_version: Mapped[str] = mapped_column(String(160), nullable=False, default="unknown", index=True)
+    sku_relation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allocated_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    primary_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    secondary_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    observed_need_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    brand_claim_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    opportunity_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    drag_risk_sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    estimated_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    estimated_avg_weekly_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    estimated_avg_weekly_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    observed_need_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    observed_need_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    drag_risk_market_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    drag_risk_market_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    total_market_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    total_market_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_market_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_market_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    unallocated_market_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    unallocated_market_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    sales_volume_share: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    sales_amount_share: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    allocation_coverage_rate: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    brand_distribution_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    size_price_distribution_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    relation_status_counts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    top_skus_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    confidence_avg: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    business_summary_cn: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11d_semantic_market_allocation_v0.1", index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success", index=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SemanticMarketSkuContribution(Base, AuditMixin):
+    __tablename__ = "core3_semantic_market_sku_contribution"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "analysis_population",
+            "market_window",
+            "dimension_type",
+            "dimension_code",
+            "sku_code",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11d_contribution_current",
+        ),
+        CheckConstraint("allocation_weight >= 0 and allocation_weight <= 1", name="ck_m11d_contribution_weight"),
+        CheckConstraint("sku_share_in_dimension_volume >= 0 and sku_share_in_dimension_volume <= 1", name="ck_m11d_contribution_volume_share"),
+        CheckConstraint("sku_share_in_dimension_amount >= 0 and sku_share_in_dimension_amount <= 1", name="ck_m11d_contribution_amount_share"),
+        CheckConstraint("allocation_confidence >= 0 and allocation_confidence <= 1", name="ck_m11d_contribution_confidence"),
+        Index("ix_core3_m11d_contribution_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11d_contribution_dimension", "project_id", "category_code", "batch_id", "dimension_type", "dimension_code"),
+        Index("ix_core3_m11d_contribution_sku", "project_id", "category_code", "batch_id", "sku_code"),
+    )
+
+    contribution_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    summary_id: Mapped[str | None] = mapped_column(ForeignKey("core3_semantic_market_dimension_summary.summary_id"), index=True)
+    allocation_id: Mapped[str | None] = mapped_column(ForeignKey("core3_semantic_market_allocation.allocation_id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    analysis_population: Mapped[str] = mapped_column(String(80), nullable=False, default="fact_complete_with_comment", index=True)
+    market_window: Mapped[str] = mapped_column(String(80), nullable=False, default="full_observed_window", index=True)
+    dimension_type: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    dimension_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    dimension_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    allocation_weight: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    allocated_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0.0000"))
+    allocated_avg_weekly_sales_volume: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    allocated_avg_weekly_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    sku_share_in_dimension_volume: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    sku_share_in_dimension_amount: Mapped[Decimal] = mapped_column(Numeric(8, 6), nullable=False, default=Decimal("0.000000"))
+    sku_rank_in_dimension: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    is_primary_dimension: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    allocation_role: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    relation_status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    allocation_confidence: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    contribution_reason_cn: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    evidence_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11d_semantic_market_allocation_v0.1", index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success", index=True)
+
+
+class Core3SemanticMarketGraphSnapshot(Base, AuditMixin):
+    __tablename__ = "core3_semantic_market_graph_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "analysis_population",
+            "market_window",
+            "rule_version",
+            "is_current",
+            name="uq_core3_m11d_graph_current",
+        ),
+        Index("ix_core3_m11d_graph_batch", "project_id", "category_code", "batch_id"),
+        Index("ix_core3_m11d_graph_window", "analysis_population", "market_window"),
+        Index("ix_core3_m11d_graph_graph_gin", "graph_json", postgresql_using="gin"),
+        Index("ix_core3_m11d_graph_coverage_gin", "coverage_summary_json", postgresql_using="gin"),
+    )
+
+    graph_snapshot_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    analysis_population: Mapped[str] = mapped_column(String(80), nullable=False, default="fact_complete_with_comment", index=True)
+    market_window: Mapped[str] = mapped_column(String(80), nullable=False, default="full_observed_window", index=True)
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dimension_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    graph_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    coverage_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    allocation_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    unallocated_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11d_semantic_market_allocation_v0.1", index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    graph_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3SemanticMarketReconciliationCheck(Base, AuditMixin):
+    __tablename__ = "core3_semantic_market_reconciliation_check"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "analysis_population",
+            "market_window",
+            "check_type",
+            "sku_code",
+            "dimension_type",
+            "dimension_code",
+            "input_fingerprint",
+            name="uq_core3_m11d_check_key",
+        ),
+        Index("ix_core3_m11d_check_batch", "project_id", "category_code", "batch_id", "status"),
+        Index("ix_core3_m11d_check_dimension", "project_id", "category_code", "batch_id", "dimension_type", "dimension_code"),
+        Index("ix_core3_m11d_check_sku", "project_id", "category_code", "batch_id", "sku_code"),
+    )
+
+    check_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, default="TV")
+    batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_pipeline_run.run_id"), index=True)
+    module_run_id: Mapped[str | None] = mapped_column(ForeignKey("core3_v2_module_run.module_run_id"), index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, default="TV", index=True)
+    analysis_population: Mapped[str] = mapped_column(String(80), nullable=False, default="fact_complete_with_comment", index=True)
+    market_window: Mapped[str] = mapped_column(String(80), nullable=False, default="full_observed_window", index=True)
+    check_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, default="", index=True)
+    dimension_type: Mapped[str] = mapped_column(String(60), nullable=False, default="", index=True)
+    dimension_code: Mapped[str] = mapped_column(String(160), nullable=False, default="", index=True)
+    expected_value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    actual_value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    gap_value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    tolerance_value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False, default=Decimal("0.000000"))
+    status: Mapped[str] = mapped_column(String(60), nullable=False, default="passed", index=True)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False, default="info", index=True)
+    failure_reason_code: Mapped[str] = mapped_column(String(120), nullable=False, default="", index=True)
+    failure_reason_cn: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    check_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m11d_semantic_market_allocation_v0.1", index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success", index=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass", index=True)
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
 class Core3SkuBattlefieldClaimCandidate(Base, AuditMixin):
     __tablename__ = "core3_sku_battlefield_claim_candidate"
     __table_args__ = (

@@ -1,6 +1,6 @@
 ---
 name: catforge-pipeline
-description: Run CatForge data-preparation, SKU parameter profile, SKU claim fact profile, SKU market profile, SKU comment fact profile, SKU user task, SKU target group, and SKU value battlefield jobs from natural language.
+description: Run CatForge data-preparation, SKU parameter profile, SKU claim fact profile, SKU market profile, SKU comment fact profile, SKU user task, SKU target group, SKU value battlefield, and semantic market graph jobs from natural language.
 ---
 
 # CatForge Pipeline Skill
@@ -29,6 +29,9 @@ Use this skill when the user asks Claude Code to execute preparation/profile wor
 - "重新生成彩电价值战场画像"
 - "重跑 TV00027354 的价值战场画像"
 - "更新彩电价值战场图谱"
+- "生成彩电语义市场图谱和销量分配"
+- "更新彩电用户任务、目标客群、价值战场的市场空间"
+- "重新生成彩电语义市场图谱"
 
 This is an execution skill. For read-only questions like "查某个 SKU 的参数画像", "查彩电标准卖点", or "查某个 SKU 的卖点画像", use `catforge-insight` instead.
 For read-only market questions like "查某个 SKU 的市场画像", "查价格区间覆盖哪些 SKU", or "查某个 SKU 的可比池", also use `catforge-insight`.
@@ -36,6 +39,7 @@ For read-only comment questions like "查某个 SKU 的评论事实画像", "查
 For read-only user-task questions like "查某个 SKU 的用户任务", "查彩电用户任务预设", or "大屏换新升级有哪些 SKU", use `catforge-insight` instead.
 For read-only target-group questions like "查某个 SKU 的目标客群", "查彩电目标客群预设", or "性价比理性用户有哪些 SKU", use `catforge-insight` instead.
 For read-only value battlefield questions like "查某个 SKU 的价值战场", "查彩电价值战场预设", or "大屏换新战场有哪些 SKU", use `catforge-insight` instead.
+For read-only semantic-market questions like "查某个 SKU 的销量分配", "某个价值战场有多少销量", or "用户任务图谱有哪些 SKU", use `catforge-insight` instead.
 
 ## Working Directory
 
@@ -81,6 +85,8 @@ M11C value battlefield profiles currently have a published TV taxonomy only. It 
 - TV value battlefield profile: `taxonomy_version=m11c_tv_value_battlefield_taxonomy_v0.2`, `rule_version=m11c_tv_value_battlefield_profile_v0.2`
 - AC value battlefield profile: not available until AC task/group/battlefield taxonomies are published.
 
+M11D semantic market graph and sales allocation is a deterministic result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM. Default population is `fact_complete_with_comment`, meaning only SKUs with comment facts, user-task profile, target-group profile, value-battlefield profile, and market profile enter the market graph. It generates user-task, target-group, and value-battlefield market maps plus SKU sales allocation. It outputs both total allocated sales and average weekly allocated sales; cumulative sales are display-only context, not the sole basis for comparison.
+
 LLM credentials must come from environment variables. Never write API keys into skill files, committed docs, or command transcripts. On 205 validation, use `--llm-mode required` so failure to call the LLM is visible.
 
 ## Natural Language Entry
@@ -117,6 +123,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
 ```
 
 ## Stable Atomic Commands
@@ -231,6 +241,24 @@ Run one TV battlefield subset:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --battlefield-code BF_LARGE_SCREEN_VALUE_UPGRADE --force-rebuild --format json
 ```
 
+Run TV semantic market graph and sales allocation:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-semantic-market-graph --product-category tv --batch-id latest --force-rebuild --format json
+```
+
+Run one TV SKU's semantic market allocation:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-semantic-market-graph --product-category tv --batch-id latest --sku-code TV00027354 --force-rebuild --format json
+```
+
+Run only one semantic dimension type:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-semantic-market-graph --product-category tv --batch-id latest --dimension-type battlefield --force-rebuild --format json
+```
+
 Use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when the current deployment has new raw selling points but M01/M02 have not been rerun yet.
 
 Use `--batch-id latest` unless the user gives a specific batch id. Use `--force-rebuild` when source data or taxonomy/rules have changed and existing profile business keys should be refreshed.
@@ -239,6 +267,7 @@ For M05C-B comment fact profiles, use `--llm-mode required` on 205 validation, `
 For M09C user task profiles, confirm the same batch already has current M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows. Use repeated `--sku-code` for scoped reruns and repeated `--user-task-code` for a user-task subset. This stage is deterministic and does not call an LLM.
 For M10C target group profiles, confirm the same batch already has current M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` for a target-group subset. This stage is deterministic and does not call an LLM.
 For M11C value battlefield profiles, confirm the same batch already has current M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows. Use `--graph-mode inline` to write the graph snapshot, `--graph-mode skip` to write only SKU profiles and score rows, repeated `--sku-code` for scoped reruns, and repeated `--battlefield-code` for a battlefield subset.
+For M11D semantic market graph, confirm the same batch already has current M05C, M09C, M10C, M11C, and M07 outputs. Keep the default `--analysis-population fact_complete_with_comment` for business-facing analysis. Use `--analysis-population all_semantic_profiles` only for diagnostics that intentionally include SKUs without M05C comment facts. Use repeated `--dimension-type user_task|target_group|battlefield` for scoped reruns.
 
 ## Response Rules
 
@@ -253,6 +282,7 @@ After execution, summarize:
 - For user task profiles, summarize SKU profile count, score count, coverage count, primary user-task distribution, relation status distribution, drag-factor task count, and any warnings about missing fact-layer inputs.
 - For target group profiles, summarize SKU profile count, score count, coverage count, primary target-group distribution, relation status distribution, and any warnings about missing fact-layer inputs.
 - For value battlefield profiles, summarize SKU profile count, score count, graph snapshot count, primary battlefield distribution, relation status distribution, and any warnings about missing fact-layer inputs.
+- For semantic market graph, summarize analysis population, market window, included SKU count, allocation count, dimension summary count, contribution count, graph snapshot count, check count, and any no-allocation diagnostics.
 - Warnings, especially empty input, parameter conflicts, or failed status.
 
 If the CLI returns `error`, report the error and do not claim the job completed. If the job succeeds with warnings, state that outputs were written but review may be needed.

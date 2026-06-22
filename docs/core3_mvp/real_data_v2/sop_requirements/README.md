@@ -30,6 +30,7 @@
 | 证据原子层 | 把市场、参数、卖点、评论、质量问题统一成 evidence | `core3_evidence_atom` |
 | 抽取特征层 | 生成参数、卖点、评论下游信号 | `core3_extract_param`、`core3_sku_claim_fact_profile`、`core3_sku_claim_activation`、`core3_comment_signal` |
 | 画像推导层 | 生成市场画像、SKU 画像、任务、客群、战场、卖点价值分层 | `core3_sku_market_profile`、`core3_sku_signal_profile`、`core3_m09c_sku_user_task_profile`、`core3_m10c_sku_target_group_profile`、`core3_sku_value_battlefield_profile`、`core3_sku_claim_value_layer` |
+| 语义市场结果层 | 生成任务、客群、战场图谱和销量/销额分配 | `core3_semantic_market_allocation`、`core3_semantic_market_dimension_summary`、`core3_semantic_market_graph_snapshot` |
 | 竞品结果层 | 生成候选、评分、核心竞品、证据卡和报告 payload | `core3_candidate_pool`、`core3_candidate_component_score`、`core3_competitor_selection`、`core3_evidence_card`、`core3_target_report_payload` |
 
 原则：下游模块只能读取上游产物，不能为了省事直接读取原始表做业务判断。
@@ -52,18 +53,19 @@
 14. [M09C 新用户任务画像](M09C_user_task_profile_requirements.md)
 15. [M10C 新目标客群画像](M10C_target_group_profile_requirements.md)
 16. [M11C 新价值战场画像与图谱](M11C_value_battlefield_profile_requirements.md)
-17. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
-18. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
+17. [M11D 新版语义市场图谱与销量分配](M11D_semantic_market_graph_allocation_requirements.md)
+18. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
+19. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
     - [M08.6 参数-卖点-评论分层产品锚点校准](M08_6_product_anchor_evidence_layer_requirements.md)
-19. [M09 用户任务模块](M09_user_task_requirements.md)
-20. [M10 目标客群模块](M10_target_group_requirements.md)
-21. [M11 价值战场模块](M11_battlefield_requirements.md)
-22. [M11.5 战场内卖点价值分层](M11_5_claim_value_layer_requirements.md)
-23. [M12 候选池召回模块](M12_candidate_recall_requirements.md)
-24. [M13 竞品组件评分模块](M13_component_scoring_requirements.md)
-25. [M14 三槽位核心竞品选择](M14_core3_selection_requirements.md)
-26. [M15 证据卡与高层报告](M15_evidence_report_requirements.md)
-27. [M16 增量任务编排、复核和验收](M16_incremental_review_acceptance_requirements.md)
+20. [M09 用户任务模块](M09_user_task_requirements.md)
+21. [M10 目标客群模块](M10_target_group_requirements.md)
+22. [M11 价值战场模块](M11_battlefield_requirements.md)
+23. [M11.5 战场内卖点价值分层](M11_5_claim_value_layer_requirements.md)
+24. [M12 候选池召回模块](M12_candidate_recall_requirements.md)
+25. [M13 竞品组件评分模块](M13_component_scoring_requirements.md)
+26. [M14 三槽位核心竞品选择](M14_core3_selection_requirements.md)
+27. [M15 证据卡与高层报告](M15_evidence_report_requirements.md)
+28. [M16 增量任务编排、复核和验收](M16_incremental_review_acceptance_requirements.md)
 
 新分层链路落地后，旧 M05/M06/M08/M09/M10/M11 只作为历史兼容和对照验证；常规新链路由 M02 进入 M05C 评论事实画像，再进入 M09C 用户任务、M10C 目标客群和 M11C 价值战场。
 

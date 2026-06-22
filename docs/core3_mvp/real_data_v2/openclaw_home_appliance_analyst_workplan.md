@@ -272,7 +272,7 @@ SOP：
 | 用户选择卖点 / 溢价卖点 | `catforge_analyst premium-claim-drivers` 查询和解释结果 |
 | 战场扩张建议 | `catforge_analyst battlefield-opportunity` 查询和解释结果 |
 | 战场空间测算 | `catforge_analyst battlefield-space` 查询新版图谱结果 |
-| 任务/客群/战场市场图谱 | `catforge_analyst dimension-market-map` 查询新版图谱结果 |
+| 任务/客群/战场市场图谱 | `catforge_insight semantic-market-map` 查询新版图谱结果 |
 | 小奥 Agent 提示词 | `tools/openclaw/agents/xiaoao-home-appliance-market-analyst/AGENTS.md` |
 | 小奥分析 Skill | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` |
 
@@ -287,6 +287,10 @@ SOP：
 5. 更新价值战场预设、查询和 Skill 文档。
 
 ### 阶段 2：新版图谱和销量切分结果层
+
+需求文档见：[M11D 新版语义市场图谱与销量分配 SOP 需求](sop_requirements/M11D_semantic_market_graph_allocation_requirements.md)。
+
+详细设计见：[M11D 新版语义市场图谱与销量分配详细设计](sop_detailed_design/M11D_semantic_market_graph_allocation_design.md)。
 
 1. 新增新版任务/客群/战场市场图谱聚合程序。
 2. 新增 SKU 在任务/客群/战场的销量/销额 allocation 程序。
@@ -304,7 +308,7 @@ SOP：
    - `premium-claim-drivers`
    - `battlefield-space`
    - `battlefield-opportunity`
-   - `dimension-market-map`
+   - `semantic-market-map`
    - `sku-sales-allocation`
    - `ask`
 3. CLI 默认输出 JSON，必要时支持 text。
@@ -318,7 +322,7 @@ SOP：
    - 查事实：调用 `catforge_insight`。
    - 跑流程：调用 `catforge_pipeline`。
    - 复合分析：调用 `catforge_analyst`。
-   - 查图谱和 allocation：调用 `catforge_analyst dimension-market-map`、`catforge_analyst sku-sales-allocation`。
+   - 查图谱和 allocation：调用 `catforge_insight semantic-market-map`、`catforge_insight sku-sales-allocation`。
 4. 提示词要求：
    - 用业务语言回答。
    - 必须引用 CLI 返回的证据字段。

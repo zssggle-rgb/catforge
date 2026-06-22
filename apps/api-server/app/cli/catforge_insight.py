@@ -34,6 +34,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
+    CORE3_M11D_RULE_VERSION,
 )
 from app.services.core3_real_data.m03b_param_profile_service import (
     M03BTaxonomy,
@@ -77,6 +78,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
         "value_battlefield_taxonomy_factory": tv_value_battlefield_taxonomy_v0_2,
+        "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -98,6 +100,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_rule_version": None,
         "value_battlefield_taxonomy_version": None,
         "value_battlefield_taxonomy_factory": None,
+        "semantic_market_rule_version": None,
     },
 }
 
@@ -467,6 +470,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                     batch_id=args.batch_id,
                     product_category=normalize_product_category_arg(args.product_category),
                 )
+            elif args.command == "semantic-market-map":
+                result = query_semantic_market_map(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    analysis_population=args.analysis_population,
+                    market_window=args.market_window,
+                    dimension_type=args.dimension_type,
+                    dimension_code=args.dimension_code,
+                    query=args.query,
+                    sku_limit=args.sku_limit,
+                )
+            elif args.command == "sku-sales-allocation":
+                result = query_sku_sales_allocation(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    analysis_population=args.analysis_population,
+                    market_window=args.market_window,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                    dimension_type=args.dimension_type,
+                )
             elif args.command == "ask":
                 result = answer_natural_language(
                     db,
@@ -716,6 +747,28 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_args(value_graph)
     add_product_category_arg(value_graph, default="tv", allow_auto=False)
     add_format_arg(value_graph)
+
+    semantic_map = subparsers.add_parser("semantic-market-map", help="Query M11D market map and allocation summary by task, target group, or battlefield.")
+    add_common_args(semantic_map)
+    add_product_category_arg(semantic_map, default="tv", allow_auto=False)
+    semantic_map.add_argument("--analysis-population", choices=("fact_complete_with_comment", "all_semantic_profiles"), default="fact_complete_with_comment")
+    semantic_map.add_argument("--market-window", default="full_observed_window")
+    semantic_map.add_argument("--dimension-type", choices=("user_task", "target_group", "battlefield"), help="Dimension type to query.")
+    semantic_map.add_argument("--dimension-code", help="Dimension code, such as BF_LARGE_SCREEN_FAMILY_CINEMA.")
+    semantic_map.add_argument("--query", help="Natural dimension query text.")
+    semantic_map.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of top SKU contributions to include; 0 means all.")
+    add_format_arg(semantic_map)
+
+    sku_allocation = subparsers.add_parser("sku-sales-allocation", help="Query M11D sales allocation for one SKU/model.")
+    add_common_args(sku_allocation)
+    add_product_category_arg(sku_allocation)
+    sku_allocation.add_argument("--analysis-population", choices=("fact_complete_with_comment", "all_semantic_profiles"), default="fact_complete_with_comment")
+    sku_allocation.add_argument("--market-window", default="full_observed_window")
+    sku_allocation.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    sku_allocation.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
+    sku_allocation.add_argument("--model-name", help="Exact or fuzzy model name, such as 65E7Q.")
+    sku_allocation.add_argument("--dimension-type", choices=("all", "user_task", "target_group", "battlefield"), default="all")
+    add_format_arg(sku_allocation)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
     add_common_args(ask)
@@ -2459,6 +2512,261 @@ def query_value_battlefield_graph(
     }
 
 
+def query_semantic_market_map(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    analysis_population: str = "fact_complete_with_comment",
+    market_window: str = "full_observed_window",
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    query: str | None = None,
+    sku_limit: int = DEFAULT_SKU_LIMIT,
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    rule_version = config.get("semantic_market_rule_version")
+    if not rule_version:
+        raise CatForgeInsightError(f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。")
+    resolved_batch_id = resolve_semantic_market_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=rule_version,
+        analysis_population=analysis_population,
+        market_window=market_window,
+    )
+    stmt = (
+        select(entities.Core3SemanticMarketDimensionSummary)
+        .where(entities.Core3SemanticMarketDimensionSummary.project_id == project_id)
+        .where(entities.Core3SemanticMarketDimensionSummary.category_code == category_code)
+        .where(entities.Core3SemanticMarketDimensionSummary.batch_id == resolved_batch_id)
+        .where(entities.Core3SemanticMarketDimensionSummary.rule_version == rule_version)
+        .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
+        .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+        .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
+        .order_by(
+            entities.Core3SemanticMarketDimensionSummary.dimension_type,
+            entities.Core3SemanticMarketDimensionSummary.estimated_sales_volume.desc(),
+            entities.Core3SemanticMarketDimensionSummary.dimension_code,
+        )
+    )
+    if dimension_type:
+        stmt = stmt.where(entities.Core3SemanticMarketDimensionSummary.dimension_type == dimension_type)
+    query_terms = semantic_market_query_terms(query)
+    if dimension_code:
+        stmt = stmt.where(entities.Core3SemanticMarketDimensionSummary.dimension_code == dimension_code)
+    elif query_terms:
+        stmt = stmt.where(
+            or_(
+                *[
+                    func.lower(entities.Core3SemanticMarketDimensionSummary.dimension_code).like(f"%{escape_like(term.lower())}%", escape="\\")
+                    for term in query_terms
+                ],
+                *[
+                    func.lower(entities.Core3SemanticMarketDimensionSummary.dimension_name).like(f"%{escape_like(term.lower())}%", escape="\\")
+                    for term in query_terms
+                ],
+            )
+        )
+    rows = list(db.execute(stmt.limit(200)).scalars())
+    if not rows:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到 M11D 语义市场图谱结果，请先执行 run-semantic-market-graph。",
+            "batch_id": resolved_batch_id,
+            "analysis_population": analysis_population,
+            "market_window": market_window,
+            "dimension_type": dimension_type,
+            "dimension_code": dimension_code,
+            "query": query,
+        }
+    visible_rows = rows if sku_limit == 0 else rows[:200]
+    result_items = []
+    for row in visible_rows:
+        contributions = list_semantic_market_contributions(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=resolved_batch_id,
+            rule_version=rule_version,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            dimension_type=row.dimension_type,
+            dimension_code=row.dimension_code,
+            limit=sku_limit,
+        )
+        result_items.append(
+            {
+                **semantic_market_summary_payload(row),
+                "contributions": [semantic_market_contribution_payload(item) for item in contributions],
+            }
+        )
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": rule_version,
+        "analysis_population": analysis_population,
+        "market_window": market_window,
+        "dimension_type": dimension_type or "all",
+        "dimension_code": dimension_code,
+        "query": query,
+        "query_terms": query_terms,
+        "summary_count": len(rows),
+        "items": result_items,
+    }
+
+
+def query_sku_sales_allocation(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    product_category: str = "TV",
+    analysis_population: str = "fact_complete_with_comment",
+    market_window: str = "full_observed_window",
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    dimension_type: str = "all",
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    rule_version = config.get("semantic_market_rule_version")
+    if not rule_version:
+        raise CatForgeInsightError(f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。")
+    resolved_batch_id = resolve_semantic_market_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=rule_version,
+        analysis_population=analysis_population,
+        market_window=market_window,
+    )
+    rows_or_candidates = find_sku_sales_allocations(
+        db,
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=resolved_batch_id,
+        rule_version=rule_version,
+        analysis_population=analysis_population,
+        market_window=market_window,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        dimension_type=dimension_type,
+    )
+    if rows_or_candidates is None:
+        return {
+            "status": "not_found",
+            "message_cn": "没有找到该 SKU 的 M11D 销量分配结果。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+        }
+    if isinstance(rows_or_candidates, list) and rows_or_candidates and isinstance(rows_or_candidates[0], dict):
+        return {
+            "status": "ambiguous",
+            "message_cn": "匹配到多个 SKU，请用 --sku-code 精确查询。",
+            "candidates": rows_or_candidates,
+        }
+    rows = list(rows_or_candidates)
+    if not rows:
+        return {
+            "status": "not_found",
+            "message_cn": "该 SKU 在指定维度类型下没有 M11D allocation 行；可能属于未分配诊断。",
+            "batch_id": resolved_batch_id,
+            "query": query or sku_code or model_name,
+            "dimension_type": dimension_type,
+        }
+    totals_by_type: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        bucket = totals_by_type.setdefault(
+            row.dimension_type,
+            {
+                "allocation_weight_sum": 0.0,
+                "allocated_sales_volume": 0.0,
+                "allocated_sales_amount": 0.0,
+                "allocated_avg_weekly_sales_volume": 0.0,
+                "allocated_avg_weekly_sales_amount": 0.0,
+            },
+        )
+        bucket["allocation_weight_sum"] += float(row.allocation_weight or 0)
+        bucket["allocated_sales_volume"] += float(row.allocated_sales_volume or 0)
+        bucket["allocated_sales_amount"] += float(row.allocated_sales_amount or 0)
+        bucket["allocated_avg_weekly_sales_volume"] += float(row.allocated_avg_weekly_sales_volume or 0)
+        bucket["allocated_avg_weekly_sales_amount"] += float(row.allocated_avg_weekly_sales_amount or 0)
+    first = rows[0]
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "category_code": category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "rule_version": rule_version,
+        "analysis_population": analysis_population,
+        "market_window": market_window,
+        "sku_code": first.sku_code,
+        "brand_name": first.brand_name,
+        "model_name": first.model_name,
+        "sku": {
+            "sku_code": first.sku_code,
+            "brand_name": first.brand_name,
+            "model_name": first.model_name,
+            "size_tier": first.size_tier,
+            "price_band_in_size_tier": first.price_band_in_size_tier,
+        },
+        "dimension_type": dimension_type,
+        "allocation_count": len(rows),
+        "totals_by_dimension_type": totals_by_type,
+        "allocations": [semantic_market_allocation_payload(row) for row in rows],
+    }
+
+
+def list_semantic_market_contributions(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    analysis_population: str,
+    market_window: str,
+    dimension_type: str,
+    dimension_code: str,
+    limit: int,
+) -> list[entities.Core3SemanticMarketSkuContribution]:
+    stmt = (
+        select(entities.Core3SemanticMarketSkuContribution)
+        .where(entities.Core3SemanticMarketSkuContribution.project_id == project_id)
+        .where(entities.Core3SemanticMarketSkuContribution.category_code == category_code)
+        .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
+        .where(entities.Core3SemanticMarketSkuContribution.rule_version == rule_version)
+        .where(entities.Core3SemanticMarketSkuContribution.analysis_population == analysis_population)
+        .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
+        .where(entities.Core3SemanticMarketSkuContribution.dimension_type == dimension_type)
+        .where(entities.Core3SemanticMarketSkuContribution.dimension_code == dimension_code)
+        .where(entities.Core3SemanticMarketSkuContribution.is_current.is_(True))
+        .order_by(
+            entities.Core3SemanticMarketSkuContribution.sku_rank_in_dimension,
+            entities.Core3SemanticMarketSkuContribution.allocated_sales_volume.desc(),
+        )
+    )
+    if limit != 0:
+        stmt = stmt.limit(max(limit, 0))
+    return list(db.execute(stmt).scalars())
+
+
 def answer_natural_language(
     db: Session,
     *,
@@ -2472,6 +2780,40 @@ def answer_natural_language(
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
     resolved_product_category = resolve_product_category(product_category, query=question)
+    if should_route_to_semantic_market_query(question, normalized):
+        if any(term in question for term in ("某个sku", "某个 SKU", "这款", "这个sku", "这个 SKU", "销量分配", "销量切分")) and extract_sku_or_model_query(question):
+            result = query_sku_sales_allocation(
+                db,
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=resolved_product_category,
+                query=extract_sku_or_model_query(question) or question,
+                sku_code=None,
+                model_name=None,
+                analysis_population="fact_complete_with_comment",
+                market_window="full_observed_window",
+                dimension_type=semantic_dimension_type_from_question(question),
+            )
+            result["routed_command"] = "sku-sales-allocation"
+            result["question"] = question
+            return result
+        result = query_semantic_market_map(
+            db,
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type=semantic_dimension_type_from_question(question, allow_all=True),
+            dimension_code=None,
+            query=question,
+            sku_limit=sku_limit,
+        )
+        result["routed_command"] = "semantic-market-map"
+        result["question"] = question
+        return result
     if should_route_to_user_task_query(question, normalized):
         if any(word in question for word in ("用户任务预设", "任务预设", "用户任务体系", "任务体系", "用户任务分类", "用户任务 taxonomy")):
             result = query_user_task_taxonomy(
@@ -2924,6 +3266,121 @@ def resolve_target_group_batch_id(
         if profile_batch_id:
             return str(profile_batch_id)
     return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
+def resolve_semantic_market_batch_id(
+    db: Session,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    *,
+    require_profile: bool,
+    rule_version: str,
+    analysis_population: str,
+    market_window: str,
+) -> str:
+    if batch_id != LATEST_BATCH:
+        return batch_id
+    if require_profile:
+        profile_batch_id = db.execute(
+            select(entities.Core3SemanticMarketDimensionSummary.batch_id)
+            .where(entities.Core3SemanticMarketDimensionSummary.project_id == project_id)
+            .where(entities.Core3SemanticMarketDimensionSummary.category_code == category_code)
+            .where(entities.Core3SemanticMarketDimensionSummary.rule_version == rule_version)
+            .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
+            .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+            .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
+            .order_by(entities.Core3SemanticMarketDimensionSummary.created_at.desc(), entities.Core3SemanticMarketDimensionSummary.batch_id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if profile_batch_id:
+            return str(profile_batch_id)
+    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+
+
+def find_sku_sales_allocations(
+    db: Session,
+    *,
+    project_id: str,
+    category_code: str,
+    batch_id: str,
+    rule_version: str,
+    analysis_population: str,
+    market_window: str,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+    dimension_type: str,
+) -> list[entities.Core3SemanticMarketAllocation] | list[dict[str, Any]] | None:
+    if not any([query, sku_code, model_name]):
+        raise CatForgeInsightError("查询 SKU 销量分配需要提供 --query、--sku-code 或 --model-name。")
+    filters = [
+        entities.Core3SemanticMarketAllocation.project_id == project_id,
+        entities.Core3SemanticMarketAllocation.category_code == category_code,
+        entities.Core3SemanticMarketAllocation.batch_id == batch_id,
+        entities.Core3SemanticMarketAllocation.rule_version == rule_version,
+        entities.Core3SemanticMarketAllocation.analysis_population == analysis_population,
+        entities.Core3SemanticMarketAllocation.market_window == market_window,
+        entities.Core3SemanticMarketAllocation.is_current.is_(True),
+    ]
+    if dimension_type != "all":
+        filters.append(entities.Core3SemanticMarketAllocation.dimension_type == dimension_type)
+    if sku_code:
+        filters.append(func.lower(entities.Core3SemanticMarketAllocation.sku_code) == sku_code.lower())
+    elif model_name:
+        model_norm = model_name.strip().lower()
+        filters.append(func.lower(entities.Core3SemanticMarketAllocation.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+    else:
+        query_norm = str(query or "").strip().lower()
+        filters.append(
+            or_(
+                func.lower(entities.Core3SemanticMarketAllocation.sku_code) == query_norm,
+                func.lower(entities.Core3SemanticMarketAllocation.model_name) == query_norm,
+                func.lower(entities.Core3SemanticMarketAllocation.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+            )
+        )
+    rows = list(
+        db.execute(
+            select(entities.Core3SemanticMarketAllocation)
+            .where(*filters)
+            .order_by(
+                entities.Core3SemanticMarketAllocation.sku_code,
+                entities.Core3SemanticMarketAllocation.dimension_type,
+                entities.Core3SemanticMarketAllocation.allocation_weight.desc(),
+                entities.Core3SemanticMarketAllocation.dimension_code,
+            )
+            .limit(200)
+        ).scalars()
+    )
+    if not rows:
+        return None
+    matched_skus = sorted({row.sku_code for row in rows})
+    exact_query = (sku_code or model_name or query or "").strip().lower()
+    exact_skus = sorted(
+        {
+            row.sku_code
+            for row in rows
+            if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query
+        }
+    )
+    if len(exact_skus) == 1:
+        matched_skus = exact_skus
+    if len(matched_skus) > 1:
+        candidate_map: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            candidate_map.setdefault(
+                row.sku_code,
+                {
+                    "sku_code": row.sku_code,
+                    "model_name": row.model_name,
+                    "brand_name": row.brand_name,
+                    "size_tier": row.size_tier,
+                    "price_band_in_size_tier": row.price_band_in_size_tier,
+                },
+            )
+        return list(candidate_map.values())[:10]
+    selected_sku = matched_skus[0]
+    return [row for row in rows if row.sku_code == selected_sku]
 
 
 def find_sku_profile(
@@ -3462,6 +3919,105 @@ def value_battlefield_score_payload(row: entities.Core3SkuValueBattlefieldScore)
         "score_breakdown": row.score_breakdown_json or {},
         "review_required": row.review_required,
         "confidence": decimal_to_float(row.confidence),
+    }
+
+
+def semantic_market_summary_payload(row: entities.Core3SemanticMarketDimensionSummary) -> dict[str, Any]:
+    return {
+        "summary_id": row.summary_id,
+        "dimension_type": row.dimension_type,
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "taxonomy_version": row.taxonomy_version,
+        "sku_relation_count": row.sku_relation_count,
+        "allocated_sku_count": row.allocated_sku_count,
+        "primary_sku_count": row.primary_sku_count,
+        "secondary_sku_count": row.secondary_sku_count,
+        "observed_need_sku_count": row.observed_need_sku_count,
+        "brand_claim_sku_count": row.brand_claim_sku_count,
+        "opportunity_sku_count": row.opportunity_sku_count,
+        "drag_risk_sku_count": row.drag_risk_sku_count,
+        "estimated_sales_volume": decimal_to_float(row.estimated_sales_volume),
+        "estimated_sales_amount": decimal_to_float(row.estimated_sales_amount),
+        "estimated_avg_weekly_sales_volume": decimal_to_float(row.estimated_avg_weekly_sales_volume),
+        "estimated_avg_weekly_sales_amount": decimal_to_float(row.estimated_avg_weekly_sales_amount),
+        "observed_need_sales_volume": decimal_to_float(row.observed_need_sales_volume),
+        "observed_need_sales_amount": decimal_to_float(row.observed_need_sales_amount),
+        "drag_risk_market_volume": decimal_to_float(row.drag_risk_market_volume),
+        "drag_risk_market_amount": decimal_to_float(row.drag_risk_market_amount),
+        "total_market_sales_volume": decimal_to_float(row.total_market_sales_volume),
+        "total_market_sales_amount": decimal_to_float(row.total_market_sales_amount),
+        "allocated_market_sales_volume": decimal_to_float(row.allocated_market_sales_volume),
+        "allocated_market_sales_amount": decimal_to_float(row.allocated_market_sales_amount),
+        "unallocated_market_sales_volume": decimal_to_float(row.unallocated_market_sales_volume),
+        "unallocated_market_sales_amount": decimal_to_float(row.unallocated_market_sales_amount),
+        "sales_volume_share": decimal_to_float(row.sales_volume_share),
+        "sales_amount_share": decimal_to_float(row.sales_amount_share),
+        "allocation_coverage_rate": decimal_to_float(row.allocation_coverage_rate),
+        "brand_distribution": row.brand_distribution_json or {},
+        "size_price_distribution": row.size_price_distribution_json or {},
+        "relation_status_counts": row.relation_status_counts_json or {},
+        "top_skus": row.top_skus_json or [],
+        "confidence_avg": decimal_to_float(row.confidence_avg),
+        "business_summary_cn": row.business_summary_cn,
+    }
+
+
+def semantic_market_contribution_payload(row: entities.Core3SemanticMarketSkuContribution) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "dimension_type": row.dimension_type,
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "sku_rank_in_dimension": row.sku_rank_in_dimension,
+        "allocation_weight": decimal_to_float(row.allocation_weight),
+        "allocated_sales_volume": decimal_to_float(row.allocated_sales_volume),
+        "allocated_sales_amount": decimal_to_float(row.allocated_sales_amount),
+        "allocated_avg_weekly_sales_volume": decimal_to_float(row.allocated_avg_weekly_sales_volume),
+        "allocated_avg_weekly_sales_amount": decimal_to_float(row.allocated_avg_weekly_sales_amount),
+        "sku_share_in_dimension_volume": decimal_to_float(row.sku_share_in_dimension_volume),
+        "sku_share_in_dimension_amount": decimal_to_float(row.sku_share_in_dimension_amount),
+        "is_primary_dimension": row.is_primary_dimension,
+        "allocation_role": row.allocation_role,
+        "relation_status": row.relation_status,
+        "allocation_confidence": decimal_to_float(row.allocation_confidence),
+        "contribution_reason_cn": row.contribution_reason_cn,
+        "evidence_id_count": len(row.evidence_ids_json or []),
+    }
+
+
+def semantic_market_allocation_payload(row: entities.Core3SemanticMarketAllocation) -> dict[str, Any]:
+    return {
+        "allocation_id": row.allocation_id,
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "dimension_type": row.dimension_type,
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "relation_status": row.relation_status,
+        "allocation_role": row.allocation_role,
+        "allocation_value_type": row.allocation_value_type,
+        "size_tier": row.size_tier,
+        "price_band_in_size_tier": row.price_band_in_size_tier,
+        "final_score": decimal_to_float(row.final_score),
+        "allocation_basis": decimal_to_float(row.allocation_basis),
+        "relation_factor": decimal_to_float(row.relation_factor),
+        "allocation_weight": decimal_to_float(row.allocation_weight),
+        "sales_volume_total": decimal_to_float(row.sales_volume_total),
+        "sales_amount_total": decimal_to_float(row.sales_amount_total),
+        "avg_weekly_sales_volume": decimal_to_float(row.avg_weekly_sales_volume),
+        "avg_weekly_sales_amount": decimal_to_float(row.avg_weekly_sales_amount),
+        "allocated_sales_volume": decimal_to_float(row.allocated_sales_volume),
+        "allocated_sales_amount": decimal_to_float(row.allocated_sales_amount),
+        "allocated_avg_weekly_sales_volume": decimal_to_float(row.allocated_avg_weekly_sales_volume),
+        "allocated_avg_weekly_sales_amount": decimal_to_float(row.allocated_avg_weekly_sales_amount),
+        "allocation_confidence": decimal_to_float(row.allocation_confidence),
+        "allocation_basis_json": row.allocation_basis_json or {},
+        "evidence_id_count": len(row.evidence_ids_json or []),
+        "market_source": row.market_source_json or {},
     }
 
 
@@ -4040,6 +4596,78 @@ def sample_status_from_count(count: int) -> str:
     if count > 0:
         return "insufficient"
     return "unknown"
+
+
+def should_route_to_semantic_market_query(question: str, normalized: str) -> bool:
+    if "m11d" in normalized or "semanticmarket" in normalized:
+        return True
+    if any(word in question for word in ("用户任务", "目标客群", "目标客户", "目标用户", "价值战场", "任务", "客群", "战场")) and any(
+        word in question for word in ("市场空间", "市场规模", "销量", "销额", "市场贡献", "贡献销量")
+    ):
+        return True
+    return any(
+        word in question
+        for word in (
+            "语义市场图谱",
+            "市场图谱",
+            "市场空间",
+            "销量分配",
+            "销量切分",
+            "销额分配",
+            "销额切分",
+            "任务图谱",
+            "客群图谱",
+            "战场市场图谱",
+        )
+    )
+
+
+def semantic_dimension_type_from_question(question: str, *, allow_all: bool = False) -> str | None:
+    if "用户任务" in question or "任务图谱" in question:
+        return "user_task"
+    if any(word in question for word in ("目标客群", "目标客户", "目标用户", "客群图谱", "客户图谱")):
+        return "target_group"
+    if "价值战场" in question or "战场图谱" in question or "战场市场" in question:
+        return "battlefield"
+    return None if allow_all else "all"
+
+
+def semantic_market_query_terms(query: str | None) -> list[str]:
+    if not query:
+        return []
+    text = str(query)
+    explicit_codes = re.findall(r"\b(?:TASK|TG|BF)_[A-Za-z0-9_]+\b", text.upper())
+    generic_phrases = (
+        "语义市场图谱",
+        "市场图谱",
+        "市场空间",
+        "市场规模",
+        "销量分配",
+        "销量切分",
+        "销额分配",
+        "销额切分",
+        "销量",
+        "销额",
+        "图谱",
+        "查一下",
+        "查看",
+        "查询",
+        "查",
+        "有多少",
+        "多少",
+        "有哪些",
+        "哪些",
+        "sku列表",
+        "SKU列表",
+        "sku",
+        "SKU",
+        "彩电",
+        "电视",
+    )
+    for phrase in generic_phrases:
+        text = text.replace(phrase, " ")
+    terms = [term for term in extract_match_tokens(text) if term]
+    return list(dict.fromkeys([*explicit_codes, *terms]))
 
 
 def should_route_to_target_group_query(question: str, normalized: str) -> bool:

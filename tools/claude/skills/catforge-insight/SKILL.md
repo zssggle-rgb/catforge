@@ -29,8 +29,9 @@ Use this skill when the user asks about:
 - TV value battlefield taxonomy, for example "查彩电价值战场预设", "电视价值战场怎么分".
 - Value battlefield coverage, for example "大屏换新性价比战场有哪些 SKU", "拖后腿战场有哪些 SKU".
 - Value battlefield graph, for example "查彩电价值战场图谱".
+- Semantic market map and sales allocation, for example "某个价值战场有多少销量", "目标客群图谱有哪些 SKU", "用户任务图谱销量怎么分", "查 100A4F 的销量分配", "这个 SKU 在多个战场里销量怎么切".
 
-Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", "用户任务画像", "用户任务预设", "目标客群画像", "目标客群预设", "价值战场画像", "价值战场预设", "价值战场图谱", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07/M09C/M10C/M11C if the user asks for implementation details.
+Do not require the user to know module codes. In user-facing replies, call this "参数画像", "标准参数", "卖点事实画像", "标准卖点", "市场画像", "市场区间覆盖", "可比池", "评论事实画像", "评论事实维度", "用户任务画像", "用户任务预设", "目标客群画像", "目标客群预设", "价值战场画像", "价值战场预设", "价值战场图谱", "语义市场图谱", "销量分配", and "覆盖 SKU"; only mention M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D if the user asks for implementation details.
 
 M05C-B, sometimes called `m05b` in business discussion, is the LLM-based comment profile generation stage. This skill is M05C-C read-only query and never calls an LLM.
 
@@ -39,6 +40,8 @@ M09C is the deterministic TV user task profile stage. It reads M03B parameter pr
 M10C is the deterministic TV target group profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses M03B's five size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment. This skill only queries M10C outputs and never writes data.
 
 M11C is the deterministic TV value battlefield profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses M03B's five size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for battlefield judgment. This skill only queries M11C outputs and never writes data. TV value battlefield taxonomy `m11c_tv_value_battlefield_taxonomy_v0.2` has 13 battlefields and adds `BF_GIANT_SCREEN_VALUE_DOWNTRADE` to separate low/mid/mid_high 98+ inch giant-screen value-downtrade SKUs from `BF_GIANT_HOME_THEATER_FLAGSHIP`.
+
+M11D is the deterministic semantic market graph and sales-allocation result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM and does not rejudge a SKU's user task, target group, or battlefield. Default population is `fact_complete_with_comment`, so business-facing market maps only include SKUs with comment facts and complete semantic profiles. It outputs user-task, target-group, and battlefield maps, SKU contribution rows, and SKU-level sales allocation. Use M11D when the question asks market size, SKU contribution within a dimension, or how one SKU's sales are split across multiple tasks/groups/battlefields. It reports total allocated sales and average weekly allocated sales; cumulative sales are context only.
 
 ## Working Directory
 
@@ -154,6 +157,14 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电价值战场图谱" --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查彩电语义市场图谱" --sku-limit 100 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的销量分配" --format json
 ```
 
 ## Stable Atomic Commands
@@ -330,6 +341,30 @@ Query value battlefield graph:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-graph --product-category tv --format json
 ```
 
+Query semantic market map across all dimensions:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight semantic-market-map --product-category tv --batch-id latest --sku-limit 100 --format json
+```
+
+Query one semantic dimension map:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight semantic-market-map --product-category tv --batch-id latest --dimension-type battlefield --dimension-code BF_LARGE_SCREEN_VALUE_UPGRADE --sku-limit 100 --format json
+```
+
+Query one SKU/model's sales allocation:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-sales-allocation --product-category tv --batch-id latest --query 100A4F --format json
+```
+
+Query one SKU/model's battlefield-only allocation:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight sku-sales-allocation --product-category tv --batch-id latest --query 100A4F --dimension-type battlefield --format json
+```
+
 ## Response Rules
 
 For SKU parameter profile results, summarize:
@@ -440,5 +475,22 @@ For value battlefield taxonomy results, summarize taxonomy version and the relev
 For value battlefield SKU coverage results, summarize battlefield name/code, relation status filter, SKU count, returned SKU examples, and whether the list is truncated.
 
 For value battlefield graph results, summarize graph snapshot id, batch id, battlefield count, SKU count, edge count, and top coverage distribution.
+
+For semantic market map results, summarize:
+
+- Analysis population and market window.
+- Dimension type/name/code.
+- Relation SKU count, allocated SKU count, primary/secondary/observed/brand/drag counts.
+- Estimated sales volume and estimated average weekly sales volume.
+- Estimated sales amount and estimated average weekly sales amount.
+- Allocation coverage rate and confidence average.
+- Top contributing SKUs, noting allocation weight and allocated sales.
+
+For SKU sales allocation results, summarize:
+
+- SKU code, model name, brand, analysis population, and market window.
+- Allocation weight sum by dimension type; each dimension type should usually sum to 1 when allocated.
+- For each user task, target group, and battlefield allocation: relation status, allocation role, weight, allocated sales volume, allocated average weekly volume, confidence, and evidence ids when returned.
+- If a dimension type is not found, explain it may be a no-allocation diagnostic rather than a data loss issue.
 
 If the CLI returns `ambiguous`, ask for the exact SKU code or fuller model name. If it returns `not_found`, say no profile was found in the selected batch and suggest checking whether the corresponding generation job has run for that batch.
