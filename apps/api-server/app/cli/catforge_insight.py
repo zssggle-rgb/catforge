@@ -1959,6 +1959,7 @@ def query_sku_user_task(
         project_id=project_id,
         category_code=category_code,
         batch_id=resolved_batch_id,
+        taxonomy_version=config["user_task_taxonomy_version"],
         rule_version=config["user_task_rule_version"],
         query=query,
         sku_code=sku_code,
@@ -2180,6 +2181,7 @@ def query_sku_target_group(
         project_id=project_id,
         category_code=category_code,
         batch_id=resolved_batch_id,
+        taxonomy_version=config["target_group_taxonomy_version"],
         rule_version=config["target_group_rule_version"],
         query=query,
         sku_code=sku_code,
@@ -2334,6 +2336,7 @@ def query_sku_value_battlefield(
         project_id=project_id,
         category_code=category_code,
         batch_id=resolved_batch_id,
+        taxonomy_version=config["value_battlefield_taxonomy_version"],
         rule_version=config["value_battlefield_rule_version"],
         query=query,
         sku_code=sku_code,
@@ -3547,6 +3550,7 @@ def find_sku_value_battlefield_profile(
     project_id: str,
     category_code: str,
     batch_id: str,
+    taxonomy_version: str | None,
     rule_version: str,
     query: str | None,
     sku_code: str | None,
@@ -3561,6 +3565,8 @@ def find_sku_value_battlefield_profile(
         entities.Core3SkuValueBattlefieldProfile.rule_version == rule_version,
         entities.Core3SkuValueBattlefieldProfile.is_current.is_(True),
     ]
+    if taxonomy_version:
+        filters.append(entities.Core3SkuValueBattlefieldProfile.taxonomy_version == taxonomy_version)
     if sku_code:
         filters.append(func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code) == sku_code.lower())
     elif model_name:
@@ -3600,6 +3606,7 @@ def find_sku_user_task_profile(
     project_id: str,
     category_code: str,
     batch_id: str,
+    taxonomy_version: str | None,
     rule_version: str,
     query: str | None,
     sku_code: str | None,
@@ -3614,6 +3621,8 @@ def find_sku_user_task_profile(
         entities.Core3M09cSkuUserTaskProfile.rule_version == rule_version,
         entities.Core3M09cSkuUserTaskProfile.is_current.is_(True),
     ]
+    if taxonomy_version:
+        filters.append(entities.Core3M09cSkuUserTaskProfile.taxonomy_version == taxonomy_version)
     if sku_code:
         filters.append(func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code) == sku_code.lower())
     elif model_name:
@@ -3653,6 +3662,7 @@ def find_sku_target_group_profile(
     project_id: str,
     category_code: str,
     batch_id: str,
+    taxonomy_version: str | None,
     rule_version: str,
     query: str | None,
     sku_code: str | None,
@@ -3667,6 +3677,8 @@ def find_sku_target_group_profile(
         entities.Core3M10cSkuTargetGroupProfile.rule_version == rule_version,
         entities.Core3M10cSkuTargetGroupProfile.is_current.is_(True),
     ]
+    if taxonomy_version:
+        filters.append(entities.Core3M10cSkuTargetGroupProfile.taxonomy_version == taxonomy_version)
     if sku_code:
         filters.append(func.lower(entities.Core3M10cSkuTargetGroupProfile.sku_code) == sku_code.lower())
     elif model_name:

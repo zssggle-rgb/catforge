@@ -457,6 +457,44 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
     assert pipeline_result["status"] == "ok"
     assert pipeline_result["summary"]["profile_count"] == 5
 
+    current_profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(
+            entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_VALUE,
+            entities.Core3SkuValueBattlefieldProfile.taxonomy_version == CORE3_M11C_TV_TAXONOMY_VERSION,
+        )
+    ).scalar_one()
+    session.add(
+        entities.Core3SkuValueBattlefieldProfile(
+            profile_id="legacy-taxonomy-profile",
+            project_id=current_profile.project_id,
+            category_code=current_profile.category_code,
+            batch_id=current_profile.batch_id,
+            product_category=current_profile.product_category,
+            taxonomy_version="m11c_tv_value_battlefield_taxonomy_legacy",
+            rule_version=current_profile.rule_version,
+            sku_code=current_profile.sku_code,
+            model_name=current_profile.model_name,
+            brand_name=current_profile.brand_name,
+            size_tier=current_profile.size_tier,
+            price_band_in_size_tier=current_profile.price_band_in_size_tier,
+            price_percentile_in_size_tier=current_profile.price_percentile_in_size_tier,
+            primary_battlefield_code=current_profile.primary_battlefield_code,
+            primary_relation_status=current_profile.primary_relation_status,
+            secondary_battlefield_codes_json=current_profile.secondary_battlefield_codes_json,
+            opportunity_battlefield_codes_json=current_profile.opportunity_battlefield_codes_json,
+            drag_factor_battlefield_codes_json=current_profile.drag_factor_battlefield_codes_json,
+            battlefield_summary_json=current_profile.battlefield_summary_json,
+            review_required=current_profile.review_required,
+            review_status=current_profile.review_status,
+            review_reason_json=current_profile.review_reason_json,
+            confidence=current_profile.confidence,
+            evidence_ids_json=current_profile.evidence_ids_json,
+            profile_hash="sha256:legacy-taxonomy-profile",
+            is_current=True,
+        )
+    )
+    session.commit()
+
     sku_profile = catforge_insight.query_sku_value_battlefield(
         session,
         project_id=PROJECT_ID,
