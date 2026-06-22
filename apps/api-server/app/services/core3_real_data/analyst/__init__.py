@@ -1,0 +1,2 @@
+"""CatForge analyst service package."""
+
