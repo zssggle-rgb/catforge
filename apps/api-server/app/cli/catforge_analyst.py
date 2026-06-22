@@ -427,6 +427,184 @@ def opportunity_gaps(
     )
 
 
+def competitor_set(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="competitor-set",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
+def sku_business_brief(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="sku-business-brief",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
+def why_sales_diff(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="why-sales-diff",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+    )
+
+
+def premium_claim_drivers(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="premium-claim-drivers",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
+def battlefield_space(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    dimension_code: str | None = None,
+    query: str | None = None,
+    brand_name: str | None = None,
+    size_tier: str | None = None,
+    price_band: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="battlefield-space",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        analysis_population=analysis_population,
+        market_window=market_window,
+        dimension_code=dimension_code,
+        query=query,
+        brand_name=brand_name,
+        size_tier=size_tier,
+        price_band=price_band,
+        limit=limit,
+    )
+
+
+def battlefield_opportunity(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="battlefield-opportunity",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
 def semantic_dimension_space(
     db: Session,
     *,

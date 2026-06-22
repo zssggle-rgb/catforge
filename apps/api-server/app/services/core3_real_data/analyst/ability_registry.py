@@ -115,6 +115,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="按同尺寸价格、同价值战场、同任务/客群、同参数/卖点、销量验证生成竞品集合。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="why-sales-diff",
@@ -122,6 +123,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="解释两个 SKU 为什么卖得好或卖得差，必须使用重叠在售周周均销量/销额。",
         required_inputs=("sku_code", "candidate_sku_code"),
         source_modules=("M01", "M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="premium-claim-drivers",
@@ -129,6 +131,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="识别用户选择卖点、销量支撑卖点、溢价卖点、基础卖点和拖后腿卖点。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="battlefield-space",
@@ -136,6 +139,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="查询价值战场市场空间、SKU 贡献、品牌分布和尺寸价格分布。",
         required_inputs=("dimension_code|query",),
         source_modules=("M11D",),
+        status="implemented",
     ),
     AbilityDefinition(
         code="battlefield-opportunity",
@@ -143,6 +147,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="分析某 SKU 能否通过价格、参数、卖点调整进入或强化更多价值战场。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="sku-business-brief",
@@ -150,6 +155,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="生成单 SKU 面向业务用户的综合画像和市场位置摘要。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
 )
 

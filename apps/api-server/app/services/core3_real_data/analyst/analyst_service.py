@@ -42,7 +42,7 @@ class CatForgeAnalystService:
     def __init__(self, db: Session, *, project_id: str, category_code: str) -> None:
         self.repository = AnalystRepository(db, project_id=project_id, category_code=category_code)
         self.atomic_handlers = AtomicAnalystHandlers(self.repository)
-        self.sop_orchestrators = SopOrchestrators()
+        self.sop_orchestrators = SopOrchestrators(self.atomic_handlers)
         self.project_id = project_id
         self.category_code = category_code
 
@@ -104,7 +104,7 @@ class CatForgeAnalystService:
         if command in ATOM_COMMANDS:
             return self.atomic_handlers.planned_atom(context, command=command, **kwargs)
         if command in SOP_COMMANDS:
-            return self.sop_orchestrators.planned_sop(context, command=command, **kwargs)
+            return self.sop_orchestrators.dispatch(command, context, **kwargs)
         if command == "ask":
             question = str(kwargs.pop("question", "") or "")
             return self.ask(context, question=question, **kwargs)

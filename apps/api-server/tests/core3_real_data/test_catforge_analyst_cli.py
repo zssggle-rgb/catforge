@@ -824,6 +824,9 @@ def test_list_abilities_returns_agent_contract() -> None:
     codes = {item["code"] for item in result["result"]["abilities"]}
     assert "competitor-set" in codes
     assert "why-sales-diff" in codes
+    by_code = {item["code"]: item for item in result["result"]["abilities"]}
+    assert by_code["competitor-set"]["status"] == "implemented"
+    assert by_code["sku-business-brief"]["status"] == "implemented"
 
 
 def test_resolve_sku_uses_market_profile_and_size_tier() -> None:
@@ -1042,7 +1045,122 @@ def test_opportunity_gaps_returns_market_battlefield_and_fact_signals() -> None:
     assert "drag_factor_battlefields_present" in semantic_gap_codes
 
 
-def test_ask_routes_competitor_question_to_sop_placeholder() -> None:
+def test_competitor_set_sop_composes_candidate_evidence() -> None:
+    session = make_session()
+    result = catforge_analyst.competitor_set(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        limit=3,
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["competitor_set"]
+    assert payload["candidate_count"] == 1
+    assert payload["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
+    assert payload["candidates"][0]["basis"]["same_size_price_pool"] is True
+    assert payload["candidates"][0]["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+    assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
+
+
+def test_sku_business_brief_sop_returns_summary_sections() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_business_brief(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    brief = result["result"]["sku_business_brief"]
+    assert brief["primary_semantics"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert brief["top_same_size_price_candidates"][0]["sku_code"] == "TV00030001"
+    assert brief["opportunity_and_risk"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+
+
+def test_why_sales_diff_sop_uses_overlap_week_sales() -> None:
+    session = make_session()
+    result = catforge_analyst.why_sales_diff(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        candidate_sku_code="TV00030001",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["why_sales_diff"]
+    assert payload["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+    assert payload["sales_overlap"]["comparison"]["target_vs_candidate_avg_weekly_volume_gap"] == 30.0
+    assert payload["factor_summary"][0]["factor_code"] == "overlap_week_sales_gap"
+
+
+def test_premium_claim_drivers_sop_classifies_claims() -> None:
+    session = make_session()
+    result = catforge_analyst.premium_claim_drivers(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["premium_claim_drivers"]
+    assert payload["premium_driver_claim_codes"] == ["tv_claim_miniled"]
+    assert payload["drag_factor_claim_codes"] == ["tv_claim_high_refresh"]
+    assert payload["semantic_context"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+
+
+def test_battlefield_space_sop_returns_graph_space() -> None:
+    session = make_session()
+    result = catforge_analyst.battlefield_space(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["battlefield_space"]
+    assert payload["summary_count"] == 1
+    assert payload["items"][0]["summary"]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+
+
+def test_battlefield_opportunity_sop_returns_related_spaces() -> None:
+    session = make_session()
+    result = catforge_analyst.battlefield_opportunity(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["battlefield_opportunity"]
+    assert payload["opportunity_gaps"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+    space_codes = {
+        item["items"][0]["summary"]["dimension_code"]
+        for item in payload["related_battlefield_spaces"]
+        if item.get("items")
+    }
+    assert {"BF_GAMING_SPORTS_FLUENCY", "BF_SMART_CONNECTED_EXPERIENCE"} <= space_codes
+
+
+def test_ask_routes_competitor_question_to_sop() -> None:
     session = make_session()
     result = catforge_analyst.answer_natural_language(
         session,
@@ -1051,11 +1169,12 @@ def test_ask_routes_competitor_question_to_sop_placeholder() -> None:
         batch_id=BATCH_ID,
         product_category="tv",
         question="海信65E7Q和谁竞争？",
-        query="65E7Q",
+        sku_code="TV00029112",
     )
 
-    assert result["status"] == "not_implemented"
+    assert result["status"] == "ok"
     assert result["routed_command"] == "competitor-set"
+    assert result["result"]["competitor_set"]["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
     assert [step["step_code"] for step in result["sop_steps"]][:3] == [
         "resolve-sku",
         "sku-fact-brief",
