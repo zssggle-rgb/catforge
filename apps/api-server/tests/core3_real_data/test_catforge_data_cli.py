@@ -75,6 +75,30 @@ def test_project_args_work_before_or_after_subcommand():
     assert after_args.category_code == "TV"
 
 
+def test_inspect_data_quality_handles_summary_without_preliminary_summary(monkeypatch):
+    session = _make_sku_quality_session()
+    _seed_sku_quality_rows(session)
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "inspect-data-quality",
+            "--batch-id",
+            "m00_real_project",
+            "--limit-skus",
+            "1",
+        ]
+    )
+    monkeypatch.setattr(catforge_data, "SessionLocal", lambda: session)
+
+    result = catforge_data._inspect_data_quality(args)
+
+    assert result["status"] == "success"
+    assert result["market_coverage_summary"] == {}
+    assert result["comment_preliminary_summary"] == {}
+    assert result["clean_counts"]["sku"] == 1
+    assert len(result["sample_skus"]) == 1
+
+
 def test_prepare_new_data_dry_run_does_not_register_source_batch(monkeypatch):
     parser = _build_parser()
     args = parser.parse_args(["prepare-new-data", "--dry-run"])

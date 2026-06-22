@@ -330,6 +330,7 @@ def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:
         context = Core3RepositoryContext(db=db, project_id=project_id, category_code=category_code)
         query = CleaningQueryRepository(context)
         summary = query.get_clean_summary(batch_id)
+        preliminary_summary = summary.get("preliminary_summary") or {}
         skus = query.list_clean_skus(batch_id, limit=max(args.limit_skus, 1))
         return {
             "command": "inspect-data-quality",
@@ -340,8 +341,8 @@ def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:
             "clean_counts": summary["clean_counts"],
             "issue_counts": summary["issue_counts"],
             "review_required": summary["review_required"],
-            "market_coverage_summary": summary["preliminary_summary"].get("market_coverage_summary", {}),
-            "comment_preliminary_summary": summary["preliminary_summary"].get("comment_preliminary_summary", {}),
+            "market_coverage_summary": preliminary_summary.get("market_coverage_summary", {}),
+            "comment_preliminary_summary": preliminary_summary.get("comment_preliminary_summary", {}),
             "sample_skus": [
                 {
                     "sku_code": sku.sku_code,
