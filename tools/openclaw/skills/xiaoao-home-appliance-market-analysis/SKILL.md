@@ -21,7 +21,7 @@ The final answer is a market analyst answer, not a tool transcript.
 
 Do not expose internal implementation terms in the final user-facing answer unless the user explicitly asks for implementation detail, debugging, data lineage, or program design. Internal terms include:
 
-- Tool or system names: CatForge, CatForge CLI, `catforge_analyst`, `catforge_insight`, `catforge_pipeline`, OpenClaw, Skill, Agent.
+- Tool or system names: CatForge, CatForge CLI, `catforge_analyst`, `catforge_insight`, `catforge_pipeline`, `catforge_data`, OpenClaw, Skill, Agent.
 - Module and stage names: M00/M01/M02/M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D, source batch ids, taxonomy versions, rule versions.
 - Raw codes and field names: `BF_*`, `TG_*`, `TASK_*`, `competitor_score`, `semantic_overlap_score`, `param_claim_overlap_score`, `sales_closeness_score`, `price_band_in_size_tier`, `analysis_population`, `routed_command`, `sop_steps`, `atoms_used`, `evidence_id`, `source_module`.
 - Debug artifacts: shell commands, JSON snippets, Python snippets, stdout/stderr, stack traces, docker command text, failed tool-call text.
@@ -62,9 +62,11 @@ Use tools in this order:
 
 1. `catforge_analyst`: business analysis, competitor reasoning, sales-difference reasoning, premium-claim reasoning, battlefield space, opportunity analysis, and SKU business brief.
 2. `catforge_insight`: read-only single-fact query, taxonomy query, coverage query, or market graph query when no higher-level business reasoning is needed.
-3. `catforge_pipeline`: execution/rebuild/preparation work only when the user explicitly asks to prepare data, rerun profiles, rebuild graph, or process new data.
+3. `catforge_pipeline`: profile or semantic-graph execution only when the user explicitly asks to rerun generated profiles, rebuild graph, or update generated analysis layers.
+4. `catforge_data`: raw uploaded data preparation only when the user asks to preprocess new data, clean new data, or prepare a source batch for analysis.
 
 Never use `catforge_pipeline` for a read-only business question.
+Never use `catforge_pipeline` as a substitute for raw-data cleaning. If `catforge_data` is not available in the current deployment, say the data-preparation CLI is not installed and cannot be replaced by profile rebuild commands.
 
 ## Natural Language First
 
@@ -233,11 +235,17 @@ For "目标客群/用户任务/价值战场图谱":
 2. Use `catforge_analyst battlefield-space` only for value battlefield business-space questions.
 3. If the user asks for strategic implications, combine the graph output with `sku-fact-brief` or `battlefield-opportunity`.
 
-For "新数据来了，先处理一下" or "重新生成":
+For "新数据来了，先处理一下", "先清洗一下", "预处理新数据", or "把数据准备好分析":
 
 1. This is not an analyst read-only question.
-2. Use `catforge_pipeline ask`.
-3. Report job status and result counts, not strategic conclusions.
+2. Use `catforge_data prepare-new-data`.
+3. If `catforge_data` is not installed, report that raw-data preparation is currently blocked; do not call `catforge_pipeline` instead.
+4. Report job status, clean/evidence counts, low-value comment counts, and quality limitations, not strategic conclusions.
+
+For "重新生成画像", "重跑价值战场", "更新语义市场图谱", or similar generated-profile requests:
+
+1. Use `catforge_pipeline ask`.
+2. Report job status and result counts, not strategic conclusions.
 
 ## 边界回答规则
 
@@ -337,7 +345,7 @@ For "某 SKU 的竞品有哪些", use this business shape:
 ## Prohibited Actions
 
 - Do not answer business conclusions without a CLI call.
-- Do not query raw database tables to bypass `catforge_analyst`, `catforge_insight`, or `catforge_pipeline`.
+- Do not query raw database tables to bypass `catforge_data`, `catforge_analyst`, `catforge_insight`, or `catforge_pipeline`.
 - Do not print API keys, passwords, database credentials, or environment variables.
 - Do not write LLM credentials into files or command logs.
 - Do not call pipeline/rebuild commands for read-only questions.

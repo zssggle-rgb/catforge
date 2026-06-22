@@ -24,6 +24,7 @@ v2 的核心修正：
 10. [页面、API、任务编排与实施验收](06_ui_api_execution_plan.md)
 11. [彩电真实数据结果链路解释](07_result_chain_explainer_tv_example.md)
 12. [分层分析路径指导](08_layered_analysis_path_guidance.md)
+13. [当前正确流程、CLI、Skill 与 Agent 系统](current_implementation/00_current_flow_cli_skill_system.md)
 
 ## 与旧设计的关系
 
@@ -32,6 +33,7 @@ v2 的核心修正：
 - 本目录是后续讨论和实现真实样例数据接入的主设计依据。
 - 后续模块详细设计按 `00a_competitor_sop_module_plan.md` 一个一个生成，先讨论确认，再进入下一模块。
 - `08_layered_analysis_path_guidance.md` 是在 `07_result_chain_explainer_tv_example.md` 基础上重新整理的分层分析路径，用于指导后续模块保留、优化、合并和执行顺序调整。
+- `current_implementation/00_current_flow_cli_skill_system.md` 是当前执行入口、CLI、Skill、OpenClaw/XiaoAo 路由的最新口径，用于避免把历史模块、当前 CLI 和 agent 能力混在一起。
 
 ## 一句话架构
 

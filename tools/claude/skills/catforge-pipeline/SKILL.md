@@ -1,11 +1,11 @@
 ---
 name: catforge-pipeline
-description: Run CatForge execution jobs for data preparation, SKU parameter profiles, SKU claim fact profiles, SKU market profiles, SKU comment fact profiles, SKU user tasks, SKU target groups, SKU value battlefields, and semantic market graphs from natural language. This skill is for rebuild and rerun work, not read-only query or business analysis.
+description: Run CatForge execution jobs for SKU parameter profiles, SKU claim fact profiles, SKU market profiles, SKU comment fact profiles, SKU user tasks, SKU target groups, SKU value battlefields, and semantic market graphs from natural language. This skill is for profile rebuild and rerun work after data preparation, not raw-data cleaning, read-only query, or business analysis.
 ---
 
 # CatForge Pipeline Skill
 
-Use this skill when the user asks Claude Code to execute preparation/profile work, for example:
+Use this skill when the user asks Claude Code to execute profile or semantic-graph rebuild work after raw data has already been prepared, for example:
 
 - "重新生成彩电 SKU 参数画像"
 - "电视新增 SKU 了，更新参数画像"
@@ -19,13 +19,13 @@ Use this skill when the user asks Claude Code to execute preparation/profile wor
 - "更新彩电价格区间和尺寸区间的市场画像"
 - "重新生成彩电评论事实画像"
 - "重跑 TV00027354 的评论画像"
-- "新数据来了，把彩电评论事实准备好"
+- "已完成预处理后，把彩电评论事实准备好"
 - "重新生成彩电用户任务画像"
 - "重跑 TV00027354 的主用户任务分析"
-- "新数据来了，把彩电用户任务准备好"
+- "已完成预处理后，把彩电用户任务准备好"
 - "重新生成彩电目标客群画像"
 - "重跑 TV00027354 的目标客户分析"
-- "新数据来了，把彩电目标客群准备好"
+- "已完成预处理后，把彩电目标客群准备好"
 - "重新生成彩电价值战场画像"
 - "重跑 TV00027354 的价值战场画像"
 - "更新彩电价值战场图谱"
@@ -33,7 +33,9 @@ Use this skill when the user asks Claude Code to execute preparation/profile wor
 - "更新彩电用户任务、目标客群、价值战场的市场空间"
 - "重新生成彩电语义市场图谱"
 
-This is an execution skill. Use it only when the user asks to prepare, generate, rerun, rebuild, update, or process data.
+This is an execution skill. Use it only when the user asks to generate, rerun, rebuild, or update generated profiles or semantic graph outputs.
+
+Do not use this skill for raw uploaded data preparation, preliminary cleaning, or "新数据来了，先处理一下". Those requests belong to the `catforge-data` skill and `python -m app.cli.catforge_data prepare-new-data`. If `catforge-data` / `catforge_data` is not installed in the current branch or deployment, report that data preparation is currently blocked instead of substituting `catforge_pipeline`.
 
 For read-only questions like "查某个 SKU 的参数画像", "查彩电标准卖点", or "查某个 SKU 的卖点画像", use `catforge-insight` instead.
 For read-only market questions like "查某个 SKU 的市场画像", "查价格区间覆盖哪些 SKU", or "查某个 SKU 的可比池", also use `catforge-insight`.
@@ -60,6 +62,8 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 In OpenClaw, use `xiaoao-home-appliance-market-analysis` and the XiaoAo agent when available.
 
 After a pipeline command finishes, report execution status, counts, and limitations. Do not turn a successful rerun into a business conclusion unless you call `catforge_analyst` or `catforge_insight` afterward and cite their JSON output.
+
+For the latest CLI/Skill routing contract, see `docs/core3_mvp/real_data_v2/current_implementation/00_current_flow_cli_skill_system.md`.
 
 ## Working Directory
 
