@@ -85,6 +85,10 @@ class CatForgeAnalystService:
     def dispatch(self, command: str, context: AnalystContext, **kwargs: Any) -> dict[str, Any]:
         if command == "resolve-sku":
             return self.atomic_handlers.resolve_sku(context, **kwargs)
+        if command == "sku-fact-brief":
+            return self.atomic_handlers.sku_fact_brief(context, **kwargs)
+        if command == "semantic-dimension-space":
+            return self.atomic_handlers.semantic_dimension_space(context, **kwargs)
         if command in ATOM_COMMANDS:
             return self.atomic_handlers.planned_atom(context, command=command, **kwargs)
         if command in SOP_COMMANDS:

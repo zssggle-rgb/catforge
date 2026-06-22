@@ -7,7 +7,22 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_analyst
 from app.models import entities
-from app.services.core3_real_data.constants import CORE3_M07_PRICE_BAND_RULE_VERSION, CORE3_M07_RULE_VERSION
+from app.services.core3_real_data.constants import (
+    CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
+    CORE3_M07_PRICE_BAND_RULE_VERSION,
+    CORE3_M07_RULE_VERSION,
+    CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M09C_TV_TAXONOMY_VERSION,
+    CORE3_M10C_TV_RULE_VERSION,
+    CORE3_M10C_TV_TAXONOMY_VERSION,
+    CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
+    CORE3_M11D_RULE_VERSION,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -26,6 +41,14 @@ def make_session() -> Session:
         entities.Core3SourceBatch.__table__,
         entities.Core3SkuMarketProfile.__table__,
         entities.Core3SkuParamProfile.__table__,
+        entities.Core3SkuClaimFactProfile.__table__,
+        entities.Core3SkuCommentFactProfile.__table__,
+        entities.Core3M09cSkuUserTaskProfile.__table__,
+        entities.Core3M10cSkuTargetGroupProfile.__table__,
+        entities.Core3SkuValueBattlefieldProfile.__table__,
+        entities.Core3SemanticMarketDimensionSummary.__table__,
+        entities.Core3SemanticMarketSkuContribution.__table__,
+        entities.Core3SemanticMarketAllocation.__table__,
     ]:
         table.create(bind=engine, checkfirst=True)
     session = Session(engine)
@@ -53,6 +76,8 @@ def seed_data(session: Session) -> None:
     )
     seed_market_profile(session, sku_code="TV00029112", model_name="65E7Q", brand_name="海信", size=65, price=Decimal("4999"), volume=Decimal("1200"))
     seed_market_profile(session, sku_code="TV00030001", model_name="65E7Q Pro", brand_name="海信", size=65, price=Decimal("6999"), volume=Decimal("800"))
+    seed_fact_profiles(session)
+    seed_semantic_space(session)
     session.commit()
 
 
@@ -120,6 +145,290 @@ def seed_market_profile(
     )
 
 
+def seed_fact_profiles(session: Session) -> None:
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id="profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            param_values_json={
+                "screen_size_inch": {"normalized_value": 65},
+                "display_tech_class": {"normalized_value": "miniled"},
+                "dimension_tier_profile": {"size": "large_60_69", "display_tech": "miniled"},
+            },
+            core_picture_params_json={"screen_size_inch": {"normalized_value": 65}},
+            core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
+            core_system_params_json={"ai_chip_flag": {"normalized_value": True}},
+            core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
+            param_completeness=Decimal("0.820000"),
+            known_param_count=42,
+            unknown_param_count=5,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=["ev-param-tv00029112"],
+            quality_summary_json={"status": "ok"},
+            profile_hash="hash-param-tv00029112",
+            seed_version="tv_param_taxonomy_manual_v0.1",
+            rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id="claim-profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            raw_claim_count=3,
+            matched_claim_count=3,
+            fact_claim_count=2,
+            unsupported_claim_count=1,
+            claim_texts_json=["MiniLED 画质", "144Hz 高刷"],
+            claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
+            fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
+            unsupported_claim_codes=["tv_claim_unknown"],
+            dimension_profile_json={"picture_quality": {"fact_claim_count": 1}, "motion_gaming": {"fact_claim_count": 1}},
+            dimension_position_profile_json={"picture_quality": ["picture_flagship_miniled"]},
+            claim_summary_json={"premium_claim_candidates": ["tv_claim_miniled"]},
+            evidence_ids=["ev-claim-tv00029112"],
+            confidence=Decimal("0.9000"),
+            profile_hash="hash-claim-tv00029112",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id="comment-profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            comment_sentence_count=20,
+            matched_sentence_count=18,
+            fact_atom_count=22,
+            product_fact_sentence_count=18,
+            positive_sentence_count=14,
+            negative_sentence_count=2,
+            neutral_sentence_count=2,
+            service_excluded_sentence_count=1,
+            dimension_summary_json={"picture_screen_experience": {"positive": 8}},
+            signal_summary_json={"use_case_signal": ["客厅观影"]},
+            param_comment_support_json={"screen_size_inch": {"positive": 3}},
+            claim_comment_support_json={"tv_claim_miniled": {"positive": 5}},
+            supported_param_codes=["screen_size_inch"],
+            supported_claim_codes=["tv_claim_miniled"],
+            evidence_examples_json=[{"text": "画质清晰，客厅看电影不错"}],
+            evidence_ids=["ev-comment-tv00029112"],
+            confidence=Decimal("0.8800"),
+            profile_hash="hash-comment-tv00029112",
+            rule_version=CORE3_M05C_TV_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3M09cSkuUserTaskProfile(
+            profile_id="m09c-profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M09C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M09C_TV_RULE_VERSION,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_user_task_code="TASK_CINEMA_IMMERSION",
+            primary_relation_status="primary_user_task",
+            secondary_user_task_codes_json=["TASK_PREMIUM_PICTURE_EXPERIENCE"],
+            comment_observed_task_codes_json=["TASK_CINEMA_IMMERSION"],
+            brand_claimed_task_codes_json=["TASK_PREMIUM_PICTURE_EXPERIENCE"],
+            user_task_summary_json={"primary_reason_cn": "评论和卖点都支撑大屏观影。"},
+            confidence=Decimal("0.8700"),
+            evidence_ids_json=["ev-task-tv00029112"],
+            profile_hash="hash-task-tv00029112",
+        )
+    )
+    session.add(
+        entities.Core3M10cSkuTargetGroupProfile(
+            profile_id="m10c-profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M10C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M10C_TV_RULE_VERSION,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_target_group_code="TG_PREMIUM_AV_ENTHUSIAST",
+            primary_relation_status="primary_target_group",
+            secondary_target_group_codes_json=["TG_MAINSTREAM_FAMILY_VIEWER"],
+            comment_observed_group_codes_json=["TG_PREMIUM_AV_ENTHUSIAST"],
+            target_group_summary_json={"primary_reason_cn": "影音体验用户匹配。"},
+            confidence=Decimal("0.8500"),
+            evidence_ids_json=["ev-group-tv00029112"],
+            profile_hash="hash-group-tv00029112",
+        )
+    )
+    session.add(
+        entities.Core3SkuValueBattlefieldProfile(
+            profile_id="m11c-profile-tv00029112",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M11C_TV_RULE_VERSION,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_battlefield_code="BF_PREMIUM_PICTURE_UPGRADE",
+            primary_relation_status="primary_battlefield",
+            secondary_battlefield_codes_json=["BF_MAINSTREAM_LIVING_BALANCE"],
+            opportunity_battlefield_codes_json=["BF_GAMING_SPORTS_FLUENCY"],
+            battlefield_summary_json={"primary_reason_cn": "MiniLED 与评论画质支撑。"},
+            confidence=Decimal("0.8400"),
+            evidence_ids_json=["ev-bf-tv00029112"],
+            profile_hash="hash-bf-tv00029112",
+        )
+    )
+
+
+def seed_semantic_space(session: Session) -> None:
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-bf-premium-picture",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+            dimension_name="高端画质升级战场",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            sku_relation_count=2,
+            allocated_sku_count=2,
+            primary_sku_count=1,
+            secondary_sku_count=1,
+            estimated_sales_volume=Decimal("900.0000"),
+            estimated_sales_amount=Decimal("4800000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("75.000000"),
+            estimated_avg_weekly_sales_amount=Decimal("400000.000000"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.450000"),
+            sales_amount_share=Decimal("0.480000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"海信": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"primary_battlefield": 1},
+            top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 700}],
+            confidence_avg=Decimal("0.8600"),
+            business_summary_cn="高端画质升级战场由 MiniLED 与高刷支撑。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-bf-premium-picture",
+            result_hash="hash-summary-bf-premium-picture",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketSkuContribution(
+            contribution_id="contribution-tv00029112-bf-premium",
+            summary_id="summary-bf-premium-picture",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+            dimension_name="高端画质升级战场",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            allocation_weight=Decimal("0.600000"),
+            allocated_sales_volume=Decimal("700.0000"),
+            allocated_sales_amount=Decimal("3500000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("58.333333"),
+            allocated_avg_weekly_sales_amount=Decimal("291666.666667"),
+            sku_share_in_dimension_volume=Decimal("0.777778"),
+            sku_share_in_dimension_amount=Decimal("0.729167"),
+            sku_rank_in_dimension=1,
+            is_primary_dimension=True,
+            allocation_role="primary",
+            relation_status="primary_battlefield",
+            allocation_confidence=Decimal("0.9000"),
+            contribution_reason_cn="主战场贡献 SKU。",
+            evidence_ids_json=["ev-bf-tv00029112"],
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-contribution-tv00029112-bf-premium",
+            result_hash="hash-contribution-tv00029112-bf-premium",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-tv00029112-bf-premium",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=12,
+            dimension_type="battlefield",
+            dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+            dimension_name="高端画质升级战场",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            relation_status="primary_battlefield",
+            allocation_role="primary",
+            allocation_value_type="positive_value",
+            final_score=Decimal("0.8500"),
+            allocation_basis=Decimal("0.600000"),
+            relation_factor=Decimal("1.0000"),
+            allocation_weight=Decimal("0.600000"),
+            sales_volume_total=Decimal("1200.0000"),
+            sales_amount_total=Decimal("5998800.0000"),
+            avg_weekly_sales_volume=Decimal("100.000000"),
+            avg_weekly_sales_amount=Decimal("499900.000000"),
+            allocated_sales_volume=Decimal("700.0000"),
+            allocated_sales_amount=Decimal("3500000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("58.333333"),
+            allocated_avg_weekly_sales_amount=Decimal("291666.666667"),
+            allocation_confidence=Decimal("0.9000"),
+            allocation_basis_json={"source": "test"},
+            evidence_ids_json=["ev-bf-tv00029112"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-tv00029112-bf-premium",
+            result_hash="hash-allocation-tv00029112-bf-premium",
+        )
+    )
+
+
 def test_list_abilities_returns_agent_contract() -> None:
     session = make_session()
     result = catforge_analyst.list_analyst_abilities(
@@ -152,6 +461,54 @@ def test_resolve_sku_uses_market_profile_and_size_tier() -> None:
     assert resolved["brand_name"] == "海信"
     assert resolved["size_tier"] == "large_60_69"
     assert resolved["price_band_in_size_tier"] == "mid_high"
+
+
+def test_sku_fact_brief_returns_core_fact_sections() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_fact_brief(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    fact_brief = result["result"]["fact_brief"]
+    sections = fact_brief["sections"]
+    assert sections["market"]["market_metrics"]["price_wavg"] == 4999.0
+    assert sections["parameter_fact"]["dimension_tier_profile"]["size"] == "large_60_69"
+    assert sections["claim_fact"]["fact_claim_codes"] == ["tv_claim_miniled", "tv_claim_high_refresh"]
+    assert sections["comment_fact"]["supported_claim_codes"] == ["tv_claim_miniled"]
+    assert sections["user_task"]["primary_user_task_code"] == "TASK_CINEMA_IMMERSION"
+    assert sections["target_group"]["primary_target_group_code"] == "TG_PREMIUM_AV_ENTHUSIAST"
+    assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert sections["sales_allocation"][0]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert fact_brief["missing_sections"] == []
+
+
+def test_semantic_dimension_space_returns_m11d_market_space() -> None:
+    session = make_session()
+    result = catforge_analyst.semantic_dimension_space(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        dimension_type="battlefield",
+        dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+        size_tier="large_60_69",
+        price_band="mid_high",
+    )
+
+    assert result["status"] == "ok"
+    assert result["result"]["summary_count"] == 1
+    item = result["result"]["items"][0]
+    assert item["summary"]["dimension_name"] == "高端画质升级战场"
+    assert item["summary"]["estimated_sales_volume"] == 900.0
+    assert item["sku_contributions"][0]["sku_code"] == "TV00029112"
+    assert item["sku_contributions"][0]["size_tier"] == "large_60_69"
 
 
 def test_ask_routes_competitor_question_to_sop_placeholder() -> None:

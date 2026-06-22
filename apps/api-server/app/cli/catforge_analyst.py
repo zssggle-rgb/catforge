@@ -219,6 +219,68 @@ def resolve_sku(
     )
 
 
+def sku_fact_brief(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="sku-fact-brief",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+    )
+
+
+def semantic_dimension_space(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    query: str | None = None,
+    brand_name: str | None = None,
+    size_tier: str | None = None,
+    price_band: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="semantic-dimension-space",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        analysis_population=analysis_population,
+        market_window=market_window,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        query=query,
+        brand_name=brand_name,
+        size_tier=size_tier,
+        price_band=price_band,
+        limit=limit,
+    )
+
+
 def answer_natural_language(
     db: Session,
     *,

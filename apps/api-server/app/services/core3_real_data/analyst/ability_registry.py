@@ -44,6 +44,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="汇总单 SKU 的参数、卖点、评论、市场、用户任务、目标客群、价值战场和销量分配。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
+        status="implemented",
     ),
     AbilityDefinition(
         code="same-size-price-candidates",
@@ -89,6 +90,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         required_inputs=("dimension_type", "dimension_code|query"),
         optional_inputs=("brand_name", "size_tier", "price_band", "sku_limit"),
         source_modules=("M11D",),
+        status="implemented",
     ),
     AbilityDefinition(
         code="opportunity-gaps",
