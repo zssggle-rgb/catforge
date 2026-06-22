@@ -157,6 +157,8 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
     normalized = question.strip().lower()
     extracted_params = extract_question_params(question)
     routing_params = merge_route_kwargs(explicit_kwargs=explicit_params or {}, extracted_kwargs=extracted_params)
+    is_competitor_question = bool(re.search(r"竞品|竞争|和谁.*比|和谁竞争|对手|比较对象", normalized))
+    is_sales_diff_question = bool(re.search(r"为什么|销量差|卖得好|卖得差|比.*好|比.*差", normalized))
     command = "sku-business-brief"
     matched_rule = "fallback_sku_business_brief"
     confidence = "low"
@@ -165,11 +167,15 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
         command = "comment-support"
         matched_rule = "comment_support_code_filter"
         confidence = "high"
-    elif re.search(r"为什么|销量差|卖得好|卖得差|比.*好|比.*差", normalized):
+    elif is_competitor_question and not routing_params.get("candidate_sku_code"):
+        command = "competitor-set"
+        matched_rule = "competitor_set"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
+    elif is_sales_diff_question:
         command = "why-sales-diff"
         matched_rule = "sales_difference"
         confidence = "high" if routing_params.get("candidate_sku_code") else "medium"
-    elif re.search(r"竞品|竞争|和谁.*比|和谁竞争|对手|比较对象", normalized):
+    elif is_competitor_question:
         command = "competitor-set"
         matched_rule = "competitor_set"
         confidence = "high" if _has_sku_target(routing_params) else "medium"

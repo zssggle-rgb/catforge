@@ -1198,6 +1198,24 @@ def test_ask_routes_competitor_question_to_sop() -> None:
     ]
 
 
+def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_set() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="海信65E7Q和谁竞争，为什么？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "competitor-set"
+    assert result["routing"]["matched_rule"] == "competitor_set"
+    assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
+    assert result["result"]["competitor_set"]["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
+
+
 def test_ask_routes_pairwise_sales_diff_from_sku_codes() -> None:
     session = make_session()
     result = catforge_analyst.answer_natural_language(
