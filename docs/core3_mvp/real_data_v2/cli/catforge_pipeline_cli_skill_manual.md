@@ -51,14 +51,14 @@ M05C-B comment fact profiles currently have a published TV taxonomy only. In bus
 | TV | `TV` | `tv_comment_fact_taxonomy_manual_v0.1` | `m05c_tv_comment_fact_profile_v0.1` |
 | AC | `AC` | not published | not available |
 
-M10C target group profiles currently have a published TV taxonomy only. M10C does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, and M07 `full_observed_window` market profiles. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier.
+M10C target group profiles currently have a published TV taxonomy only. M10C does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment.
 
 | Product category | SKU prefix | Target group taxonomy version | Target group rule version |
 |---|---|---|---|
 | TV | `TV` | `m10c_tv_target_group_taxonomy_v0.1` | `m10c_tv_target_group_profile_v0.1` |
 | AC | `AC` | not published | not available |
 
-M11C value battlefield profiles currently have a published TV taxonomy only. M11C does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, and M07 `full_observed_window` market profiles. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier.
+M11C value battlefield profiles currently have a published TV taxonomy only. M11C does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for battlefield judgment.
 
 | Product category | SKU prefix | Value battlefield taxonomy version | Value battlefield rule version |
 |---|---|---|---|
@@ -126,9 +126,9 @@ For `run-market-profile`, omit `--analysis-window` to run all M07 windows. The C
 
 For `run-comment-profile`, use `--llm-mode required` on 205 when validating the real TV run. `--llm-batch-size` controls how many M02 comment sentences are sent per LLM request; lower it if the provider times out. `--max-sentences-per-sku` caps comment sentences per SKU for scoped validation and should be raised or omitted for full production-style runs. The command reads M02 comment sentences and existing M03B/M04C context; it does not regenerate M05C-A taxonomy.
 
-For `run-target-group`, make sure M03B, M04C, M05C, and M07 have already produced current outputs for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` to limit scoring to specific target-group definitions. Because M10C derives price bands inside the M03B size tier, it should be rerun after market prices, parameter size tiers, claim facts, or comment facts change.
+For `run-target-group`, make sure M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows are current for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` to limit scoring to specific target-group definitions. Because M10C derives price bands inside the M03B size tier and validates market strength by same-size overlap weekly averages, it should be rerun after market prices, weekly market rows, parameter size tiers, claim facts, or comment facts change.
 
-For `run-value-battlefield`, make sure M03B, M04C, M05C, and M07 have already produced current outputs for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--battlefield-code` to limit scoring to specific battlefield definitions. `--graph-mode inline` writes a graph snapshot with coverage statistics; `--graph-mode skip` only writes SKU profiles and score rows. Because M11C derives price bands inside the M03B size tier, it should be rerun after market prices, parameter size tiers, claim facts, or comment facts change.
+For `run-value-battlefield`, make sure M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows are current for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--battlefield-code` to limit scoring to specific battlefield definitions. `--graph-mode inline` writes a graph snapshot with coverage statistics; `--graph-mode skip` only writes SKU profiles and score rows. Because M11C derives price bands inside the M03B size tier and validates market strength by same-size overlap weekly averages, it should be rerun after market prices, weekly market rows, parameter size tiers, claim facts, or comment facts change.
 
 ## Outputs
 

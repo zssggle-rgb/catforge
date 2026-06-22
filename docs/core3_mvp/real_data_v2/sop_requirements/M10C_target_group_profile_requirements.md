@@ -26,7 +26,7 @@ M10C 的证据优先级为：
 -> 五档尺寸和尺寸内价格带适配
 -> 标准卖点表达
 -> 标准参数能力
--> 市场销量/销额验证
+-> 同尺寸重叠周周均销量/销额验证
 ```
 
 说明：
@@ -85,7 +85,7 @@ M10C 的证据优先级为：
 | SKU 参数事实画像 | M03B | 尺寸五档、画质、刷新率、智能、护眼、外观、接口等产品能力 |
 | SKU 卖点事实画像 | M04C | 标准卖点、参数支撑状态、卖点维度位置 |
 | SKU 评论事实画像 | M05C | 用户人群、用途、购买动机、价格价值、品牌力、竞品、正负向体验 |
-| SKU 量价事实 | M07 或新市场事实模块 | 尺寸内价格带、销量/销额位置、价格/英寸、市场验证 |
+| SKU 量价事实 | M07 价格事实 + M01 清洗周度量价 | 尺寸内价格带、同尺寸重叠周周均销量/销额位置、价格/英寸、市场验证 |
 
 M10C 必须统一使用 M03B 参数事实画像中的五档尺寸口径：
 
@@ -182,9 +182,9 @@ M10C 必须沿用已确认的 10 个 TV 目标客群 code 和含义。
 | --- | --- |
 | 评论 | `value_price`、`brand_recommendation`，或评论出现性价比、划算、补贴、优惠、价格香、值得买、同价位更好 |
 | 用户任务 | `TASK_VALUE_FOR_MONEY_PURCHASE` 强，`TASK_LARGE_SCREEN_UPGRADE` 可增强 |
-| 尺寸价格 | 所有尺寸均可，但必须体现“尺寸内价格效率”；价格带 `low/mid_low/mid` 更匹配，`mid_high/high` 需要高端配置下探或销量口碑支撑 |
+| 尺寸价格 | 所有尺寸均可，但必须体现“尺寸内价格效率”；价格带 `low/mid_low/mid` 更匹配，`mid_high/high` 需要高端配置下探或重叠周周均销量口碑支撑 |
 | 卖点 | `tv_claim_value_price`、`tv_claim_theater_scene`、`tv_claim_high_refresh_rate`、`tv_claim_hdr_high_brightness` 等同价位高配卖点 |
-| 参数 | `screen_size_inch`、`resolution_class`、`declared_refresh_rate_hz`、`declared_brightness_nit_or_band`、`price_per_inch`、销量/销额分位 |
+| 参数 | `screen_size_inch`、`resolution_class`、`declared_refresh_rate_hz`、`declared_brightness_nit_or_band`、`price_per_inch`、重叠周周均销量/销额分位 |
 
 ### 5.6 `TG_GAMING_SPORTS_USER`
 
@@ -313,7 +313,7 @@ target_group_score =
 | `size_price_fit_score` | 五档尺寸和尺寸内价格适配分 |
 | `claim_alignment_score` | 卖点表达分 |
 | `param_capability_score` | 参数能力分 |
-| `market_validation_score` | 销量、销额、价格位置验证分 |
+| `market_validation_score` | 重叠周周均销量/销额、价格位置验证分 |
 | `brand_trust_boost` | 品牌信任/复购增强 |
 | `sentiment_polarity` | `positive`、`negative`、`mixed`、`neutral`、`unknown` |
 | `status_reason_cn` | 中文原因 |

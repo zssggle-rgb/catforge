@@ -83,7 +83,7 @@ flowchart TD
 | `allowed_price_bands` | 推荐尺寸内价格带 |
 | `adjacent_size_tiers` | 可降级相邻尺寸档 |
 | `adjacent_price_bands` | 可降级相邻价格带 |
-| `market_validation_rules` | 销量、销额、价格/英寸验证规则 |
+| `market_validation_rules` | 重叠周周均销量/销额、价格/英寸验证规则 |
 | `service_exclusion_rules` | 服务履约隔离规则 |
 | `status_caps` | 不同证据缺口下的最高关系状态 |
 
@@ -134,17 +134,17 @@ flowchart TD
 
 ### 4.2 量价事实
 
-读取 `core3_sku_market_profile` 的 `full_observed_window`：
+价格事实读取 `core3_sku_market_profile` 的 `full_observed_window`，销量/销额验证读取 M01 清洗后的周度量价：
 
 | 字段 | 用途 |
 | --- | --- |
 | `price_wavg` | 尺寸内价格带派生 |
 | `price_per_inch` | 大屏换新、性价比支撑 |
-| `sales_volume_total`、`sales_amount_total` | 市场验证 |
-| `volume_percentile_in_size`、`amount_percentile_in_size` | 任务市场验证 |
+| `sales_volume_total`、`sales_amount_total` | 仅展示累计规模，不参与任务判断 |
+| M01 清洗周度量价 | 同尺寸 SKU 重叠在售周的周均销量/销额验证 |
 | `evidence_ids` | 市场证据 |
 
-M09C 自行按五档尺寸派生 `price_band_in_size_tier`。不得使用旧 M07 `screen_size_class` 作为主口径。
+M09C 自行按五档尺寸派生 `price_band_in_size_tier`。不得使用旧 M07 `screen_size_class` 作为主口径。累计销量会受新品、退市和平台特供影响，不能作为任务成立或不成立的判断依据。
 
 ### 4.3 M04C 卖点事实
 
@@ -249,8 +249,8 @@ price_percentile = index / (n - 1)；
 
 | 情况 | 分数建议 |
 | --- | ---: |
-| 同任务尺寸价格池内销量/销额分位高，且价格效率匹配 | 0.70-1.00 |
-| 销量或销额中等，价格位置合理 | 0.35-0.70 |
+| 同任务尺寸价格池内重叠周周均销量/销额分位高，且价格效率匹配 | 0.70-1.00 |
+| 重叠周周均销量或销额中等，价格位置合理 | 0.35-0.70 |
 | 市场样本不足或销量弱 | 0-0.35 |
 | 市场缺失 | 0，不直接否定 |
 
@@ -273,7 +273,7 @@ user_task_score =
   + claim_task_alignment_score * 0.20
   + param_capability_score * 0.20
   + size_price_fit_score * 0.10
-  + market_validation_score * 0.10
+  + market_validation_score * 0.07
   - negative_drag_score * 0.05
 ```
 

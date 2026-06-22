@@ -62,9 +62,9 @@ M11C 的业务定义：
 | SKU 参数事实画像 | M03B | 尺寸五档、画质、刷新率、亮度、控光、智能、外观、能效等产品能力 |
 | SKU 卖点事实画像 | M04C | 标准卖点、参数支撑状态、卖点维度位置 |
 | SKU 评论事实画像 | M05C | 用户声音、用途、人群、价格价值、品牌力、竞品、正负向体验 |
-| SKU 量价事实 | M07 或新市场事实模块 | 尺寸内价格带、销量/销额位置、价格/英寸、市场验证 |
+| SKU 量价事实 | M07 价格事实 + M01 清洗周度量价 | 尺寸内价格带、同尺寸重叠周周均销量/销额位置、价格/英寸、市场验证 |
 
-M11C 可以读取 M07 的价格、销量、销额、周期等指标，但必须按 M03B 五档尺寸口径重新派生 M11C 自用的 `size_tier` 和 `price_band_in_size_tier`。
+M11C 可以读取 M07 的加权价格、价格/英寸、周期等指标，但必须按 M03B 五档尺寸口径重新派生 M11C 自用的 `size_tier` 和 `price_band_in_size_tier`。销量/销额验证必须使用 M01 清洗后的周度量价：同尺寸 SKU 两两比较重叠在售周的周均销量/销额。累计销量和累计销额只可作为展示上下文，不得参与主战场、辅战场、机会战场或拖后腿战场判断。
 
 首版 M11C 不依赖已经落地的 SKU 用户任务画像和 SKU 目标客群画像，因为新版任务/客群模块在本开发序列中位于 M11C 之后。首版通过价值战场 taxonomy 中的 `primary_task_codes`、`secondary_task_codes`、`primary_target_group_codes` 以及对应的评论/卖点/参数规则完成任务和客群含义的间接匹配。后续 M09C/M10C 落地后，可以作为增强输入加入评分，但不得改变 M11C 的尺寸价格门槛和评论优先原则。
 
@@ -109,7 +109,7 @@ M11C 匹配优先级为：
 -> 已成立目标客群
 -> 标准卖点表达
 -> 标准参数能力
--> 市场销量/销额验证
+-> 同尺寸重叠周周均销量/销额验证
 ```
 
 说明：
@@ -155,7 +155,7 @@ M11C 匹配优先级为：
 | `task_group_fit_score` | 用户任务和目标客群适配分 |
 | `claim_alignment_score` | 标准卖点表达分 |
 | `param_capability_score` | 参数能力支撑分 |
-| `market_validation_score` | 销量、销额、价格位置验证分 |
+| `market_validation_score` | 重叠周周均销量/销额、价格位置验证分 |
 | `sentiment_polarity` | `positive`、`negative`、`mixed`、`neutral`、`unknown` |
 | `value_effect` | `premium_driver`、`basic_support`、`brand_claim_only`、`user_observed_need`、`drag_factor`、`unmet_need`、`not_applicable` |
 | `confidence` | 置信度 |

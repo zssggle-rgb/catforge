@@ -62,7 +62,7 @@ It reads M10C outputs from:
 - `core3_m10c_sku_target_group_score`
 - `core3_m10c_target_group_coverage`
 
-M10C target group profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices.
+M10C target group profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices. Market validation uses M01 clean weekly market rows: same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for target-group judgment.
 
 It reads M11C outputs from:
 
@@ -70,7 +70,7 @@ It reads M11C outputs from:
 - `core3_sku_value_battlefield_score`
 - `core3_value_battlefield_graph_snapshot`
 
-M11C value battlefield profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices.
+M11C value battlefield profiles are deterministic. They use M03B's five size tiers and derive `low/mid_low/mid/mid_high/high` price bands inside each size tier from M07 weighted prices. Market validation uses M01 clean weekly market rows: same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for battlefield judgment.
 
 Current M07 query note: the updated M07 design adds business absolute price buckets and `core3_market_bucket_coverage`. Until that service/table implementation is complete, `market-bucket-coverage` derives coverage from current M07 profile fields: `price_band_category`, `size_segment`, and their cross bucket.
 

@@ -84,7 +84,7 @@ flowchart TD
 | `comment_match_rules` | 评论事实匹配规则 |
 | `claim_match_rules` | 标准卖点匹配规则 |
 | `param_match_rules` | 标准参数匹配规则 |
-| `market_validation_rules` | 销量、销额、价格效率验证规则 |
+| `market_validation_rules` | 重叠周周均销量/销额、价格效率验证规则 |
 | `negative_comment_rules` | 负向评论如何转成拖后腿或未满足需求 |
 | `service_exclusion_rules` | 服务履约隔离规则 |
 | `status_caps` | 不同证据缺口下的最高关系状态 |
@@ -110,9 +110,9 @@ M11C 在 `size_tier` 内按 SKU 加权均价计算价格分位：
 | --- | --- | --- | --- | --- |
 | `BF_SMALL_SCREEN_ESSENTIAL_VALUE` | `small_32_45 × low/mid_low` | 卧室、租房、第二台、小房间、便宜、够用、尺寸合适 | `tv_claim_value_price`、`tv_claim_full_screen_design`、`tv_claim_voice_control` | `screen_size_inch <= 45`、基础画质、低价、系统/语音辅助 |
 | `BF_SMALL_SMART_EASY_USE` | `small_32_45 × mid/mid_high` | 卧室/长辈/小空间，同时提到语音、投屏、操作方便 | `tv_claim_voice_control`、`tv_claim_casting_connectivity`、`tv_claim_ai_large_model` | 语音、远场语音、WiFi、网络电视、RAM/ROM 不低 |
-| `BF_MAINSTREAM_FAMILY_VALUE` | `medium_46_59 / large_60_69 × low/mid_low/mid` | 客厅、家庭、追剧、日常看、价格合适、销量口碑、够用 | `tv_claim_theater_scene`、`tv_claim_value_price`、`tv_claim_hdr_high_brightness`、`tv_claim_full_screen_design` | 50-69 寸，画质 mainstream/enhanced，价格带不高，销量位置较好 |
+| `BF_MAINSTREAM_FAMILY_VALUE` | `medium_46_59 / large_60_69 × low/mid_low/mid` | 客厅、家庭、追剧、日常看、价格合适、销量口碑、够用 | `tv_claim_theater_scene`、`tv_claim_value_price`、`tv_claim_hdr_high_brightness`、`tv_claim_full_screen_design` | 50-69 寸，画质 mainstream/enhanced，价格带不高，重叠周周均销量位置较好 |
 | `BF_MAINSTREAM_LIVING_BALANCE` | `medium_46_59 / large_60_69 × mid/mid_high` | 家庭观影、画质好、声音可以、系统流畅、护眼舒适 | `tv_claim_hdr_high_brightness`、`tv_claim_wide_color_accuracy`、`tv_claim_speaker_sound`、`tv_claim_eye_care_display`、`tv_claim_voice_control` | 画质、音频、系统、护眼至少多项中等支撑 |
-| `BF_LARGE_SCREEN_VALUE_UPGRADE` | `xlarge_70_85 × low/mid_low/mid` | 换大屏、旧电视升级、75/85 寸、客厅震撼、划算、补贴 | `tv_claim_theater_scene`、`tv_claim_value_price`、`tv_claim_full_screen_design` | 70-85 寸，尺寸内价格不高，价格/英寸有优势，销量验证 |
+| `BF_LARGE_SCREEN_VALUE_UPGRADE` | `xlarge_70_85 × low/mid_low/mid` | 换大屏、旧电视升级、75/85 寸、客厅震撼、划算、补贴 | `tv_claim_theater_scene`、`tv_claim_value_price`、`tv_claim_full_screen_design` | 70-85 寸，尺寸内价格不高，价格/英寸有优势，重叠周周均销量验证 |
 | `BF_LARGE_SCREEN_FAMILY_CINEMA` | `xlarge_70_85 × mid/mid_high` | 客厅影院、电影、追剧、全家看、大屏沉浸、音画体验好 | `tv_claim_theater_scene`、`tv_claim_hdr_high_brightness`、`tv_claim_dolby_audio_video`、`tv_claim_speaker_sound` | 70-85 寸，HDR/亮度/音频/画质组合支撑 |
 | `BF_PREMIUM_PICTURE_UPGRADE` | `large_60_69 / xlarge_70_85 × mid_high/high` | 画质、色彩、亮度、黑位、控光、电影效果正向；负向画质扣分 | `tv_claim_miniled_display`、`tv_claim_qd_miniled_display`、`tv_claim_rgb_miniled_display`、`tv_claim_oled_self_lit`、`tv_claim_hdr_high_brightness`、`tv_claim_wide_color_accuracy`、`tv_claim_local_dimming`、`tv_claim_picture_engine_ai` | MiniLED/OLED/QD、亮度、分区控光、色域、HDR、画质芯片 |
 | `BF_PREMIUM_VALUE_DOWNTRADE` | `xlarge_70_85 × mid/mid_high` | 配置高、划算、同价位强、比某品牌便宜，画质/大屏体验正向 | `tv_claim_value_price` 加高端画质/高刷/音画卖点 | 高端参数部分成立，价格低于同配置或同池高端 SKU |
@@ -154,7 +154,7 @@ battlefield_score =
 - `market_pool_fit_score` 仍是硬门槛；权重不是唯一约束。
 - `claim_alignment_score` 使用 M04C 参数支撑后的卖点。无参数支撑的卖点不得高分。
 - `param_capability_score` 证明产品有没有能力，但不能单独决定用户战场。
-- `market_validation_score` 用销量、销额、价格效率增强，不直接生成战场。
+- `market_validation_score` 用同尺寸重叠在售周的周均销量/销额、价格效率增强，不直接生成战场；累计销量和累计销额仅展示，不参与主/辅/机会/拖后腿战场判断。
 
 ### 4.3 状态判定
 

@@ -109,7 +109,7 @@ flowchart TD
 | `TG_LARGE_SCREEN_UPGRADER` | `replacement_source`、`appearance_size_fit`、大屏换新表达 | 大屏换新、影院沉浸 | 超大为主，低到中高 | 大屏影院、性价比、全面屏 | 尺寸、价格/英寸、全面屏 |
 | `TG_PREMIUM_AV_ENTHUSIAST` | 画质、亮度、控光、色彩、音效 | 高端画质、影院沉浸 | 大/超大，中高/高 | MiniLED/OLED/QD、HDR、色域、控光、画质芯片 | 显示技术、亮度、分区、色域、芯片 |
 | `TG_GIANT_HOME_THEATER_BUYER` | 巨幕、新家、大客厅、贴墙 | 影院沉浸、空间融合 | 巨幕，中高/高 | 巨幕影院、HDR、音效、贴墙 | 98 寸以上、旗舰画质、音频、贴墙 |
-| `TG_VALUE_MAXIMIZER` | `value_price`、优惠、补贴、划算 | 性价比、大屏换新 | 全尺寸，低/中低/中 | 性价比、同价位高配 | 价格分位、尺寸、配置、销量 |
+| `TG_VALUE_MAXIMIZER` | `value_price`、优惠、补贴、划算 | 性价比、大屏换新 | 全尺寸，低/中低/中 | 性价比、同价位高配 | 价格分位、尺寸、配置、重叠周周均销量 |
 | `TG_GAMING_SPORTS_USER` | `use_gaming_sports`、高刷、看球、低延迟 | 游戏、体育赛事 | 中/大/超大，中以上 | 高刷、低延迟、HDMI2.1 | 刷新率、HDMI2.1、MEMC、系统性能 |
 | `TG_CHILD_FAMILY_LONG_WATCH` | `audience_child_family`、护眼、长看 | 护眼长看、主流家庭 | 小/中/大，中低以上 | 护眼、亮度、色彩 | 护眼、亮度、刷新率、HDR |
 | `TG_SENIOR_PARENT_FRIENDLY` | `audience_senior`、语音、广告少、操作简单 | 长辈易用、主流客厅 | 小/中/大，低到中 | 语音、投屏、AI | 语音、智能、网络、内存 |
@@ -131,19 +131,19 @@ flowchart TD
 | `evidence_ids` | 参数证据 |
 | `profile_hash` | 增量判断 |
 
-### 4.2 M07 市场事实
+### 4.2 量价事实
 
-读取 `core3_sku_market_profile` 的 `full_observed_window`：
+价格事实读取 `core3_sku_market_profile` 的 `full_observed_window`，销量/销额验证读取 M01 清洗后的周度量价：
 
 | 字段 | 用途 |
 | --- | --- |
 | `price_wavg` | 尺寸内价格带派生 |
 | `price_per_inch` | 性价比、大屏换新支撑 |
-| `sales_volume_total`、`sales_amount_total` | 市场验证 |
-| `volume_percentile_in_size`、`amount_percentile_in_size` | 客群购买验证 |
+| `sales_volume_total`、`sales_amount_total` | 仅展示累计规模，不参与客群判断 |
+| M01 清洗周度量价 | 同尺寸 SKU 重叠在售周的周均销量/销额验证 |
 | `evidence_ids` | 市场证据 |
 
-M10C 自行按五档尺寸派生 `price_band_in_size_tier`。不得使用旧 M07 `screen_size_class` 作为主口径。
+M10C 自行按五档尺寸派生 `price_band_in_size_tier`。不得使用旧 M07 `screen_size_class` 作为主口径。累计销量会受新品、退市和平台特供影响，不能作为目标客群成立或不成立的判断依据。
 
 ### 4.3 M04C 卖点事实
 
@@ -286,8 +286,8 @@ M09C 落地后：
 
 | 情况 | 分数建议 |
 | --- | ---: |
-| 同尺寸或同价格池销量/销额较强 | 0.65-1.00 |
-| 有销量但不突出 | 0.30-0.60 |
+| 同尺寸或同价格池重叠周周均销量/销额较强 | 0.65-1.00 |
+| 重叠周周均销量有记录但不突出 | 0.30-0.60 |
 | 样本不足但有效 | 0.15-0.30 |
 | 无市场事实 | 0 |
 
