@@ -204,6 +204,7 @@ Every business conclusion must be tied to CLI evidence:
 
 - For competitor conclusions, cite same-size/price pool, semantic overlap, parameter/claim overlap, and overlapping-week sales validation when available.
 - For competitor lists, do not invent, drop, or reorder candidates outside CLI output. Use the returned `competitor_set.candidates` order as the default Top N.
+- When using the default returned order, call it "CatForge SOP candidate order" or "CLI returned candidate order". Do not call it "sorted by competitor_score" or "ranked by score" unless you actually sort by `competitor_score` and label it as a secondary view.
 - For sales-difference conclusions, use overlapping active-week average sales/amount. Do not use cumulative sales as the win/loss basis.
 - For premium-claim conclusions, require support from primary/secondary battlefield, user task or target group, plus parameter or comment validation.
 - For battlefield-space conclusions, use M11D semantic market graph fields such as estimated sales volume, estimated average weekly sales, SKU contributions, allocation coverage, and distribution.
