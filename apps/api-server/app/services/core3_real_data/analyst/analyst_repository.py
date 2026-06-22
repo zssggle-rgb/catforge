@@ -25,6 +25,34 @@ from app.services.core3_real_data.constants import (
 
 
 SKU_CODE_RE = re.compile(r"\b(?:TV|AC)\d{6,}\b", re.IGNORECASE)
+MODEL_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:\d{2,3}[A-Za-z][A-Za-z0-9-]*(?:\s*(?:PRO|PLUS|MAX|MINI|\+))?|[A-Za-z]{1,8}\d{2,3}[A-Za-z0-9-]*(?:\s*(?:PRO|PLUS|MAX|MINI|\+))?)(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+BRAND_QUERY_WORDS = (
+    "海信",
+    "hisense",
+    "vidda",
+    "创维",
+    "skyworth",
+    "tcl",
+    "小米",
+    "xiaomi",
+    "redmi",
+    "红米",
+    "华为",
+    "huawei",
+    "索尼",
+    "sony",
+    "三星",
+    "samsung",
+    "雷鸟",
+    "ffalcon",
+    "长虹",
+    "changhong",
+    "康佳",
+    "konka",
+)
 
 
 class AnalystRepository:
@@ -58,7 +86,7 @@ class AnalystRepository:
         requested_sku = self._extract_sku_code(query=query, sku_code=sku_code)
         if requested_sku and not requested_sku.startswith(self._sku_prefix(normalized_category)):
             return []
-        requested_model = (model_name or "").strip() or self._extract_model_query(query=query)
+        requested_model = self._normalize_requested_model((model_name or "").strip() or self._extract_model_query(query=query))
         market_matches = self._resolve_from_market(
             batch_id=batch_id,
             product_category=normalized_category,
@@ -102,23 +130,23 @@ class AnalystRepository:
         elif model_name:
             sku_prefix_filter = entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
             exact_stmt = (
-                base_stmt.where(entities.Core3SkuMarketProfile.model_name == model_name)
+                base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(model_name))
                 .where(sku_prefix_filter)
                 .order_by(entities.Core3SkuMarketProfile.sku_code)
                 .limit(limit)
             )
-            exact_rows = list(self.db.execute(exact_stmt).scalars())
-            if exact_rows:
+            exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_name)
+            if len(exact_rows) == 1:
                 rows = exact_rows
             else:
-                like_value = f"%{model_name}%"
+                like_value = f"%{_model_like_anchor(model_name)}%"
                 stmt = (
                     base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(like_value))
                     .where(sku_prefix_filter)
                     .order_by(entities.Core3SkuMarketProfile.sku_code)
-                    .limit(limit)
+                    .limit(max(limit * 5, 50))
                 )
-                rows = list(self.db.execute(stmt).scalars())
+                rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_name)[:limit]
         else:
             return []
         return [
@@ -160,23 +188,23 @@ class AnalystRepository:
         elif model_name:
             sku_prefix_filter = entities.Core3SkuParamProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
             exact_stmt = (
-                base_stmt.where(entities.Core3SkuParamProfile.model_name == model_name)
+                base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(model_name))
                 .where(sku_prefix_filter)
                 .order_by(entities.Core3SkuParamProfile.sku_code)
                 .limit(limit)
             )
-            exact_rows = list(self.db.execute(exact_stmt).scalars())
-            if exact_rows:
+            exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_name)
+            if len(exact_rows) == 1:
                 rows = exact_rows
             else:
-                like_value = f"%{model_name}%"
+                like_value = f"%{_model_like_anchor(model_name)}%"
                 stmt = (
                     base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(like_value))
                     .where(sku_prefix_filter)
                     .order_by(entities.Core3SkuParamProfile.sku_code)
-                    .limit(limit)
+                    .limit(max(limit * 5, 50))
                 )
-                rows = list(self.db.execute(stmt).scalars())
+                rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_name)[:limit]
         else:
             return []
         return [
@@ -897,7 +925,22 @@ class AnalystRepository:
         text = (query or "").strip()
         if not text or SKU_CODE_RE.search(text):
             return None
+        for match in MODEL_TOKEN_RE.finditer(_strip_brand_words(text)):
+            token = " ".join(match.group(0).strip().split())
+            if token and token.lower() not in {"sku", "pro", "max", "mini", "plus"}:
+                return token
         return text
+
+    @staticmethod
+    def _normalize_requested_model(value: str | None) -> str | None:
+        text = _strip_brand_words(value or "")
+        if not text:
+            return None
+        for match in MODEL_TOKEN_RE.finditer(text):
+            token = " ".join(match.group(0).strip().split())
+            if token:
+                return token.upper()
+        return text.strip().upper()
 
     @staticmethod
     def _sku_prefix(product_category: str) -> str:
@@ -913,6 +956,70 @@ def unique_skus(candidates: Sequence[ResolvedSku]) -> list[ResolvedSku]:
         seen.add(candidate.sku_code)
         result.append(candidate)
     return result
+
+
+def _strip_brand_words(value: str) -> str:
+    text = str(value or "")
+    for word in BRAND_QUERY_WORDS:
+        text = re.sub(re.escape(word), " ", text, flags=re.IGNORECASE)
+    return " ".join(text.strip().split())
+
+
+def _exact_model_rows(rows: Sequence[Any], requested_model: str) -> list[Any]:
+    requested_key = _model_key(requested_model)
+    if not requested_key:
+        return []
+    return [row for row in rows if _model_key(getattr(row, "model_name", None)) == requested_key]
+
+
+def _rank_model_rows(rows: Sequence[Any], requested_model: str) -> list[Any]:
+    ranked = [
+        (_model_match_rank(getattr(row, "model_name", None), requested_model), str(getattr(row, "sku_code", "")), row)
+        for row in rows
+    ]
+    exact_rows = [row for rank, _sku_code, row in ranked if rank == 0]
+    if exact_rows:
+        return sorted(exact_rows, key=lambda row: str(getattr(row, "sku_code", "")))
+    return [row for rank, _sku_code, row in sorted(ranked, key=lambda item: (item[0], item[1])) if rank < 100]
+
+
+def _model_match_rank(model_name: Any, requested_model: str) -> int:
+    model_key = _model_key(model_name)
+    requested_key = _model_key(requested_model)
+    if not model_key or not requested_key:
+        return 100
+    if model_key == requested_key:
+        return 0
+
+    requested_has_pro = _has_suffix(requested_key, "PRO")
+    model_has_pro = _has_suffix(model_key, "PRO")
+    if requested_has_pro and not model_has_pro:
+        return 80
+    if not requested_has_pro and model_has_pro and model_key.startswith(requested_key):
+        return 30 + min(len(model_key) - len(requested_key), 20)
+    if model_key.startswith(requested_key):
+        return 10 + min(len(model_key) - len(requested_key), 20)
+    if requested_key in model_key:
+        return 20 + min(len(model_key) - len(requested_key), 20)
+    if requested_key.startswith(model_key):
+        return 60 + min(len(requested_key) - len(model_key), 20)
+    return 100
+
+
+def _model_key(value: Any) -> str:
+    text = _strip_brand_words(str(value or "")).upper()
+    return re.sub(r"[^A-Z0-9]+", "", text)
+
+
+def _model_like_anchor(value: str) -> str:
+    text = _strip_brand_words(value).upper()
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"[\s-]*(PRO|PLUS|MAX|MINI|\+)$", "", text, flags=re.IGNORECASE).strip()
+    return text or value
+
+
+def _has_suffix(model_key: str, suffix: str) -> bool:
+    return model_key.endswith(suffix)
 
 
 def _decimal(value: object) -> Decimal | None:

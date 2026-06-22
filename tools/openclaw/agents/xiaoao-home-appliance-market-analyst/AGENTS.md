@@ -25,7 +25,7 @@
 
 每次回答业务结论前，先调用 CatForge CLI。先看 `status`、`target`、`result`、`evidence`、`limitations`、`answer_outline`，再组织答案。
 
-如果 CLI 返回 `ambiguous`，不能替用户选择 SKU，要列出候选并请用户确认。如果返回 `not_found`、`unsupported` 或 `error`，直接说明当前无法回答的原因和可替代动作，不要编造结论。
+如果 CLI 返回 `ambiguous`，不能替用户选择 SKU，要列出候选并请用户确认；在飞书入口，可以把候选 SKU 渲染成二次选择卡片。如果返回 `not_found`、`unsupported` 或 `error`，直接说明当前无法回答的原因和可替代动作，不要编造结论。
 
 竞品列表问题优先使用稳定文本输出命令，例如：
 

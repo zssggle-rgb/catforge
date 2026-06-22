@@ -863,6 +863,72 @@ def test_resolve_sku_prefers_exact_model_before_fuzzy_suffix() -> None:
     assert result["target"]["sku_code"] == "TV00029112"
 
 
+def test_resolve_sku_strips_brand_words_from_query() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["sku_code"] == "TV00029112"
+
+
+def test_resolve_sku_preserves_pro_suffix_priority() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q Pro",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["sku_code"] == "TV00030001"
+    assert result["target"]["model_name"] == "65E7Q Pro"
+
+
+def test_resolve_sku_returns_candidates_for_partial_model() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7",
+    )
+
+    assert result["status"] == "ambiguous"
+    candidate_codes = [item["sku_code"] for item in result["result"]["candidates"]]
+    assert candidate_codes == ["TV00029112", "TV00030001"]
+    text = catforge_analyst.format_business_text(result)
+    assert "匹配到多个 SKU" in text
+    assert "TV00029112" in text
+    assert "TV00030001" in text
+
+
+def test_resolve_sku_does_not_autocorrect_ambiguous_zero_to_q() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E70",
+    )
+
+    assert result["status"] == "not_found"
+    assert result["result"]["candidates"] == []
+
+
 def test_sku_fact_brief_returns_core_fact_sections() -> None:
     session = make_session()
     result = catforge_analyst.sku_fact_brief(

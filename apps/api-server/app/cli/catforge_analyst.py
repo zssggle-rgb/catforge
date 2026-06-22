@@ -743,11 +743,27 @@ def emit_result(result: dict[str, Any], output_format: str) -> None:
 
 def format_business_text(result: dict[str, Any]) -> str:
     payload = result.get("result") or {}
+    if result.get("status") == "ambiguous" and payload.get("candidates"):
+        return _format_ambiguous_sku_text(result)
     if "competitor_set" in payload:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:
         return _format_why_sales_diff_text(result)
     return ""
+
+
+def _format_ambiguous_sku_text(result: dict[str, Any]) -> str:
+    candidates = (result.get("result") or {}).get("candidates") or []
+    lines = ["匹配到多个 SKU，请选择一个后继续分析："]
+    for index, candidate in enumerate(candidates[:10], start=1):
+        name = _brand_model(candidate)
+        sku_code = candidate.get("sku_code") or ""
+        size = _format_number(candidate.get("screen_size_inch"))
+        price = _format_money(candidate.get("weighted_price"))
+        details = [item for item in [f"{size}英寸" if size else "", price] if item]
+        suffix = f"（{'，'.join(details)}）" if details else ""
+        lines.append(f"{index}. {name}，SKU：{sku_code}{suffix}")
+    return "\n".join(lines)
 
 
 def _format_competitor_set_text(result: dict[str, Any]) -> str:

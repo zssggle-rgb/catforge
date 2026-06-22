@@ -253,7 +253,7 @@ Follow these rules exactly when CLI results are incomplete or not decisive.
 
 | CLI status or data condition | Required response |
 | --- | --- |
-| `ambiguous` | Do not choose a SKU yourself. Show the candidate SKUs/model names and ask the user to confirm. |
+| `ambiguous` | Do not choose a SKU yourself. Show the candidate SKUs/model names and ask the user to confirm. In Feishu/Lark entrypoints, the caller may render `result.candidates` as a second-selection card. |
 | `not_found` | State that current batch did not find the SKU/model. Ask for SKU code, model name, product category, or batch. |
 | `unsupported` | State the unsupported scope and the missing upstream data or taxonomy. Offer the closest supported query. |
 | `error` | State that the current analysis package failed to return usable results. Do not invent an answer and do not paste raw error text. |
