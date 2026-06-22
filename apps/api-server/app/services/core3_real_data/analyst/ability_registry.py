@@ -103,6 +103,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="查询某 SKU 的机会战场、用户观察战场、拖后腿战场和价格/参数/卖点/评论卡点。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M11C", "M11D"),
+        status="implemented",
     ),
 )
 

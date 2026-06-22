@@ -97,6 +97,8 @@ class CatForgeAnalystService:
             return self.atomic_handlers.param_claim_overlap(context, **kwargs)
         if command == "comment-support":
             return self.atomic_handlers.comment_support(context, **kwargs)
+        if command == "opportunity-gaps":
+            return self.atomic_handlers.opportunity_gaps(context, **kwargs)
         if command == "semantic-dimension-space":
             return self.atomic_handlers.semantic_dimension_space(context, **kwargs)
         if command in ATOM_COMMANDS:

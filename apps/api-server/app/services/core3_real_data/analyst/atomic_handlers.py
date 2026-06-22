@@ -391,6 +391,63 @@ class AtomicAnalystHandlers:
             answer_outline=[f"已查询 {candidate.sku_code} 的评论对参数、卖点或语义维度的支撑。"],
         )
 
+    def opportunity_gaps(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        resolved = self._resolve_one(context, command="opportunity-gaps", query=query, sku_code=sku_code, model_name=model_name)
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        gaps = self.repository.opportunity_gaps(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            sku_code=candidate.sku_code,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            limit=limit,
+        )
+        missing_sections = [
+            key
+            for key, value in gaps.get("source_profiles", {}).items()
+            if value in ({}, [])
+            and key
+            in {
+                "market",
+                "parameter_fact",
+                "claim_fact",
+                "comment_fact",
+                "user_task",
+                "target_group",
+                "value_battlefield",
+            }
+        ]
+        limitations = [f"缺少或未生成的事实层：{', '.join(missing_sections)}。"] if missing_sections else []
+        return base_result(
+            status=AnalystStatus.OK,
+            command="opportunity-gaps",
+            context=context,
+            target=candidate.to_dict(),
+            result={"opportunity_gaps": gaps},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "opportunity-gaps", "status": "ok"},
+            ],
+            evidence=gaps.get("evidence_sources", []),
+            limitations=limitations,
+            answer_outline=[
+                (
+                    f"已返回 {candidate.sku_code} 的机会战场、拖后腿战场，以及价格、参数、"
+                    "卖点、评论和语义缺口信号。"
+                )
+            ],
+        )
+
     def planned_atom(self, context: AnalystContext, *, command: str, **_: Any) -> dict[str, Any]:
         return base_result(
             status=AnalystStatus.NOT_IMPLEMENTED,

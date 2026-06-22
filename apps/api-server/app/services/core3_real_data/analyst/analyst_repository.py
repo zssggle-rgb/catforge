@@ -491,6 +491,105 @@ class AnalystRepository:
             },
         }
 
+    def opportunity_gaps(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        market = self._market_profile(batch_id=batch_id, sku_code=sku_code, market_window=market_window)
+        param = self._param_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        claim = self._claim_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        comment = self._comment_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        task = self._user_task_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        group = self._target_group_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        battlefield = self._battlefield_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        allocations = self._semantic_allocations(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            limit=limit,
+        )
+        battlefield_codes = _opportunity_dimension_codes(battlefield, allocations)
+        summaries = self._semantic_summaries_by_codes(
+            batch_id=batch_id,
+            product_category=product_category,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            dimension_type="battlefield",
+            dimension_codes=battlefield_codes,
+        )
+        summary_by_code = {row.dimension_code: row for row in summaries}
+        allocation_by_code = {row.dimension_code: row for row in allocations}
+        established_codes = _unique_codes(
+            [battlefield.primary_battlefield_code if battlefield else None],
+            battlefield.secondary_battlefield_codes_json if battlefield else [],
+        )
+        opportunity_codes = _unique_codes(battlefield.opportunity_battlefield_codes_json if battlefield else [])
+        drag_codes = _unique_codes(battlefield.drag_factor_battlefield_codes_json if battlefield else [])
+        observed_codes = _unique_codes(
+            [row.dimension_code for row in allocations if row.relation_status == "user_observed_battlefield"]
+        )
+        return {
+            "sku_code": sku_code,
+            "market_position": _opportunity_market_position(market, param),
+            "established_battlefields": _dimension_gap_items(
+                established_codes,
+                summary_by_code=summary_by_code,
+                allocation_by_code=allocation_by_code,
+                default_relation_status="established_battlefield",
+            ),
+            "opportunity_battlefields": _dimension_gap_items(
+                opportunity_codes,
+                summary_by_code=summary_by_code,
+                allocation_by_code=allocation_by_code,
+                default_relation_status="opportunity_battlefield",
+            ),
+            "user_observed_battlefields": _dimension_gap_items(
+                observed_codes,
+                summary_by_code=summary_by_code,
+                allocation_by_code=allocation_by_code,
+                default_relation_status="user_observed_battlefield",
+            ),
+            "drag_factor_battlefields": _dimension_gap_items(
+                drag_codes,
+                summary_by_code=summary_by_code,
+                allocation_by_code=allocation_by_code,
+                default_relation_status="drag_factor_battlefield",
+            ),
+            "price_gap_signals": _price_gap_signals(market),
+            "param_gap_signals": _param_gap_signals(param, comment),
+            "claim_gap_signals": _claim_gap_signals(claim, comment),
+            "comment_gap_signals": _comment_gap_signals(comment),
+            "semantic_gap_signals": _semantic_gap_signals(task, group, battlefield),
+            "source_profiles": {
+                "market": _market_payload(market),
+                "parameter_fact": _param_payload(param),
+                "claim_fact": _claim_payload(claim),
+                "comment_fact": _comment_payload(comment),
+                "user_task": _user_task_payload(task),
+                "target_group": _target_group_payload(group),
+                "value_battlefield": _battlefield_payload(battlefield),
+                "sales_allocations": [_allocation_payload(row) for row in allocations],
+            },
+            "evidence_sources": _section_evidence_sources(
+                market=market,
+                param_profile=param,
+                claim_profile=claim,
+                comment_profile=comment,
+                user_task_profile=task,
+                target_group_profile=group,
+                battlefield_profile=battlefield,
+                semantic_allocations=allocations,
+            ),
+        }
+
     def _sales_overlap_market_fallback(
         self,
         *,
@@ -534,6 +633,33 @@ class AnalystRepository:
             .where(entities.Core3CleanMarketWeekly.record_status == "active")
             .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
             .order_by(entities.Core3CleanMarketWeekly.sku_code, entities.Core3CleanMarketWeekly.period_week_index)
+        )
+        return list(self.db.execute(stmt).scalars())
+
+    def _semantic_summaries_by_codes(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        analysis_population: str,
+        market_window: str,
+        dimension_type: str,
+        dimension_codes: Sequence[str],
+    ) -> list[entities.Core3SemanticMarketDimensionSummary]:
+        if not dimension_codes:
+            return []
+        stmt = (
+            select(entities.Core3SemanticMarketDimensionSummary)
+            .where(entities.Core3SemanticMarketDimensionSummary.project_id == self.project_id)
+            .where(entities.Core3SemanticMarketDimensionSummary.category_code == self.category_code)
+            .where(entities.Core3SemanticMarketDimensionSummary.batch_id == batch_id)
+            .where(entities.Core3SemanticMarketDimensionSummary.product_category == product_category.upper())
+            .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
+            .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+            .where(entities.Core3SemanticMarketDimensionSummary.dimension_type == dimension_type)
+            .where(entities.Core3SemanticMarketDimensionSummary.dimension_code.in_(tuple(dimension_codes)))
+            .where(entities.Core3SemanticMarketDimensionSummary.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
         )
         return list(self.db.execute(stmt).scalars())
 
@@ -1405,3 +1531,332 @@ def _support_status(*, code: str, positive_codes: Sequence[Any] | None, negative
     if code in {str(item) for item in negative_codes or []}:
         return "contradicted"
     return "unmentioned"
+
+
+def _opportunity_dimension_codes(
+    battlefield: entities.Core3SkuValueBattlefieldProfile | None,
+    allocations: Sequence[entities.Core3SemanticMarketAllocation],
+) -> list[str]:
+    if battlefield is None:
+        return _unique_codes([row.dimension_code for row in allocations])
+    return _unique_codes(
+        [battlefield.primary_battlefield_code],
+        battlefield.secondary_battlefield_codes_json,
+        battlefield.opportunity_battlefield_codes_json,
+        battlefield.drag_factor_battlefield_codes_json,
+        [row.dimension_code for row in allocations],
+    )
+
+
+def _unique_codes(*groups: Sequence[Any] | None) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for group in groups:
+        for value in group or []:
+            if value is None:
+                continue
+            code = str(value).strip()
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            result.append(code)
+    return result
+
+
+def _opportunity_market_position(
+    row: entities.Core3SkuMarketProfile | None,
+    param: entities.Core3SkuParamProfile | None,
+) -> dict[str, Any]:
+    param_tiers = (param.param_values_json or {}).get("dimension_tier_profile") if param else {}
+    fact_size_tier = (param_tiers or {}).get("size")
+    if row is None:
+        return {"size_tier": fact_size_tier} if fact_size_tier else {}
+    market_size_tier = row.size_segment
+    payload: dict[str, Any] = {
+        "screen_size_inch": _number(row.screen_size_inch),
+        "size_tier": fact_size_tier or market_size_tier,
+        "market_size_tier": market_size_tier,
+        "price_band_in_size_tier": row.price_band_size,
+        "price_wavg": _number(row.price_wavg),
+        "price_percentile_in_size": _number(row.price_percentile_in_size),
+        "volume_percentile_in_size": _number(row.volume_percentile_in_size),
+        "avg_weekly_sales_volume": _number(_safe_avg(_decimal(row.sales_volume_total), row.active_week_count)),
+        "same_pool_sku_count": row.same_pool_sku_count,
+        "confidence_level": row.confidence_level,
+    }
+    if fact_size_tier and market_size_tier and fact_size_tier != market_size_tier:
+        payload["size_tier_note_cn"] = "size_tier 优先采用 M03B 参数事实画像五档口径，market_size_tier 保留 M07 原市场池字段。"
+    return payload
+
+
+def _dimension_gap_items(
+    codes: Sequence[str],
+    *,
+    summary_by_code: dict[str, entities.Core3SemanticMarketDimensionSummary],
+    allocation_by_code: dict[str, entities.Core3SemanticMarketAllocation],
+    default_relation_status: str,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for code in codes:
+        summary = summary_by_code.get(code)
+        allocation = allocation_by_code.get(code)
+        items.append(
+            {
+                "dimension_code": code,
+                "dimension_name": (summary.dimension_name if summary else None) or (allocation.dimension_name if allocation else None),
+                "relation_status": allocation.relation_status if allocation else default_relation_status,
+                "allocation_role": allocation.allocation_role if allocation else None,
+                "market_space": _semantic_summary_payload(summary) if summary else {},
+                "sku_allocation": _allocation_payload(allocation) if allocation else {},
+            }
+        )
+    return items
+
+
+def _price_gap_signals(row: entities.Core3SkuMarketProfile | None) -> list[dict[str, Any]]:
+    if row is None:
+        return [_gap_signal("price", "market_profile_missing", "unknown", "缺少 M07 市场画像，无法判断价格带和尺寸池位置。")]
+    signals: list[dict[str, Any]] = []
+    price_pct = _decimal(row.price_percentile_in_size)
+    volume_pct = _decimal(row.volume_percentile_in_size)
+    if price_pct is not None and volume_pct is not None:
+        if price_pct >= Decimal("0.800000") and volume_pct <= Decimal("0.500000"):
+            signals.append(
+                _gap_signal(
+                    "price",
+                    "high_price_weak_volume",
+                    "risk",
+                    "同尺寸价格分位高但销量分位不高，可能存在价格或价值感压力。",
+                    price_percentile_in_size=_number(price_pct),
+                    volume_percentile_in_size=_number(volume_pct),
+                )
+            )
+        if price_pct <= Decimal("0.300000") and volume_pct >= Decimal("0.700000"):
+            signals.append(
+                _gap_signal(
+                    "price",
+                    "low_price_strong_volume",
+                    "advantage",
+                    "同尺寸价格分位低且销量分位高，当前价格可能是销量支撑因素。",
+                    price_percentile_in_size=_number(price_pct),
+                    volume_percentile_in_size=_number(volume_pct),
+                )
+            )
+        if price_pct <= Decimal("0.400000") and volume_pct <= Decimal("0.400000"):
+            signals.append(
+                _gap_signal(
+                    "price",
+                    "low_price_weak_volume",
+                    "risk",
+                    "价格不高但销量分位也不高，问题可能不只在价格，需要看参数、卖点或评论支撑。",
+                    price_percentile_in_size=_number(price_pct),
+                    volume_percentile_in_size=_number(volume_pct),
+                )
+            )
+    if not signals:
+        signals.append(_gap_signal("price", "no_clear_price_gap", "neutral", "价格分位和销量分位没有形成明显价格缺口信号。"))
+    return signals
+
+
+def _param_gap_signals(
+    param: entities.Core3SkuParamProfile | None,
+    comment: entities.Core3SkuCommentFactProfile | None,
+) -> list[dict[str, Any]]:
+    signals: list[dict[str, Any]] = []
+    if param is None:
+        return [_gap_signal("parameter", "param_profile_missing", "unknown", "缺少 M03B 参数事实画像，无法判断参数能力缺口。")]
+    if param.unknown_param_count:
+        signals.append(
+            _gap_signal(
+                "parameter",
+                "unknown_param_count",
+                "risk",
+                "部分参数仍未知，后续判断机会战场时需要避免把未知当作无能力。",
+                unknown_param_count=param.unknown_param_count,
+            )
+        )
+    if param.conflict_count:
+        signals.append(
+            _gap_signal(
+                "parameter",
+                "param_conflict_count",
+                "review_required",
+                "存在参数冲突，进入机会判断前应优先复核。",
+                conflict_count=param.conflict_count,
+            )
+        )
+    if param.review_required_count:
+        signals.append(
+            _gap_signal(
+                "parameter",
+                "param_review_required",
+                "review_required",
+                "部分参数需要人工复核，影响机会战场判断置信度。",
+                review_required_count=param.review_required_count,
+            )
+        )
+    for code in (comment.contradicted_param_codes if comment else []):
+        signals.append(
+            _gap_signal(
+                "parameter",
+                "comment_param_contradiction",
+                "risk",
+                "评论中存在对该参数或能力的负向反馈。",
+                param_code=code,
+                support_detail=(comment.param_comment_support_json or {}).get(code) if comment else None,
+            )
+        )
+    if not signals:
+        signals.append(_gap_signal("parameter", "no_clear_param_gap", "neutral", "当前参数画像未发现明确缺口信号。"))
+    return signals
+
+
+def _claim_gap_signals(
+    claim: entities.Core3SkuClaimFactProfile | None,
+    comment: entities.Core3SkuCommentFactProfile | None,
+) -> list[dict[str, Any]]:
+    signals: list[dict[str, Any]] = []
+    if claim is None:
+        return [_gap_signal("claim", "claim_profile_missing", "unknown", "缺少 M04C 卖点事实画像，无法判断卖点缺口。")]
+    if claim.unsupported_claim_codes:
+        signals.append(
+            _gap_signal(
+                "claim",
+                "unsupported_claim_codes",
+                "risk",
+                "存在缺少参数事实支撑的卖点，不能直接作为溢价卖点。",
+                claim_codes=claim.unsupported_claim_codes,
+            )
+        )
+    if claim.fact_claim_count == 0:
+        signals.append(_gap_signal("claim", "no_fact_claim", "risk", "没有形成事实卖点，机会分析缺少可验证卖点锚点。"))
+    for code in (comment.contradicted_claim_codes if comment else []):
+        signals.append(
+            _gap_signal(
+                "claim",
+                "comment_claim_contradiction",
+                "risk",
+                "评论中存在对该卖点的负向反馈。",
+                claim_code=code,
+                support_detail=(comment.claim_comment_support_json or {}).get(code) if comment else None,
+            )
+        )
+    if not signals:
+        signals.append(_gap_signal("claim", "no_clear_claim_gap", "neutral", "当前卖点画像未发现明确缺口信号。"))
+    return signals
+
+
+def _comment_gap_signals(row: entities.Core3SkuCommentFactProfile | None) -> list[dict[str, Any]]:
+    if row is None:
+        return [_gap_signal("comment", "comment_profile_missing", "unknown", "缺少 M05C 评论事实画像，无法判断用户侧机会和风险。")]
+    signals: list[dict[str, Any]] = []
+    if row.negative_sentence_count:
+        signals.append(
+            _gap_signal(
+                "comment",
+                "negative_comment_signal",
+                "risk",
+                "评论事实中存在负向产品体验，机会判断需要区分需求强但产品未满足的情况。",
+                negative_sentence_count=row.negative_sentence_count,
+            )
+        )
+    if row.product_fact_sentence_count == 0:
+        signals.append(_gap_signal("comment", "no_product_fact_comment", "unknown", "评论中没有产品事实句，用户侧支撑不足。"))
+    confidence = _decimal(row.confidence)
+    if confidence is not None and confidence < Decimal("0.6000"):
+        signals.append(
+            _gap_signal(
+                "comment",
+                "low_comment_confidence",
+                "review_required",
+                "评论事实画像置信度偏低，后续结论需要复核。",
+                confidence=_number(confidence),
+            )
+        )
+    if not signals:
+        signals.append(_gap_signal("comment", "no_clear_comment_gap", "neutral", "当前评论事实未发现明显负向缺口信号。"))
+    return signals
+
+
+def _semantic_gap_signals(
+    task: entities.Core3M09cSkuUserTaskProfile | None,
+    group: entities.Core3M10cSkuTargetGroupProfile | None,
+    battlefield: entities.Core3SkuValueBattlefieldProfile | None,
+) -> list[dict[str, Any]]:
+    signals: list[dict[str, Any]] = []
+    if task is None:
+        signals.append(_gap_signal("semantic", "user_task_profile_missing", "unknown", "缺少用户任务画像。"))
+    else:
+        if not task.primary_user_task_code:
+            signals.append(
+                _gap_signal(
+                    "semantic",
+                    "no_primary_user_task",
+                    "risk",
+                    "没有主用户任务，机会判断需要先确认真实用户目的。",
+                    no_primary_reason=task.no_primary_reason,
+                )
+            )
+        if task.drag_factor_task_codes_json:
+            signals.append(
+                _gap_signal(
+                    "semantic",
+                    "drag_factor_user_tasks",
+                    "risk",
+                    "存在拖后腿用户任务，说明用户有需求但产品支撑不足。",
+                    user_task_codes=task.drag_factor_task_codes_json,
+                )
+            )
+    if group is None:
+        signals.append(_gap_signal("semantic", "target_group_profile_missing", "unknown", "缺少目标客群画像。"))
+    else:
+        if not group.primary_target_group_code:
+            signals.append(_gap_signal("semantic", "no_primary_target_group", "risk", "没有主目标客群，机会判断缺少明确人群锚点。"))
+        if group.unmet_group_need_codes_json:
+            signals.append(
+                _gap_signal(
+                    "semantic",
+                    "unmet_target_group_needs",
+                    "risk",
+                    "存在未满足客群需求，可能是机会也可能是短板。",
+                    target_group_codes=group.unmet_group_need_codes_json,
+                )
+            )
+    if battlefield is None:
+        signals.append(_gap_signal("semantic", "battlefield_profile_missing", "unknown", "缺少价值战场画像。"))
+    else:
+        if not battlefield.primary_battlefield_code:
+            signals.append(_gap_signal("semantic", "no_primary_battlefield", "risk", "没有主价值战场，竞品和机会分析需要先确定竞争池。"))
+        if battlefield.opportunity_battlefield_codes_json:
+            signals.append(
+                _gap_signal(
+                    "semantic",
+                    "opportunity_battlefields_present",
+                    "opportunity",
+                    "存在可进一步分析的机会战场。",
+                    battlefield_codes=battlefield.opportunity_battlefield_codes_json,
+                )
+            )
+        if battlefield.drag_factor_battlefield_codes_json:
+            signals.append(
+                _gap_signal(
+                    "semantic",
+                    "drag_factor_battlefields_present",
+                    "risk",
+                    "存在拖后腿战场，相关卖点不能直接判为溢价。",
+                    battlefield_codes=battlefield.drag_factor_battlefield_codes_json,
+                )
+            )
+    if not signals:
+        signals.append(_gap_signal("semantic", "no_clear_semantic_gap", "neutral", "语义画像未发现明显机会或短板信号。"))
+    return signals
+
+
+def _gap_signal(signal_type: str, code: str, severity: str, message_cn: str, **details: Any) -> dict[str, Any]:
+    return {
+        "signal_type": signal_type,
+        "gap_code": code,
+        "severity": severity,
+        "message_cn": message_cn,
+        "details": {key: value for key, value in details.items() if value not in (None, [], {})},
+    }

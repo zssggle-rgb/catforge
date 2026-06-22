@@ -228,9 +228,10 @@ def seed_fact_profiles(session: Session) -> None:
             dimension_summary_json={"picture_screen_experience": {"positive": 8}},
             signal_summary_json={"use_case_signal": ["客厅观影"]},
             param_comment_support_json={"screen_size_inch": {"positive": 3}},
-            claim_comment_support_json={"tv_claim_miniled": {"positive": 5}},
+            claim_comment_support_json={"tv_claim_miniled": {"positive": 5}, "tv_claim_high_refresh": {"negative": 2}},
             supported_param_codes=["screen_size_inch"],
             supported_claim_codes=["tv_claim_miniled"],
+            contradicted_claim_codes=["tv_claim_high_refresh"],
             evidence_examples_json=[{"text": "画质清晰，客厅看电影不错"}],
             evidence_ids=["ev-comment-tv00029112"],
             confidence=Decimal("0.8800"),
@@ -305,6 +306,7 @@ def seed_fact_profiles(session: Session) -> None:
             primary_relation_status="primary_battlefield",
             secondary_battlefield_codes_json=["BF_MAINSTREAM_LIVING_BALANCE"],
             opportunity_battlefield_codes_json=["BF_GAMING_SPORTS_FLUENCY"],
+            drag_factor_battlefield_codes_json=["BF_SMART_CONNECTED_EXPERIENCE"],
             battlefield_summary_json={"primary_reason_cn": "MiniLED 与评论画质支撑。"},
             confidence=Decimal("0.8400"),
             evidence_ids_json=["ev-bf-tv00029112"],
@@ -646,6 +648,167 @@ def seed_semantic_space(session: Session) -> None:
             result_hash="hash-allocation-tv00029112-bf-premium",
         )
     )
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-bf-gaming-sports",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_GAMING_SPORTS_FLUENCY",
+            dimension_name="游戏体育流畅战场",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            sku_relation_count=3,
+            allocated_sku_count=3,
+            primary_sku_count=1,
+            opportunity_sku_count=1,
+            estimated_sales_volume=Decimal("500.0000"),
+            estimated_sales_amount=Decimal("2600000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("41.666667"),
+            estimated_avg_weekly_sales_amount=Decimal("216666.666667"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.250000"),
+            sales_amount_share=Decimal("0.260000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"海信": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"opportunity_battlefield": 1},
+            top_skus_json=[{"sku_code": "TV00030001", "allocated_sales_volume": 300}],
+            confidence_avg=Decimal("0.8100"),
+            business_summary_cn="游戏体育流畅战场由高刷和运动流畅支撑。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-bf-gaming",
+            result_hash="hash-summary-bf-gaming",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-tv00029112-bf-gaming",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=12,
+            dimension_type="battlefield",
+            dimension_code="BF_GAMING_SPORTS_FLUENCY",
+            dimension_name="游戏体育流畅战场",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            relation_status="opportunity_battlefield",
+            allocation_role="opportunity",
+            allocation_value_type="opportunity_value",
+            final_score=Decimal("0.5500"),
+            allocation_basis=Decimal("0.250000"),
+            relation_factor=Decimal("0.7000"),
+            allocation_weight=Decimal("0.250000"),
+            sales_volume_total=Decimal("1200.0000"),
+            sales_amount_total=Decimal("5998800.0000"),
+            avg_weekly_sales_volume=Decimal("100.000000"),
+            avg_weekly_sales_amount=Decimal("499900.000000"),
+            allocated_sales_volume=Decimal("300.0000"),
+            allocated_sales_amount=Decimal("1499700.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("25.000000"),
+            allocated_avg_weekly_sales_amount=Decimal("124975.000000"),
+            allocation_confidence=Decimal("0.7200"),
+            allocation_basis_json={"source": "test", "role": "opportunity"},
+            evidence_ids_json=["ev-bf-tv00029112"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-tv00029112-bf-gaming",
+            result_hash="hash-allocation-tv00029112-bf-gaming",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-bf-smart-connected",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_SMART_CONNECTED_EXPERIENCE",
+            dimension_name="智能互联体验战场",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            sku_relation_count=2,
+            allocated_sku_count=2,
+            drag_risk_sku_count=1,
+            estimated_sales_volume=Decimal("300.0000"),
+            estimated_sales_amount=Decimal("1500000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("25.000000"),
+            estimated_avg_weekly_sales_amount=Decimal("125000.000000"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.150000"),
+            sales_amount_share=Decimal("0.150000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"海信": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"drag_factor_battlefield": 1},
+            top_skus_json=[{"sku_code": "TV00030001", "allocated_sales_volume": 180}],
+            confidence_avg=Decimal("0.7000"),
+            business_summary_cn="智能互联体验战场对系统和互联能力要求更高。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-bf-smart",
+            result_hash="hash-summary-bf-smart",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-tv00029112-bf-smart",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=12,
+            dimension_type="battlefield",
+            dimension_code="BF_SMART_CONNECTED_EXPERIENCE",
+            dimension_name="智能互联体验战场",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            relation_status="drag_factor_battlefield",
+            allocation_role="drag_factor",
+            allocation_value_type="negative_value",
+            final_score=Decimal("0.3000"),
+            allocation_basis=Decimal("0.100000"),
+            relation_factor=Decimal("0.5000"),
+            allocation_weight=Decimal("0.100000"),
+            sales_volume_total=Decimal("1200.0000"),
+            sales_amount_total=Decimal("5998800.0000"),
+            avg_weekly_sales_volume=Decimal("100.000000"),
+            avg_weekly_sales_amount=Decimal("499900.000000"),
+            allocated_sales_volume=Decimal("120.0000"),
+            allocated_sales_amount=Decimal("599880.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("10.000000"),
+            allocated_avg_weekly_sales_amount=Decimal("49990.000000"),
+            allocation_confidence=Decimal("0.6500"),
+            allocation_basis_json={"source": "test", "role": "drag_factor"},
+            evidence_ids_json=["ev-bf-tv00029112"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-tv00029112-bf-smart",
+            result_hash="hash-allocation-tv00029112-bf-smart",
+        )
+    )
 
 
 def test_list_abilities_returns_agent_contract() -> None:
@@ -853,6 +1016,30 @@ def test_comment_support_returns_claim_param_and_semantic_support() -> None:
     assert statuses["user_task"] == "supported_or_established"
     assert statuses["target_group"] == "supported_or_established"
     assert statuses["battlefield"] == "supported_or_established"
+
+
+def test_opportunity_gaps_returns_market_battlefield_and_fact_signals() -> None:
+    session = make_session()
+    result = catforge_analyst.opportunity_gaps(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    gaps = result["result"]["opportunity_gaps"]
+    assert gaps["market_position"]["size_tier"] == "large_60_69"
+    assert [item["dimension_code"] for item in gaps["opportunity_battlefields"]] == ["BF_GAMING_SPORTS_FLUENCY"]
+    assert [item["dimension_code"] for item in gaps["drag_factor_battlefields"]] == ["BF_SMART_CONNECTED_EXPERIENCE"]
+    assert gaps["opportunity_battlefields"][0]["market_space"]["estimated_sales_volume"] == 500.0
+    claim_gap_codes = {item["gap_code"] for item in gaps["claim_gap_signals"]}
+    semantic_gap_codes = {item["gap_code"] for item in gaps["semantic_gap_signals"]}
+    assert "comment_claim_contradiction" in claim_gap_codes
+    assert "opportunity_battlefields_present" in semantic_gap_codes
+    assert "drag_factor_battlefields_present" in semantic_gap_codes
 
 
 def test_ask_routes_competitor_question_to_sop_placeholder() -> None:
