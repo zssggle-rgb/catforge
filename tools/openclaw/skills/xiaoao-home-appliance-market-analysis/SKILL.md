@@ -91,7 +91,14 @@ If `status` is not `ok`, follow the boundary rules below.
 
 Tooling hygiene:
 
+- For competitor-list questions, prefer the stable text command and send its output directly:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 7 --format text
+```
+
 - Use stable CLI commands only. Do not run ad hoc heredocs, inline Python, jq pipelines, grep pipelines, or shell parsing scripts to create a business answer.
+- Do not post-process analyst JSON with Python, jq, grep, sed, awk, or shell pipelines for user-facing answers. If text output is available, use it directly.
 - If a command output is too large, rerun the stable CLI with narrower inputs or a smaller limit if the command supports it.
 - If a tool call fails after a previous successful CLI result already contains enough evidence, do not expose the failed tool call. Answer from the successful result and put only a clean limitation if needed.
 - If the primary CLI result itself fails and no usable evidence is available, give a concise business-facing failure message. Never paste raw command text, stdout/stderr, JSON parse errors, stack traces, or shell error messages into the final answer.
@@ -165,12 +172,14 @@ For "这款和谁比":
 
 1. `competitor-set`
 2. If the user asks for deeper reasoning, run `why-sales-diff` on the chosen pair.
-3. Build the user-facing Top 3 as "重点竞品" using the confirmed business
+3. For the initial answer, call `competitor-set --format text` and reuse that
+   answer directly. Do not parse JSON for this question.
+4. Build the user-facing Top 3 as "重点竞品" using the confirmed business
    priority: same size/price first, then same value battlefield, same user
    task/target group, parameter/claim overlap, and overlapping-week sales
    validation. It is acceptable to distinguish "最直接竞品", "价格贴身竞品",
    and "下探分流竞品" when that is more useful than raw returned order.
-4. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
+5. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
 
 For "这款和某竞品有什么区别":

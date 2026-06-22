@@ -659,6 +659,7 @@ Skill 内容结构：
 Skill 必须要求：
 
 - 每次业务结论前先调用 CLI。
+- 竞品列表问题优先调用 `catforge_analyst competitor-set --format text`，直接使用稳定业务文本，不再让智能体二次解析 JSON。
 - CLI 返回 `ambiguous` 时，必须要求用户确认 SKU。
 - CLI 返回 `unsupported` 时，必须说明数据缺口。
 - 不允许把 `estimated_sales_volume` 说成真实归因。
@@ -667,6 +668,7 @@ Skill 必须要求：
 - 普通业务问题不得出现 CatForge、CLI、OpenClaw、Mxx、BF/TG/TASK 代码、批次号、字段名或程序路径。
 - 竞品问题默认按业务优先级给三款重点竞品：最直接竞品、价格贴身竞品、分流/替代竞品；不说“CLI 返回顺序”或“SOP 候选顺序”。
 - 第一句话必须直接回答业务问题，不用“数据完整”“下面是回答”等工具状态开场，不用 emoji 排名，不展示未翻译的英文价格带。
+- 禁止为竞品列表问题写临时 Python、jq、grep、sed、awk 或 shell 管道解析 JSON。
 
 ## 11. Agent 设计
 
@@ -705,6 +707,7 @@ Agent 禁止：
 - 用“根据 CatForge CLI/SOP/Mxx 模块”作为业务回答依据。
 - 在聊天场景输出宽表格；优先使用结论段和编号列表。
 - 用“数据完整”“已查询到”“下面是回答”等工具口吻开场，或输出 emoji 排名、英文价格带标签。
+- 为竞品列表问题写临时脚本或管道解析 JSON；应直接使用稳定文本输出。
 
 ## 12. 数据访问设计
 

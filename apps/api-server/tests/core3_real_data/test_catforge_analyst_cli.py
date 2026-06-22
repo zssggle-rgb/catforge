@@ -1081,6 +1081,34 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
     assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
 
 
+def test_competitor_set_text_format_is_business_facing() -> None:
+    session = make_session()
+    result = catforge_analyst.competitor_set(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        limit=3,
+    )
+
+    text = catforge_analyst.format_business_text(result)
+
+    assert text.startswith("结论：")
+    assert "海信 65E7Q" in text
+    assert "海信 65E7Q Pro" in text
+    assert "判断依据：" in text
+    assert "口径与限制：" in text
+    assert "CLI" not in text
+    assert "CatForge" not in text
+    assert "M07" not in text
+    assert "BF_" not in text
+    assert "TG_" not in text
+    assert "TASK_" not in text
+    assert "mid_high" not in text
+
+
 def test_sku_business_brief_sop_returns_summary_sections() -> None:
     session = make_session()
     result = catforge_analyst.sku_business_brief(

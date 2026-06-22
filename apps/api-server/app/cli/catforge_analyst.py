@@ -727,6 +727,10 @@ def emit_result(result: dict[str, Any], output_format: str) -> None:
     if output_format == "json":
         print(json.dumps(result, ensure_ascii=False, default=json_default, indent=2, sort_keys=True))
         return
+    business_text = format_business_text(result)
+    if business_text:
+        print(business_text)
+        return
     message = result.get("message_cn")
     if message:
         print(message)
@@ -735,6 +739,237 @@ def emit_result(result: dict[str, Any], output_format: str) -> None:
         print(f"- {item}")
     if not message and not outline:
         print(json.dumps(result, ensure_ascii=False, default=json_default, indent=2, sort_keys=True))
+
+
+def format_business_text(result: dict[str, Any]) -> str:
+    payload = result.get("result") or {}
+    if "competitor_set" in payload:
+        return _format_competitor_set_text(result)
+    return ""
+
+
+def _format_competitor_set_text(result: dict[str, Any]) -> str:
+    target = result.get("target") or {}
+    competitor_set_payload = (result.get("result") or {}).get("competitor_set") or {}
+    candidates = competitor_set_payload.get("candidates") or []
+    if not candidates:
+        target_name = _brand_model(target)
+        return f"当前可观测线上样本中，{target_name} 暂未找到可稳定比较的同尺寸同价位竞品。"
+
+    top_candidates = _select_key_competitors(candidates)
+    top_names = "、".join(_brand_model(item.get("candidate") or {}) for item in top_candidates)
+    target_name = _brand_model(target)
+    size = _format_number(target.get("screen_size_inch"))
+    price = _format_money(target.get("weighted_price") or target.get("price_wavg"))
+    price_band = _price_band_cn(target.get("price_band_in_size_tier"))
+    sales = _format_volume(target.get("avg_weekly_sales_volume"))
+
+    identity_parts = [target_name]
+    if size:
+        identity_parts.append(f"{size}英寸")
+    if price_band:
+        identity_parts.append(price_band)
+    if price:
+        identity_parts.append(f"当前线上均价约{price}")
+    if sales:
+        identity_parts.append(f"重叠口径周均销量约{sales}台")
+
+    lines: list[str] = [
+        f"结论：{'、'.join(identity_parts)}，当前最值得重点比较的三款竞品是：{top_names}。",
+        "",
+        "判断依据：",
+    ]
+    for index, item in enumerate(top_candidates, start=1):
+        lines.append(f"{index}. {_format_competitor_line(item)}")
+
+    remaining = [item for item in candidates if item not in top_candidates]
+    if remaining:
+        lines.extend(["", "补充观察："])
+        for item in remaining[:4]:
+            cand = item.get("candidate") or {}
+            role = _competitor_role(item)
+            price_gap = _format_price_gap(cand.get("price_gap_pct_to_target"), cand.get("price_gap_to_target"))
+            sales_text = _format_volume(cand.get("avg_weekly_sales_volume"))
+            detail_parts = [role]
+            if price_gap:
+                detail_parts.append(price_gap)
+            if sales_text:
+                detail_parts.append(f"周均销量约{sales_text}台")
+            lines.append(f"- {_brand_model(cand)}：{'；'.join(detail_parts)}。")
+
+    lines.extend(
+        [
+            "",
+            "分析过程：",
+            "- 先限定竞争池：优先看同尺寸、同尺寸内相近价格带的产品，避免把不同空间和预算段的电视混在一起比较。",
+            "- 再看需求重合：价值战场、用户任务和目标客群越接近，越可能在同一批用户心智中相互替代。",
+            "- 再看产品重合：关键参数和卖点越接近，用户在货架上越容易做横向比较。",
+            "- 最后用重叠在售周的周均销量做市场验证，不用累计销量判断谁更强。",
+            "",
+            "口径与限制：基于当前可观测线上样本；线下渠道、广告投放、库存、促销资源不在当前数据内。",
+        ]
+    )
+    limitations = [item for item in result.get("limitations") or [] if item]
+    if limitations:
+        lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
+    return "\n".join(lines)
+
+
+def _select_key_competitors(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    close_price = [
+        item
+        for item in candidates
+        if (_abs_decimal(((item.get("candidate") or {}).get("price_gap_pct_to_target"))) or Decimal("0")) <= Decimal("0.15")
+    ]
+    selected: list[dict[str, Any]] = sorted(close_price, key=_competitor_business_score, reverse=True)[:2]
+    if candidates:
+        price_adjacent = min(
+            candidates,
+            key=lambda item: _abs_decimal(((item.get("candidate") or {}).get("price_gap_pct_to_target"))) or Decimal("999"),
+        )
+        if price_adjacent not in selected:
+            selected.append(price_adjacent)
+    for item in sorted(candidates, key=_competitor_business_score, reverse=True):
+        if len(selected) >= 3:
+            break
+        if item not in selected:
+            selected.append(item)
+    return selected[:3]
+
+
+def _format_competitor_line(item: dict[str, Any]) -> str:
+    cand = item.get("candidate") or {}
+    basis = item.get("basis") or {}
+    name = _brand_model(cand)
+    role = _competitor_role(item)
+    price_text = _format_money(cand.get("price_wavg"))
+    price_gap = _format_price_gap(cand.get("price_gap_pct_to_target"), cand.get("price_gap_to_target"))
+    sales_text = _format_volume(cand.get("avg_weekly_sales_volume"))
+    semantic = _format_percent(basis.get("semantic_overlap_score"))
+    param = _format_percent(basis.get("param_claim_overlap_score"))
+    sales_closeness = _format_percent(basis.get("sales_closeness_score"))
+
+    facts: list[str] = [role]
+    if price_text:
+        facts.append(f"均价约{price_text}")
+    if price_gap:
+        facts.append(price_gap)
+    if semantic:
+        facts.append(f"需求重合度约{semantic}")
+    if param:
+        facts.append(f"参数卖点重合度约{param}")
+    if sales_closeness:
+        facts.append(f"销量接近度约{sales_closeness}")
+    if sales_text:
+        facts.append(f"周均销量约{sales_text}台")
+    return f"{name}：{'；'.join(facts)}。"
+
+
+def _competitor_business_score(item: dict[str, Any]) -> Decimal:
+    basis = item.get("basis") or {}
+    cand = item.get("candidate") or {}
+    semantic = _decimal(basis.get("semantic_overlap_score")) or Decimal("0")
+    param = _decimal(basis.get("param_claim_overlap_score")) or Decimal("0")
+    sales = _decimal(basis.get("sales_closeness_score")) or Decimal("0")
+    price_gap = _abs_decimal(cand.get("price_gap_pct_to_target")) or Decimal("1")
+    price = max(Decimal("0"), Decimal("1") - min(price_gap, Decimal("1")))
+    return semantic * Decimal("0.45") + param * Decimal("0.25") + sales * Decimal("0.20") + price * Decimal("0.10")
+
+
+def _competitor_role(item: dict[str, Any]) -> str:
+    cand = item.get("candidate") or {}
+    basis = item.get("basis") or {}
+    gap = _decimal(cand.get("price_gap_pct_to_target"))
+    semantic = _decimal(basis.get("semantic_overlap_score")) or Decimal("0")
+    if gap is not None and gap <= Decimal("-0.15"):
+        return "下探分流竞品"
+    if gap is not None and gap >= Decimal("0.15"):
+        return "上探替代竞品"
+    if gap is not None and abs(gap) <= Decimal("0.03"):
+        return "价格贴身竞品"
+    if semantic >= Decimal("0.80"):
+        return "最直接竞品"
+    return "同尺寸同价位竞品"
+
+
+def _brand_model(payload: dict[str, Any]) -> str:
+    brand = str(payload.get("brand_name") or "").strip()
+    model = str(payload.get("model_name") or payload.get("sku_code") or "").strip()
+    if brand and model:
+        return f"{brand} {model}"
+    return brand or model or "该 SKU"
+
+
+def _price_band_cn(value: Any) -> str:
+    mapping = {
+        "low": "低价位段",
+        "mid_low": "中低价位段",
+        "mid": "中价位段",
+        "mid_high": "中高价位段",
+        "high": "高价位段",
+    }
+    return mapping.get(str(value or "").lower(), "")
+
+
+def _format_money(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return f"{number.quantize(Decimal('1')):,}元"
+
+
+def _format_volume(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    if number == number.to_integral_value():
+        return f"{number.quantize(Decimal('1')):,}"
+    return f"{number.quantize(Decimal('0.1')):,}"
+
+
+def _format_number(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    if number == number.to_integral_value():
+        return f"{number.quantize(Decimal('1'))}"
+    return f"{number.normalize()}"
+
+
+def _format_percent(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return f"{(number * Decimal('100')).quantize(Decimal('1'))}%"
+
+
+def _format_price_gap(gap_pct: Any, gap_amount: Any = None) -> str:
+    pct = _decimal(gap_pct)
+    amount = _decimal(gap_amount)
+    if pct is None:
+        return ""
+    direction = "便宜" if pct < 0 else "贵" if pct > 0 else "几乎同价"
+    if direction == "几乎同价":
+        return direction
+    pct_text = _format_percent(abs(pct))
+    if amount is not None:
+        amount_text = _format_money(abs(amount))
+        return f"比目标{direction}约{pct_text}（约{amount_text}）"
+    return f"比目标{direction}约{pct_text}"
+
+
+def _abs_decimal(value: Any) -> Decimal | None:
+    number = _decimal(value)
+    return abs(number) if number is not None else None
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
 
 def json_default(value: Any) -> Any:
