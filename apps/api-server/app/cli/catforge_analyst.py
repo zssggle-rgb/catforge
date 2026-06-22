@@ -862,7 +862,7 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
     segment_text = f"同为{segment}产品，" if segment else ""
 
     lines = [
-        f"结论：{candidate_name} 被列为 {target_name} 的第一竞品是合理的。它们{segment_text}价格非常接近，目标用户和使用场景高度重合，且重叠在售周销量处在同一竞争量级。",
+        f"结论：{candidate_name} 被列为{target_name}的第一竞品是合理的。它们{segment_text}价格非常接近，目标用户和使用场景高度重合，且重叠在售周销量处在同一竞争量级。",
         "",
         "核心依据：",
         f"1. 市场池相同：{'；'.join(identity)}。{price_gap}",
@@ -890,7 +890,7 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
             "",
             "怎么理解“第一竞品”：",
             "- 它不是因为销量最接近才被选中，而是先满足同尺寸、同价位，再满足高需求重合和产品能力可比，最后由重叠周销量验证。",
-            f"- 因此它适合作为 {target_name} 的第一对标对象，用来比较价格策略、画质/影音卖点、游戏体育场景和用户评论认可度。",
+            f"- 因此它适合作为{target_name}的第一对标对象，用来比较价格策略、画质/影音卖点、游戏体育场景和用户评论认可度。",
             "",
             "口径与限制：当前判断基于可观测线上样本；线下渠道、广告投放、库存和促销资源不在当前数据内。",
         ]
