@@ -109,7 +109,7 @@ This path is for Python/API source changes under `apps/api-server/app/`, CLI cha
 4. Falls back to a local git bundle when 205 cannot reach GitHub.
 5. Copies API source into the running API container.
 6. Restarts only the API container.
-7. Reinstalls CatForge Claude Code skills when permissions allow.
+7. Reinstalls CatForge Claude Code skills and command wrappers when permissions allow.
 8. Checks server-local `/readyz`.
 
 Useful optional settings:
@@ -121,6 +121,19 @@ CATFORGE_HOTFIX_BUNDLE_FALLBACK=true
 CATFORGE_HOTFIX_INSTALL_CLAUDE_SKILLS=true
 CATFORGE_HOTFIX_SMOKE_COMMAND='python -m app.cli.catforge_insight ask "查彩电标准参数" --format json'
 ```
+
+When installed, Claude Code can call these host-side wrappers from 205 without
+remembering the Docker Compose prefix:
+
+```bash
+catforge-data inspect-data-quality --batch-id latest --format json
+catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+catforge-insight ask "查彩电价值战场图谱" --format json
+catforge-analyst ask "海信65E7Q的竞品有哪些" --product-category tv --batch-id latest --format json
+```
+
+The wrappers execute inside the API container, so they use the same runtime
+environment as production jobs.
 
 `CATFORGE_HOTFIX_GIT_REF` defaults to the current local branch. This is intentionally separate from full-deploy `CATFORGE_GIT_REF`, which may point to `main`.
 

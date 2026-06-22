@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="${CATFORGE_APP_DIR:-/opt/catforge}"
+COMPOSE_FILE="${CATFORGE_COMPOSE_FILE:-docker-compose.cloud.yml}"
+
+cd "${APP_DIR}"
+exec docker compose -f "${COMPOSE_FILE}" exec -T api python -m app.cli.catforge_data "$@"

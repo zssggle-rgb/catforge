@@ -27,6 +27,15 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 
 ## Commands
 
+On 205, Claude Code should prefer the installed wrapper command when available:
+
+```bash
+catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
+```
+
+The wrapper runs inside the CatForge API container. If the wrapper is not
+available, use the Docker Compose form below.
+
 From the deployed CatForge repository on 205, prefer running inside the API container:
 
 ```bash

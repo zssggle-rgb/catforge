@@ -150,7 +150,7 @@ else
 fi
 
 if [[ "${install_claude_skills}" == "true" ]]; then
-  echo "Installing Claude Code skills when permissions allow"
+  echo "Installing Claude Code skills and CLI wrappers when permissions allow"
   ssh "${ssh_opts[@]}" "${remote}" "APP_DIR=$(shell_quote "${app_dir}") bash -s" <<'REMOTE'
 set -euo pipefail
 cd "${APP_DIR}"
@@ -169,16 +169,32 @@ install_skill_dir() {
   done
 }
 
+install_cli_bin() {
+  local target_dir="$1"
+  if [[ -z "${target_dir}" ]]; then
+    return 0
+  fi
+  mkdir -p "${target_dir}"
+  for bin_path in tools/claude/bin/catforge-*; do
+    [[ -f "${bin_path}" ]] || continue
+    install -m 0755 "${bin_path}" "${target_dir}/$(basename "${bin_path}")"
+  done
+}
+
 if [[ "$(id -u)" == "0" ]]; then
   install_skill_dir /root
   install_skill_dir /home/deploy
+  install_cli_bin /usr/local/bin
+  install_cli_bin /home/deploy/bin
   chown -R deploy:deploy /home/deploy/.claude 2>/dev/null || true
+  chown -R deploy:deploy /home/deploy/bin 2>/dev/null || true
 else
   install_skill_dir "${HOME}"
+  install_cli_bin "${HOME}/bin"
   if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    sudo bash -c 'cd "$1"; mkdir -p /root/.claude/skills /home/deploy/.claude/skills; for skill_dir in tools/claude/skills/catforge-*; do [[ -d "${skill_dir}" ]] || continue; skill_name="$(basename "${skill_dir}")"; rm -rf "/root/.claude/skills/${skill_name}" "/home/deploy/.claude/skills/${skill_name}"; cp -R "${skill_dir}" "/root/.claude/skills/${skill_name}"; cp -R "${skill_dir}" "/home/deploy/.claude/skills/${skill_name}"; done; chown -R deploy:deploy /home/deploy/.claude 2>/dev/null || true' _ "${APP_DIR}"
+    sudo bash -c 'cd "$1"; mkdir -p /root/.claude/skills /home/deploy/.claude/skills /usr/local/bin /home/deploy/bin; for skill_dir in tools/claude/skills/catforge-*; do [[ -d "${skill_dir}" ]] || continue; skill_name="$(basename "${skill_dir}")"; rm -rf "/root/.claude/skills/${skill_name}" "/home/deploy/.claude/skills/${skill_name}"; cp -R "${skill_dir}" "/root/.claude/skills/${skill_name}"; cp -R "${skill_dir}" "/home/deploy/.claude/skills/${skill_name}"; done; for bin_path in tools/claude/bin/catforge-*; do [[ -f "${bin_path}" ]] || continue; install -m 0755 "${bin_path}" "/usr/local/bin/$(basename "${bin_path}")"; install -m 0755 "${bin_path}" "/home/deploy/bin/$(basename "${bin_path}")"; done; chown -R deploy:deploy /home/deploy/.claude /home/deploy/bin 2>/dev/null || true' _ "${APP_DIR}"
   else
-    echo "No passwordless sudo; installed skills only for ${HOME}." >&2
+    echo "No passwordless sudo; installed skills and CLI wrappers only for ${HOME}." >&2
   fi
 fi
 REMOTE

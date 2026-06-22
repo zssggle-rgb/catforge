@@ -72,6 +72,28 @@ Run commands from the deployed repository on 205:
 cd /opt/catforge
 ```
 
+On 205, Claude Code can use the installed wrapper command for quick read-only
+checks:
+
+```bash
+catforge-insight ask "查彩电价值战场图谱" --format json
+```
+
+Common semantic-analysis query examples:
+
+```bash
+catforge-insight ask "查 100A4F 的用户任务" --format json
+catforge-insight ask "查彩电用户任务预设" --format json
+catforge-insight ask "查 100A4F 的目标客群" --format json
+catforge-insight ask "查彩电目标客群预设" --format json
+catforge-insight ask "查 100A4F 的价值战场" --format json
+catforge-insight ask "查彩电价值战场图谱" --format json
+catforge-insight ask "查彩电语义市场图谱" --sku-limit 100 --format json
+```
+
+The wrapper runs inside the CatForge API container. For business-analysis
+questions, keep using OpenClaw / XiaoAo as the primary answering agent.
+
 Prefer running inside the API container:
 
 ```bash
@@ -83,6 +105,18 @@ Default project and category are already set in the CLI for the current 205 TV p
 ## Natural Language Entry
 
 For free-form questions, use `ask` first:
+
+On 205, prefer the wrapper form:
+
+```bash
+catforge-insight ask "查 100A4F 的用户任务" --format json
+catforge-insight ask "查 100A4F 的目标客群" --format json
+catforge-insight ask "查 100A4F 的价值战场" --format json
+catforge-insight ask "查彩电价值战场图谱" --format json
+catforge-insight ask "查彩电语义市场图谱" --sku-limit 100 --format json
+```
+
+Fallback Docker Compose examples:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight ask "查 100A4F 的参数画像" --format json

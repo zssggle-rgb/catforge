@@ -73,6 +73,24 @@ Run commands from the deployed repository on 205:
 cd /opt/catforge
 ```
 
+On 205, Claude Code should prefer the installed wrapper command when available:
+
+```bash
+catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+```
+
+Common semantic-analysis execution examples:
+
+```bash
+catforge-pipeline ask "重新生成彩电用户任务画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电目标客群画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+```
+
+The wrapper runs inside the CatForge API container. If the wrapper is not
+available, use the Docker Compose form below.
+
 Prefer running inside the API container:
 
 ```bash
@@ -116,6 +134,17 @@ LLM credentials must come from environment variables. Never write API keys into 
 ## Natural Language Entry
 
 Use `ask` first for free-form execution requests:
+
+On 205, prefer the wrapper form:
+
+```bash
+catforge-pipeline ask "重新生成彩电用户任务画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电目标客群画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
+catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+```
+
+Fallback Docker Compose examples:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电 SKU 参数画像" --force-rebuild --format json
