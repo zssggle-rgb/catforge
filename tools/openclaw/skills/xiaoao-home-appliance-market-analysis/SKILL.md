@@ -36,6 +36,8 @@ Translate internal evidence into business language:
 
 For chat channels, avoid wide markdown tables. Use a short conclusion first, then numbered bullets. The user should see an expert market answer, not a generated report dump.
 
+Start directly with the business conclusion. Do not begin with filler such as "数据完整", "已查询到", "下面是回答", "根据工具结果", "根据 CLI 结果", or similar tool-status narration. Do not use emoji ranking markers. Translate English price-band labels such as `low`, `mid_low`, `mid`, `mid_high`, `high`, or "high tier" into Chinese business wording such as "低价位", "中低价位", "中价位", "中高价位", "高价位".
+
 ## Working Directory
 
 Run commands from the deployed CatForge repository:
@@ -316,6 +318,8 @@ For "某 SKU 的竞品有哪些", use this business shape:
 - Do not invent SKU competitors, market sizes, target groups, user tasks, or value battlefields outside CLI output.
 - Do not present hypothetical opportunity as forecasted incremental sales unless the user explicitly asks for a scenario assumption and you label it as such.
 - Do not expose raw tool errors, command failures, shell snippets, JSON parse errors, or debugging output in the final answer.
+- Do not use AI/tool filler openings such as "数据完整" or "下面是回答"; the first sentence must answer the business question.
+- Do not use emoji ranking markers or untranslated internal price-band labels.
 
 ## Quick Verification Commands
 
