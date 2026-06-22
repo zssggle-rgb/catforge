@@ -772,7 +772,7 @@ def _format_competitor_set_text(result: dict[str, Any]) -> str:
     if price:
         identity_parts.append(f"当前线上均价约{price}")
     if sales:
-        identity_parts.append(f"重叠口径周均销量约{sales}台")
+        identity_parts.append(f"当前周均销量约{sales}台")
 
     lines: list[str] = [
         f"结论：{'、'.join(identity_parts)}，当前最值得重点比较的三款竞品是：{top_names}。",
@@ -924,7 +924,10 @@ def _format_volume(value: Any) -> str:
         return ""
     if number == number.to_integral_value():
         return f"{number.quantize(Decimal('1')):,}"
-    return f"{number.quantize(Decimal('0.1')):,}"
+    rounded = number.quantize(Decimal("0.1"))
+    if rounded == rounded.to_integral_value():
+        return f"{rounded.quantize(Decimal('1')):,}"
+    return f"{rounded:,}"
 
 
 def _format_number(value: Any) -> str:
