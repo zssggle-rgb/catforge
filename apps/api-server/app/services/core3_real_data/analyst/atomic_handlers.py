@@ -221,7 +221,9 @@ class AtomicAnalystHandlers:
         sku_code: str | None = None,
         model_name: str | None = None,
         candidate_sku_code: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
+        del limit
         pair = self._resolve_pair(
             context,
             command="semantic-overlap",
@@ -262,7 +264,9 @@ class AtomicAnalystHandlers:
         sku_code: str | None = None,
         model_name: str | None = None,
         candidate_sku_code: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
+        del limit
         pair = self._resolve_pair(
             context,
             command="sales-overlap",
@@ -307,7 +311,9 @@ class AtomicAnalystHandlers:
         sku_code: str | None = None,
         model_name: str | None = None,
         candidate_sku_code: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
+        del limit
         pair = self._resolve_pair(
             context,
             command="param-claim-overlap",
@@ -352,7 +358,9 @@ class AtomicAnalystHandlers:
         user_task_code: str | None = None,
         target_group_code: str | None = None,
         battlefield_code: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
+        del limit
         resolved = self._resolve_one(context, command="comment-support", query=query, sku_code=sku_code, model_name=model_name)
         if resolved["status"] != AnalystStatus.OK:
             return resolved["payload"]

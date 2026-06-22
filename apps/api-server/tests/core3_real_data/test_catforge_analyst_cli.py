@@ -770,6 +770,24 @@ def test_semantic_overlap_returns_task_group_battlefield_matches() -> None:
     assert result["result"]["semantic_overlap"]["semantic_overlap_score"] > 0
 
 
+def test_pairwise_atom_tolerates_cli_limit_argument() -> None:
+    session = make_session()
+    result = catforge_analyst.run_analyst_command(
+        session,
+        command="semantic-overlap",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        candidate_sku_code="TV00030001",
+        limit=20,
+    )
+
+    assert result["status"] == "ok"
+    assert result["result"]["semantic_overlap"]["target_sku_code"] == "TV00029112"
+
+
 def test_sales_overlap_uses_pairwise_overlap_weeks() -> None:
     session = make_session()
     result = catforge_analyst.sales_overlap(
