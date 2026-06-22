@@ -745,6 +745,8 @@ def format_business_text(result: dict[str, Any]) -> str:
     payload = result.get("result") or {}
     if "competitor_set" in payload:
         return _format_competitor_set_text(result)
+    if "why_sales_diff" in payload:
+        return _format_why_sales_diff_text(result)
     return ""
 
 
@@ -807,6 +809,90 @@ def _format_competitor_set_text(result: dict[str, Any]) -> str:
             "- 最后用重叠在售周的周均销量做市场验证，不用累计销量判断谁更强。",
             "",
             "口径与限制：基于当前可观测线上样本；线下渠道、广告投放、库存、促销资源不在当前数据内。",
+        ]
+    )
+    limitations = [item for item in result.get("limitations") or [] if item]
+    if limitations:
+        lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
+    return "\n".join(lines)
+
+
+def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
+    target = result.get("target") or {}
+    payload = ((result.get("result") or {}).get("why_sales_diff") or {})
+    candidate = payload.get("candidate") or {}
+    sales = payload.get("sales_overlap") or {}
+    semantic = payload.get("semantic_overlap") or {}
+    param_claim = payload.get("param_claim_overlap") or {}
+    comment_support = payload.get("comment_support") or {}
+
+    target_name = _brand_model(target)
+    candidate_name = _brand_model(candidate)
+    target_price = _format_money(target.get("weighted_price") or target.get("price_wavg"))
+    candidate_price = _format_money(candidate.get("weighted_price") or candidate.get("price_wavg"))
+    target_sales = _format_volume(target.get("avg_weekly_sales_volume"))
+    candidate_sales = _format_volume(candidate.get("avg_weekly_sales_volume"))
+    price_gap = _pair_price_gap_text(target, candidate)
+    size = _format_number(target.get("screen_size_inch"))
+    price_band = _price_band_cn(target.get("price_band_in_size_tier"))
+
+    overlap_weeks = sales.get("overlap_week_count")
+    comparison = sales.get("comparison") or {}
+    volume_gap = _decimal(comparison.get("target_vs_candidate_avg_weekly_volume_gap"))
+    volume_ratio = _decimal(comparison.get("target_vs_candidate_avg_weekly_volume_ratio"))
+    amount_ratio = _decimal(comparison.get("target_vs_candidate_avg_weekly_amount_ratio"))
+    semantic_score = _format_percent(semantic.get("semantic_overlap_score"))
+    param_score = _format_percent(param_claim.get("param_claim_overlap_score"))
+
+    target_available = ((comment_support.get("target") or {}).get("available_summary") or {})
+    candidate_available = ((comment_support.get("candidate") or {}).get("available_summary") or {})
+    target_claims = _claim_names(target_available.get("supported_claim_codes") or [])
+    candidate_claims = _claim_names(candidate_available.get("supported_claim_codes") or [])
+    candidate_risks = _claim_names(candidate_available.get("contradicted_claim_codes") or [])
+
+    lead_text = _sales_lead_text(target_name, candidate_name, volume_gap, volume_ratio)
+    identity = [f"{target_name} 与 {candidate_name}"]
+    if overlap_weeks:
+        identity.append(f"{overlap_weeks} 个重叠在售周")
+    if target_price and candidate_price:
+        identity.append(f"均价分别约 {target_price} / {candidate_price}")
+    if target_sales and candidate_sales:
+        identity.append(f"周均销量约 {target_sales} 台 / {candidate_sales} 台")
+    segment = "、".join(part for part in (f"{size} 英寸" if size else "", price_band) if part)
+    segment_text = f"同为 {segment} 产品，" if segment else ""
+
+    lines = [
+        f"结论：{candidate_name} 被列为 {target_name} 的第一竞品是合理的。它们{segment_text}价格非常接近，目标用户和使用场景高度重合，且重叠在售周销量处在同一竞争量级。",
+        "",
+        "核心依据：",
+        f"1. 市场池相同：{'；'.join(identity)}。{price_gap}",
+    ]
+    if semantic_score:
+        lines.append(f"2. 需求重合高：用户任务、目标客群和价值战场的综合重合度约 {semantic_score}，说明两款产品会被同一批用户放在一起比较。")
+    if param_score:
+        lines.append(f"3. 产品表达可比：参数和卖点重合度约 {param_score}，不是只靠价格接近，而是在画质、影音、智能/游戏等能力上形成横向对比。")
+    if lead_text:
+        lines.append(f"4. 销量验证成立：按重叠在售周周均销量看，{lead_text}；这说明它不是边缘候选，而是真实处在同一销售竞争带内。")
+    if amount_ratio:
+        lines.append(f"5. 销额表现也接近：{target_name} 相对 {candidate_name} 的重叠周均销额约为 {_format_ratio(amount_ratio)}，价格与销量共同支撑其直接竞争关系。")
+
+    if target_claims or candidate_claims:
+        lines.extend(["", "卖点和用户反馈："])
+        if target_claims:
+            lines.append(f"- {target_name} 的用户评论更集中支撑：{'、'.join(target_claims[:6])}。")
+        if candidate_claims:
+            lines.append(f"- {candidate_name} 的用户评论更集中支撑：{'、'.join(candidate_claims[:6])}。")
+        if candidate_risks:
+            lines.append(f"- {candidate_name} 也有需要复核的用户反馈风险：{'、'.join(candidate_risks[:4])}。")
+
+    lines.extend(
+        [
+            "",
+            "怎么理解“第一竞品”：",
+            "- 它不是因为销量最接近才被选中，而是先满足同尺寸、同价位，再满足高需求重合和产品能力可比，最后由重叠周销量验证。",
+            f"- 因此它适合作为 {target_name} 的第一对标对象，用来比较价格策略、画质/影音卖点、游戏体育场景和用户评论认可度。",
+            "",
+            "口径与限制：当前判断基于可观测线上样本；线下渠道、广告投放、库存和促销资源不在当前数据内。",
         ]
     )
     limitations = [item for item in result.get("limitations") or [] if item]
@@ -959,6 +1045,75 @@ def _format_price_gap(gap_pct: Any, gap_amount: Any = None) -> str:
         amount_text = _format_money(abs(amount))
         return f"比目标{direction}约{pct_text}（约{amount_text}）"
     return f"比目标{direction}约{pct_text}"
+
+
+def _pair_price_gap_text(target: dict[str, Any], candidate: dict[str, Any]) -> str:
+    target_price = _decimal(target.get("weighted_price") or target.get("price_wavg"))
+    candidate_price = _decimal(candidate.get("weighted_price") or candidate.get("price_wavg"))
+    if target_price is None or candidate_price is None or target_price == 0:
+        return ""
+    gap = (candidate_price - target_price) / target_price
+    return _format_price_gap(gap, candidate_price - target_price)
+
+
+def _sales_lead_text(
+    target_name: str,
+    candidate_name: str,
+    volume_gap: Decimal | None,
+    volume_ratio: Decimal | None,
+) -> str:
+    if volume_gap is None:
+        return ""
+    gap = _format_volume(abs(volume_gap))
+    ratio_text = _format_ratio(volume_ratio) if volume_ratio is not None else ""
+    if volume_gap > 0:
+        suffix = f"，约为对方的 {ratio_text}" if ratio_text else ""
+        return f"{target_name} 比 {candidate_name} 高约 {gap} 台/周{suffix}"
+    if volume_gap < 0:
+        suffix = f"，约为对方的 {ratio_text}" if ratio_text else ""
+        return f"{candidate_name} 比 {target_name} 高约 {gap} 台/周{suffix}"
+    return "两款产品周均销量基本持平"
+
+
+def _format_ratio(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return f"{number.quantize(Decimal('0.01'))} 倍"
+
+
+CLAIM_LABELS_CN = {
+    "tv_claim_ai_large_model": "AI 大模型/智能能力",
+    "tv_claim_casting_connectivity": "投屏互联",
+    "tv_claim_chip_performance": "芯片性能",
+    "tv_claim_dolby_audio_video": "杜比音画",
+    "tv_claim_eye_care_display": "护眼显示",
+    "tv_claim_flush_wall_mount": "贴墙/超薄外观",
+    "tv_claim_gaming_low_latency": "游戏低延迟",
+    "tv_claim_hdmi21_connectivity": "HDMI 2.1 连接",
+    "tv_claim_hdr_high_brightness": "高亮度 HDR",
+    "tv_claim_high_refresh_rate": "高刷新率",
+    "tv_claim_local_dimming": "分区控光",
+    "tv_claim_memory_storage": "内存/存储",
+    "tv_claim_miniled_display": "MiniLED 显示",
+    "tv_claim_oled_self_lit": "OLED 自发光",
+    "tv_claim_picture_engine_ai": "AI 画质引擎",
+    "tv_claim_qd_miniled_display": "量子点 MiniLED",
+    "tv_claim_rgb_miniled_display": "RGB MiniLED",
+    "tv_claim_smart_home_iot": "智能家居互联",
+    "tv_claim_theater_scene": "影院音画体验",
+    "tv_claim_voice_control": "语音控制",
+    "tv_claim_wide_color_accuracy": "广色域/色彩还原",
+}
+
+
+def _claim_names(codes: list[Any]) -> list[str]:
+    names: list[str] = []
+    for code in codes:
+        label = CLAIM_LABELS_CN.get(str(code), "")
+        if label and label not in names:
+            names.append(label)
+    return names
 
 
 def _abs_decimal(value: Any) -> Decimal | None:

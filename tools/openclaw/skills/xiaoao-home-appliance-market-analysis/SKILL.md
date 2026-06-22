@@ -182,6 +182,24 @@ For "这款和谁比":
 5. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
 
+For follow-up references such as "第一款", "第一名", "上面第一款", "它", "这款",
+or "分析第一款为什么选它":
+
+1. Resolve the reference from the immediately previous XiaoAo answer in the same
+   conversation. For example, after answering "海信 65E7Q 的竞品有哪些", "第一款"
+   means the first competitor shown in that answer, not a new unknown SKU.
+2. Do not pass the pronoun-only question directly to `catforge_analyst ask`.
+3. Use explicit SKU codes whenever possible. First resolve the target SKU and the
+   referenced competitor with `resolve-sku`; then call `why-sales-diff
+   --sku-code <target_sku_code> --candidate-sku-code <competitor_sku_code>
+   --format text`.
+4. If the prior answer is not available or the ordinal reference is ambiguous,
+   ask the user to confirm the competitor instead of guessing.
+5. For this follow-up question, the user-facing answer should explain why the
+   referenced SKU is a direct competitor: same size/price pool, demand overlap,
+   parameter/claim overlap, and overlapping-week sales validation. It should not
+   expose command names, JSON, stack traces, or module codes.
+
 For "这款和某竞品有什么区别":
 
 1. `sales-overlap`
