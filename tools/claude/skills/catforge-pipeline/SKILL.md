@@ -249,7 +249,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 Run one TV SKU user task profile:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-id latest --sku-code TV00027354 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-id latest --sku-code TV00027354 --force-rebuild --format json
 ```
 
 Run one TV user-task subset:
@@ -267,7 +267,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 Run one TV SKU target group profile:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --sku-code TV00027354 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --sku-code TV00027354 --force-rebuild --format json
 ```
 
 Run one TV target-group subset:
@@ -285,7 +285,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 Run one TV SKU value battlefield profile:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --sku-code TV00027354 --graph-mode inline --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --sku-code TV00027354 --graph-mode inline --force-rebuild --format json
 ```
 
 Run one TV battlefield subset:

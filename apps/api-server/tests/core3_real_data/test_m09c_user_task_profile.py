@@ -1,13 +1,16 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.cli import catforge_insight, catforge_pipeline
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    Core3ModuleCode,
     CORE3_M09C_TV_TAXONOMY_VERSION,
     Core3RunStatus,
 )
-from app.services.core3_real_data.m09c_user_task_service import M09CRunner
+from app.services.core3_real_data.m09c_user_task_service import M09CRunner, _failed_result
 from tests.core3_real_data.test_m10c_target_group_profile import (
     BATCH_ID,
     PROJECT_ID,
@@ -121,3 +124,23 @@ def test_m09c_pipeline_and_insight_cli_query_user_tasks() -> None:
     assert natural["primary_user_task_code"] == "TASK_MAINSTREAM_LIVING_VIEWING"
     assert taxonomy["user_task_count"] == 12
     assert taxonomy["taxonomy_version"] == CORE3_M09C_TV_TAXONOMY_VERSION
+
+
+def test_m09c_failed_result_uses_current_review_issue_schema() -> None:
+    result = _failed_result(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        run_id="run-test",
+        started_at=datetime.now(timezone.utc),
+        error_code="m09c_user_task_failed",
+        message_cn="用户任务画像生成失败",
+        error_message="上游事实层缺失",
+    )
+
+    assert result.status == Core3RunStatus.FAILED
+    assert result.review_issues[0].issue_code == "m09c_user_task_failed"
+    assert result.review_issues[0].severity == "blocker"
+    assert result.review_issues[0].source_module == Core3ModuleCode.M09C
+    assert result.review_issues[0].object_type == "module_run"
+    assert result.review_issues[0].object_id == "run-test"

@@ -1415,10 +1415,14 @@ def _failed_result(
         warnings=[message_cn],
         review_issues=[
             {
+                "issue_code": error_code,
                 "issue_type": error_code,
-                "severity": "error",
+                "severity": "blocker",
+                "source_module": Core3ModuleCode.M09C,
+                "object_type": "module_run",
+                "object_id": run_id,
                 "message_cn": message_cn,
-                "detail": error_message,
+                "suggestion_cn": error_message,
             }
         ],
         downstream_impacts=[],

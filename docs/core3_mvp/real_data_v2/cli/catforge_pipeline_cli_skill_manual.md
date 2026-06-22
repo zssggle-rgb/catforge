@@ -110,11 +110,13 @@ python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --analy
 python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --sku-chunk-size 50 --format json
 python -m app.cli.catforge_pipeline run-comment-profile --product-category tv --batch-id latest --llm-mode required --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-comment-profile --product-category tv --batch-id latest --sku-code TV00027354 --llm-mode required --max-sentences-per-sku 500 --format json
+python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-id latest --force-rebuild --format json
+python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-id latest --sku-code TV00027354 --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --force-rebuild --format json
-python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --sku-code TV00027354 --format json
+python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --sku-code TV00027354 --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --target-group-code TG_VALUE_MAXIMIZER --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --force-rebuild --format json
-python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --sku-code TV00027354 --graph-mode inline --format json
+python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --sku-code TV00027354 --graph-mode inline --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --battlefield-code BF_LARGE_SCREEN_VALUE_UPGRADE --force-rebuild --format json
 ```
 
