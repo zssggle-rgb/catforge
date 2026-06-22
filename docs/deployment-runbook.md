@@ -120,6 +120,7 @@ CATFORGE_HOTFIX_PUSH=true
 CATFORGE_HOTFIX_BUNDLE_FALLBACK=true
 CATFORGE_HOTFIX_INSTALL_CLAUDE_SKILLS=true
 CATFORGE_HOTFIX_SMOKE_COMMAND='python -m app.cli.catforge_insight ask "查彩电标准参数" --format json'
+CATFORGE_HOTFIX_HOST_SMOKE_COMMAND='catforge-insight ask "查彩电价值战场图谱" --format json | head -c 400'
 ```
 
 When installed, Claude Code can call these host-side wrappers from 205 without
@@ -134,6 +135,10 @@ catforge-analyst ask "海信65E7Q的竞品有哪些" --product-category tv --bat
 
 The wrappers execute inside the API container, so they use the same runtime
 environment as production jobs.
+
+`CATFORGE_HOTFIX_SMOKE_COMMAND` runs inside the API container. Use
+`CATFORGE_HOTFIX_HOST_SMOKE_COMMAND` for host-side Claude Code wrappers such as
+`catforge-data`, `catforge-pipeline`, `catforge-insight`, and `catforge-analyst`.
 
 `CATFORGE_HOTFIX_GIT_REF` defaults to the current local branch. This is intentionally separate from full-deploy `CATFORGE_GIT_REF`, which may point to `main`.
 

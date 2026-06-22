@@ -55,6 +55,7 @@ bundle_fallback="${CATFORGE_HOTFIX_BUNDLE_FALLBACK:-true}"
 install_claude_skills="${CATFORGE_HOTFIX_INSTALL_CLAUDE_SKILLS:-true}"
 restart_api="${CATFORGE_HOTFIX_RESTART_API:-true}"
 smoke_command="${CATFORGE_HOTFIX_SMOKE_COMMAND:-}"
+host_smoke_command="${CATFORGE_HOTFIX_HOST_SMOKE_COMMAND:-}"
 
 if [[ -z "${git_ref}" ]]; then
   echo "Cannot infer Git ref from detached HEAD. Set CATFORGE_GIT_REF." >&2
@@ -247,6 +248,19 @@ set -euo pipefail
 cd "${APP_DIR}"
 smoke_command="$(printf "%s" "${SMOKE_B64}" | base64 -d)"
 docker compose -f "${COMPOSE_FILE}" --env-file .env exec -T api bash -lc "${smoke_command}"
+REMOTE
+fi
+
+if [[ -n "${host_smoke_command}" ]]; then
+  host_smoke_b64="$(printf "%s" "${host_smoke_command}" | base64 | tr -d '\n')"
+  echo "Running host smoke command"
+  ssh "${ssh_opts[@]}" "${remote}" \
+    "APP_DIR=$(shell_quote "${app_dir}") HOST_SMOKE_B64=$(shell_quote "${host_smoke_b64}") bash -s" <<'REMOTE'
+set -euo pipefail
+cd "${APP_DIR}"
+export PATH="/usr/local/bin:${HOME}/bin:/home/deploy/bin:${PATH}"
+host_smoke_command="$(printf "%s" "${HOST_SMOKE_B64}" | base64 -d)"
+bash -lc "${host_smoke_command}"
 REMOTE
 fi
 
