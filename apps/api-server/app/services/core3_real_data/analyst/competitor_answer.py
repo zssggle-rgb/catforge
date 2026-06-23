@@ -569,11 +569,11 @@ def _product_profile_lines(
     lines.extend([f"### {section_no}.1 市场画像", ""])
     lines.extend(_product_market_profile_lines(sku_name, sku, sections, competitor_item=competitor_item))
     lines.extend(["", f"### {section_no}.2 价值战场画像", ""])
-    lines.extend(_semantic_profile_table_lines(sections.get("value_battlefield") or {}, profile_type="battlefield"))
+    lines.extend(_semantic_profile_table_lines(sections.get("value_battlefield") or {}, profile_type="battlefield", sections=sections))
     lines.extend(["", f"### {section_no}.3 用户任务画像", ""])
-    lines.extend(_semantic_profile_table_lines(sections.get("user_task") or {}, profile_type="task"))
+    lines.extend(_semantic_profile_table_lines(sections.get("user_task") or {}, profile_type="task", sections=sections))
     lines.extend(["", f"### {section_no}.4 目标客群画像", ""])
-    lines.extend(_semantic_profile_table_lines(sections.get("target_group") or {}, profile_type="group"))
+    lines.extend(_semantic_profile_table_lines(sections.get("target_group") or {}, profile_type="group", sections=sections))
     lines.extend(["", f"### {section_no}.5 卖点画像", ""])
     lines.extend(_product_claim_profile_lines(sections))
     lines.extend(["", f"### {section_no}.6 参数画像", ""])
@@ -594,12 +594,22 @@ def _product_market_profile_lines(
     weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
     size = position.get("screen_size_inch") or sku.get("screen_size_inch")
     price_band = PRICE_BAND_NAMES.get(str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier")), "价格带未知")
+    size_tier = SIZE_TIER_NAMES.get(str(position.get("size_tier") or sku.get("size_tier")), "")
+    pool = (sections.get("market") or {}).get("market_pool") or {}
     role = _report_role_cn(competitor_item) if competitor_item else f"{price_band}核心 SKU"
     rows = [
         ("尺寸", f"{_format_number(size) or '未知'} 寸"),
         ("均价", _format_money(price) or "未知"),
         ("周均销量", f"{_format_number(weekly_sales) or '未知'} 台"),
-        ("价格位置", price_band),
+        ("尺寸价格池", f"{size_tier or '尺寸段未知'} × {price_band}"),
+        (
+            "所在池空间",
+            f"{_format_number(pool.get('total_sales_volume')) or '未知'}台，周均{_format_number(pool.get('total_avg_weekly_sales_volume')) or '未知'}台，SKU数{_format_number(pool.get('sku_count')) or '未知'}",
+        ),
+        (
+            "池内销量表现",
+            f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名，占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}",
+        ),
         ("市场角色", role),
     ]
     lines = ["| 指标 | 表现 |", "| --- | --- |"]
@@ -607,25 +617,29 @@ def _product_market_profile_lines(
     lines.extend(
         [
             "",
-            f"市场解读：{sku_name} 当前处在{price_band}，周均销量约{_format_number(weekly_sales) or '未知'}台，市场画像需要结合价值战场、用户任务和关键卖点共同判断。",
+            f"市场解读：{sku_name} 当前处在{size_tier or '目标尺寸段'}的{price_band}，周均销量约{_format_number(weekly_sales) or '未知'}台；所在尺寸价格池总销量约{_format_number(pool.get('total_sales_volume')) or '未知'}台，本品占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}。",
         ]
     )
     return lines
 
 
-def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str) -> list[str]:
+def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str, sections: dict[str, Any]) -> list[str]:
     columns = {
         "battlefield": ("战场", "业务含义"),
         "task": ("用户任务", "支撑证据"),
         "group": ("目标客群", "购买动机"),
     }[profile_type]
+    positions = _semantic_position_by_code(sections, profile_type=profile_type)
     rows = _semantic_rows(profile, profile_type=profile_type)
-    lines = [f"| {columns[0]} | 关系 | {columns[1]} |", "| --- | --- | --- |"]
+    lines = [f"| {columns[0]} | 关系 | 维度总空间 | 本品销量表现 | {columns[1]} |", "| --- | --- | --- | --- | --- |"]
     if not rows:
-        lines.append(f"| 暂无稳定画像 | 待确认 | 当前事实不足，无法形成稳定{columns[0]}判断 |")
+        lines.append(f"| 暂无稳定画像 | 待确认 | 暂无 | 暂无 | 当前事实不足，无法形成稳定{columns[0]}判断 |")
         return lines
-    for label, relation, reason in rows:
-        lines.append(f"| {label} | {relation} | {reason} |")
+    for code, label, relation, reason in rows:
+        position = positions.get(code, {})
+        lines.append(
+            f"| {label} | {relation} | {_semantic_market_space_text(position)} | {_semantic_sku_performance_text(position)} | {reason} |"
+        )
     return lines
 
 
@@ -673,11 +687,12 @@ def _product_param_profile_lines(sections: dict[str, Any]) -> list[str]:
 
 def _primary_secondary_text(profile: dict[str, Any], profile_type: str) -> str:
     rows = _semantic_rows(profile, profile_type=profile_type)
-    labels = [label for label, relation, _ in rows if relation in {"主战场", "主任务", "主客群", "辅战场", "辅任务", "辅客群"}]
+    primary_markers = ("主战场", "主任务", "主客群", "辅战场", "辅任务", "辅客群")
+    labels = [label for _code, label, relation, _reason in rows if any(marker in relation for marker in primary_markers)]
     return _join_cn(labels[:5])
 
 
-def _semantic_rows(profile: dict[str, Any], *, profile_type: str) -> list[tuple[str, str, str]]:
+def _semantic_rows(profile: dict[str, Any], *, profile_type: str) -> list[tuple[str, str, str, str]]:
     if profile_type == "battlefield":
         specs = [
             ("primary_battlefield_code", "主战场", "产品当前最核心的价值竞争位置"),
@@ -699,15 +714,75 @@ def _semantic_rows(profile: dict[str, Any], *, profile_type: str) -> list[tuple[
             ("comment_observed_group_codes", "评论观察客群", "评论侧出现的真实人群"),
             ("brand_claimed_group_codes", "厂家主张客群", "卖点侧表达但评论验证相对不足的人群"),
         ]
-    rows: list[tuple[str, str, str]] = []
+    row_by_code: dict[str, dict[str, Any]] = {}
     for key, relation, reason in specs:
         value = profile.get(key)
         values = value if isinstance(value, list) else [value]
         for code in values:
             label = _label_code(code)
             if label:
-                rows.append((label, relation, reason))
-    return rows
+                code_text = str(code)
+                row = row_by_code.setdefault(code_text, {"label": label, "relations": [], "reasons": []})
+                if relation not in row["relations"]:
+                    row["relations"].append(relation)
+                if reason not in row["reasons"]:
+                    row["reasons"].append(reason)
+    return [
+        (code, str(payload["label"]), _join_cn(payload["relations"]), "；".join(payload["reasons"]))
+        for code, payload in row_by_code.items()
+    ]
+
+
+def _semantic_position_by_code(sections: dict[str, Any], *, profile_type: str) -> dict[str, dict[str, Any]]:
+    dimension_type = {"battlefield": "battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    result: dict[str, dict[str, Any]] = {}
+    for item in sections.get("semantic_dimension_positions") or []:
+        if not isinstance(item, dict) or item.get("dimension_type") != dimension_type:
+            continue
+        code = str(item.get("dimension_code") or "")
+        if code:
+            result[code] = item
+    return result
+
+
+def _semantic_market_space_text(position: dict[str, Any]) -> str:
+    market_space = position.get("market_space") or {}
+    if not market_space:
+        return "图谱空间待生成"
+    parts = [
+        f"空间{_format_number(market_space.get('estimated_sales_volume')) or '未知'}台",
+        f"周均{_format_number(market_space.get('estimated_avg_weekly_sales_volume')) or '未知'}台",
+        f"覆盖{_format_number(market_space.get('allocated_sku_count')) or '未知'}个SKU",
+    ]
+    share = _pct_or_unknown(market_space.get("sales_volume_share"))
+    if share != "未知":
+        parts.append(f"市场占比{share}")
+    return "；".join(parts)
+
+
+def _semantic_sku_performance_text(position: dict[str, Any]) -> str:
+    allocation = position.get("sku_allocation") or {}
+    contribution = position.get("sku_contribution") or {}
+    if not allocation:
+        return "未进入销量分配"
+    share = contribution.get("sku_share_in_dimension_volume")
+    if share is None:
+        market_space = position.get("market_space") or {}
+        allocated = _decimal(allocation.get("allocated_sales_volume"))
+        total = _decimal(market_space.get("estimated_sales_volume"))
+        share = allocated / total if allocated is not None and total else None
+    parts = [
+        f"分配{_format_number(allocation.get('allocated_sales_volume')) or '未知'}台",
+        f"周均{_format_number(allocation.get('allocated_avg_weekly_sales_volume')) or '未知'}台",
+        f"权重{_pct_or_unknown(allocation.get('allocation_weight'))}",
+    ]
+    rank = contribution.get("sku_rank_in_dimension")
+    if rank:
+        parts.append(f"维度内第{_format_number(rank)}名")
+    share_text = _pct_or_unknown(share)
+    if share_text != "未知":
+        parts.append(f"占维度销量{share_text}")
+    return "；".join(parts)
 
 
 def _first_candidate_by_role(
@@ -2090,6 +2165,11 @@ def _pct(value: Any) -> str:
     if number is None:
         return "-"
     return f"{(number * Decimal('100')).quantize(Decimal('1'))}%"
+
+
+def _pct_or_unknown(value: Any) -> str:
+    text = _pct(value)
+    return "未知" if text == "-" else text
 
 
 def _decimal(value: Any) -> Decimal | None:

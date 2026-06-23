@@ -304,8 +304,15 @@ class AnalystRepository:
             market_window=market_window,
             limit=allocation_limit,
         )
+        market_payload = _market_payload(market)
+        if market_payload:
+            market_payload["market_pool"] = self._market_pool_summary(
+                batch_id=batch_id,
+                market=market,
+                market_window=market_window,
+            )
         sections = {
-            "market": _market_payload(market),
+            "market": market_payload,
             "parameter_fact": _param_payload(param_profile),
             "claim_fact": _claim_payload(claim_profile),
             "comment_fact": _comment_payload(comment_profile),
@@ -313,6 +320,14 @@ class AnalystRepository:
             "target_group": _target_group_payload(target_group_profile),
             "value_battlefield": _battlefield_payload(battlefield_profile),
             "sales_allocation": [_allocation_payload(row) for row in semantic_allocations],
+            "semantic_dimension_positions": self._semantic_dimension_positions(
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_code=sku.sku_code,
+                analysis_population=analysis_population,
+                market_window=market_window,
+                allocations=semantic_allocations,
+            ),
         }
         missing_sections = [key for key, value in sections.items() if value in ({}, [])]
         evidence_sources = _section_evidence_sources(
@@ -773,6 +788,136 @@ class AnalystRepository:
             .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
         )
         return list(self.db.execute(stmt).scalars())
+
+    def _semantic_dimension_positions(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        analysis_population: str,
+        market_window: str,
+        allocations: Sequence[entities.Core3SemanticMarketAllocation],
+    ) -> list[dict[str, Any]]:
+        if not allocations or product_category != "TV":
+            return []
+        codes_by_type: dict[str, list[str]] = {}
+        for allocation in allocations:
+            codes_by_type.setdefault(allocation.dimension_type, [])
+            if allocation.dimension_code not in codes_by_type[allocation.dimension_type]:
+                codes_by_type[allocation.dimension_type].append(allocation.dimension_code)
+
+        summary_by_key: dict[tuple[str, str], entities.Core3SemanticMarketDimensionSummary] = {}
+        for dimension_type, dimension_codes in codes_by_type.items():
+            for row in self._semantic_summaries_by_codes(
+                batch_id=batch_id,
+                product_category=product_category,
+                analysis_population=analysis_population,
+                market_window=market_window,
+                dimension_type=dimension_type,
+                dimension_codes=dimension_codes,
+            ):
+                summary_by_key[(row.dimension_type, row.dimension_code)] = row
+
+        contribution_by_key = self._semantic_contribution_by_dimension(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            dimension_codes=[allocation.dimension_code for allocation in allocations],
+        )
+        positions: list[dict[str, Any]] = []
+        for allocation in allocations:
+            key = (allocation.dimension_type, allocation.dimension_code)
+            summary = summary_by_key.get(key)
+            contribution = contribution_by_key.get(key)
+            positions.append(
+                {
+                    "dimension_type": allocation.dimension_type,
+                    "dimension_code": allocation.dimension_code,
+                    "dimension_name": allocation.dimension_name,
+                    "market_space": _semantic_summary_payload(summary) if summary else {},
+                    "sku_allocation": _allocation_payload(allocation),
+                    "sku_contribution": _semantic_contribution_payload(contribution) if contribution else {},
+                }
+            )
+        return positions
+
+    def _semantic_contribution_by_dimension(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        analysis_population: str,
+        market_window: str,
+        dimension_codes: Sequence[str],
+    ) -> dict[tuple[str, str], entities.Core3SemanticMarketSkuContribution]:
+        if not dimension_codes:
+            return {}
+        stmt = (
+            select(entities.Core3SemanticMarketSkuContribution)
+            .where(entities.Core3SemanticMarketSkuContribution.project_id == self.project_id)
+            .where(entities.Core3SemanticMarketSkuContribution.category_code == self.category_code)
+            .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
+            .where(entities.Core3SemanticMarketSkuContribution.product_category == product_category.upper())
+            .where(entities.Core3SemanticMarketSkuContribution.analysis_population == analysis_population)
+            .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
+            .where(entities.Core3SemanticMarketSkuContribution.sku_code == sku_code)
+            .where(entities.Core3SemanticMarketSkuContribution.dimension_code.in_(tuple(dimension_codes)))
+            .where(entities.Core3SemanticMarketSkuContribution.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketSkuContribution.is_current.is_(True))
+        )
+        return {(row.dimension_type, row.dimension_code): row for row in self.db.execute(stmt).scalars()}
+
+    def _market_pool_summary(
+        self,
+        *,
+        batch_id: str,
+        market: entities.Core3SkuMarketProfile | None,
+        market_window: str,
+    ) -> dict[str, Any]:
+        if market is None or not market.size_segment or not market.price_band_size:
+            return {}
+        stmt = (
+            select(entities.Core3SkuMarketProfile)
+            .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
+            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .where(entities.Core3SkuMarketProfile.size_segment == market.size_segment)
+            .where(entities.Core3SkuMarketProfile.price_band_size == market.price_band_size)
+        )
+        rows = list(self.db.execute(stmt).scalars())
+        if not rows:
+            return {}
+        target_avg = _safe_avg(_decimal(market.sales_volume_total), market.active_week_count) or Decimal("0")
+        total_sales_volume = sum((_decimal(row.sales_volume_total) or Decimal("0")) for row in rows)
+        total_sales_amount = sum((_decimal(row.sales_amount_total) or Decimal("0")) for row in rows)
+        total_avg_weekly = sum((_safe_avg(_decimal(row.sales_volume_total), row.active_week_count) or Decimal("0")) for row in rows)
+        rank = 1 + sum(
+            1
+            for row in rows
+            if (_safe_avg(_decimal(row.sales_volume_total), row.active_week_count) or Decimal("0")) > target_avg
+        )
+        target_sales_volume = _decimal(market.sales_volume_total) or Decimal("0")
+        target_sales_amount = _decimal(market.sales_amount_total) or Decimal("0")
+        return {
+            "size_tier": market.size_segment,
+            "price_band_in_size_tier": market.price_band_size,
+            "sku_count": len(rows),
+            "total_sales_volume": _number(total_sales_volume),
+            "total_sales_amount": _number(total_sales_amount),
+            "total_avg_weekly_sales_volume": _number(total_avg_weekly),
+            "target_rank_by_avg_weekly_sales": rank,
+            "target_sales_volume": _number(target_sales_volume),
+            "target_avg_weekly_sales_volume": _number(target_avg),
+            "target_sales_volume_share": _number(target_sales_volume / total_sales_volume) if total_sales_volume else None,
+            "target_sales_amount_share": _number(target_sales_amount / total_sales_amount) if total_sales_amount else None,
+        }
 
     def _market_profile(self, *, batch_id: str, sku_code: str, market_window: str) -> entities.Core3SkuMarketProfile | None:
         stmt = (

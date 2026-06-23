@@ -917,6 +917,238 @@ def seed_semantic_space(session: Session) -> None:
     )
     session.add(
         entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-task-cinema",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="user_task",
+            dimension_code="TASK_CINEMA_IMMERSION",
+            dimension_name="影院沉浸观影",
+            taxonomy_version=CORE3_M09C_TV_TAXONOMY_VERSION,
+            sku_relation_count=3,
+            allocated_sku_count=3,
+            primary_sku_count=2,
+            secondary_sku_count=1,
+            estimated_sales_volume=Decimal("1100.0000"),
+            estimated_sales_amount=Decimal("5500000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("91.666667"),
+            estimated_avg_weekly_sales_amount=Decimal("458333.333333"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.550000"),
+            sales_amount_share=Decimal("0.550000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"海信": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"primary_user_task": 2},
+            top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 500}],
+            confidence_avg=Decimal("0.8800"),
+            business_summary_cn="影院沉浸观影由大屏、画质和影音体验支撑。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-task-cinema",
+            result_hash="hash-summary-task-cinema",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketSkuContribution(
+            contribution_id="contribution-tv00029112-task-cinema",
+            summary_id="summary-task-cinema",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="user_task",
+            dimension_code="TASK_CINEMA_IMMERSION",
+            dimension_name="影院沉浸观影",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            allocation_weight=Decimal("0.420000"),
+            allocated_sales_volume=Decimal("500.0000"),
+            allocated_sales_amount=Decimal("2500000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("41.666667"),
+            allocated_avg_weekly_sales_amount=Decimal("208333.333333"),
+            sku_share_in_dimension_volume=Decimal("0.454545"),
+            sku_share_in_dimension_amount=Decimal("0.454545"),
+            sku_rank_in_dimension=2,
+            is_primary_dimension=True,
+            allocation_role="primary",
+            relation_status="primary_user_task",
+            allocation_confidence=Decimal("0.8800"),
+            contribution_reason_cn="主用户任务贡献 SKU。",
+            evidence_ids_json=["ev-task-tv00029112"],
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-contribution-tv00029112-task-cinema",
+            result_hash="hash-contribution-tv00029112-task-cinema",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-tv00029112-task-cinema",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=12,
+            dimension_type="user_task",
+            dimension_code="TASK_CINEMA_IMMERSION",
+            dimension_name="影院沉浸观影",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            relation_status="primary_user_task",
+            allocation_role="primary",
+            allocation_value_type="positive_value",
+            final_score=Decimal("0.9000"),
+            allocation_basis=Decimal("0.420000"),
+            relation_factor=Decimal("1.0000"),
+            allocation_weight=Decimal("0.420000"),
+            sales_volume_total=Decimal("1200.0000"),
+            sales_amount_total=Decimal("5998800.0000"),
+            avg_weekly_sales_volume=Decimal("100.000000"),
+            avg_weekly_sales_amount=Decimal("499900.000000"),
+            allocated_sales_volume=Decimal("500.0000"),
+            allocated_sales_amount=Decimal("2500000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("41.666667"),
+            allocated_avg_weekly_sales_amount=Decimal("208333.333333"),
+            allocation_confidence=Decimal("0.8800"),
+            allocation_basis_json={"source": "test", "role": "primary"},
+            evidence_ids_json=["ev-task-tv00029112"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-tv00029112-task-cinema",
+            result_hash="hash-allocation-tv00029112-task-cinema",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-group-premium-av",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="target_group",
+            dimension_code="TG_PREMIUM_AV_ENTHUSIAST",
+            dimension_name="高端影音体验用户",
+            taxonomy_version=CORE3_M10C_TV_TAXONOMY_VERSION,
+            sku_relation_count=2,
+            allocated_sku_count=2,
+            primary_sku_count=1,
+            secondary_sku_count=1,
+            estimated_sales_volume=Decimal("1000.0000"),
+            estimated_sales_amount=Decimal("5200000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("83.333333"),
+            estimated_avg_weekly_sales_amount=Decimal("433333.333333"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.500000"),
+            sales_amount_share=Decimal("0.520000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"海信": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"primary_target_group": 1},
+            top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 480}],
+            confidence_avg=Decimal("0.8700"),
+            business_summary_cn="高端影音体验用户重视画质、音画和客厅沉浸。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-group-premium-av",
+            result_hash="hash-summary-group-premium-av",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketSkuContribution(
+            contribution_id="contribution-tv00029112-group-premium-av",
+            summary_id="summary-group-premium-av",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="target_group",
+            dimension_code="TG_PREMIUM_AV_ENTHUSIAST",
+            dimension_name="高端影音体验用户",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            allocation_weight=Decimal("0.400000"),
+            allocated_sales_volume=Decimal("480.0000"),
+            allocated_sales_amount=Decimal("2400000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("40.000000"),
+            allocated_avg_weekly_sales_amount=Decimal("200000.000000"),
+            sku_share_in_dimension_volume=Decimal("0.480000"),
+            sku_share_in_dimension_amount=Decimal("0.461538"),
+            sku_rank_in_dimension=1,
+            is_primary_dimension=True,
+            allocation_role="primary",
+            relation_status="primary_target_group",
+            allocation_confidence=Decimal("0.8700"),
+            contribution_reason_cn="主目标客群贡献 SKU。",
+            evidence_ids_json=["ev-group-tv00029112"],
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-contribution-tv00029112-group-premium-av",
+            result_hash="hash-contribution-tv00029112-group-premium-av",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-tv00029112-group-premium-av",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=12,
+            dimension_type="target_group",
+            dimension_code="TG_PREMIUM_AV_ENTHUSIAST",
+            dimension_name="高端影音体验用户",
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            relation_status="primary_target_group",
+            allocation_role="primary",
+            allocation_value_type="positive_value",
+            final_score=Decimal("0.8700"),
+            allocation_basis=Decimal("0.400000"),
+            relation_factor=Decimal("1.0000"),
+            allocation_weight=Decimal("0.400000"),
+            sales_volume_total=Decimal("1200.0000"),
+            sales_amount_total=Decimal("5998800.0000"),
+            avg_weekly_sales_volume=Decimal("100.000000"),
+            avg_weekly_sales_amount=Decimal("499900.000000"),
+            allocated_sales_volume=Decimal("480.0000"),
+            allocated_sales_amount=Decimal("2400000.0000"),
+            allocated_avg_weekly_sales_volume=Decimal("40.000000"),
+            allocated_avg_weekly_sales_amount=Decimal("200000.000000"),
+            allocation_confidence=Decimal("0.8700"),
+            allocation_basis_json={"source": "test", "role": "primary"},
+            evidence_ids_json=["ev-group-tv00029112"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-tv00029112-group-premium-av",
+            result_hash="hash-allocation-tv00029112-group-premium-av",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
             summary_id="summary-bf-gaming-sports",
             project_id=PROJECT_ID,
             category_code="TV",
@@ -1290,6 +1522,21 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
     assert sections["target_group"]["primary_target_group_code"] == "TG_PREMIUM_AV_ENTHUSIAST"
     assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
     assert sections["sales_allocation"][0]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert sections["market"]["market_pool"]["sku_count"] == 5
+    assert sections["market"]["market_pool"]["target_rank_by_avg_weekly_sales"] == 2
+    semantic_positions = sections["semantic_dimension_positions"]
+    assert any(
+        item["dimension_code"] == "TASK_CINEMA_IMMERSION"
+        and item["market_space"]["estimated_sales_volume"] == 1100.0
+        and item["sku_contribution"]["sku_rank_in_dimension"] == 2
+        for item in semantic_positions
+    )
+    assert any(
+        item["dimension_code"] == "TG_PREMIUM_AV_ENTHUSIAST"
+        and item["market_space"]["estimated_sales_volume"] == 1000.0
+        and item["sku_contribution"]["sku_rank_in_dimension"] == 1
+        for item in semantic_positions
+    )
     assert fact_brief["missing_sections"] == []
 
 
@@ -1531,6 +1778,12 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "目标客群画像" in markdown
     assert "卖点画像" in markdown
     assert "参数画像" in markdown
+    assert "所在池空间" in markdown
+    assert "池内销量表现" in markdown
+    assert "空间900台；周均75台；覆盖2个SKU" in markdown
+    assert "分配700台；周均58.3台；权重60%；维度内第1名；占维度销量78%" in markdown
+    assert "影院沉浸观影 | 主任务和评论观察任务 | 空间1,100台" in markdown
+    assert "高端影音体验用户 | 主客群和评论观察客群 | 空间1,000台" in markdown
     assert "MiniLED 高端画质路线" in markdown
     assert "4K（3840x2160）" in markdown
     assert "量子点：未见" in markdown
