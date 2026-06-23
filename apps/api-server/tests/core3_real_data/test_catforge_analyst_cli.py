@@ -1779,7 +1779,19 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "## 三、四个产品详情链接" in markdown
     assert "[海信 65E7Q 产品画像](#profile-target)" in markdown
     assert "[创维 65A7H PRO 产品画像](#profile-competitor-1)" in markdown
-    assert "## 四、海信 65E7Q 产品画像" in markdown
+    assert "## 四、四个产品横向详细对比" in markdown
+    assert "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
+    assert "### 4.1 市场画像" in markdown
+    assert "### 4.2 价值战场画像" in markdown
+    assert "### 4.3 用户任务画像" in markdown
+    assert "### 4.4 目标客群画像" in markdown
+    assert "### 4.5 卖点画像" in markdown
+    assert "### 4.6 参数画像" in markdown
+    assert "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |" in markdown
+    assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
+    assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
+    assert "| 溢价卖点 | MiniLED 显示 | 贴墙安装和MiniLED 显示 | 高刷新率和MiniLED 显示 | MiniLED 显示 |" in markdown
+    assert "## 五、海信 65E7Q 产品画像" in markdown
     assert "市场画像" in markdown
     assert "价值战场画像" in markdown
     assert "用户任务画像" in markdown

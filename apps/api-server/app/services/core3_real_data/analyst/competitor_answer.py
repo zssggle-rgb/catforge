@@ -398,8 +398,10 @@ def render_competitor_report(
     lines.append(f"- [{target_name} 产品画像](#profile-target)")
     for index, item in enumerate(top_competitors[:3], start=1):
         lines.append(f"- [{_display_name(item.get('candidate') or {})} 产品画像](#profile-competitor-{index})")
-    lines.extend(["", '<a id="profile-target"></a>', f"## 四、{target_name} 产品画像", ""])
-    lines.extend(_product_profile_lines("4", target_name, target, target_sections, competitor_item=None))
+    lines.extend(["", "## 四、四个产品横向详细对比", ""])
+    lines.extend(_product_comparison_lines(target_name, target, target_sections, top_competitors[:3]))
+    lines.extend(["", '<a id="profile-target"></a>', f"## 五、{target_name} 产品画像", ""])
+    lines.extend(_product_profile_lines("5", target_name, target, target_sections, competitor_item=None))
     for index, item in enumerate(top_competitors[:3], start=1):
         candidate = item.get("candidate") or {}
         candidate_name = _display_name(candidate)
@@ -408,11 +410,11 @@ def render_competitor_report(
             [
                 "",
                 f'<a id="profile-competitor-{index}"></a>',
-                f"## {INDEX_CN[index + 3]}、{candidate_name} 产品画像",
+                f"## {INDEX_CN[index + 4]}、{candidate_name} 产品画像",
                 "",
             ]
         )
-        lines.extend(_product_profile_lines(str(index + 4), candidate_name, candidate, candidate_sections, competitor_item=item))
+        lines.extend(_product_profile_lines(str(index + 5), candidate_name, candidate, candidate_sections, competitor_item=item))
     return "\n".join(lines)
 
 
@@ -569,6 +571,194 @@ def _anchor_market_score_lines(top_competitors: list[dict[str, Any]], all_compet
             f"| {_display_name(item.get('candidate') or {})} | {score['value_anchor']} | {score['replacement_pressure']} | {score['market_validation']} | {anchors}；{item['replacement_pressure']['reason_cn']}；{item['market_validation']['summary_cn']} |"
         )
     return lines
+
+
+def _product_comparison_lines(
+    target_name: str,
+    target: dict[str, Any],
+    target_sections: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+) -> list[str]:
+    products = _comparison_products(target_name, target, target_sections, top_competitors)
+    lines: list[str] = [
+        "本节把本品和前三重点竞品放在同一张业务比较表里：纵轴是比较内容，横轴是四个产品，重点看同一购买池中的市场位置、价值战场、用户任务、目标客群、卖点和参数证据差异。",
+        "",
+        "### 4.1 市场画像",
+        "",
+    ]
+    lines.extend(_comparison_table_lines(products, ["尺寸", "尺寸价格池", "均价", "周均销量", "所在池空间", "池内销量表现", "相对本品", "市场角色"], _market_comparison_values))
+    lines.extend(["", "### 4.2 价值战场画像", ""])
+    lines.extend(_comparison_table_lines(products, ["主价值战场", "辅价值战场", "机会/拖后腿战场", "主战场空间", "主战场销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="battlefield")))
+    lines.extend(["", "### 4.3 用户任务画像", ""])
+    lines.extend(_comparison_table_lines(products, ["主用户任务", "辅用户任务", "评论/厂家观察任务", "主任务空间", "主任务销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="task")))
+    lines.extend(["", "### 4.4 目标客群画像", ""])
+    lines.extend(_comparison_table_lines(products, ["主目标客群", "辅目标客群", "评论/厂家观察客群", "主客群空间", "主客群销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="group")))
+    lines.extend(["", "### 4.5 卖点画像", ""])
+    lines.extend(_comparison_table_lines(products, ["事实卖点", "溢价卖点", "基础支撑卖点", "拖后腿卖点", "需复核表达", "共同价值锚点"], _claim_comparison_values))
+    lines.extend(["", "### 4.6 参数画像", ""])
+    lines.extend(
+        _comparison_table_lines(
+            products,
+            ["尺寸空间", "清晰度规格", "画质技术路线", "亮度控光能力", "动态与游戏能力", "智能系统能力", "外观安装能力", "护眼舒适能力"],
+            _param_comparison_values,
+        )
+    )
+    return lines
+
+
+def _comparison_products(
+    target_name: str,
+    target: dict[str, Any],
+    target_sections: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    products = [{"name": target_name, "sku": target, "sections": target_sections, "competitor_item": None}]
+    for item in top_competitors[:3]:
+        candidate = item.get("candidate") or {}
+        products.append(
+            {
+                "name": _display_name(candidate),
+                "sku": candidate,
+                "sections": _fact_sections(item.get("candidate_fact_brief") or {}),
+                "competitor_item": item,
+            }
+        )
+    return products
+
+
+def _comparison_table_lines(
+    products: list[dict[str, Any]],
+    row_labels: list[str],
+    value_builder: Any,
+) -> list[str]:
+    value_maps = [value_builder(product) for product in products]
+    lines = [
+        "| 比较内容 | " + " | ".join(_markdown_cell(product["name"]) for product in products) + " |",
+        "| --- | " + " | ".join("---" for _product in products) + " |",
+    ]
+    for label in row_labels:
+        values = [_markdown_cell(values.get(label) or "暂无稳定证据") for values in value_maps]
+        lines.append("| " + " | ".join([_markdown_cell(label), *values]) + " |")
+    return lines
+
+
+def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
+    sku = product.get("sku") or {}
+    sections = product.get("sections") or {}
+    competitor_item = product.get("competitor_item")
+    metrics = _market_metrics(sections)
+    position = _market_position(sections)
+    price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price")
+    weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
+    size = position.get("screen_size_inch") or sku.get("screen_size_inch")
+    price_band = PRICE_BAND_NAMES.get(str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier")), "价格带未知")
+    size_tier = SIZE_TIER_NAMES.get(str(position.get("size_tier") or sku.get("size_tier")), "尺寸段未知")
+    pool = (sections.get("market") or {}).get("market_pool") or {}
+    if competitor_item:
+        candidate = competitor_item.get("candidate") or {}
+        relative = f"{_price_gap_phrase(candidate.get('price_gap_pct_to_target'))}；{(competitor_item.get('market_validation') or {}).get('summary_cn') or '市场验证待补充'}"
+        role = _report_role_cn(competitor_item)
+    else:
+        relative = "本品基准"
+        role = f"{price_band}核心 SKU"
+    return {
+        "尺寸": f"{_format_number(size) or '未知'} 寸",
+        "尺寸价格池": f"{size_tier} × {price_band}",
+        "均价": _format_money(price) or "未知",
+        "周均销量": f"{_format_number(weekly_sales) or '未知'} 台",
+        "所在池空间": f"{_format_number(pool.get('total_sales_volume')) or '未知'}台；周均{_format_number(pool.get('total_avg_weekly_sales_volume')) or '未知'}台；SKU数{_format_number(pool.get('sku_count')) or '未知'}",
+        "池内销量表现": f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名；占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}",
+        "相对本品": relative,
+        "市场角色": role,
+    }
+
+
+def _semantic_comparison_values(product: dict[str, Any], *, profile_type: str) -> dict[str, str]:
+    sections = product.get("sections") or {}
+    profile_key = {"battlefield": "value_battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    dimension_key = {"battlefield": "battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    rows = _semantic_rows(sections.get(profile_key) or {}, profile_type=profile_type)
+    positions = _semantic_position_by_code(sections, profile_type=profile_type)
+    primary_marker = {"battlefield": "主战场", "task": "主任务", "group": "主客群"}[profile_type]
+    secondary_marker = {"battlefield": "辅战场", "task": "辅任务", "group": "辅客群"}[profile_type]
+    observed_markers = {
+        "battlefield": ("机会战场", "拖后腿战场"),
+        "task": ("评论观察任务", "厂家主张任务"),
+        "group": ("评论观察客群", "厂家主张客群"),
+    }[profile_type]
+    primary_codes = [code for code, _label, relation, _reason in rows if primary_marker in relation]
+    primary_code = primary_codes[0] if primary_codes else (rows[0][0] if rows else "")
+    primary_position = positions.get(primary_code, {})
+    competitor_item = product.get("competitor_item")
+    if competitor_item:
+        matched = _join_cn((competitor_item.get("matched_dimensions") or {}).get(dimension_key, [])[:6]) or "重合不足"
+        overlap = _pct_or_unknown((competitor_item.get("weighted_overlap") or {}).get(dimension_key))
+        overlap_text = f"{matched}；加权重合{overlap}"
+    else:
+        overlap_text = "本品基准"
+    return {
+        "主价值战场": _labels_by_relation(rows, primary_marker),
+        "辅价值战场": _labels_by_relation(rows, secondary_marker),
+        "机会/拖后腿战场": _labels_by_relation(rows, *observed_markers),
+        "主战场空间": _semantic_market_space_text(primary_position),
+        "主战场销量表现": _semantic_sku_performance_text(primary_position),
+        "主用户任务": _labels_by_relation(rows, primary_marker),
+        "辅用户任务": _labels_by_relation(rows, secondary_marker),
+        "评论/厂家观察任务": _labels_by_relation(rows, *observed_markers),
+        "主任务空间": _semantic_market_space_text(primary_position),
+        "主任务销量表现": _semantic_sku_performance_text(primary_position),
+        "主目标客群": _labels_by_relation(rows, primary_marker),
+        "辅目标客群": _labels_by_relation(rows, secondary_marker),
+        "评论/厂家观察客群": _labels_by_relation(rows, *observed_markers),
+        "主客群空间": _semantic_market_space_text(primary_position),
+        "主客群销量表现": _semantic_sku_performance_text(primary_position),
+        "与本品重合": overlap_text,
+    }
+
+
+def _labels_by_relation(rows: list[tuple[str, str, str, str]], *markers: str) -> str:
+    labels = [label for _code, label, relation, _reason in rows if any(marker in relation for marker in markers)]
+    return _join_cn(labels[:6]) or "暂无稳定证据"
+
+
+def _claim_comparison_values(product: dict[str, Any]) -> dict[str, str]:
+    sections = product.get("sections") or {}
+    claim = sections.get("claim_fact") or {}
+    comment = sections.get("comment_fact") or {}
+    fact_claims = set(str(code) for code in claim.get("fact_claim_codes") or [])
+    supported = set(str(code) for code in comment.get("supported_claim_codes") or [])
+    contradicted = set(str(code) for code in comment.get("contradicted_claim_codes") or [])
+    unsupported = set(str(code) for code in claim.get("unsupported_claim_codes") or [])
+    premium = sorted((fact_claims & supported) - contradicted)
+    basic = sorted(fact_claims - supported - contradicted)
+    competitor_item = product.get("competitor_item") or {}
+    shared_anchors = (competitor_item.get("value_anchor") or {}).get("shared_anchors") or []
+    return {
+        "事实卖点": _join_cn(_labels_for_codes(sorted(fact_claims))[:10]) or "暂无稳定证据",
+        "溢价卖点": _join_cn(_labels_for_codes(premium)[:10]) or "暂无稳定证据",
+        "基础支撑卖点": _join_cn(_labels_for_codes(basic)[:10]) or "暂无稳定证据",
+        "拖后腿卖点": _join_cn(_labels_for_codes(sorted(contradicted))[:10]) or "暂无稳定证据",
+        "需复核表达": _join_cn(_labels_for_codes(sorted(unsupported))[:10]) or "暂无稳定证据",
+        "共同价值锚点": _join_cn(shared_anchors[:8]) if shared_anchors else "本品基准",
+    }
+
+
+def _param_comparison_values(product: dict[str, Any]) -> dict[str, str]:
+    sections = product.get("sections") or {}
+    rows = _business_param_profile_rows(sections)
+    values: dict[str, str] = {}
+    for dimension, judgement, evidence, business_meaning in rows:
+        detail = _join_evidence([judgement, evidence, business_meaning])
+        values[dimension] = detail or "暂无稳定证据"
+    contradicted = _labels_for_codes((sections.get("comment_fact") or {}).get("contradicted_param_codes") or [])
+    if contradicted:
+        values["护眼舒适能力"] = _join_evidence([values.get("护眼舒适能力", ""), f"评论质疑：{_join_cn(contradicted[:5])}"])
+    return values
+
+
+def _markdown_cell(value: Any) -> str:
+    text = str(value or "").replace("\n", "<br>").replace("|", "｜").strip()
+    return text or "暂无稳定证据"
 
 
 def _product_profile_lines(
