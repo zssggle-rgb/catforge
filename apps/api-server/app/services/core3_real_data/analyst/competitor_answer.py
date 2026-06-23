@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -156,11 +157,18 @@ PARAM_LABELS_CN = {
     "declared_brightness_nit_or_band": "亮度",
     "declared_refresh_rate_hz": "刷新率",
     "display_technology": "显示技术",
+    "display_tech_class": "显示技术",
+    "backlight_source": "背光源",
     "hdmi21_port_count": "HDMI 2.1 接口",
     "hdr_capability_flag": "HDR 能力",
     "local_dimming_zone_count": "控光分区",
     "memory_storage": "内存/存储",
+    "mini_led_flag": "MiniLED",
+    "mini_led_type": "MiniLED 类型",
     "processor_chip_model": "芯片",
+    "quantum_dot_flag": "量子点",
+    "resolution_label": "分辨率",
+    "resolution_pixels": "分辨率像素",
     "screen_size_inch": "尺寸",
     "slim_design_label": "超薄标签",
     "speaker_power_w": "音响功率",
@@ -650,32 +658,16 @@ def _product_claim_profile_lines(sections: dict[str, Any]) -> list[str]:
 
 def _product_param_profile_lines(sections: dict[str, Any]) -> list[str]:
     param = sections.get("parameter_fact") or {}
-    core_params = param.get("core_params") or {}
-    lines = ["| 参数组 | 核心参数 | 业务作用 |", "| --- | --- | --- |"]
-    if not isinstance(core_params, dict) or not core_params:
-        lines.append("| 暂无稳定参数 | 暂无 | 当前参数事实不足 |")
+    rows = _business_param_profile_rows(sections)
+    lines = ["| 参数维度 | 业务判断 | 关键证据 | 对成交价值的含义 |", "| --- | --- | --- | --- |"]
+    if not rows:
+        lines.append("| 暂无稳定参数 | 暂无 | 当前参数事实不足 | 需要补齐核心规格后再判断产品力 |")
         return lines
-    for group, payload in core_params.items():
-        if not isinstance(payload, dict) or not payload:
-            continue
-        values = []
-        for code, entry in payload.items():
-            if isinstance(entry, dict):
-                value = entry.get("normalized_value")
-                if value is None:
-                    value = entry.get("raw_value")
-            else:
-                value = entry
-            if value is not None:
-                values.append(f"{_label_code(code)}={_format_param_value(value)}")
-        if values:
-            group_label = PARAM_GROUP_NAMES.get(str(group), _label_code(group) or str(group))
-            lines.append(f"| {group_label} | {_join_cn(values[:8])} | {_param_group_business_role(str(group))} |")
+    for dimension, judgement, evidence, business_meaning in rows:
+        lines.append(f"| {dimension} | {judgement} | {evidence} | {business_meaning} |")
     contradicted = _labels_for_codes((sections.get("comment_fact") or {}).get("contradicted_param_codes") or [])
     if contradicted:
-        lines.append(f"| 拖后腿参数 | {_join_cn(contradicted)} | 评论侧存在负向或质疑信号，需要结合原始证据复核 |")
-    if len(lines) == 2:
-        lines.append("| 暂无稳定参数 | 暂无 | 当前参数事实不足 |")
+        lines.append(f"| 拖后腿参数 | {_join_cn(contradicted)} | 评论侧存在负向或质疑信号 | 需要结合原始评论复核，避免把被质疑能力包装成溢价点 |")
     return lines
 
 
@@ -835,6 +827,294 @@ def _param_group_business_role(group: str) -> str:
     if "eye" in normalized or "care" in normalized:
         return "支撑护眼、长时间观看和家庭舒适体验"
     return "支撑对应产品能力和卖点表达"
+
+
+def _business_param_profile_rows(sections: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    param = sections.get("parameter_fact") or {}
+    values = _param_value_map(param)
+    rows: list[tuple[str, str, str, str]] = []
+
+    size_value = _first_param(values, "screen_size_inch", "size_inch", "screen_size", "尺寸")
+    size_tier = (param.get("dimension_tier_profile") or {}).get("size") if isinstance(param.get("dimension_tier_profile"), dict) else None
+    if size_value is not None or size_tier:
+        size_text = f"{_format_number(size_value)}寸" if size_value is not None else "尺寸已识别"
+        tier_text = _label_code(size_tier) if size_tier else ""
+        rows.append(
+            (
+                "尺寸空间",
+                f"{size_text}{'，' + tier_text if tier_text else ''}",
+                _join_evidence([item for item in (size_text, tier_text) if item]),
+                "决定产品进入哪个尺寸购买池，是客厅观影、影院沉浸和同尺寸竞品比较的基础。",
+            )
+        )
+
+    resolution_text = _resolution_business_text(values)
+    if resolution_text:
+        rows.append(
+            (
+                "清晰度规格",
+                f"{resolution_text} 显示规格",
+                resolution_text,
+                "属于当前大屏电视的基础清晰度门槛，可支撑高清片源、客厅观影和高端画质叙事。",
+            )
+        )
+
+    picture_row = _picture_technology_row(values)
+    if picture_row:
+        rows.append(picture_row)
+
+    brightness = _first_param(values, "declared_brightness_nit_or_band", "brightness_nit", "peak_brightness_nit", "亮度")
+    dimming = _first_param(values, "local_dimming_zone_count", "dimming_zone_count", "控光分区")
+    hdr = _first_param(values, "hdr_capability_flag", "hdr_flag", "hdr")
+    if brightness is not None or dimming is not None or hdr is not None:
+        evidence = []
+        if brightness is not None:
+            evidence.append(f"亮度：{_format_business_value(brightness)}")
+        if dimming is not None:
+            evidence.append(f"控光分区：{_format_business_value(dimming)}")
+        if hdr is not None:
+            evidence.append(f"HDR：{'支持' if _truthy_param(hdr) else '未见明确支持'}")
+        rows.append(
+            (
+                "亮度控光能力",
+                "高亮控光证据已出现" if brightness is not None or dimming is not None else "HDR 能力已出现",
+                _join_evidence(evidence),
+                "直接影响暗场层次、明暗对比和高端画质感，是高端画质升级战场的重要溢价证据。",
+            )
+        )
+
+    refresh = _first_param(values, "declared_refresh_rate_hz", "refresh_rate_hz", "screen_refresh_rate_hz", "刷新率")
+    hdmi21 = _first_param(values, "hdmi21_port_count", "hdmi_2_1_port_count", "hdmi2_1_port_count")
+    if refresh is not None or hdmi21 is not None:
+        evidence = []
+        if refresh is not None:
+            evidence.append(f"刷新率：{_format_business_value(refresh)}Hz")
+        if hdmi21 is not None:
+            evidence.append(f"HDMI 2.1：{_format_business_value(hdmi21)}个")
+        rows.append(
+            (
+                "动态与游戏能力",
+                "高刷娱乐能力已成立" if refresh is not None else "游戏连接能力有证据",
+                _join_evidence(evidence),
+                "支撑游戏、体育赛事和高速画面流畅，是游戏体育流畅战场的核心产品证据。",
+            )
+        )
+
+    ai_capability = _first_param(values, "ai_capability_flag", "ai_model_capability_flag", "ai_flag", "ai能力")
+    chip = _first_param(values, "processor_chip_model", "chip_model", "芯片")
+    wifi = _first_param(values, "wifi_capability_flag", "wifi_flag")
+    if ai_capability is not None or chip is not None or wifi is not None:
+        evidence = []
+        if ai_capability is not None:
+            evidence.append(f"AI：{'有' if _truthy_param(ai_capability) else '未见明确能力'}")
+        if chip is not None:
+            evidence.append(f"芯片：{_format_business_value(chip)}")
+        if wifi is not None:
+            evidence.append(f"无线连接：{'有' if _truthy_param(wifi) else '未见明确能力'}")
+        rows.append(
+            (
+                "智能系统能力",
+                "智能交互和系统能力有参数支撑",
+                _join_evidence(evidence),
+                "影响投屏互联、语音控制、系统流畅和日常易用，是智能互联与家庭使用体验的基础。",
+            )
+        )
+
+    slim = _first_param(values, "slim_design_label", "body_thickness_mm", "ultra_thin_flag", "超薄")
+    flush = _first_param(values, "wall_mount_flush_flag", "flush_wall_mount_flag", "贴墙安装")
+    if slim is not None or flush is not None:
+        evidence = []
+        if slim is not None:
+            evidence.append(f"外观：{_format_business_value(slim)}")
+        if flush is not None:
+            evidence.append(f"贴墙安装：{'支持' if _truthy_param(flush) else '未见支持'}")
+        rows.append(
+            (
+                "外观安装能力",
+                "家装融合能力有参数支撑",
+                _join_evidence(evidence),
+                "支撑新家装修、客厅空间融合和高端外观感，可把技术参数转译成家庭场景价值。",
+            )
+        )
+
+    eye_care = _first_param(values, "low_blue_light_flag", "flicker_free_flag", "eye_care_flag", "护眼")
+    if eye_care is not None:
+        rows.append(
+            (
+                "护眼舒适能力",
+                "护眼长看能力有参数支撑" if _truthy_param(eye_care) else "未见明确护眼参数",
+                f"护眼：{'有' if _truthy_param(eye_care) else '未见明确支持'}",
+                "影响儿童家庭、长时间观看和舒适体验；若评论同步正向，可成为家庭客群的溢价支撑。",
+            )
+        )
+
+    return rows
+
+
+def _param_value_map(param: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    core_params = param.get("core_params") or {}
+    if isinstance(core_params, dict):
+        for group_value in core_params.values():
+            if not isinstance(group_value, dict):
+                continue
+            for code, payload in group_value.items():
+                value = _extract_param_value(payload)
+                if value is not None:
+                    result[str(code)] = value
+    dimension_tier = param.get("dimension_tier_profile") or {}
+    if isinstance(dimension_tier, dict):
+        for code, value in dimension_tier.items():
+            if value is not None:
+                result.setdefault(str(code), value)
+    return result
+
+
+def _extract_param_value(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        if "normalized_value" in payload and payload.get("normalized_value") is not None:
+            return payload.get("normalized_value")
+        if "raw_value" in payload and payload.get("raw_value") is not None:
+            return payload.get("raw_value")
+        if any(key in payload for key in ("width", "height", "resolution_label")):
+            return payload
+        return None
+    return payload
+
+
+def _first_param(values: dict[str, Any], *codes: str) -> Any:
+    normalized_map = {_param_lookup_key(key): value for key, value in values.items()}
+    for code in codes:
+        if code in values:
+            return values[code]
+        key = _param_lookup_key(code)
+        if key in normalized_map:
+            return normalized_map[key]
+    return None
+
+
+def _param_lookup_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _resolution_business_text(values: dict[str, Any]) -> str:
+    label = _first_param(values, "resolution_label", "分辨率")
+    pixels = _first_param(values, "resolution_pixels")
+    width = height = None
+    if isinstance(pixels, dict):
+        width = pixels.get("width")
+        height = pixels.get("height")
+        label = label or pixels.get("resolution_label")
+    label_text = _format_business_value(label) if label is not None else ""
+    if width and height:
+        pixel_text = f"{_format_resolution_axis(width)}x{_format_resolution_axis(height)}"
+        return f"{label_text}（{pixel_text}）" if label_text else pixel_text
+    return label_text
+
+
+def _format_resolution_axis(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return str(value or "").strip()
+    return str(int(number)) if number == number.to_integral_value() else str(number)
+
+
+def _picture_technology_row(values: dict[str, Any]) -> tuple[str, str, str, str] | None:
+    mini_led = _first_param(values, "mini_led_flag", "miniled_flag")
+    mini_led_type = _first_param(values, "mini_led_type", "miniled_type")
+    backlight = _first_param(values, "backlight_source", "背光源")
+    quantum_dot = _first_param(values, "quantum_dot_flag", "qled_flag", "量子点")
+    display_tech = _first_param(values, "display_tech_class", "display_technology", "display_type")
+    picture_score = _first_param(values, "picture_quality_score", "premium_picture_score", "高端画质")
+    if all(value is None for value in (mini_led, mini_led_type, backlight, quantum_dot, display_tech, picture_score)):
+        return None
+
+    evidence: list[str] = []
+    if mini_led is not None:
+        evidence.append("MiniLED 方案已成立" if _truthy_param(mini_led) else "未见 MiniLED 方案")
+    if mini_led_type is not None:
+        evidence.append(f"画质定位：{_format_business_value(mini_led_type)}")
+    if backlight is not None:
+        evidence.append(f"背光源：{_format_business_value(backlight)}")
+    if quantum_dot is not None:
+        evidence.append("量子点：有" if _truthy_param(quantum_dot) else "量子点：未见")
+    if display_tech is not None:
+        evidence.append(f"显示技术：{_format_business_value(display_tech)}")
+    if picture_score is not None:
+        evidence.append(f"高端画质评分：{_format_business_value(picture_score)}")
+
+    if _truthy_param(mini_led):
+        judgement = "MiniLED 高端画质路线"
+        meaning = "这是高端画质升级和影院沉浸的核心硬件锚点；背光源只作为技术底座，不应单独包装成溢价卖点"
+        if quantum_dot is not None and not _truthy_param(quantum_dot):
+            meaning += "；未见量子点加成，色彩增强叙事需要依赖其他参数或卖点证据"
+    elif display_tech is not None or backlight is not None:
+        judgement = f"{_format_business_value(display_tech or backlight)} 显示路线"
+        meaning = "可说明基础显示技术路线，但是否构成溢价还要看亮度、控光、色彩和评论验证。"
+    else:
+        judgement = "画质能力有参数证据"
+        meaning = "可作为画质卖点的辅助证据，需和卖点、评论共同判断是否形成溢价。"
+    return ("画质技术路线", judgement, _join_evidence(evidence), meaning)
+
+
+def _truthy_param(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, Decimal)):
+        return Decimal(str(value)) != 0
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "yes", "y", "有", "是", "支持", "supported", "yes_supported"}
+
+
+def _format_business_value(value: Any) -> str:
+    if isinstance(value, dict):
+        if "value" in value:
+            unit = _business_unit(value.get("unit"))
+            formatted = _format_unit_number(value.get("value")) if unit else _format_business_value(value.get("value"))
+            return f"{formatted}{unit}" if unit else formatted
+        resolution = _resolution_business_text({"resolution_pixels": value})
+        return resolution or str(value)
+    if isinstance(value, bool):
+        return "有" if value else "无"
+    if isinstance(value, (int, float, Decimal)):
+        return _format_number(value)
+    text = str(value or "").strip()
+    mapping = {
+        "miniled": "MiniLED",
+        "mini_led": "MiniLED",
+        "led": "LED",
+        "lcd": "LCD",
+        "oled": "OLED",
+        "qled": "QLED",
+        "4k": "4K",
+        "8k": "8K",
+        "high_end_picture": "高端画质",
+    }
+    return mapping.get(text.lower(), _label_code(text) or text)
+
+
+def _business_unit(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    mapping = {
+        "nit": "尼特",
+        "nits": "尼特",
+        "hz": "Hz",
+        "w": "W",
+        "mm": "mm",
+        "%": "%",
+    }
+    return mapping.get(text, str(value or "").strip())
+
+
+def _format_unit_number(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return str(value or "").strip()
+    return str(int(number)) if number == number.to_integral_value() else str(number.normalize())
+
+
+def _join_evidence(items: list[str]) -> str:
+    return "；".join(item for item in items if item)
 
 
 def _fact_sections(fact_brief: dict[str, Any]) -> dict[str, Any]:
@@ -1034,11 +1314,14 @@ def _market_fact_lines(
 def _parameter_fact_lines(sections: dict[str, Any]) -> list[str]:
     param = sections.get("parameter_fact") or {}
     summary = param.get("summary") or {}
-    core = _flatten_core_params(param.get("core_params") or {})
-    if not core:
+    rows = _business_param_profile_rows(sections)
+    if not rows:
         return ["- 当前参数事实不足，需要补齐核心参数后再做产品力判断。"]
-    values = [f"{_label_code(code)}={_format_param_value(value)}" for code, value in core[:10]]
-    lines = [f"- 核心参数：{_join_cn(values)}。"]
+    highlights = [f"{dimension}：{judgement}" for dimension, judgement, _evidence, _meaning in rows[:4]]
+    lines = [f"- 参数解读：{_join_cn(highlights)}。"]
+    meanings = _unique_strings([meaning for _dimension, _judgement, _evidence, meaning in rows[:3]])
+    if meanings:
+        lines.append(f"- 业务含义：{_join_cn(meanings[:2])}。")
     completeness = _decimal(summary.get("param_completeness") or param.get("param_completeness"))
     known = summary.get("known_param_count") or param.get("known_param_count")
     conflict = summary.get("conflict_count") or param.get("conflict_count")

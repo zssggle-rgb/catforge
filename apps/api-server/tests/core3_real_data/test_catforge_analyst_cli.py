@@ -177,7 +177,18 @@ def seed_fact_profiles(session: Session) -> None:
                 "display_tech_class": {"normalized_value": "miniled"},
                 "dimension_tier_profile": {"size": "large_60_69", "display_tech": "miniled"},
             },
-            core_picture_params_json={"screen_size_inch": {"normalized_value": 65}},
+            core_picture_params_json={
+                "screen_size_inch": {"normalized_value": 65},
+                "mini_led_flag": {"normalized_value": True},
+                "mini_led_type": {"normalized_value": "高端画质"},
+                "backlight_source": {"normalized_value": "LED"},
+                "quantum_dot_flag": {"normalized_value": False},
+                "resolution_label": {"normalized_value": "4K"},
+                "declared_brightness_nit_or_band": {"normalized_value": {"value": 5200, "unit": "nits"}},
+                "local_dimming_zone_count": {"normalized_value": 1920},
+                "高端画质": {"normalized_value": 95},
+                "resolution_pixels": {"normalized_value": {"width": 3840, "height": 2160, "resolution_label": "4K"}},
+            },
             core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
             core_system_params_json={"ai_chip_flag": {"normalized_value": True}},
             core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
@@ -1520,8 +1531,29 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "目标客群画像" in markdown
     assert "卖点画像" in markdown
     assert "参数画像" in markdown
+    assert "MiniLED 高端画质路线" in markdown
+    assert "4K（3840x2160）" in markdown
+    assert "量子点：未见" in markdown
+    assert "5200尼特" in markdown
+    assert "控光分区：1,920" in markdown
     assert "溢价卖点" in markdown
-    for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high", "产品经理策略", "市场导购话术", "海信应对策略"):
+    for forbidden in (
+        "CLI",
+        "JSON",
+        "M03B",
+        "BF_",
+        "TG_",
+        "TASK_",
+        "mid_high",
+        "mini_led_flag",
+        "resolution_pixels",
+        "core_picture_params",
+        "{'unit'",
+        '"unit"',
+        "产品经理策略",
+        "市场导购话术",
+        "海信应对策略",
+    ):
         assert forbidden not in markdown
     short_answer = answer["short_answer"]
     assert len(short_answer) <= 600
