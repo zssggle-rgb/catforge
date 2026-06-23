@@ -1637,11 +1637,38 @@ def _feishu_failure_message(output: str) -> str:
     normalized = output.lower()
     if "not found" in normalized or "no such file" in normalized:
         return "飞书文档创建失败：当前环境找不到飞书 CLI。"
+    if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
+        scopes = _extract_missing_scopes(output)
+        console_url = _extract_console_url(output)
+        scope_text = f"（缺少 {scopes}）" if scopes else ""
+        url_text = f" 请在飞书开发者后台开通后重试：{console_url}" if console_url else ""
+        return f"飞书文档创建失败：飞书应用或用户缺少文档创建权限{scope_text}。{url_text}".strip()
     if "auth" in normalized or "login" in normalized or "user identity" in normalized:
         return "飞书文档创建失败：飞书用户身份未授权或授权已失效。"
-    if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
-        return "飞书文档创建失败：飞书应用或用户缺少文档创建权限。"
     return "飞书文档创建失败：请检查飞书 CLI 配置、授权和网络连通性。"
+
+
+def _extract_missing_scopes(output: str) -> str:
+    try:
+        payload = json.loads(output)
+    except Exception:
+        return ""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    scopes = error.get("missing_scopes") if isinstance(error, dict) else None
+    if not isinstance(scopes, list):
+        return ""
+    values = [str(scope) for scope in scopes if scope]
+    return "、".join(values[:8])
+
+
+def _extract_console_url(output: str) -> str:
+    try:
+        payload = json.loads(output)
+    except Exception:
+        return ""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    url = error.get("console_url") if isinstance(error, dict) else None
+    return url if isinstance(url, str) and url.startswith("http") else ""
 
 
 def _role_weight(roles: list[Any]) -> Decimal:
