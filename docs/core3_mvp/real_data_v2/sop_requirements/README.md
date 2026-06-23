@@ -55,6 +55,7 @@
 16. [M11C 新价值战场画像与图谱](M11C_value_battlefield_profile_requirements.md)
 17. [M11D 新版语义市场图谱与销量分配](M11D_semantic_market_graph_allocation_requirements.md)
 18. [CatForge Analyst 与小奥家电市场分析专家](CATFORGE_ANALYST_xiaoao_agent_requirements.md)
+    - [CatForge Analyst 竞品问答 CLI 与小奥 Skill](CATFORGE_ANALYST_competitor_answer_requirements.md)
 19. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
 20. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
     - [M08.6 参数-卖点-评论分层产品锚点校准](M08_6_product_anchor_evidence_layer_requirements.md)
