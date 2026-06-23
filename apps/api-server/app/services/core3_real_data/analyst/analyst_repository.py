@@ -337,6 +337,9 @@ class AnalystRepository:
                 analysis_population=analysis_population,
                 market_window=market_window,
                 allocations=semantic_allocations,
+                user_task_profile=user_task_profile,
+                target_group_profile=target_group_profile,
+                battlefield_profile=battlefield_profile,
             ),
         }
         missing_sections = [key for key, value in sections.items() if value in ({}, [])]
@@ -808,14 +811,20 @@ class AnalystRepository:
         analysis_population: str,
         market_window: str,
         allocations: Sequence[entities.Core3SemanticMarketAllocation],
+        user_task_profile: entities.Core3M09cSkuUserTaskProfile | None = None,
+        target_group_profile: entities.Core3M10cSkuTargetGroupProfile | None = None,
+        battlefield_profile: entities.Core3SkuValueBattlefieldProfile | None = None,
     ) -> list[dict[str, Any]]:
-        if not allocations or product_category != "TV":
+        if product_category != "TV":
             return []
         codes_by_type: dict[str, list[str]] = {}
         for allocation in allocations:
             codes_by_type.setdefault(allocation.dimension_type, [])
             if allocation.dimension_code not in codes_by_type[allocation.dimension_type]:
                 codes_by_type[allocation.dimension_type].append(allocation.dimension_code)
+        _add_profile_dimension_codes(codes_by_type, user_task_profile, target_group_profile, battlefield_profile)
+        if not codes_by_type:
+            return []
 
         summary_by_key: dict[tuple[str, str], entities.Core3SemanticMarketDimensionSummary] = {}
         for dimension_type, dimension_codes in codes_by_type.items():
@@ -829,29 +838,39 @@ class AnalystRepository:
             ):
                 summary_by_key[(row.dimension_type, row.dimension_code)] = row
 
+        allocation_by_key = {(row.dimension_type, row.dimension_code): row for row in allocations}
         contribution_by_key = self._semantic_contribution_by_dimension(
             batch_id=batch_id,
             product_category=product_category,
             sku_code=sku_code,
             analysis_population=analysis_population,
             market_window=market_window,
-            dimension_codes=[allocation.dimension_code for allocation in allocations],
+            dimension_codes=[code for dimension_codes in codes_by_type.values() for code in dimension_codes],
         )
         positions: list[dict[str, Any]] = []
-        for allocation in allocations:
-            key = (allocation.dimension_type, allocation.dimension_code)
-            summary = summary_by_key.get(key)
-            contribution = contribution_by_key.get(key)
-            positions.append(
-                {
-                    "dimension_type": allocation.dimension_type,
-                    "dimension_code": allocation.dimension_code,
-                    "dimension_name": allocation.dimension_name,
-                    "market_space": _semantic_summary_payload(summary) if summary else {},
-                    "sku_allocation": _allocation_payload(allocation),
-                    "sku_contribution": _semantic_contribution_payload(contribution) if contribution else {},
-                }
-            )
+        for dimension_type, dimension_codes in codes_by_type.items():
+            for dimension_code in dimension_codes:
+                key = (dimension_type, dimension_code)
+                allocation = allocation_by_key.get(key)
+                summary = summary_by_key.get(key)
+                contribution = contribution_by_key.get(key)
+                dimension_name = ""
+                if allocation:
+                    dimension_name = allocation.dimension_name
+                elif summary:
+                    dimension_name = summary.dimension_name
+                else:
+                    dimension_name = dimension_code
+                positions.append(
+                    {
+                        "dimension_type": dimension_type,
+                        "dimension_code": dimension_code,
+                        "dimension_name": dimension_name,
+                        "market_space": _semantic_summary_payload(summary) if summary else {},
+                        "sku_allocation": _allocation_payload(allocation) if allocation else {},
+                        "sku_contribution": _semantic_contribution_payload(contribution) if contribution else {},
+                    }
+                )
         return positions
 
     def _semantic_contribution_by_dimension(
@@ -1431,6 +1450,59 @@ def _comment_payload(row: entities.Core3SkuCommentFactProfile | None) -> dict[st
         "quality_flags": row.quality_flags or [],
         "evidence_id_count": len(row.evidence_ids or []),
     }
+
+
+def _add_profile_dimension_codes(
+    codes_by_type: dict[str, list[str]],
+    user_task_profile: entities.Core3M09cSkuUserTaskProfile | None,
+    target_group_profile: entities.Core3M10cSkuTargetGroupProfile | None,
+    battlefield_profile: entities.Core3SkuValueBattlefieldProfile | None,
+) -> None:
+    if user_task_profile:
+        _append_dimension_codes(
+            codes_by_type,
+            "user_task",
+            [
+                user_task_profile.primary_user_task_code,
+                *(user_task_profile.secondary_user_task_codes_json or []),
+                *(user_task_profile.comment_observed_task_codes_json or []),
+                *(user_task_profile.brand_claimed_task_codes_json or []),
+                *(user_task_profile.latent_capability_task_codes_json or []),
+                *(user_task_profile.drag_factor_task_codes_json or []),
+            ],
+        )
+    if target_group_profile:
+        _append_dimension_codes(
+            codes_by_type,
+            "target_group",
+            [
+                target_group_profile.primary_target_group_code,
+                *(target_group_profile.secondary_target_group_codes_json or []),
+                *(target_group_profile.comment_observed_group_codes_json or []),
+                *(target_group_profile.brand_claimed_group_codes_json or []),
+                *(target_group_profile.latent_group_codes_json or []),
+                *(target_group_profile.unmet_group_need_codes_json or []),
+            ],
+        )
+    if battlefield_profile:
+        _append_dimension_codes(
+            codes_by_type,
+            "battlefield",
+            [
+                battlefield_profile.primary_battlefield_code,
+                *(battlefield_profile.secondary_battlefield_codes_json or []),
+                *(battlefield_profile.opportunity_battlefield_codes_json or []),
+                *(battlefield_profile.drag_factor_battlefield_codes_json or []),
+            ],
+        )
+
+
+def _append_dimension_codes(codes_by_type: dict[str, list[str]], dimension_type: str, codes: Sequence[Any]) -> None:
+    values = codes_by_type.setdefault(dimension_type, [])
+    for code in codes:
+        text = str(code or "").strip()
+        if text and text not in values:
+            values.append(text)
 
 
 def _user_task_payload(row: entities.Core3M09cSkuUserTaskProfile | None) -> dict[str, Any]:

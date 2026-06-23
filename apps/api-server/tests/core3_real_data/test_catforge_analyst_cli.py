@@ -918,6 +918,44 @@ def seed_semantic_space(session: Session) -> None:
     )
     session.add(
         entities.Core3SemanticMarketDimensionSummary(
+            summary_id="summary-bf-mainstream-living",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_MAINSTREAM_LIVING_BALANCE",
+            dimension_name="主流客厅均衡体验战场",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            sku_relation_count=4,
+            allocated_sku_count=3,
+            secondary_sku_count=1,
+            estimated_sales_volume=Decimal("600.0000"),
+            estimated_sales_amount=Decimal("3000000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("50.000000"),
+            estimated_avg_weekly_sales_amount=Decimal("250000.000000"),
+            total_market_sales_volume=Decimal("2000.0000"),
+            total_market_sales_amount=Decimal("10000000.0000"),
+            allocated_market_sales_volume=Decimal("1800.0000"),
+            allocated_market_sales_amount=Decimal("9000000.0000"),
+            sales_volume_share=Decimal("0.300000"),
+            sales_amount_share=Decimal("0.300000"),
+            allocation_coverage_rate=Decimal("0.900000"),
+            brand_distribution_json={"创维": {"sku_count": 1}},
+            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            relation_status_counts_json={"secondary_battlefield": 1},
+            top_skus_json=[{"sku_code": "TV00040001", "allocated_sales_volume": 260}],
+            confidence_avg=Decimal("0.7800"),
+            business_summary_cn="主流客厅均衡体验战场由家庭客厅、画质和易用性支撑。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-bf-mainstream-living",
+            result_hash="hash-summary-bf-mainstream-living",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
             summary_id="summary-task-cinema",
             project_id=PROJECT_ID,
             category_code="TV",
@@ -1545,6 +1583,13 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
         and item["sku_contribution"]["sku_rank_in_dimension"] == 1
         for item in semantic_positions
     )
+    assert any(
+        item["dimension_code"] == "BF_MAINSTREAM_LIVING_BALANCE"
+        and item["market_space"]["estimated_sales_volume"] == 600.0
+        and item["sku_allocation"] == {}
+        and item["sku_contribution"] == {}
+        for item in semantic_positions
+    )
     assert fact_brief["missing_sections"] == []
 
 
@@ -1788,6 +1833,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 4.5 卖点画像" in markdown
     assert "### 4.6 参数画像" in markdown
     assert "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |" in markdown
+    assert "| 命中的固定价值战场 |" in markdown
+    assert "| 补充证据判断 |" in markdown
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
     assert "| 溢价卖点 | MiniLED 显示 | 贴墙安装和MiniLED 显示 | 高刷新率和MiniLED 显示 | MiniLED 显示 |" in markdown
@@ -1801,7 +1848,9 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "所在池空间" in markdown
     assert "池内销量表现" in markdown
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
-    assert "分配700台；周均58.3台；权重60%；维度内第1名；占维度销量78%" in markdown
+    assert "分配700台；周均58台；权重60%；维度内第1名；占维度销量78%" in markdown
+    assert "主流客厅均衡体验 | 辅战场 | 空间600台" in markdown
+    assert "本品未进入该分类销量承接分配" in markdown
     assert "影院沉浸观影 | 主任务和评论观察任务 | 空间1,100台" in markdown
     assert "高端影音体验用户 | 主客群和评论观察客群 | 空间1,000台" in markdown
     assert "MiniLED 高端画质路线" in markdown
@@ -1823,6 +1872,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "core_picture_params",
         "{'unit'",
         '"unit"',
+        "其他关系状态",
+        "图谱空间待生成",
         "产品经理策略",
         "市场导购话术",
         "海信应对策略",

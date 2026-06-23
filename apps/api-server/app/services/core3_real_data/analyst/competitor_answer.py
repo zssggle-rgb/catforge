@@ -12,7 +12,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal
 
 
@@ -478,7 +478,7 @@ def _analysis_conclusion_lines(
             ]
         )
     market_parts = [
-        f"{_display_name(item.get('candidate') or {})} 周均约{_format_number(item['market_validation'].get('avg_weekly_sales_volume')) or '未知'}台"
+        f"{_display_name(item.get('candidate') or {})} 周均约{_format_unit_count(item['market_validation'].get('avg_weekly_sales_volume')) or '未知'}台"
         for item in top_competitors[:3]
     ]
     lines.append(
@@ -588,11 +588,11 @@ def _product_comparison_lines(
     ]
     lines.extend(_comparison_table_lines(products, ["尺寸", "尺寸价格池", "均价", "周均销量", "所在池空间", "池内销量表现", "相对本品", "市场角色"], _market_comparison_values))
     lines.extend(["", "### 4.2 价值战场画像", ""])
-    lines.extend(_comparison_table_lines(products, ["主价值战场", "辅价值战场", "机会/拖后腿战场", "主战场空间", "主战场销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="battlefield")))
+    lines.extend(_comparison_table_lines(products, ["命中的固定价值战场", "主价值战场", "辅价值战场", "补充证据判断", "主价值战场市场空间", "本品在主战场销量承接", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="battlefield")))
     lines.extend(["", "### 4.3 用户任务画像", ""])
-    lines.extend(_comparison_table_lines(products, ["主用户任务", "辅用户任务", "评论/厂家观察任务", "主任务空间", "主任务销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="task")))
+    lines.extend(_comparison_table_lines(products, ["命中的固定用户任务", "主用户任务", "辅用户任务", "补充证据判断", "主用户任务市场空间", "本品在主任务销量承接", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="task")))
     lines.extend(["", "### 4.4 目标客群画像", ""])
-    lines.extend(_comparison_table_lines(products, ["主目标客群", "辅目标客群", "评论/厂家观察客群", "主客群空间", "主客群销量表现", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="group")))
+    lines.extend(_comparison_table_lines(products, ["命中的固定目标客群", "主目标客群", "辅目标客群", "补充证据判断", "主目标客群市场空间", "本品在主客群销量承接", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="group")))
     lines.extend(["", "### 4.5 卖点画像", ""])
     lines.extend(_comparison_table_lines(products, ["事实卖点", "溢价卖点", "基础支撑卖点", "拖后腿卖点", "需复核表达", "共同价值锚点"], _claim_comparison_values))
     lines.extend(["", "### 4.6 参数画像", ""])
@@ -665,8 +665,8 @@ def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
         "尺寸": f"{_format_number(size) or '未知'} 寸",
         "尺寸价格池": f"{size_tier} × {price_band}",
         "均价": _format_money(price) or "未知",
-        "周均销量": f"{_format_number(weekly_sales) or '未知'} 台",
-        "所在池空间": f"{_format_number(pool.get('total_sales_volume')) or '未知'}台；周均{_format_number(pool.get('total_avg_weekly_sales_volume')) or '未知'}台；SKU数{_format_number(pool.get('sku_count')) or '未知'}",
+        "周均销量": f"{_format_unit_count(weekly_sales) or '未知'} 台",
+        "所在池空间": f"{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台；周均{_format_unit_count(pool.get('total_avg_weekly_sales_volume')) or '未知'}台；SKU数{_format_number(pool.get('sku_count')) or '未知'}",
         "池内销量表现": f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名；占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}",
         "相对本品": relative,
         "市场角色": role,
@@ -681,11 +681,6 @@ def _semantic_comparison_values(product: dict[str, Any], *, profile_type: str) -
     positions = _semantic_position_by_code(sections, profile_type=profile_type)
     primary_marker = {"battlefield": "主战场", "task": "主任务", "group": "主客群"}[profile_type]
     secondary_marker = {"battlefield": "辅战场", "task": "辅任务", "group": "辅客群"}[profile_type]
-    observed_markers = {
-        "battlefield": ("机会战场", "拖后腿战场"),
-        "task": ("评论观察任务", "厂家主张任务"),
-        "group": ("评论观察客群", "厂家主张客群"),
-    }[profile_type]
     primary_codes = [code for code, _label, relation, _reason in rows if primary_marker in relation]
     primary_code = primary_codes[0] if primary_codes else (rows[0][0] if rows else "")
     primary_position = positions.get(primary_code, {})
@@ -697,21 +692,22 @@ def _semantic_comparison_values(product: dict[str, Any], *, profile_type: str) -
     else:
         overlap_text = "本品基准"
     return {
+        "命中的固定价值战场": _semantic_dimensions_with_relation(rows),
         "主价值战场": _labels_by_relation(rows, primary_marker),
         "辅价值战场": _labels_by_relation(rows, secondary_marker),
-        "机会/拖后腿战场": _labels_by_relation(rows, *observed_markers),
-        "主战场空间": _semantic_market_space_text(primary_position),
-        "主战场销量表现": _semantic_sku_performance_text(primary_position),
+        "补充证据判断": _relation_status_detail(rows, primary_marker, secondary_marker),
+        "主价值战场市场空间": _semantic_space_with_label(rows, primary_code, primary_position),
+        "本品在主战场销量承接": _semantic_performance_with_label(rows, primary_code, primary_position),
+        "命中的固定用户任务": _semantic_dimensions_with_relation(rows),
         "主用户任务": _labels_by_relation(rows, primary_marker),
         "辅用户任务": _labels_by_relation(rows, secondary_marker),
-        "评论/厂家观察任务": _labels_by_relation(rows, *observed_markers),
-        "主任务空间": _semantic_market_space_text(primary_position),
-        "主任务销量表现": _semantic_sku_performance_text(primary_position),
+        "主用户任务市场空间": _semantic_space_with_label(rows, primary_code, primary_position),
+        "本品在主任务销量承接": _semantic_performance_with_label(rows, primary_code, primary_position),
+        "命中的固定目标客群": _semantic_dimensions_with_relation(rows),
         "主目标客群": _labels_by_relation(rows, primary_marker),
         "辅目标客群": _labels_by_relation(rows, secondary_marker),
-        "评论/厂家观察客群": _labels_by_relation(rows, *observed_markers),
-        "主客群空间": _semantic_market_space_text(primary_position),
-        "主客群销量表现": _semantic_sku_performance_text(primary_position),
+        "主目标客群市场空间": _semantic_space_with_label(rows, primary_code, primary_position),
+        "本品在主客群销量承接": _semantic_performance_with_label(rows, primary_code, primary_position),
         "与本品重合": overlap_text,
     }
 
@@ -719,6 +715,45 @@ def _semantic_comparison_values(product: dict[str, Any], *, profile_type: str) -
 def _labels_by_relation(rows: list[tuple[str, str, str, str]], *markers: str) -> str:
     labels = [label for _code, label, relation, _reason in rows if any(marker in relation for marker in markers)]
     return _join_cn(labels[:6]) or "暂无稳定证据"
+
+
+def _semantic_dimensions_with_relation(rows: list[tuple[str, str, str, str]]) -> str:
+    items = [f"{label}（{relation}）" for _code, label, relation, _reason in rows]
+    return _join_cn(items[:8]) or "暂无稳定证据"
+
+
+def _relation_status_detail(rows: list[tuple[str, str, str, str]], *excluded_markers: str) -> str:
+    grouped: dict[str, list[str]] = {}
+    for _code, label, relation, _reason in rows:
+        relation_labels = [item.strip() for item in re.split(r"[、和]", relation) if item.strip()]
+        for relation_label in relation_labels:
+            if any(marker == relation_label for marker in excluded_markers):
+                continue
+            grouped.setdefault(relation_label, [])
+            if label not in grouped[relation_label]:
+                grouped[relation_label].append(label)
+    if not grouped:
+        return "暂无补充证据判断"
+    return "；".join(f"{relation}：{_join_cn(labels[:5])}" for relation, labels in grouped.items())
+
+
+def _label_for_semantic_code(rows: list[tuple[str, str, str, str]], code: str) -> str:
+    for row_code, label, _relation, _reason in rows:
+        if row_code == code:
+            return label
+    return _label_code(code)
+
+
+def _semantic_space_with_label(rows: list[tuple[str, str, str, str]], code: str, position: dict[str, Any]) -> str:
+    label = _label_for_semantic_code(rows, code)
+    prefix = f"{label}：" if label else ""
+    return f"{prefix}{_semantic_market_space_text(position)}"
+
+
+def _semantic_performance_with_label(rows: list[tuple[str, str, str, str]], code: str, position: dict[str, Any]) -> str:
+    label = _label_for_semantic_code(rows, code)
+    prefix = f"{label}：" if label else ""
+    return f"{prefix}{_semantic_sku_performance_text(position)}"
 
 
 def _claim_comparison_values(product: dict[str, Any]) -> dict[str, str]:
@@ -804,11 +839,11 @@ def _product_market_profile_lines(
     rows = [
         ("尺寸", f"{_format_number(size) or '未知'} 寸"),
         ("均价", _format_money(price) or "未知"),
-        ("周均销量", f"{_format_number(weekly_sales) or '未知'} 台"),
+        ("周均销量", f"{_format_unit_count(weekly_sales) or '未知'} 台"),
         ("尺寸价格池", f"{size_tier or '尺寸段未知'} × {price_band}"),
         (
             "所在池空间",
-            f"{_format_number(pool.get('total_sales_volume')) or '未知'}台，周均{_format_number(pool.get('total_avg_weekly_sales_volume')) or '未知'}台，SKU数{_format_number(pool.get('sku_count')) or '未知'}",
+            f"{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台，周均{_format_unit_count(pool.get('total_avg_weekly_sales_volume')) or '未知'}台，SKU数{_format_number(pool.get('sku_count')) or '未知'}",
         ),
         (
             "池内销量表现",
@@ -821,7 +856,7 @@ def _product_market_profile_lines(
     lines.extend(
         [
             "",
-            f"市场解读：{sku_name} 当前处在{size_tier or '目标尺寸段'}的{price_band}，周均销量约{_format_number(weekly_sales) or '未知'}台；所在尺寸价格池总销量约{_format_number(pool.get('total_sales_volume')) or '未知'}台，本品占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}。",
+            f"市场解读：{sku_name} 当前处在{size_tier or '目标尺寸段'}的{price_band}，周均销量约{_format_unit_count(weekly_sales) or '未知'}台；所在尺寸价格池总销量约{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台，本品占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}。",
         ]
     )
     return lines
@@ -952,10 +987,10 @@ def _semantic_position_by_code(sections: dict[str, Any], *, profile_type: str) -
 def _semantic_market_space_text(position: dict[str, Any]) -> str:
     market_space = position.get("market_space") or {}
     if not market_space:
-        return "图谱空间待生成"
+        return "暂无该分类市场空间数据"
     parts = [
-        f"空间{_format_number(market_space.get('estimated_sales_volume')) or '未知'}台",
-        f"周均{_format_number(market_space.get('estimated_avg_weekly_sales_volume')) or '未知'}台",
+        f"空间{_format_unit_count(market_space.get('estimated_sales_volume')) or '未知'}台",
+        f"周均{_format_unit_count(market_space.get('estimated_avg_weekly_sales_volume')) or '未知'}台",
         f"覆盖{_format_number(market_space.get('allocated_sku_count')) or '未知'}个SKU",
     ]
     share = _pct_or_unknown(market_space.get("sales_volume_share"))
@@ -968,7 +1003,7 @@ def _semantic_sku_performance_text(position: dict[str, Any]) -> str:
     allocation = position.get("sku_allocation") or {}
     contribution = position.get("sku_contribution") or {}
     if not allocation:
-        return "未进入销量分配"
+        return "本品未进入该分类销量承接分配"
     share = contribution.get("sku_share_in_dimension_volume")
     if share is None:
         market_space = position.get("market_space") or {}
@@ -976,8 +1011,8 @@ def _semantic_sku_performance_text(position: dict[str, Any]) -> str:
         total = _decimal(market_space.get("estimated_sales_volume"))
         share = allocated / total if allocated is not None and total else None
     parts = [
-        f"分配{_format_number(allocation.get('allocated_sales_volume')) or '未知'}台",
-        f"周均{_format_number(allocation.get('allocated_avg_weekly_sales_volume')) or '未知'}台",
+        f"分配{_format_unit_count(allocation.get('allocated_sales_volume')) or '未知'}台",
+        f"周均{_format_unit_count(allocation.get('allocated_avg_weekly_sales_volume')) or '未知'}台",
         f"权重{_pct_or_unknown(allocation.get('allocation_weight'))}",
     ]
     rank = contribution.get("sku_rank_in_dimension")
@@ -1578,7 +1613,7 @@ def _market_fact_lines(
     weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
     lines = [
         f"- 尺寸价格：{_format_number(size) or '未知'}英寸，{SIZE_TIER_NAMES.get(str(size_tier), '尺寸段未知')}，{PRICE_BAND_NAMES.get(str(price_band), '价格带未知')}，线上均价约{_format_money(price) or '未知'}。",
-        f"- 市场表现：周均销量约{_format_number(weekly_sales) or '未知'}台；主渠道为{_market_label(metrics.get('main_channel_type')) or '未知'}，主平台为{_market_label(metrics.get('main_platform')) or '未知'}。",
+        f"- 市场表现：周均销量约{_format_unit_count(weekly_sales) or '未知'}台；主渠道为{_market_label(metrics.get('main_channel_type')) or '未知'}，主平台为{_market_label(metrics.get('main_platform')) or '未知'}。",
     ]
     price_percentile = _percentile_phrase(position.get("price_percentile_in_size"))
     volume_percentile = _percentile_phrase(position.get("volume_percentile_in_size"))
@@ -1679,7 +1714,7 @@ def _target_strength_risk_lines(target: dict[str, Any], sections: dict[str, Any]
     supported_claims = _labels_for_codes((sections.get("comment_fact") or {}).get("supported_claim_codes") or [])[:6]
     contradicted_claims = _labels_for_codes((sections.get("comment_fact") or {}).get("contradicted_claim_codes") or [])[:6]
     lines = [
-        f"- 优势：{_display_name(target)} 已经站在{SIZE_TIER_NAMES.get(str(position.get('size_tier') or target.get('size_tier')), '目标尺寸段')}的{PRICE_BAND_NAMES.get(str(position.get('price_band_in_size_tier') or target.get('price_band_in_size_tier')), '目标价格带')}，周均销量约{_format_number(metrics.get('avg_weekly_sales_volume') or target.get('avg_weekly_sales_volume')) or '未知'}台，具备真实成交基础。",
+        f"- 优势：{_display_name(target)} 已经站在{SIZE_TIER_NAMES.get(str(position.get('size_tier') or target.get('size_tier')), '目标尺寸段')}的{PRICE_BAND_NAMES.get(str(position.get('price_band_in_size_tier') or target.get('price_band_in_size_tier')), '目标价格带')}，周均销量约{_format_unit_count(metrics.get('avg_weekly_sales_volume') or target.get('avg_weekly_sales_volume')) or '未知'}台，具备真实成交基础。",
         f"- 优势：与重点竞品共同争夺的价值锚点集中在{_join_cn(anchors) or '高端画质、娱乐体验和智能互联'}，显示本品已经进入真实购买场景中的同池比较，具备可被用户理解的支付理由。",
     ]
     if supported_claims:
@@ -2003,9 +2038,9 @@ def _market_validation(sales: dict[str, Any], candidate: dict[str, Any]) -> dict
         level = "weak"
         level_cn = "验证不足"
     if overlap_week_count > 0:
-        summary = f"重叠在售周{overlap_week_count}周，候选周均销量约{_format_number(avg_weekly) or '未知'}台"
+        summary = f"重叠在售周{overlap_week_count}周，候选周均销量约{_format_unit_count(avg_weekly) or '未知'}台"
     else:
-        summary = f"候选周均销量约{_format_number(avg_weekly) or '未知'}台，重叠在售周验证不足"
+        summary = f"候选周均销量约{_format_unit_count(avg_weekly) or '未知'}台，重叠在售周验证不足"
     return {
         "level": level,
         "level_cn": level_cn,
@@ -2479,6 +2514,13 @@ def _format_number(value: Any) -> str:
     if number == number.to_integral_value():
         return f"{number.quantize(Decimal('1')):,}"
     return f"{number.quantize(Decimal('0.1')):,}"
+
+
+def _format_unit_count(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return f"{number.quantize(Decimal('1'), rounding=ROUND_HALF_UP):,}"
 
 
 def _pct(value: Any) -> str:
