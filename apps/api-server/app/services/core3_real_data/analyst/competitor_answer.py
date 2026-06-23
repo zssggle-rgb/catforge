@@ -1583,7 +1583,11 @@ def _publish_report(*, title: str, markdown: str, with_report: str) -> ReportPub
             "--format",
             "json",
         ]
-        completed = subprocess.run(command, input=markdown, check=False, capture_output=True, text=True, timeout=60)
+        env = os.environ.copy()
+        cli_dir = os.path.dirname(cli_bin)
+        if cli_dir:
+            env["PATH"] = f"{cli_dir}:{env.get('PATH', '')}"
+        completed = subprocess.run(command, input=markdown, check=False, capture_output=True, text=True, timeout=60, env=env)
         if completed.returncode != 0:
             return ReportPublishResult(status="failed", message_cn=_feishu_failure_message(completed.stderr or completed.stdout))
         url = _extract_url(completed.stdout)
