@@ -104,9 +104,9 @@ GROUP_NAMES = {
 
 ROLE_CN = {
     "primary_direct": "首选直接竞品",
-    "strong_direct": "强直接竞品",
+    "strong_direct": "强配置对标竞品",
     "price_adjacent": "价格贴身竞品",
-    "downtrade_diversion": "下探分流竞品",
+    "downtrade_diversion": "价格下探分流竞品",
     "uptrade_alternative": "上探替代竞品",
     "scenario_alternative": "场景替代竞品",
     "excluded": "排除候选",
@@ -316,9 +316,11 @@ def render_short_answer(
     for index, item in enumerate(top_competitors, start=1):
         name = _display_name(item.get("candidate") or {})
         if index == 1:
+            anchors = _join_cn(item["value_anchor"]["shared_anchors"][:4]) or "关键价值锚点"
             lines.append(
                 f"{name}排第一，核心原因是同一购买池内替代关系最完整，"
-                f"在{_join_cn(item['shared_business_context'][:4])}上覆盖本品的核心成交理由，"
+                f"主辅价值战场、用户任务和目标客群的有效重合更完整，"
+                f"共同价值锚点集中在{anchors}，"
                 f"形成{item['replacement_pressure']['type_cn']}。"
             )
         else:
