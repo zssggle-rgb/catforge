@@ -304,12 +304,22 @@ class AnalystRepository:
             market_window=market_window,
             limit=allocation_limit,
         )
+        fact_size_tier = _param_size_tier(param_profile)
         market_payload = _market_payload(market)
+        if market_payload and fact_size_tier:
+            market_position = market_payload.setdefault("market_position", {})
+            market_size_tier = market_position.get("size_tier")
+            market_position["size_tier"] = fact_size_tier
+            if market_size_tier and market_size_tier != fact_size_tier:
+                market_position["market_size_tier"] = market_size_tier
+                market_position["size_tier_note_cn"] = "尺寸段优先采用 M03B 参数事实画像五档口径，M07 原市场池字段保留为 market_size_tier。"
         if market_payload:
             market_payload["market_pool"] = self._market_pool_summary(
                 batch_id=batch_id,
                 market=market,
+                product_category=product_category,
                 market_window=market_window,
+                size_tier=fact_size_tier,
             )
         sections = {
             "market": market_payload,
@@ -876,9 +886,14 @@ class AnalystRepository:
         *,
         batch_id: str,
         market: entities.Core3SkuMarketProfile | None,
+        product_category: str,
         market_window: str,
+        size_tier: str | None,
     ) -> dict[str, Any]:
-        if market is None or not market.size_segment or not market.price_band_size:
+        if market is None or not market.price_band_size:
+            return {}
+        target_size_tier = size_tier or market.size_segment
+        if not target_size_tier:
             return {}
         stmt = (
             select(entities.Core3SkuMarketProfile)
@@ -888,10 +903,23 @@ class AnalystRepository:
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
-            .where(entities.Core3SkuMarketProfile.size_segment == market.size_segment)
             .where(entities.Core3SkuMarketProfile.price_band_size == market.price_band_size)
         )
+        if not size_tier:
+            stmt = stmt.where(entities.Core3SkuMarketProfile.size_segment == target_size_tier)
         rows = list(self.db.execute(stmt).scalars())
+        if size_tier and rows:
+            params_by_sku = self._param_profiles_by_sku(
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_codes=[row.sku_code for row in rows],
+            )
+            rows = [
+                row
+                for row in rows
+                if _param_size_tier(params_by_sku.get(row.sku_code)) == target_size_tier
+                or (row.size_segment == target_size_tier and row.sku_code not in params_by_sku)
+            ]
         if not rows:
             return {}
         target_avg = _safe_avg(_decimal(market.sales_volume_total), market.active_week_count) or Decimal("0")
@@ -906,7 +934,8 @@ class AnalystRepository:
         target_sales_volume = _decimal(market.sales_volume_total) or Decimal("0")
         target_sales_amount = _decimal(market.sales_amount_total) or Decimal("0")
         return {
-            "size_tier": market.size_segment,
+            "size_tier": target_size_tier,
+            "market_size_tier": market.size_segment,
             "price_band_in_size_tier": market.price_band_size,
             "sku_count": len(rows),
             "total_sales_volume": _number(total_sales_volume),
@@ -945,6 +974,26 @@ class AnalystRepository:
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def _param_profiles_by_sku(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_codes: Sequence[str],
+    ) -> dict[str, entities.Core3SkuParamProfile]:
+        if not sku_codes:
+            return {}
+        rule_version = CORE3_M03B_AC_RULE_VERSION if product_category == "AC" else CORE3_M03B_RULE_VERSION
+        stmt = (
+            select(entities.Core3SkuParamProfile)
+            .where(entities.Core3SkuParamProfile.project_id == self.project_id)
+            .where(entities.Core3SkuParamProfile.category_code == self.category_code)
+            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
+            .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3SkuParamProfile.rule_version == rule_version)
+        )
+        return {row.sku_code: row for row in self.db.execute(stmt).scalars()}
 
     def _claim_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuClaimFactProfile | None:
         if product_category != "TV":
@@ -1322,6 +1371,15 @@ def _param_payload(row: entities.Core3SkuParamProfile | None) -> dict[str, Any]:
         "quality_summary": row.quality_summary_json or {},
         "evidence_id_count": len(row.evidence_ids or []),
     }
+
+
+def _param_size_tier(row: entities.Core3SkuParamProfile | None) -> str | None:
+    if row is None:
+        return None
+    values = row.param_values_json or {}
+    tiers = values.get("dimension_tier_profile") or {}
+    size_tier = tiers.get("size") if isinstance(tiers, dict) else None
+    return str(size_tier) if size_tier else None
 
 
 def _claim_payload(row: entities.Core3SkuClaimFactProfile | None) -> dict[str, Any]:

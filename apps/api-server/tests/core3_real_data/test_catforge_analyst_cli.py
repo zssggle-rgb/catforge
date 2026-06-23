@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -1502,6 +1502,11 @@ def test_resolve_sku_does_not_autocorrect_ambiguous_zero_to_q() -> None:
 
 def test_sku_fact_brief_returns_core_fact_sections() -> None:
     session = make_session()
+    target_market = session.execute(
+        select(entities.Core3SkuMarketProfile).where(entities.Core3SkuMarketProfile.sku_code == "TV00029112")
+    ).scalar_one()
+    target_market.size_segment = "legacy_large_screen"
+    target_market.screen_size_class = "legacy_large_screen"
     result = catforge_analyst.sku_fact_brief(
         session,
         project_id=PROJECT_ID,
@@ -1515,6 +1520,7 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
     fact_brief = result["result"]["fact_brief"]
     sections = fact_brief["sections"]
     assert sections["market"]["market_metrics"]["price_wavg"] == 4999.0
+    assert sections["market"]["market_position"]["size_tier"] == "large_60_69"
     assert sections["parameter_fact"]["dimension_tier_profile"]["size"] == "large_60_69"
     assert sections["claim_fact"]["fact_claim_codes"] == ["tv_claim_miniled", "tv_claim_high_refresh"]
     assert sections["comment_fact"]["supported_claim_codes"] == ["tv_claim_miniled"]
@@ -1523,6 +1529,7 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
     assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
     assert sections["sales_allocation"][0]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
     assert sections["market"]["market_pool"]["sku_count"] == 5
+    assert sections["market"]["market_pool"]["size_tier"] == "large_60_69"
     assert sections["market"]["market_pool"]["target_rank_by_avg_weekly_sales"] == 2
     semantic_positions = sections["semantic_dimension_positions"]
     assert any(
