@@ -1454,7 +1454,23 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "TV00040002" not in top_codes[:2]
     assert answer["top_competitors"][0]["role"] == "primary_direct"
     assert answer["top_competitors"][0]["weighted_overlap"]["battlefield"] > answer["all_candidates"][0]["weighted_overlap"]["battlefield"] - 0.01
-    assert answer["report_payload"]["markdown"].startswith("# 海信 65E7Q 重点竞品分析报告")
+    markdown = answer["report_payload"]["markdown"]
+    assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
+    assert "## 一、给产品经理和市场领导的结论" in markdown
+    assert "## 二、为什么这三款是重点竞品" in markdown
+    assert "[本品：海信 65E7Q](#target-profile)" in markdown
+    assert "[竞品一：创维 65A7H PRO](#competitor-1)" in markdown
+    assert "## 三、本品业务画像：海信 65E7Q" in markdown
+    assert "市场事实" in markdown
+    assert "参数事实" in markdown
+    assert "卖点事实" in markdown
+    assert "评论事实" in markdown
+    assert "用户任务、目标客群、价值战场" in markdown
+    assert "海信应对策略" in markdown
+    assert "市场导购话术" in markdown
+    assert "产品经理策略清单" in markdown
+    for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high"):
+        assert forbidden not in markdown
     short_answer = answer["short_answer"]
     assert len(short_answer) <= 600
     assert "创维 65A7H PRO" in short_answer

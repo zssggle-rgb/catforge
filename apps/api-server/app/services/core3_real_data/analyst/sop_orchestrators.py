@@ -94,6 +94,7 @@ class SopOrchestrators:
         candidate_rows = (((candidates_result.get("result") or {}).get("candidate_search") or {}).get("candidates") or [])[:limit]
         competitors: list[dict[str, Any]] = []
         pair_atom_results: list[dict[str, Any]] = []
+        need_candidate_fact = answer_style == "xiaoao" or with_report != "none"
         for rank, row in enumerate(candidate_rows, start=1):
             candidate_sku = row.get("sku_code")
             if not candidate_sku:
@@ -101,8 +102,11 @@ class SopOrchestrators:
             semantic = self.atomic_handlers.semantic_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             param_claim = self.atomic_handlers.param_claim_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             sales = self.atomic_handlers.sales_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
+            candidate_fact = self.atomic_handlers.sku_fact_brief(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
             pair_atom_results.extend([semantic, param_claim, sales])
-            competitors.append(_competitor_item(rank, row, semantic, param_claim, sales))
+            if candidate_fact:
+                pair_atom_results.append(candidate_fact)
+            competitors.append(_competitor_item(rank, row, semantic, param_claim, sales, candidate_fact))
         atom_results = [target, fact, candidates_result, *pair_atom_results]
         target_fact_brief = (fact.get("result") or {}).get("fact_brief", {})
         result_payload: dict[str, Any] = {
@@ -479,6 +483,7 @@ def _competitor_item(
     semantic: dict[str, Any],
     param_claim: dict[str, Any],
     sales: dict[str, Any],
+    candidate_fact: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     semantic_payload = (semantic.get("result") or {}).get("semantic_overlap") or {}
     param_payload = (param_claim.get("result") or {}).get("param_claim_overlap") or {}
@@ -504,6 +509,7 @@ def _competitor_item(
             "claim_position_overlap": param_payload.get("claim_position_overlap") or {},
         },
         "sales_overlap": sales_payload,
+        "candidate_fact_brief": ((candidate_fact or {}).get("result") or {}).get("fact_brief", {}),
     }
 
 
