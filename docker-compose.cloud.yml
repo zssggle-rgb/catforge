@@ -27,12 +27,20 @@ services:
       CATFORGE_EXPORT_DIR: ${CATFORGE_EXPORT_DIR:-/data/exports}
       CATFORGE_SYNC_JOBS: ${CATFORGE_SYNC_JOBS:-true}
       CATFORGE_SLOW_REQUEST_SECONDS: ${CATFORGE_SLOW_REQUEST_SECONDS:-2.0}
+      CATFORGE_ANALYST_REPORT_PUBLISHER: ${CATFORGE_ANALYST_REPORT_PUBLISHER:-}
+      CATFORGE_FEISHU_CLI_BIN: ${CATFORGE_FEISHU_CLI_BIN:-}
+      CATFORGE_FEISHU_AS: ${CATFORGE_FEISHU_AS:-bot}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      PATH: ${CATFORGE_API_PATH:-/opt/openclaw-node/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "${CATFORGE_API_PORT:-8000}:8000"
     volumes:
       - catforge_data:/data
+      - ${CATFORGE_FEISHU_NODE_DIR:-/opt/catforge/.empty-feishu-node}:/opt/openclaw-node:ro
+      - ${CATFORGE_FEISHU_CONFIG_DIR:-/opt/catforge/.empty-lark-cli}:/root/.lark-cli:ro
     depends_on:
       redis:
         condition: service_healthy
