@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_analyst
 from app.models import entities
+from app.services.core3_real_data.analyst import competitor_answer
 from app.services.core3_real_data.constants import (
     CORE3_M03B_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
@@ -1870,6 +1871,41 @@ def test_competitor_set_text_uses_xiaoao_short_answer() -> None:
 
     assert text == result["result"]["competitor_answer"]["short_answer"]
     assert text.startswith("海信 65E7Q 的重点竞品建议看")
+
+
+def test_competitor_answer_parses_feishu_docx_token() -> None:
+    assert competitor_answer._extract_feishu_doc_token("https://my.feishu.cn/docx/RugxdBRmEoKHCdxseo8csmktnSb") == (
+        "RugxdBRmEoKHCdxseo8csmktnSb",
+        "docx",
+    )
+    assert competitor_answer._extract_feishu_doc_token("https://my.feishu.cn/sheets/AbCdEf") == ("AbCdEf", "sheet")
+
+
+def test_xiaoao_short_answer_downgrades_when_semantic_evidence_missing() -> None:
+    text = competitor_answer.render_short_answer(
+        target={"brand_name": "海信", "model_name": "85E7S"},
+        target_fact_brief={"sections": {"claim_fact": {"fact_claim_codes": ["tv_claim_miniled_display"]}}},
+        top_competitors=[
+            {
+                "candidate": {"brand_name": "小米", "model_name": "L85MC-SP"},
+                "value_anchor": {"shared_anchors": ["高端画质", "游戏流畅"]},
+                "replacement_pressure": {"type_cn": "价值替代压力"},
+                "role_cn": "强配置对标竞品",
+            },
+            {
+                "candidate": {"brand_name": "TCL", "model_name": "85Q9M"},
+                "value_anchor": {"shared_anchors": ["高端画质"]},
+                "replacement_pressure": {"type_cn": "价值替代压力"},
+                "role_cn": "强配置对标竞品",
+            },
+        ],
+        report_url=None,
+        max_chat_chars=600,
+    )
+
+    assert "主辅价值战场、用户任务和目标客群的有效重合更完整" not in text
+    assert "当前缺少用户评论或语义图谱验证" in text
+    assert "参数/卖点替代压力" in text
 
 
 def test_sku_business_brief_sop_returns_summary_sections() -> None:

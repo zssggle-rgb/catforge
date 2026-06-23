@@ -240,6 +240,7 @@ def build_competitor_answer(
     publish_result = _publish_report(title=title, markdown=markdown, with_report=with_report)
     short_answer = render_short_answer(
         target=target,
+        target_fact_brief=target_fact_brief,
         top_competitors=top_competitors,
         report_url=publish_result.url,
         max_chat_chars=max_chat_chars,
@@ -311,6 +312,7 @@ def weighted_overlap_from_roles(overlap: dict[str, Any]) -> dict[str, Any]:
 def render_short_answer(
     *,
     target: dict[str, Any],
+    target_fact_brief: dict[str, Any],
     top_competitors: list[dict[str, Any]],
     report_url: str | None,
     max_chat_chars: int,
@@ -319,22 +321,34 @@ def render_short_answer(
     if not top_competitors:
         suffix = _report_suffix(report_url)
         return f"{target_name} 当前没有足够证据形成稳定重点竞品。{suffix}"
+    evidence_state = _target_evidence_state(target_fact_brief)
     names = "、".join(_display_name(item.get("candidate") or {}) for item in top_competitors)
     lines = [f"{target_name} 的重点竞品建议看{len(top_competitors)}款：{names}。"]
     for index, item in enumerate(top_competitors, start=1):
         name = _display_name(item.get("candidate") or {})
+        anchors = _join_cn(item["value_anchor"]["shared_anchors"][:4]) or "关键价值锚点"
         if index == 1:
-            anchors = _join_cn(item["value_anchor"]["shared_anchors"][:4]) or "关键价值锚点"
-            lines.append(
-                f"{name}排第一，核心原因是同一购买池内替代关系最完整，"
-                f"主辅价值战场、用户任务和目标客群的有效重合更完整，"
-                f"共同价值锚点集中在{anchors}，"
-                f"形成{item['replacement_pressure']['type_cn']}。"
-            )
+            if evidence_state["semantic_verified"]:
+                lines.append(
+                    f"{name}排第一，核心原因是同一购买池内替代关系最完整，"
+                    f"主辅价值战场、用户任务和目标客群的有效重合更完整，"
+                    f"共同价值锚点集中在{anchors}，"
+                    f"形成{item['replacement_pressure']['type_cn']}。"
+                )
+            else:
+                lines.append(
+                    f"{name}排第一，主要因为它与{target_name}处在同一购买池，"
+                    f"参数和卖点可替代性最强；共同锚点集中在{anchors}。"
+                )
         else:
+            pressure = item["replacement_pressure"]["type_cn"]
+            if not evidence_state["semantic_verified"] and pressure == "价值替代压力":
+                pressure = "参数/卖点替代压力"
             lines.append(
-                f"{name}属于{item['role_cn']}，主要压力来自{item['replacement_pressure']['type_cn']}。"
+                f"{name}属于{item['role_cn']}，主要压力来自{pressure}。"
             )
+    if not evidence_state["semantic_verified"]:
+        lines.append("当前缺少用户评论或语义图谱验证，以上排序更偏同池配置、卖点和价格替代判断。")
     lines.append(_report_suffix(report_url))
     text = "".join(lines)
     return _compress_answer(text, target=target, top_competitors=top_competitors, report_url=report_url, max_chat_chars=max_chat_chars)
@@ -1951,9 +1965,68 @@ def _publish_report(*, title: str, markdown: str, with_report: str) -> ReportPub
         url = _extract_url(completed.stdout)
         if not url:
             return ReportPublishResult(status="failed", message_cn="飞书文档已请求创建，但未返回可用链接。")
+        permission_result = _publish_feishu_public_permission(cli_bin=cli_bin, url=url, env=env)
+        if permission_result is not None and not permission_result["ok"]:
+            return ReportPublishResult(
+                status="created_permission_failed",
+                url=url,
+                message_cn=f"已生成《{title}》，但链接公开权限设置失败：{permission_result['message_cn']}",
+            )
         return ReportPublishResult(status="created", url=url, message_cn=f"已生成《{title}》。")
     except Exception:
         return ReportPublishResult(status="failed", message_cn="飞书文档创建失败。")
+
+
+def _publish_feishu_public_permission(*, cli_bin: str, url: str, env: dict[str, str]) -> dict[str, Any] | None:
+    link_share_entity = os.environ.get("CATFORGE_FEISHU_LINK_SHARE_ENTITY", "").strip()
+    if not link_share_entity:
+        return None
+    token_info = _extract_feishu_doc_token(url)
+    if token_info is None:
+        return {"ok": False, "message_cn": "未能从飞书链接中解析文档 token。"}
+    token, doc_type = token_info
+    data = {
+        "external_access": _env_bool("CATFORGE_FEISHU_EXTERNAL_ACCESS", default=True),
+        "link_share_entity": link_share_entity,
+        "security_entity": os.environ.get("CATFORGE_FEISHU_SECURITY_ENTITY", "anyone_can_view"),
+        "comment_entity": os.environ.get("CATFORGE_FEISHU_COMMENT_ENTITY", "anyone_can_view"),
+        "share_entity": os.environ.get("CATFORGE_FEISHU_SHARE_ENTITY", "only_full_access"),
+        "invite_external": _env_bool("CATFORGE_FEISHU_INVITE_EXTERNAL", default=True),
+    }
+    command = [
+        cli_bin,
+        "drive",
+        "permission.public",
+        "patch",
+        "--as",
+        os.environ.get("CATFORGE_FEISHU_AS", "user"),
+        "--params",
+        json.dumps({"token": token, "type": doc_type}, ensure_ascii=False),
+        "--data",
+        json.dumps(data, ensure_ascii=False),
+        "--format",
+        "json",
+        "--yes",
+    ]
+    completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60, env=env)
+    if completed.returncode != 0:
+        return {"ok": False, "message_cn": _feishu_public_permission_failure_message(completed.stderr or completed.stdout)}
+    return {"ok": True, "message_cn": "已设置为获得链接的人可阅读。"}
+
+
+def _extract_feishu_doc_token(url: str) -> tuple[str, str] | None:
+    match = re.search(r"/(docx|doc|sheets|bitable|slides)/([^/?#]+)", url)
+    if not match:
+        return None
+    doc_type = {"sheets": "sheet"}.get(match.group(1), match.group(1))
+    return match.group(2), doc_type
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _extract_url(output: str) -> str | None:
@@ -2004,6 +2077,33 @@ def _feishu_failure_message(output: str) -> str:
     if "auth" in normalized or "login" in normalized or "user identity" in normalized:
         return "飞书文档创建失败：飞书用户身份未授权或授权已失效。"
     return "飞书文档创建失败：请检查飞书 CLI 配置、授权和网络连通性。"
+
+
+def _feishu_public_permission_failure_message(output: str) -> str:
+    code = _extract_error_code(output)
+    if code == "91009":
+        return "组织对外分享被租户安全策略管控，需要管理员打开组织级对外分享。"
+    if code == "91010":
+        return "当前文档对外分享未打开，需要先打开对外分享能力。"
+    if code == "91011":
+        return "文档密级拦截了对外分享，需要在文档内申请密级豁免或降级。"
+    if code == "91012":
+        return "文档密级拦截了权限设置，需要在文档内申请密级豁免或降级。"
+    if "scope" in output.lower() or "permission" in output.lower() or "forbidden" in output.lower():
+        return "飞书应用缺少文档权限设置 scope，需开通 docs:permission.setting:write_only 等权限后重试。"
+    return "请检查飞书应用权限、租户对外分享策略和文档密级。"
+
+
+def _extract_error_code(output: str) -> str:
+    try:
+        payload = json.loads(output)
+    except Exception:
+        match = re.search(r"\b(91009|91010|91011|91012)\b", output)
+        return match.group(1) if match else ""
+    for value in _walk_json_values(payload):
+        if str(value) in {"91009", "91010", "91011", "91012"}:
+            return str(value)
+    return ""
 
 
 def _extract_missing_scopes(output: str) -> str:
@@ -2111,6 +2211,37 @@ def _compress_answer(text: str, *, target: dict[str, Any], top_competitors: list
     if len(compact) <= max_chat_chars:
         return compact
     return compact[: max(0, max_chat_chars - 1)] + "。"
+
+
+def _target_evidence_state(target_fact_brief: dict[str, Any]) -> dict[str, bool]:
+    sections = target_fact_brief.get("sections") if isinstance(target_fact_brief, dict) else {}
+    if not isinstance(sections, dict):
+        sections = {}
+    comment = sections.get("comment_fact") or {}
+    task = sections.get("user_task") or {}
+    group = sections.get("target_group") or {}
+    battlefield = sections.get("value_battlefield") or {}
+    allocation = sections.get("sales_allocation") or {}
+    positions = sections.get("semantic_dimension_positions") or {}
+    comment_summary = comment.get("summary") or {}
+    has_comment = bool(
+        comment.get("supported_claim_codes")
+        or comment.get("contradicted_claim_codes")
+        or comment_summary.get("product_fact_sentence_count")
+        or comment_summary.get("matched_sentence_count")
+    )
+    has_semantics = bool(
+        task.get("primary_user_task_code")
+        or group.get("primary_target_group_code")
+        or battlefield.get("primary_battlefield_code")
+    )
+    has_graph = bool(allocation or positions)
+    return {
+        "has_comment": has_comment,
+        "has_semantics": has_semantics,
+        "has_graph": has_graph,
+        "semantic_verified": bool(has_comment and has_semantics and has_graph),
+    }
 
 
 def _unique_strings(*groups: list[Any]) -> list[str]:
