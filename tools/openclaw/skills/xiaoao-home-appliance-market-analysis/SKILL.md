@@ -93,10 +93,12 @@ If `status` is not `ok`, follow the boundary rules below.
 
 Tooling hygiene:
 
-- For competitor-list questions, prefer the stable text command and send its output directly:
+- For competitor-list questions, prefer the XiaoAo answer command and send its
+  `short_answer` directly. The CLI owns ranking and wording for this question;
+  do not rewrite it.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 7 --format text
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
 ```
 
 - Use stable CLI commands only. Do not run ad hoc heredocs, inline Python, jq pipelines, grep pipelines, or shell parsing scripts to create a business answer.
@@ -111,7 +113,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 
 | User intent | Stable command | Required input | When to use |
 | --- | --- | --- | --- |
-| "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Candidate priority is same size and price first, then same value battlefield, same task/group, parameter/claim overlap, sales validation. |
+| "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Use XiaoAo answer mode. Selection priority is same purchase pool, role-weighted value battlefield overlap, role-weighted user task overlap, role-weighted target group overlap, substitutable value anchors, replacement pressure, then sales as market validation only. |
 | "A 为什么比 B 卖得好/差", "销量差异原因" | `why-sales-diff` | `sku_code` and `candidate_sku_code` | Explain a pairwise sales difference. If only one SKU is provided, run `competitor-set` first and ask the user to confirm the comparison SKU if needed. |
 | "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. |
 | "某个价值战场有多大", "某战场有哪些 SKU", "战场空间" | `battlefield-space` | `dimension_code` or battlefield name query | Return market space, SKU contribution, brand distribution, and size-price distribution from semantic market graph results. |
@@ -122,7 +124,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 Stable command examples:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format json --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
 ```
 
 ```bash
@@ -174,15 +176,19 @@ For "这款和谁比":
 
 1. `competitor-set`
 2. If the user asks for deeper reasoning, run `why-sales-diff` on the chosen pair.
-3. For the initial answer, call `competitor-set --format text` and reuse that
-   answer directly. Do not parse JSON for this question.
-4. Build the user-facing Top 3 as "重点竞品" using the confirmed business
-   priority: same size/price first, then same value battlefield, same user
-   task/target group, parameter/claim overlap, and overlapping-week sales
-   validation. It is acceptable to distinguish "最直接竞品", "价格贴身竞品",
-   and "下探分流竞品" when that is more useful than raw returned order.
-5. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
+3. For the initial answer, call `competitor-set --format text --answer-style
+   xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600` and reuse
+   that answer directly. Do not parse JSON for this question.
+4. The CLI-generated Top 3 follows this business definition:
+   首选竞品 = 同一购买池 × 主辅价值战场加权重合 × 主辅用户任务加权重合 ×
+   主辅目标客群加权重合 × 关键价值锚点可替代 × 替代压力 × 市场验证.
+5. Sales is only market validation. Do not describe sales closeness as the
+   reason for selecting a competitor.
+6. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
+7. If JSON was used because text output was unavailable and
+   `result.competitor_answer.display_policy.send_short_answer_as_is=true`, send
+   `result.competitor_answer.short_answer` exactly. Do not rewrite the summary.
 
 For follow-up references such as "第一款", "第一名", "上面第一款", "它", "这款",
 or "分析第一款为什么选它":
@@ -320,26 +326,18 @@ If the user asks a very narrow factual question, you may compress the format, bu
 
 ### Competitor Answer Template
 
-For "某 SKU 的竞品有哪些", use this business shape:
+For "某 SKU 的竞品有哪些", the preferred answer is the exact CLI
+`short_answer`. It must stay within 600 Chinese characters, name only the Top 3,
+and end with the Feishu report link when available.
+
+Fallback shape only when CLI has no `short_answer`:
 
 ```text
-结论：
-这款产品当前最值得重点比较的三款竞品是：
-1. 品牌 型号：一句话说明为什么是最直接竞品。
-2. 品牌 型号：一句话说明它形成什么竞争压力。
-3. 品牌 型号：一句话说明它的角色，例如价格贴身、同战场强替代或下探分流。
-
-判断依据：
-- 竞争池：同尺寸或相邻尺寸、同价位或邻近价位。
-- 需求重合：价值战场、用户任务、目标客群是否重合。
-- 产品重合：卖点和参数是否接近，关键能力是否可比。
-- 市场验证：用重叠在售周周均销量/销额看竞争强度，不用累计销量判断胜负。
-
-分析过程：
-用 2-4 条说明直接竞品、价格压力竞品、上探/下探替代的关系。
-
-口径与限制：
-基于当前可观测线上样本；线下、广告投放、库存、促销资源不在当前数据内。
+{目标 SKU} 的重点竞品建议看三款：{竞品1}、{竞品2} 和 {竞品3}。
+{竞品1}排第一，核心原因是它处在同一购买池，并在目标 SKU 的核心成交理由上形成最高替代压力。
+{竞品2}属于强直接竞品，主要压力来自同价段配置或场景预期。
+{竞品3}属于价格贴身、下探分流或上探替代竞品，主要压力来自预算迁移或场景替代。
+详细分析报告见飞书链接：{report_url}
 ```
 
 ## Prohibited Actions

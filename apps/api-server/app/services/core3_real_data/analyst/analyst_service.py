@@ -131,6 +131,9 @@ class CatForgeAnalystService:
         routed_command = route.command
         routed_ability = get_ability(routed_command)
         merged_kwargs = merge_route_kwargs(explicit_kwargs=kwargs, extracted_kwargs=route.extracted_params)
+        if routed_command != "competitor-set":
+            for presentation_key in ("answer_style", "with_report", "top_n", "max_chat_chars", "report_title"):
+                merged_kwargs.pop(presentation_key, None)
         result = self.dispatch(routed_command, context, **merged_kwargs)
         explicit_param_keys = sorted(key for key, value in kwargs.items() if value not in (None, ""))
         applied_param_keys = sorted(set(route.extracted_params) | set(explicit_param_keys))

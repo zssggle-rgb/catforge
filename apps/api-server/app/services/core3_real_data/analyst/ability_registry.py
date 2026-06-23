@@ -112,7 +112,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="competitor-set",
         ability_type="sop",
-        description_cn="按同尺寸价格、同价值战场、同任务/客群、同参数/卖点、销量验证生成竞品集合。",
+        description_cn="按购买池、主辅战场/任务/客群加权重合、价值锚点替代压力和市场验证生成竞品集合与小奥摘要。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D"),
         status="implemented",

@@ -77,8 +77,22 @@ def seed_data(session: Session) -> None:
     )
     seed_market_profile(session, sku_code="TV00029112", model_name="65E7Q", brand_name="海信", size=65, price=Decimal("4999"), volume=Decimal("1200"))
     seed_market_profile(session, sku_code="TV00030001", model_name="65E7Q Pro", brand_name="海信", size=65, price=Decimal("6999"), volume=Decimal("800"))
+    seed_market_profile(session, sku_code="TV00040001", model_name="65A7H PRO", brand_name="创维", size=65, price=Decimal("4700"), volume=Decimal("900"))
+    seed_market_profile(session, sku_code="TV00040002", model_name="L65MC-SP", brand_name="小米", size=65, price=Decimal("5010"), volume=Decimal("1500"))
+    seed_market_profile(session, sku_code="TV00040003", model_name="65Q9L PRO", brand_name="TCL", size=65, price=Decimal("4650"), volume=Decimal("850"))
+    seed_market_profile(
+        session,
+        sku_code="TV00040004",
+        model_name="65A6F ULTRA",
+        brand_name="创维",
+        size=65,
+        price=Decimal("3700"),
+        volume=Decimal("1400"),
+        price_band="mid",
+    )
     seed_fact_profiles(session)
     seed_candidate_fact_profiles(session)
+    seed_business_competitor_profiles(session)
     seed_weekly_market(session)
     seed_semantic_space(session)
     session.commit()
@@ -93,6 +107,7 @@ def seed_market_profile(
     size: int,
     price: Decimal,
     volume: Decimal,
+    price_band: str = "mid_high",
 ) -> None:
     size_tier = "large_60_69"
     amount = price * volume
@@ -128,8 +143,8 @@ def seed_market_profile(
             main_channel_type="online",
             main_platform="test_platform",
             platform_share_json={"test_platform": {"volume_share": 1.0, "amount_share": 1.0}},
-            price_band_category="mid_high",
-            price_band_size="mid_high",
+            price_band_category=price_band,
+            price_band_size=price_band,
             price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
             price_percentile_in_size=Decimal("0.700000"),
             volume_percentile_in_size=Decimal("0.800000"),
@@ -478,6 +493,247 @@ def seed_candidate_fact_profiles(session: Session) -> None:
             confidence=Decimal("0.8000"),
             evidence_ids_json=["ev-bf-tv00030001"],
             profile_hash="hash-bf-tv00030001",
+        )
+    )
+
+
+def seed_business_competitor_profiles(session: Session) -> None:
+    seed_competitor_fact_profile(
+        session,
+        sku_code="TV00040001",
+        model_name="65A7H PRO",
+        brand_name="创维",
+        fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh", "tv_claim_flush_wall_mount"],
+        supported_claim_codes=["tv_claim_miniled", "tv_claim_flush_wall_mount"],
+        primary_task="TASK_CINEMA_IMMERSION",
+        secondary_tasks=["TASK_PREMIUM_PICTURE_EXPERIENCE"],
+        primary_group="TG_PREMIUM_AV_ENTHUSIAST",
+        secondary_groups=["TG_MAINSTREAM_FAMILY_VIEWER"],
+        primary_battlefield="BF_PREMIUM_PICTURE_UPGRADE",
+        secondary_battlefields=["BF_MAINSTREAM_LIVING_BALANCE"],
+    )
+    seed_competitor_fact_profile(
+        session,
+        sku_code="TV00040002",
+        model_name="L65MC-SP",
+        brand_name="小米",
+        fact_claim_codes=["tv_claim_casting_connectivity"],
+        supported_claim_codes=["tv_claim_casting_connectivity"],
+        primary_task="TASK_VALUE_FOR_MONEY_PURCHASE",
+        secondary_tasks=["TASK_SMART_CASTING_IOT"],
+        primary_group="TG_VALUE_MAXIMIZER",
+        secondary_groups=["TG_SMART_CONNECTED_USER"],
+        primary_battlefield="BF_MAINSTREAM_FAMILY_VALUE",
+        secondary_battlefields=["BF_SMART_CONNECTED_EXPERIENCE"],
+    )
+    seed_competitor_fact_profile(
+        session,
+        sku_code="TV00040003",
+        model_name="65Q9L PRO",
+        brand_name="TCL",
+        fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh", "tv_claim_hdmi21_connectivity"],
+        supported_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
+        primary_task="TASK_GAMING_CONSOLE_ENTERTAINMENT",
+        secondary_tasks=["TASK_CINEMA_IMMERSION", "TASK_PREMIUM_PICTURE_EXPERIENCE"],
+        primary_group="TG_GAMING_SPORTS_USER",
+        secondary_groups=["TG_PREMIUM_AV_ENTHUSIAST"],
+        primary_battlefield="BF_GAMING_SPORTS_FLUENCY",
+        secondary_battlefields=["BF_PREMIUM_PICTURE_UPGRADE"],
+    )
+    seed_competitor_fact_profile(
+        session,
+        sku_code="TV00040004",
+        model_name="65A6F ULTRA",
+        brand_name="创维",
+        fact_claim_codes=["tv_claim_miniled", "tv_claim_eye_care_display"],
+        supported_claim_codes=["tv_claim_miniled"],
+        primary_task="TASK_CINEMA_IMMERSION",
+        secondary_tasks=["TASK_VALUE_FOR_MONEY_PURCHASE"],
+        primary_group="TG_MAINSTREAM_FAMILY_VIEWER",
+        secondary_groups=["TG_PREMIUM_AV_ENTHUSIAST"],
+        primary_battlefield="BF_PREMIUM_VALUE_DOWNTRADE",
+        secondary_battlefields=["BF_PREMIUM_PICTURE_UPGRADE", "BF_MAINSTREAM_LIVING_BALANCE"],
+    )
+
+
+def seed_competitor_fact_profile(
+    session: Session,
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    fact_claim_codes: list[str],
+    supported_claim_codes: list[str],
+    primary_task: str,
+    secondary_tasks: list[str],
+    primary_group: str,
+    secondary_groups: list[str],
+    primary_battlefield: str,
+    secondary_battlefields: list[str],
+) -> None:
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id=f"profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code=sku_code,
+            model_name=model_name,
+            param_values_json={
+                "screen_size_inch": {"normalized_value": 65},
+                "display_tech_class": {"normalized_value": "miniled"},
+                "dimension_tier_profile": {"size": "large_60_69", "display_tech": "miniled"},
+            },
+            core_picture_params_json={"screen_size_inch": {"normalized_value": 65}, "display_tech_class": {"normalized_value": "miniled"}},
+            core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
+            core_system_params_json={"wifi_flag": {"normalized_value": True}},
+            core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
+            param_completeness=Decimal("0.800000"),
+            known_param_count=40,
+            unknown_param_count=6,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=[f"ev-param-{sku_code.lower()}"],
+            quality_summary_json={"status": "ok"},
+            profile_hash=f"hash-param-{sku_code.lower()}",
+            seed_version="tv_param_taxonomy_manual_v0.1",
+            rule_version=CORE3_M03B_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id=f"claim-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            raw_claim_count=len(fact_claim_codes),
+            matched_claim_count=len(fact_claim_codes),
+            fact_claim_count=len(fact_claim_codes),
+            unsupported_claim_count=0,
+            claim_texts_json=fact_claim_codes,
+            claim_codes=fact_claim_codes,
+            fact_claim_codes=fact_claim_codes,
+            unsupported_claim_codes=[],
+            dimension_profile_json={"picture_quality": {"fact_claim_count": len(fact_claim_codes)}},
+            dimension_position_profile_json={"picture_quality": ["picture_flagship_miniled"], "motion_gaming": ["gaming_high_refresh"]},
+            claim_summary_json={"premium_claim_candidates": fact_claim_codes[:2]},
+            evidence_ids=[f"ev-claim-{sku_code.lower()}"],
+            confidence=Decimal("0.8500"),
+            profile_hash=f"hash-claim-{sku_code.lower()}",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id=f"comment-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            comment_sentence_count=18,
+            matched_sentence_count=15,
+            fact_atom_count=18,
+            product_fact_sentence_count=15,
+            positive_sentence_count=12,
+            negative_sentence_count=1,
+            neutral_sentence_count=2,
+            service_excluded_sentence_count=1,
+            dimension_summary_json={"picture_screen_experience": {"positive": 7}},
+            signal_summary_json={"use_case_signal": ["客厅观影"]},
+            param_comment_support_json={"screen_size_inch": {"positive": 3}},
+            claim_comment_support_json={code: {"positive": 3} for code in supported_claim_codes},
+            supported_param_codes=["screen_size_inch"],
+            contradicted_param_codes=[],
+            supported_claim_codes=supported_claim_codes,
+            contradicted_claim_codes=[],
+            evidence_examples_json=[{"text": "画质和客厅观影体验不错"}],
+            evidence_ids=[f"ev-comment-{sku_code.lower()}"],
+            confidence=Decimal("0.8200"),
+            profile_hash=f"hash-comment-{sku_code.lower()}",
+            rule_version=CORE3_M05C_TV_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3M09cSkuUserTaskProfile(
+            profile_id=f"m09c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M09C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M09C_TV_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_user_task_code=primary_task,
+            primary_relation_status="primary_user_task",
+            secondary_user_task_codes_json=secondary_tasks,
+            comment_observed_task_codes_json=[primary_task],
+            brand_claimed_task_codes_json=secondary_tasks,
+            user_task_summary_json={"primary_reason_cn": "测试候选任务。"},
+            confidence=Decimal("0.8200"),
+            evidence_ids_json=[f"ev-task-{sku_code.lower()}"],
+            profile_hash=f"hash-task-{sku_code.lower()}",
+        )
+    )
+    session.add(
+        entities.Core3M10cSkuTargetGroupProfile(
+            profile_id=f"m10c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M10C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M10C_TV_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_target_group_code=primary_group,
+            primary_relation_status="primary_target_group",
+            secondary_target_group_codes_json=secondary_groups,
+            comment_observed_group_codes_json=[primary_group],
+            target_group_summary_json={"primary_reason_cn": "测试候选客群。"},
+            confidence=Decimal("0.8200"),
+            evidence_ids_json=[f"ev-group-{sku_code.lower()}"],
+            profile_hash=f"hash-group-{sku_code.lower()}",
+        )
+    )
+    session.add(
+        entities.Core3SkuValueBattlefieldProfile(
+            profile_id=f"m11c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M11C_TV_TAXONOMY_VERSION,
+            rule_version=CORE3_M11C_TV_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier="large_60_69",
+            price_band_in_size_tier="mid_high",
+            primary_battlefield_code=primary_battlefield,
+            primary_relation_status="primary_battlefield",
+            secondary_battlefield_codes_json=secondary_battlefields,
+            opportunity_battlefield_codes_json=[],
+            drag_factor_battlefield_codes_json=[],
+            battlefield_summary_json={"primary_reason_cn": "测试候选战场。"},
+            confidence=Decimal("0.8200"),
+            evidence_ids_json=[f"ev-bf-{sku_code.lower()}"],
+            profile_hash=f"hash-bf-{sku_code.lower()}",
         )
     )
 
@@ -1015,7 +1271,10 @@ def test_same_size_price_candidates_returns_same_pool_candidates() -> None:
     search = result["result"]["candidate_search"]
     assert search["target_market"]["sku_code"] == "TV00029112"
     assert search["match_policy"] == "m07_same_size_price_band"
-    assert [item["sku_code"] for item in search["candidates"]] == ["TV00030001"]
+    candidate_codes = [item["sku_code"] for item in search["candidates"]]
+    assert "TV00030001" in candidate_codes
+    assert "TV00040001" in candidate_codes
+    assert "TV00040002" in candidate_codes
     assert search["candidates"][0]["size_tier"] == "large_60_69"
     assert search["candidates"][0]["price_band_in_size_tier"] == "mid_high"
 
@@ -1158,16 +1417,51 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
         batch_id=BATCH_ID,
         product_category="tv",
         sku_code="TV00029112",
-        limit=3,
+        limit=10,
     )
 
     assert result["status"] == "ok"
     payload = result["result"]["competitor_set"]
-    assert payload["candidate_count"] == 1
-    assert payload["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
+    assert payload["candidate_count"] >= 5
+    candidate_codes = [item["candidate"]["sku_code"] for item in payload["candidates"]]
+    assert "TV00030001" in candidate_codes
+    assert "TV00040001" in candidate_codes
     assert payload["candidates"][0]["basis"]["same_size_price_pool"] is True
-    assert payload["candidates"][0]["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+    overlap_methods = {item["candidate"]["sku_code"]: item["sales_overlap"]["method"] for item in payload["candidates"]}
+    assert overlap_methods["TV00030001"] == "pairwise_overlap_active_week_average"
     assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
+
+
+def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
+    session = make_session()
+    result = catforge_analyst.competitor_set(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        limit=10,
+        answer_style="xiaoao",
+        with_report="markdown",
+        max_chat_chars=600,
+    )
+
+    assert result["status"] == "ok"
+    answer = result["result"]["competitor_answer"]
+    top_codes = [item["candidate"]["sku_code"] for item in answer["top_competitors"]]
+    assert top_codes[0] == "TV00040001"
+    assert "TV00040002" not in top_codes[:2]
+    assert answer["top_competitors"][0]["role"] == "primary_direct"
+    assert answer["top_competitors"][0]["weighted_overlap"]["battlefield"] > answer["all_candidates"][0]["weighted_overlap"]["battlefield"] - 0.01
+    assert answer["report_payload"]["markdown"].startswith("# 海信 65E7Q 重点竞品分析报告")
+    short_answer = answer["short_answer"]
+    assert len(short_answer) <= 600
+    assert "创维 65A7H PRO" in short_answer
+    assert "小米 L65MC-SP" not in short_answer.split("详细分析报告")[0] or "价格贴身" in short_answer
+    assert "详细分析报告暂未生成" in short_answer
+    for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high"):
+        assert forbidden not in short_answer
 
 
 def test_competitor_set_text_format_is_business_facing() -> None:
@@ -1179,14 +1473,14 @@ def test_competitor_set_text_format_is_business_facing() -> None:
         batch_id=BATCH_ID,
         product_category="tv",
         sku_code="TV00029112",
-        limit=3,
+        limit=10,
     )
 
     text = catforge_analyst.format_business_text(result)
 
     assert text.startswith("结论：")
     assert "海信 65E7Q" in text
-    assert "海信 65E7Q Pro" in text
+    assert "创维 65A7H PRO" in text
     assert "判断依据：" in text
     assert "口径与限制：" in text
     assert "CLI" not in text
@@ -1196,6 +1490,26 @@ def test_competitor_set_text_format_is_business_facing() -> None:
     assert "TG_" not in text
     assert "TASK_" not in text
     assert "mid_high" not in text
+
+
+def test_competitor_set_text_uses_xiaoao_short_answer() -> None:
+    session = make_session()
+    result = catforge_analyst.competitor_set(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        limit=10,
+        answer_style="xiaoao",
+        with_report="markdown",
+    )
+
+    text = catforge_analyst.format_business_text(result)
+
+    assert text == result["result"]["competitor_answer"]["short_answer"]
+    assert text.startswith("海信 65E7Q 的重点竞品建议看")
 
 
 def test_sku_business_brief_sop_returns_summary_sections() -> None:
@@ -1212,7 +1526,7 @@ def test_sku_business_brief_sop_returns_summary_sections() -> None:
     assert result["status"] == "ok"
     brief = result["result"]["sku_business_brief"]
     assert brief["primary_semantics"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
-    assert brief["top_same_size_price_candidates"][0]["sku_code"] == "TV00030001"
+    assert "TV00030001" in {item["sku_code"] for item in brief["top_same_size_price_candidates"]}
     assert brief["opportunity_and_risk"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
 
 
@@ -1307,7 +1621,9 @@ def test_ask_routes_competitor_question_to_sop() -> None:
     assert result["routed_command"] == "competitor-set"
     assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
     assert result["target"]["sku_code"] == "TV00029112"
-    assert result["result"]["competitor_set"]["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
+    candidate_codes = [item["candidate"]["sku_code"] for item in result["result"]["competitor_set"]["candidates"]]
+    assert "TV00030001" in candidate_codes
+    assert "TV00040001" in candidate_codes
     assert [step["step_code"] for step in result["sop_steps"]][:3] == [
         "resolve-sku",
         "sku-fact-brief",
@@ -1330,7 +1646,9 @@ def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_s
     assert result["routed_command"] == "competitor-set"
     assert result["routing"]["matched_rule"] == "competitor_set"
     assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
-    assert result["result"]["competitor_set"]["candidates"][0]["candidate"]["sku_code"] == "TV00030001"
+    candidate_codes = [item["candidate"]["sku_code"] for item in result["result"]["competitor_set"]["candidates"]]
+    assert "TV00030001" in candidate_codes
+    assert "TV00040001" in candidate_codes
 
 
 def test_ask_routes_pairwise_sales_diff_from_sku_codes() -> None:

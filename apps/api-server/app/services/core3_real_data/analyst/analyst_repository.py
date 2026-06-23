@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models import entities
 from app.services.core3_real_data.analyst.analyst_schemas import ResolvedSku
+from app.services.core3_real_data.analyst.competitor_answer import weighted_overlap_from_roles
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
@@ -371,7 +372,6 @@ class AnalystRepository:
             .where(entities.Core3SkuMarketProfile.sku_code != target_sku_code)
             .where(entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category.upper())}%"))
             .where(entities.Core3SkuMarketProfile.size_segment == target_market.size_segment)
-            .where(entities.Core3SkuMarketProfile.price_band_size == target_market.price_band_size)
             .order_by(
                 func.abs(entities.Core3SkuMarketProfile.price_wavg - target_market.price_wavg),
                 entities.Core3SkuMarketProfile.sales_volume_total.desc(),
@@ -379,8 +379,13 @@ class AnalystRepository:
             )
         )
         if limit != 0:
-            stmt = stmt.limit(max(limit, 0))
-        rows = list(self.db.execute(stmt).scalars())
+            stmt = stmt.limit(max(limit * 5, limit, 50))
+        rows = sorted(
+            list(self.db.execute(stmt).scalars()),
+            key=lambda row: _candidate_pool_sort_key(row, target_market),
+        )
+        if limit != 0:
+            rows = rows[: max(limit, 0)]
         return {
             "target_market": _candidate_market_payload(target_market, target_market=target_market),
             "match_policy": "m07_same_size_price_band",
@@ -1369,6 +1374,28 @@ def _candidate_market_payload(
     }
 
 
+def _candidate_pool_sort_key(
+    row: entities.Core3SkuMarketProfile,
+    target_market: entities.Core3SkuMarketProfile,
+) -> tuple[int, int, Decimal, Decimal, str]:
+    row_size = _decimal(row.screen_size_inch)
+    target_size = _decimal(target_market.screen_size_inch)
+    exact_size_rank = 0 if row_size is not None and target_size is not None and abs(row_size - target_size) <= Decimal("0.5") else 1
+    band_distance = _price_band_distance(row.price_band_size, target_market.price_band_size)
+    price_gap = abs((_decimal(row.price_wavg) or Decimal("0")) - (_decimal(target_market.price_wavg) or Decimal("0")))
+    sales = _decimal(row.sales_volume_total) or Decimal("0")
+    return (exact_size_rank, band_distance, price_gap, -sales, row.sku_code)
+
+
+def _price_band_distance(left: Any, right: Any) -> int:
+    order = {"low": 0, "mid_low": 1, "mid": 2, "mid_high": 3, "high": 4}
+    left_key = str(left or "").lower()
+    right_key = str(right or "").lower()
+    if left_key not in order or right_key not in order:
+        return 99
+    return abs(order[left_key] - order[right_key])
+
+
 def _weekly_market_by_sku(rows: Sequence[entities.Core3CleanMarketWeekly]) -> dict[str, dict[int, dict[str, Any]]]:
     grouped: dict[str, dict[int, dict[str, Any]]] = {}
     for row in rows:
@@ -1490,12 +1517,23 @@ def _code_overlap(
     matched = target_codes & candidate_codes
     union = target_codes | candidate_codes
     score = Decimal(len(matched)) / Decimal(len(union)) if union else Decimal("0")
+    target_items = [
+        {"code": code, "roles": sorted(target_roles.get(code, set()))}
+        for code in sorted(target_codes)
+    ]
+    candidate_items = [
+        {"code": code, "roles": sorted(candidate_roles.get(code, set()))}
+        for code in sorted(candidate_codes)
+    ]
+    weighted = weighted_overlap_from_roles({"target_items": target_items, "candidate_items": candidate_items})
     return {
         "target_codes": sorted(target_codes),
         "candidate_codes": sorted(candidate_codes),
         "matched_codes": sorted(matched),
         "target_only_codes": sorted(target_codes - candidate_codes),
         "candidate_only_codes": sorted(candidate_codes - target_codes),
+        "target_items": target_items,
+        "candidate_items": candidate_items,
         "matched_items": [
             {
                 "code": code,
@@ -1509,6 +1547,7 @@ def _code_overlap(
         "matched_count": len(matched),
         "union_count": len(union),
         "overlap_score": _number(score),
+        **weighted,
     }
 
 

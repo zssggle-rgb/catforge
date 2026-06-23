@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
+from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 
 
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
@@ -77,6 +78,11 @@ class SopOrchestrators:
         sku_code: str | None = None,
         model_name: str | None = None,
         limit: int = 20,
+        answer_style: str = "raw",
+        with_report: str = "none",
+        top_n: int = 3,
+        max_chat_chars: int = 600,
+        report_title: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         target = self.atomic_handlers.resolve_sku(context, query=query, sku_code=sku_code, model_name=model_name, limit=10)
@@ -98,30 +104,42 @@ class SopOrchestrators:
             pair_atom_results.extend([semantic, param_claim, sales])
             competitors.append(_competitor_item(rank, row, semantic, param_claim, sales))
         atom_results = [target, fact, candidates_result, *pair_atom_results]
+        target_fact_brief = (fact.get("result") or {}).get("fact_brief", {})
+        result_payload: dict[str, Any] = {
+            "competitor_set": {
+                "ranking_policy": [
+                    "same_size_price_pool",
+                    "same_value_battlefield",
+                    "same_user_task_or_target_group",
+                    "param_claim_overlap",
+                    "sales_overlap_validation",
+                ],
+                "target_fact_brief": target_fact_brief,
+                "candidate_count": len(competitors),
+                "candidates": competitors,
+            }
+        }
+        if answer_style == "xiaoao" or with_report != "none":
+            result_payload["competitor_answer"] = build_competitor_answer(
+                target=target["target"],
+                target_fact_brief=target_fact_brief,
+                competitors=competitors,
+                top_n=top_n,
+                max_chat_chars=max_chat_chars,
+                with_report=with_report,
+                report_title=report_title,
+            )
         return base_result(
             status=AnalystStatus.OK,
             command="competitor-set",
             context=context,
             target=target["target"],
-            result={
-                "competitor_set": {
-                    "ranking_policy": [
-                        "same_size_price_pool",
-                        "same_value_battlefield",
-                        "same_user_task_or_target_group",
-                        "param_claim_overlap",
-                        "sales_overlap_validation",
-                    ],
-                    "target_fact_brief": (fact.get("result") or {}).get("fact_brief", {}),
-                    "candidate_count": len(competitors),
-                    "candidates": competitors,
-                }
-            },
+            result=result_payload,
             sop_steps=_steps("competitor-set", atom_results),
             atoms_used=_atoms_used(atom_results),
             evidence=_evidence(atom_results),
             limitations=_limitations(atom_results),
-            answer_outline=[f"已按同尺寸价格优先，并结合语义、参数卖点和重叠周销量生成 {len(competitors)} 个竞品候选。"],
+            answer_outline=[f"已按购买池、主辅语义重合、价值锚点替代压力和市场验证生成 {len(competitors)} 个竞品候选。"],
         )
 
     def sku_business_brief(

@@ -87,6 +87,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 target_group_code=getattr(args, "target_group_code", None),
                 battlefield_code=getattr(args, "battlefield_code", None),
                 limit=getattr(args, "limit", DEFAULT_CANDIDATE_LIMIT),
+                answer_style=getattr(args, "answer_style", None),
+                with_report=getattr(args, "with_report", None),
+                top_n=getattr(args, "top_n", None),
+                max_chat_chars=getattr(args, "max_chat_chars", None),
+                report_title=getattr(args, "report_title", None),
             )
     except CatForgeAnalystError as exc:
         result = {
@@ -130,6 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_pair_args(command_parser)
         add_dimension_args(command_parser)
         command_parser.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
+        add_answer_args(command_parser)
         add_format_arg(command_parser)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language analyst question to an atom or SOP.")
@@ -138,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_pair_args(ask)
     add_dimension_args(ask)
     ask.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
+    add_answer_args(ask)
     ask.add_argument("question", nargs="+", help="Natural-language question.")
     add_format_arg(ask)
     return parser
@@ -181,6 +188,14 @@ def add_dimension_args(parser: argparse.ArgumentParser) -> None:
 
 def add_format_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--format", choices=("json", "text"), default="json")
+
+
+def add_answer_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--answer-style", choices=("raw", "xiaoao"), default="raw")
+    parser.add_argument("--with-report", choices=("none", "markdown", "feishu-doc"), default="none")
+    parser.add_argument("--top-n", type=int, default=3)
+    parser.add_argument("--max-chat-chars", type=int, default=600)
+    parser.add_argument("--report-title")
 
 
 def list_analyst_abilities(
@@ -440,6 +455,11 @@ def competitor_set(
     sku_code: str | None = None,
     model_name: str | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
+    answer_style: str = "raw",
+    with_report: str = "none",
+    top_n: int = 3,
+    max_chat_chars: int = 600,
+    report_title: str | None = None,
 ) -> dict[str, Any]:
     return run_analyst_command(
         db,
@@ -454,6 +474,11 @@ def competitor_set(
         sku_code=sku_code,
         model_name=model_name,
         limit=limit,
+        answer_style=answer_style,
+        with_report=with_report,
+        top_n=top_n,
+        max_chat_chars=max_chat_chars,
+        report_title=report_title,
     )
 
 
@@ -666,6 +691,11 @@ def answer_natural_language(
     target_group_code: str | None = None,
     battlefield_code: str | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
+    answer_style: str = "raw",
+    with_report: str = "none",
+    top_n: int = 3,
+    max_chat_chars: int = 600,
+    report_title: str | None = None,
 ) -> dict[str, Any]:
     return run_analyst_command(
         db,
@@ -692,6 +722,11 @@ def answer_natural_language(
         target_group_code=target_group_code,
         battlefield_code=battlefield_code,
         limit=limit,
+        answer_style=answer_style,
+        with_report=with_report,
+        top_n=top_n,
+        max_chat_chars=max_chat_chars,
+        report_title=report_title,
     )
 
 
@@ -745,6 +780,9 @@ def format_business_text(result: dict[str, Any]) -> str:
     payload = result.get("result") or {}
     if result.get("status") == "ambiguous" and payload.get("candidates"):
         return _format_ambiguous_sku_text(result)
+    competitor_answer = payload.get("competitor_answer") or {}
+    if competitor_answer.get("short_answer"):
+        return str(competitor_answer["short_answer"])
     if "competitor_set" in payload:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:
@@ -827,7 +865,8 @@ def _format_competitor_set_text(result: dict[str, Any]) -> str:
             "口径与限制：基于当前可观测线上样本；线下渠道、广告投放、库存、促销资源不在当前数据内。",
         ]
     )
-    limitations = [item for item in result.get("limitations") or [] if item]
+    limitations = [_sanitize_business_limitation(item) for item in result.get("limitations") or [] if item]
+    limitations = [item for item in limitations if item]
     if limitations:
         lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
     return "\n".join(lines)
@@ -911,7 +950,8 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
             "口径与限制：当前判断基于可观测线上样本；线下渠道、广告投放、库存和促销资源不在当前数据内。",
         ]
     )
-    limitations = [item for item in result.get("limitations") or [] if item]
+    limitations = [_sanitize_business_limitation(item) for item in result.get("limitations") or [] if item]
+    limitations = [item for item in limitations if item]
     if limitations:
         lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
     return "\n".join(lines)
@@ -1130,6 +1170,17 @@ def _claim_names(codes: list[Any]) -> list[str]:
         if label and label not in names:
             names.append(label)
     return names
+
+
+def _sanitize_business_limitation(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "M01" in text or "M07" in text:
+        return "部分候选缺少完整重叠在售周明细，已使用当前市场画像周均表现作为参考。"
+    for token in ("M03B", "M04C", "M05C", "M09C", "M10C", "M11C", "M11D"):
+        text = text.replace(token, "对应分析层")
+    return text
 
 
 def _abs_decimal(value: Any) -> Decimal | None:
