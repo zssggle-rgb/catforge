@@ -110,6 +110,18 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
   the CLI answer. When Feishu publishing is temporarily unavailable but the CLI
   still returns a valid Top 3 answer, answer the business question and state
   that the detailed report link is temporarily unavailable.
+- For competitor-list questions, the detailed report must be generated from the
+  CLI report payload, not rewritten by the agent. The report structure is:
+  1. 分析结论
+  2. 分析过程, including purchase pool, value battlefield, user task, target
+     group, value anchor, replacement pressure, and market validation scores.
+  3. 四个产品详情链接.
+  4. Target SKU and Top 3 competitor product profiles, each covering market
+     profile, value battlefield profile, user task profile, target group
+     profile, claim profile, and parameter profile.
+- The report must not contain response strategy, product-manager strategy,
+  guide/sales talk, implementation process, raw module names, source batch ids,
+  or command output.
 
 ## 固定 SOP 路由
 
@@ -186,11 +198,15 @@ For "这款和谁比":
 4. The CLI-generated Top 3 follows this business definition:
    首选竞品 = 同一购买池 × 主辅价值战场加权重合 × 主辅用户任务加权重合 ×
    主辅目标客群加权重合 × 关键价值锚点可替代 × 替代压力 × 市场验证.
-5. Sales is only market validation. Do not describe sales closeness as the
+5. In scoring, purchase pool is the entry gate; user task and target group
+   overlap carry more weight than any single battlefield hit. A SKU with one
+   very high semantic dimension but weaker task/group overlap should not be
+   promoted above a candidate with a more complete substitution relationship.
+6. Sales is only market validation. Do not describe sales closeness as the
    reason for selecting a competitor.
-6. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
+7. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
-7. If JSON was used because text output was unavailable and
+8. If JSON was used because text output was unavailable and
    `result.competitor_answer.display_policy.send_short_answer_as_is=true`, send
    `result.competitor_answer.short_answer` exactly. Do not rewrite the summary.
 

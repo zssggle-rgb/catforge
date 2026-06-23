@@ -10,7 +10,6 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
@@ -24,6 +23,16 @@ PRICE_BAND_ORDER = {
     "mid": 2,
     "mid_high": 3,
     "high": 4,
+}
+
+SCORE_WEIGHTS = {
+    "purchase_pool": Decimal("0.20"),
+    "battlefield": Decimal("0.15"),
+    "user_task": Decimal("0.20"),
+    "target_group": Decimal("0.20"),
+    "value_anchor": Decimal("0.15"),
+    "replacement_pressure": Decimal("0.05"),
+    "market_validation": Decimal("0.05"),
 }
 
 ROLE_WEIGHTS = {
@@ -308,13 +317,13 @@ def render_short_answer(
         name = _display_name(item.get("candidate") or {})
         if index == 1:
             lines.append(
-                f"{name}排第一，核心原因是{item['purchase_pool']['reason_cn']}，"
-                f"并在{_join_cn(item['shared_business_context'][:3])}上覆盖目标 SKU 的核心成交理由，"
+                f"{name}排第一，核心原因是同一购买池内替代关系最完整，"
+                f"在{_join_cn(item['shared_business_context'][:4])}上覆盖本品的核心成交理由，"
                 f"形成{item['replacement_pressure']['type_cn']}。"
             )
         else:
             lines.append(
-                f"{name}属于{item['role_cn']}，主要压力来自{item['replacement_pressure']['reason_cn']}。"
+                f"{name}属于{item['role_cn']}，主要压力来自{item['replacement_pressure']['type_cn']}。"
             )
     lines.append(_report_suffix(report_url))
     text = "".join(lines)
@@ -359,7 +368,7 @@ def render_competitor_report(
     lines.extend(_dimension_score_lines(top_competitors, all_competitors, dimension="battlefield"))
     lines.extend(["", "### 2.4 用户任务和目标客群评分依据", ""])
     lines.extend(_task_group_score_lines(top_competitors, all_competitors))
-    lines.extend(["", "### 2.5 关键价值锚点和市场验证依据", ""])
+    lines.extend(["", "### 2.5 关键价值锚点、替代压力和市场验证依据", ""])
     lines.extend(_anchor_market_score_lines(top_competitors, all_competitors))
     lines.extend(["", "## 三、四个产品详情链接", ""])
     lines.append(f"- [{target_name} 产品画像](#profile-target)")
@@ -457,18 +466,19 @@ def _scoring_method_lines() -> list[str]:
         "| 评分维度 | 权重 | 判断问题 |",
         "| --- | ---: | --- |",
         "| 购买池 | 20 | 是否同尺寸、同价位或相邻价位，是否会进入同一次购买决策 |",
-        "| 价值战场 | 25 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
-        "| 用户任务 | 15 | 用户买电视要完成的使用任务是否高度交叉 |",
-        "| 目标客群 | 15 | 是否争夺同一批核心人群和相邻人群 |",
+        "| 价值战场 | 15 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
+        "| 用户任务 | 20 | 用户买电视要完成的使用任务是否高度交叉 |",
+        "| 目标客群 | 20 | 是否争夺同一批核心人群和相邻人群 |",
         "| 关键价值锚点 | 15 | 参数、卖点、评论能否形成可替代的成交理由 |",
-        "| 市场验证 | 10 | 是否具备真实线上成交能力，能否形成实际分流 |",
+        "| 替代压力 | 5 | 是否会改变用户对目标 SKU 价值判断 |",
+        "| 市场验证 | 5 | 是否具备真实线上成交能力，能否形成实际分流 |",
     ]
 
 
 def _candidate_score_table_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
     lines = [
-        "| 排名 | 候选 SKU | 竞争角色 | 购买池 20 | 价值战场 25 | 用户任务 15 | 目标客群 15 | 价值锚点 15 | 市场验证 10 | 综合分 | 排序判断 |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| 排名 | 候选 SKU | 竞争角色 | 购买池 20 | 价值战场 15 | 用户任务 20 | 目标客群 20 | 价值锚点 15 | 替代压力 5 | 市场验证 5 | 综合分 | 排序判断 |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for rank, item in enumerate(_report_candidates(top_competitors, all_competitors), start=1):
         score = _candidate_score_breakdown(item)
@@ -484,6 +494,7 @@ def _candidate_score_table_lines(top_competitors: list[dict[str, Any]], all_comp
                     str(score["user_task"]),
                     str(score["target_group"]),
                     str(score["value_anchor"]),
+                    str(score["replacement_pressure"]),
                     str(score["market_validation"]),
                     str(score["total"]),
                     _candidate_sort_reason(item),
@@ -526,12 +537,12 @@ def _task_group_score_lines(top_competitors: list[dict[str, Any]], all_competito
 
 
 def _anchor_market_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
-    lines = ["| 候选 SKU | 价值锚点分 | 市场验证分 | 依据 |", "| --- | ---: | ---: | --- |"]
+    lines = ["| 候选 SKU | 价值锚点分 | 替代压力分 | 市场验证分 | 依据 |", "| --- | ---: | ---: | ---: | --- |"]
     for item in _report_candidates(top_competitors, all_competitors):
         score = _candidate_score_breakdown(item)
         anchors = _join_cn(item["value_anchor"]["shared_anchors"][:5]) or "关键价值锚点不足"
         lines.append(
-            f"| {_display_name(item.get('candidate') or {})} | {score['value_anchor']} | {score['market_validation']} | {anchors}；{item['market_validation']['summary_cn']} |"
+            f"| {_display_name(item.get('candidate') or {})} | {score['value_anchor']} | {score['replacement_pressure']} | {score['market_validation']} | {anchors}；{item['replacement_pressure']['reason_cn']}；{item['market_validation']['summary_cn']} |"
         )
     return lines
 
@@ -751,17 +762,18 @@ def _report_candidates(top_competitors: list[dict[str, Any]], all_competitors: l
 
 def _candidate_score_breakdown(item: dict[str, Any]) -> dict[str, int]:
     purchase_pool = _bounded_points(item.get("purchase_pool", {}).get("score"), 20)
-    battlefield = _bounded_points((item.get("weighted_overlap") or {}).get("battlefield"), 25)
-    user_task = _bounded_points((item.get("weighted_overlap") or {}).get("user_task"), 15)
-    target_group = _bounded_points((item.get("weighted_overlap") or {}).get("target_group"), 15)
+    battlefield = _bounded_points((item.get("weighted_overlap") or {}).get("battlefield"), 15)
+    user_task = _bounded_points((item.get("weighted_overlap") or {}).get("user_task"), 20)
+    target_group = _bounded_points((item.get("weighted_overlap") or {}).get("target_group"), 20)
     value_anchor = _bounded_points((item.get("value_anchor") or {}).get("score"), 15)
+    replacement_pressure = _bounded_points((item.get("replacement_pressure") or {}).get("score"), 5)
     market_validation = _market_validation_points((item.get("market_validation") or {}).get("level"))
-    total = purchase_pool + battlefield + user_task + target_group + value_anchor + market_validation
+    total = purchase_pool + battlefield + user_task + target_group + value_anchor + replacement_pressure + market_validation
     role = str(item.get("role") or "")
     if role == "strong_direct":
-        total += 6
+        total += 4
     elif role == "primary_direct":
-        total += 8
+        total += 5
     elif role == "downtrade_diversion":
         total -= 3
     elif role == "price_adjacent":
@@ -775,6 +787,7 @@ def _candidate_score_breakdown(item: dict[str, Any]) -> dict[str, int]:
         "user_task": user_task,
         "target_group": target_group,
         "value_anchor": value_anchor,
+        "replacement_pressure": replacement_pressure,
         "market_validation": market_validation,
         "total": total,
     }
@@ -787,7 +800,11 @@ def _bounded_points(value: Any, weight: int) -> int:
 
 
 def _market_validation_points(level: Any) -> int:
-    return {"strong": 10, "medium": 8, "weak": 3}.get(str(level or ""), 3)
+    return {"strong": 5, "medium": 4, "weak": 1}.get(str(level or ""), 1)
+
+
+def _market_validation_score(level: Any) -> Decimal:
+    return {"strong": Decimal("1.00"), "medium": Decimal("0.80"), "weak": Decimal("0.20")}.get(str(level or ""), Decimal("0.20"))
 
 
 def _candidate_sort_reason(item: dict[str, Any]) -> str:
@@ -1254,13 +1271,15 @@ def _enrich_competitor(target: dict[str, Any], target_fact_brief: dict[str, Any]
     value_anchor = _value_anchor(param_claim, target_fact_brief)
     market_validation = _market_validation(sales, candidate)
     replacement = _replacement_pressure(purchase_pool, battlefield, task, group, value_anchor, candidate)
+    market_score = _market_validation_score(market_validation.get("level"))
     business_score = (
-        purchase_pool["score"] * Decimal("0.20")
-        + battlefield["score"] * Decimal("0.25")
-        + task["score"] * Decimal("0.15")
-        + group["score"] * Decimal("0.15")
-        + value_anchor["score"] * Decimal("0.15")
-        + replacement["score"] * Decimal("0.10")
+        purchase_pool["score"] * SCORE_WEIGHTS["purchase_pool"]
+        + battlefield["score"] * SCORE_WEIGHTS["battlefield"]
+        + task["score"] * SCORE_WEIGHTS["user_task"]
+        + group["score"] * SCORE_WEIGHTS["target_group"]
+        + value_anchor["score"] * SCORE_WEIGHTS["value_anchor"]
+        + replacement["score"] * SCORE_WEIGHTS["replacement_pressure"]
+        + market_score * SCORE_WEIGHTS["market_validation"]
     )
     role = _base_role(purchase_pool, replacement, candidate)
     matched_dimensions = {
@@ -1371,7 +1390,7 @@ def _replacement_pressure(
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
     gap = _decimal(candidate.get("price_gap_pct_to_target")) or Decimal("0")
-    semantic_strength = battlefield["score"] * Decimal("0.45") + task["score"] * Decimal("0.25") + group["score"] * Decimal("0.30")
+    semantic_strength = battlefield["score"] * Decimal("0.25") + task["score"] * Decimal("0.35") + group["score"] * Decimal("0.40")
     score = min(Decimal("1"), purchase_pool["score"] * Decimal("0.35") + semantic_strength * Decimal("0.35") + value_anchor["score"] * Decimal("0.30"))
     if gap <= Decimal("-0.15"):
         return {
@@ -1503,10 +1522,15 @@ def _select_top_competitors(enriched: list[dict[str, Any]], *, top_n: int) -> li
     return selected[:top_n]
 
 
-def _sort_key(item: dict[str, Any]) -> tuple[float, float, float]:
-    market_bonus = {"strong": 0.03, "medium": 0.01, "weak": 0.0}.get(item["market_validation"]["level"], 0.0)
+def _sort_key(item: dict[str, Any]) -> tuple[float, float, float, float]:
+    overlap = item.get("weighted_overlap") or {}
+    semantic_balance = min(
+        float(overlap.get("battlefield") or 0),
+        float(overlap.get("user_task") or 0),
+        float(overlap.get("target_group") or 0),
+    )
     gap = abs(float(_decimal((item.get("candidate") or {}).get("price_gap_pct_to_target")) or Decimal("1")))
-    return (float(item["business_score"]) + market_bonus, item["purchase_pool"]["score"], -gap)
+    return (float(item["business_score"]), semantic_balance, float(item["purchase_pool"]["score"]), -gap)
 
 
 def _exclusion_reason(
@@ -1538,14 +1562,12 @@ def _publish_report(*, title: str, markdown: str, with_report: str) -> ReportPub
         return ReportPublishResult(status="disabled", message_cn="不支持的报告生成模式。")
     if os.environ.get("CATFORGE_ANALYST_REPORT_PUBLISHER") != "feishu_cli":
         return ReportPublishResult(status="disabled", message_cn="飞书报告发布器未启用。")
-    if not shutil.which("lark-cli"):
+    cli_bin = os.environ.get("CATFORGE_FEISHU_CLI_BIN") or shutil.which("lark-cli")
+    if not cli_bin:
         return ReportPublishResult(status="failed", message_cn="当前环境未安装飞书 CLI。")
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tmp:
-        tmp.write(markdown)
-        tmp_path = tmp.name
     try:
         command = [
-            "lark-cli",
+            cli_bin,
             "docs",
             "+create",
             "--api-version",
@@ -1555,22 +1577,19 @@ def _publish_report(*, title: str, markdown: str, with_report: str) -> ReportPub
             "--doc-format",
             "markdown",
             "--content",
-            f"@{tmp_path}",
+            "-",
             "--format",
             "json",
         ]
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60)
+        completed = subprocess.run(command, input=markdown, check=False, capture_output=True, text=True, timeout=60)
         if completed.returncode != 0:
-            return ReportPublishResult(status="failed", message_cn="飞书文档创建失败。")
+            return ReportPublishResult(status="failed", message_cn=_feishu_failure_message(completed.stderr or completed.stdout))
         url = _extract_url(completed.stdout)
+        if not url:
+            return ReportPublishResult(status="failed", message_cn="飞书文档已请求创建，但未返回可用链接。")
         return ReportPublishResult(status="created", url=url, message_cn=f"已生成《{title}》。")
     except Exception:
         return ReportPublishResult(status="failed", message_cn="飞书文档创建失败。")
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
 
 
 def _extract_url(output: str) -> str | None:
@@ -1589,7 +1608,34 @@ def _extract_url(output: str) -> str | None:
     for value in candidates:
         if isinstance(value, str) and value.startswith("http"):
             return value
+    for value in _walk_json_values(payload):
+        if isinstance(value, str) and value.startswith("http"):
+            return value
     return None
+
+
+def _walk_json_values(payload: Any) -> list[Any]:
+    values: list[Any] = []
+    if isinstance(payload, dict):
+        for value in payload.values():
+            values.append(value)
+            values.extend(_walk_json_values(value))
+    elif isinstance(payload, list):
+        for value in payload:
+            values.append(value)
+            values.extend(_walk_json_values(value))
+    return values
+
+
+def _feishu_failure_message(output: str) -> str:
+    normalized = output.lower()
+    if "not found" in normalized or "no such file" in normalized:
+        return "飞书文档创建失败：当前环境找不到飞书 CLI。"
+    if "auth" in normalized or "login" in normalized or "user identity" in normalized:
+        return "飞书文档创建失败：飞书用户身份未授权或授权已失效。"
+    if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
+        return "飞书文档创建失败：飞书应用或用户缺少文档创建权限。"
+    return "飞书文档创建失败：请检查飞书 CLI 配置、授权和网络连通性。"
 
 
 def _role_weight(roles: list[Any]) -> Decimal:

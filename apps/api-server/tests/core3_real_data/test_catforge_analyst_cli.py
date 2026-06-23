@@ -1450,15 +1450,17 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert result["status"] == "ok"
     answer = result["result"]["competitor_answer"]
     top_codes = [item["candidate"]["sku_code"] for item in answer["top_competitors"]]
-    assert top_codes[0] == "TV00040001"
+    assert top_codes[:3] == ["TV00040001", "TV00040003", "TV00040004"]
     assert "TV00040002" not in top_codes[:2]
     assert answer["top_competitors"][0]["role"] == "primary_direct"
-    assert answer["top_competitors"][0]["weighted_overlap"]["battlefield"] > answer["all_candidates"][0]["weighted_overlap"]["battlefield"] - 0.01
+    assert answer["top_competitors"][0]["weighted_overlap"]["target_group"] >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
     assert "## 一、分析结论" in markdown
     assert "## 二、分析过程" in markdown
     assert "### 2.1 候选 SKU 综合评分" in markdown
+    assert "替代压力 5" in markdown
+    assert "### 2.5 关键价值锚点、替代压力和市场验证依据" in markdown
     assert "## 三、四个产品详情链接" in markdown
     assert "[海信 65E7Q 产品画像](#profile-target)" in markdown
     assert "[创维 65A7H PRO 产品画像](#profile-competitor-1)" in markdown
