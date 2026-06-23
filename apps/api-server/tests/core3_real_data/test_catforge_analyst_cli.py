@@ -1456,20 +1456,21 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert answer["top_competitors"][0]["weighted_overlap"]["battlefield"] > answer["all_candidates"][0]["weighted_overlap"]["battlefield"] - 0.01
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
-    assert "## 一、给产品经理和市场领导的结论" in markdown
-    assert "## 二、为什么这三款是重点竞品" in markdown
-    assert "[本品：海信 65E7Q](#target-profile)" in markdown
-    assert "[竞品一：创维 65A7H PRO](#competitor-1)" in markdown
-    assert "## 三、本品业务画像：海信 65E7Q" in markdown
-    assert "市场事实" in markdown
-    assert "参数事实" in markdown
-    assert "卖点事实" in markdown
-    assert "评论事实" in markdown
-    assert "用户任务、目标客群、价值战场" in markdown
-    assert "海信应对策略" in markdown
-    assert "市场导购话术" in markdown
-    assert "产品经理策略清单" in markdown
-    for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high"):
+    assert "## 一、分析结论" in markdown
+    assert "## 二、分析过程" in markdown
+    assert "### 2.1 候选 SKU 综合评分" in markdown
+    assert "## 三、四个产品详情链接" in markdown
+    assert "[海信 65E7Q 产品画像](#profile-target)" in markdown
+    assert "[创维 65A7H PRO 产品画像](#profile-competitor-1)" in markdown
+    assert "## 四、海信 65E7Q 产品画像" in markdown
+    assert "市场画像" in markdown
+    assert "价值战场画像" in markdown
+    assert "用户任务画像" in markdown
+    assert "目标客群画像" in markdown
+    assert "卖点画像" in markdown
+    assert "参数画像" in markdown
+    assert "溢价卖点" in markdown
+    for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high", "产品经理策略", "市场导购话术", "海信应对策略"):
         assert forbidden not in markdown
     short_answer = answer["short_answer"]
     assert len(short_answer) <= 600

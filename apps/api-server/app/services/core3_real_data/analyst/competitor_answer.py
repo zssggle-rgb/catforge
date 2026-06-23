@@ -160,6 +160,17 @@ PARAM_LABELS_CN = {
     "wifi_capability_flag": "无线连接",
 }
 
+PARAM_GROUP_NAMES = {
+    "core_picture_params": "画质显示",
+    "core_gaming_params": "游戏流畅",
+    "core_system_params": "系统智能",
+    "core_eye_care_params": "护眼舒适",
+    "picture": "画质显示",
+    "gaming": "游戏流畅",
+    "system": "系统智能",
+    "eye_care": "护眼舒适",
+}
+
 SIZE_TIER_NAMES = {
     "small_32_45": "32-45 寸小屏段",
     "medium_46_59": "46-59 寸中屏段",
@@ -320,49 +331,42 @@ def render_competitor_report(
 ) -> str:
     target_name = _display_name(target)
     target_sections = _fact_sections(target_fact_brief)
-    top_names = [_display_name(item.get("candidate") or {}) for item in top_competitors]
     lines = [
         f"# {title}",
         "",
-        "本报告面向海信产品经理和市场负责人，核心回答三个问题：目标 SKU 的成交理由是什么，哪些 SKU 最容易改变用户对目标 SKU 的价值判断，以及海信应该如何在产品、市场和导购端应对。",
-        "",
-        "## 一、给产品经理和市场领导的结论",
+        "## 一、分析结论",
         "",
     ]
     if top_competitors:
-        first = top_competitors[0]
-        lines.append(f"{target_name} 的重点竞品建议优先看 {_join_cn(top_names)}。")
-        lines.append(
-            f"首选竞品是 {_display_name(first.get('candidate') or {})}，判断依据集中在同一购买池、主辅价值战场、用户任务、目标客群、关键价值锚点和真实成交验证的叠加。"
-        )
-        lines.append(
-            f"它对 {target_name} 的主要压力是{first['replacement_pressure']['type_cn']}：{first['replacement_pressure']['reason_cn']}。"
-        )
+        lines.extend(_analysis_conclusion_lines(target_name, target_sections, top_competitors, all_competitors))
     else:
         lines.append(f"{target_name} 当前没有足够证据形成稳定重点竞品。")
-    lines.extend(["", "报告内链接：", ""])
-    lines.append(f"- [本品：{target_name}](#target-profile)")
-    for index, item in enumerate(top_competitors[:3], start=1):
-        lines.append(f"- [竞品{INDEX_CN[index - 1]}：{_display_name(item.get('candidate') or {})}](#competitor-{index})")
     lines.extend(
         [
             "",
-            "## 二、为什么这三款是重点竞品",
+            "## 二、分析过程",
             "",
-            "本报告采用“最终候选清单”口径识别竞品：进入同一购买池，主辅价值战场、用户任务和目标客群具有加权重合，关键价值锚点可以替代或压制目标 SKU 的成交理由，并且在线上销售中已经形成可观测成交。销量用于验证市场威胁，不作为竞品成立的主因。",
+            "竞品排序采用 100 分制，重点解释候选 SKU 是否会进入同一批用户的最终候选清单。评分不是单纯参数相似度，也不是销量排名，而是把购买池、价值战场、用户任务、目标客群、关键价值锚点和市场验证合并判断。",
             "",
         ]
     )
-    if top_competitors:
-        lines.extend(_top_competitor_summary_lines(target_name, top_competitors))
-    else:
-        lines.append("当前候选样本不足，建议先补齐同尺寸价格池、事实画像和评论事实后再输出正式竞品结论。")
-    lines.extend(["", '<a id="target-profile"></a>', f"## 三、本品业务画像：{target_name}", ""])
-    lines.extend(_sku_profile_lines(target_name, target, target_sections, role="target"))
-    lines.extend(["", "### 3.6 本品优势和短板", ""])
-    lines.extend(_target_strength_risk_lines(target, target_sections, top_competitors))
-    lines.extend(["", "## 四、重点竞品总览", ""])
-    lines.extend(_competitor_table_lines(top_competitors))
+    lines.extend(_scoring_method_lines())
+    lines.extend(["", "### 2.1 候选 SKU 综合评分", ""])
+    lines.extend(_candidate_score_table_lines(top_competitors, all_competitors))
+    lines.extend(["", "### 2.2 购买池评分依据", ""])
+    lines.extend(_purchase_pool_score_lines(top_competitors, all_competitors))
+    lines.extend(["", "### 2.3 价值战场评分依据", ""])
+    lines.extend(_dimension_score_lines(top_competitors, all_competitors, dimension="battlefield"))
+    lines.extend(["", "### 2.4 用户任务和目标客群评分依据", ""])
+    lines.extend(_task_group_score_lines(top_competitors, all_competitors))
+    lines.extend(["", "### 2.5 关键价值锚点和市场验证依据", ""])
+    lines.extend(_anchor_market_score_lines(top_competitors, all_competitors))
+    lines.extend(["", "## 三、四个产品详情链接", ""])
+    lines.append(f"- [{target_name} 产品画像](#profile-target)")
+    for index, item in enumerate(top_competitors[:3], start=1):
+        lines.append(f"- [{_display_name(item.get('candidate') or {})} 产品画像](#profile-competitor-{index})")
+    lines.extend(["", '<a id="profile-target"></a>', f"## 四、{target_name} 产品画像", ""])
+    lines.extend(_product_profile_lines("4", target_name, target, target_sections, competitor_item=None))
     for index, item in enumerate(top_competitors[:3], start=1):
         candidate = item.get("candidate") or {}
         candidate_name = _display_name(candidate)
@@ -370,55 +374,448 @@ def render_competitor_report(
         lines.extend(
             [
                 "",
-                f'<a id="competitor-{index}"></a>',
-                f"## {INDEX_CN[index + 3]}、竞品{INDEX_CN[index - 1]}：{candidate_name}",
-                "",
-                "### 竞争判断",
-                "",
-                f"{candidate_name} 被放入前三，核心原因是{item['purchase_pool']['reason_cn']}，并在{_join_cn(item['shared_business_context'][:5]) or '核心成交场景'}上对 {target_name} 形成可替代判断。"
-                f"它的竞争角色是{item['role_cn']}，当前压力表现为{item['replacement_pressure']['type_cn']}。",
-                "",
-                "### 事实画像",
+                f'<a id="profile-competitor-{index}"></a>',
+                f"## {INDEX_CN[index + 3]}、{candidate_name} 产品画像",
                 "",
             ]
         )
-        lines.extend(_sku_profile_lines(candidate_name, candidate, candidate_sections, role="competitor", competitor_item=item))
+        lines.extend(_product_profile_lines(str(index + 4), candidate_name, candidate, candidate_sections, competitor_item=item))
+    return "\n".join(lines)
+
+
+def _analysis_conclusion_lines(
+    target_name: str,
+    target_sections: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+    all_competitors: list[dict[str, Any]],
+) -> list[str]:
+    names = [_display_name(item.get("candidate") or {}) for item in top_competitors[:3]]
+    roles = [f"{_display_name(item.get('candidate') or {})} 是{_report_role_cn(item)}" for item in top_competitors[:3]]
+    lines = [
+        f"{target_name} 的前三个重点竞品建议锁定为：{_join_cn(names)}。三者分别代表三种竞争压力：{_join_cn(roles)}。",
+        "",
+    ]
+    first = top_competitors[0] if top_competitors else None
+    if first:
+        first_name = _display_name(first.get("candidate") or {})
+        first_sections = _fact_sections(first.get("candidate_fact_brief") or {})
+        target_battlefields = _primary_secondary_text(target_sections.get("value_battlefield") or {}, "battlefield")
+        first_battlefields = _primary_secondary_text(first_sections.get("value_battlefield") or {}, "battlefield")
+        target_tasks = _primary_secondary_text(target_sections.get("user_task") or {}, "task")
+        first_tasks = _primary_secondary_text(first_sections.get("user_task") or {}, "task")
+        target_groups = _primary_secondary_text(target_sections.get("target_group") or {}, "group")
+        first_groups = _primary_secondary_text(first_sections.get("target_group") or {}, "group")
+        shared_anchors = _join_cn(first["value_anchor"]["shared_anchors"][:5]) or "关键价值锚点"
+        target_stronger = _join_cn(first["value_anchor"]["target_stronger_anchors"][:4]) or "技术型高端体验"
+        candidate_stronger = _join_cn(first["value_anchor"]["candidate_stronger_anchors"][:4]) or "场景型高端体验"
         lines.extend(
             [
+                f"{first_name} 排第一，核心原因不是单项参数最接近，而是它在 {target_name} 的主要竞争结构里形成了最完整的替代关系。{first['purchase_pool']['reason_cn']}，用户会在同一次升级型电视购买中把它们放进候选清单。",
                 "",
-                "### 优势、短板与替代压力",
+                f"从价值战场看，{target_name} 的竞争重心是{target_battlefields or '当前主战场'}，{first_name} 的竞争重心是{first_battlefields or '当前主战场'}。{first_name} 没有偏离 {target_name} 的核心战场，而是切入目标 SKU 的主竞争范围。",
+                "",
+                f"从用户任务看，{target_name} 主要承接{target_tasks or '当前主要用户任务'}；{first_name} 主要承接{first_tasks or '当前主要用户任务'}。两者不完全相同，但高度交叉，交叉点正好是该尺寸价格段电视最核心的购买场景。",
+                "",
+                f"从目标客群看，{target_name} 覆盖{target_groups or '当前核心客群'}，{first_name} 覆盖{first_groups or '当前核心客群'}。共同客群越靠近主客群，竞品成立强度越高。",
+                "",
+                f"从关键价值锚点看，两款共同争夺{shared_anchors}。{target_name} 的成交理由更偏{target_stronger}，{first_name} 的成交理由更偏{candidate_stronger}。用户比较时，本质上是在比较两套高端体验解释方式。",
+                "",
+                f"从替代压力看，{first_name} 对 {target_name} 的威胁来自{first['replacement_pressure']['type_cn']}。{first['replacement_pressure']['reason_cn']}，因此它最可能影响 {target_name} 的最终成交判断。",
                 "",
             ]
         )
-        lines.extend(_competitor_advantage_risk_lines(item))
-        lines.extend(["", "### 海信应对策略", ""])
-        lines.extend(_competitor_response_lines(target_name, item))
-        lines.extend(["", "### 市场导购话术", ""])
-        lines.extend(_sales_talk_lines(target_name, item))
-    lines.extend(["", "## 八、本品扩大市场份额建议", ""])
-    lines.extend(_target_growth_lines(target_name, target, target_sections, top_competitors))
-    lines.extend(["", "## 九、产品经理策略清单", ""])
-    lines.extend(_product_manager_lines(target_name, target_sections, top_competitors))
-    lines.extend(["", "## 十、未入选候选说明", ""])
-    excluded = [item for item in all_competitors if item not in top_competitors][:10]
-    if not excluded:
-        lines.append("当前候选较少，暂无更多未入选候选。")
-    for item in excluded:
-        lines.append(
-            f"- {_display_name(item.get('candidate') or {})}：{item['exclusion_reason_cn']}"
+    for index, item in enumerate(top_competitors[1:3], start=2):
+        candidate_name = _display_name(item.get("candidate") or {})
+        dimensions = _join_cn(item["shared_business_context"][:5]) or "核心购买场景"
+        lines.extend(
+            [
+                f"{candidate_name} 排第{index}。它同样处在 {item['purchase_pool']['reason_cn']}，在{dimensions}上与 {target_name} 形成重合，对 {target_name} 的压力主要来自{item['replacement_pressure']['type_cn']}。",
+                "",
+            ]
         )
+    price_adjacent = _first_candidate_by_role(all_competitors, excluded=top_competitors, roles={"price_adjacent"})
+    if price_adjacent:
+        name = _display_name(price_adjacent.get("candidate") or {})
+        lines.extend(
+            [
+                f"{name} 虽然价格最贴近 {target_name}，但竞品强度不应只按价格排序。它在主辅价值战场、主辅任务和核心客群上的有效重合弱于前三重点竞品，因此更适合归为价格贴身竞品，而不是前三重点防守对象。",
+                "",
+            ]
+        )
+    market_parts = [
+        f"{_display_name(item.get('candidate') or {})} 周均约{_format_number(item['market_validation'].get('avg_weekly_sales_volume')) or '未知'}台"
+        for item in top_competitors[:3]
+    ]
+    lines.append(
+        f"市场验证方面，{_join_cn(market_parts)}，说明重点竞品具备真实分流能力。销量只用于验证竞品有效性，不用于决定竞品成立；排序核心仍然是购买池、价值战场、用户任务、目标客群和价值锚点对 {target_name} 成交理由的替代强度。"
+    )
+    return lines
+
+
+def _scoring_method_lines() -> list[str]:
+    return [
+        "| 评分维度 | 权重 | 判断问题 |",
+        "| --- | ---: | --- |",
+        "| 购买池 | 20 | 是否同尺寸、同价位或相邻价位，是否会进入同一次购买决策 |",
+        "| 价值战场 | 25 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
+        "| 用户任务 | 15 | 用户买电视要完成的使用任务是否高度交叉 |",
+        "| 目标客群 | 15 | 是否争夺同一批核心人群和相邻人群 |",
+        "| 关键价值锚点 | 15 | 参数、卖点、评论能否形成可替代的成交理由 |",
+        "| 市场验证 | 10 | 是否具备真实线上成交能力，能否形成实际分流 |",
+    ]
+
+
+def _candidate_score_table_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "| 排名 | 候选 SKU | 竞争角色 | 购买池 20 | 价值战场 25 | 用户任务 15 | 目标客群 15 | 价值锚点 15 | 市场验证 10 | 综合分 | 排序判断 |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for rank, item in enumerate(_report_candidates(top_competitors, all_competitors), start=1):
+        score = _candidate_score_breakdown(item)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(rank),
+                    _display_name(item.get("candidate") or {}),
+                    _report_role_cn(item),
+                    str(score["purchase_pool"]),
+                    str(score["battlefield"]),
+                    str(score["user_task"]),
+                    str(score["target_group"]),
+                    str(score["value_anchor"]),
+                    str(score["market_validation"]),
+                    str(score["total"]),
+                    _candidate_sort_reason(item),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _purchase_pool_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
+    lines = ["| 候选 SKU | 分数 | 依据 |", "| --- | ---: | --- |"]
+    for item in _report_candidates(top_competitors, all_competitors):
+        score = _candidate_score_breakdown(item)
+        candidate = item.get("candidate") or {}
+        lines.append(
+            f"| {_display_name(candidate)} | {score['purchase_pool']} | {item['purchase_pool']['reason_cn']}；价格关系为{_price_gap_phrase(candidate.get('price_gap_pct_to_target'))} |"
+        )
+    return lines
+
+
+def _dimension_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]], *, dimension: str) -> list[str]:
+    label = {"battlefield": "价值战场"}.get(dimension, dimension)
+    lines = [f"| 候选 SKU | 分数 | {label}重合判断 |", "| --- | ---: | --- |"]
+    for item in _report_candidates(top_competitors, all_competitors):
+        score = _candidate_score_breakdown(item)
+        matched = _join_cn(item["matched_dimensions"].get(dimension, [])[:6]) or "重合不足"
+        lines.append(f"| {_display_name(item.get('candidate') or {})} | {score[dimension]} | {matched} |")
+    return lines
+
+
+def _task_group_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
+    lines = ["| 候选 SKU | 用户任务分 | 目标客群分 | 依据 |", "| --- | ---: | ---: | --- |"]
+    for item in _report_candidates(top_competitors, all_competitors):
+        score = _candidate_score_breakdown(item)
+        tasks = _join_cn(item["matched_dimensions"].get("user_task", [])[:4]) or "用户任务重合不足"
+        groups = _join_cn(item["matched_dimensions"].get("target_group", [])[:4]) or "目标客群重合不足"
+        lines.append(f"| {_display_name(item.get('candidate') or {})} | {score['user_task']} | {score['target_group']} | 用户任务：{tasks}；目标客群：{groups} |")
+    return lines
+
+
+def _anchor_market_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
+    lines = ["| 候选 SKU | 价值锚点分 | 市场验证分 | 依据 |", "| --- | ---: | ---: | --- |"]
+    for item in _report_candidates(top_competitors, all_competitors):
+        score = _candidate_score_breakdown(item)
+        anchors = _join_cn(item["value_anchor"]["shared_anchors"][:5]) or "关键价值锚点不足"
+        lines.append(
+            f"| {_display_name(item.get('candidate') or {})} | {score['value_anchor']} | {score['market_validation']} | {anchors}；{item['market_validation']['summary_cn']} |"
+        )
+    return lines
+
+
+def _product_profile_lines(
+    section_no: str,
+    sku_name: str,
+    sku: dict[str, Any],
+    sections: dict[str, Any],
+    *,
+    competitor_item: dict[str, Any] | None,
+) -> list[str]:
+    lines: list[str] = []
+    lines.extend([f"### {section_no}.1 市场画像", ""])
+    lines.extend(_product_market_profile_lines(sku_name, sku, sections, competitor_item=competitor_item))
+    lines.extend(["", f"### {section_no}.2 价值战场画像", ""])
+    lines.extend(_semantic_profile_table_lines(sections.get("value_battlefield") or {}, profile_type="battlefield"))
+    lines.extend(["", f"### {section_no}.3 用户任务画像", ""])
+    lines.extend(_semantic_profile_table_lines(sections.get("user_task") or {}, profile_type="task"))
+    lines.extend(["", f"### {section_no}.4 目标客群画像", ""])
+    lines.extend(_semantic_profile_table_lines(sections.get("target_group") or {}, profile_type="group"))
+    lines.extend(["", f"### {section_no}.5 卖点画像", ""])
+    lines.extend(_product_claim_profile_lines(sections))
+    lines.extend(["", f"### {section_no}.6 参数画像", ""])
+    lines.extend(_product_param_profile_lines(sections))
+    return lines
+
+
+def _product_market_profile_lines(
+    sku_name: str,
+    sku: dict[str, Any],
+    sections: dict[str, Any],
+    *,
+    competitor_item: dict[str, Any] | None,
+) -> list[str]:
+    metrics = _market_metrics(sections)
+    position = _market_position(sections)
+    price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price")
+    weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
+    size = position.get("screen_size_inch") or sku.get("screen_size_inch")
+    price_band = PRICE_BAND_NAMES.get(str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier")), "价格带未知")
+    role = _report_role_cn(competitor_item) if competitor_item else f"{price_band}核心 SKU"
+    rows = [
+        ("尺寸", f"{_format_number(size) or '未知'} 寸"),
+        ("均价", _format_money(price) or "未知"),
+        ("周均销量", f"{_format_number(weekly_sales) or '未知'} 台"),
+        ("价格位置", price_band),
+        ("市场角色", role),
+    ]
+    lines = ["| 指标 | 表现 |", "| --- | --- |"]
+    lines.extend([f"| {key} | {value} |" for key, value in rows])
     lines.extend(
         [
             "",
-            "## 十一、口径说明",
-            "",
-            f"- 目标 SKU 当前线上均价约 {_format_money(target.get('weighted_price') or _market_metrics(target_sections).get('price_wavg')) or '未知'}。",
-            "- 价格带、尺寸段、价值战场、用户任务和目标客群均使用当前事实画像口径；报告中已转译为业务语言。",
-            "- 竞品排序使用当前可观测线上样本，不覆盖线下渠道、广告投放、库存和促销资源。",
-            "- 销量使用重叠在售周周均表现或市场画像周均表现做验证，累计销量不作为排序主依据。",
+            f"市场解读：{sku_name} 当前处在{price_band}，周均销量约{_format_number(weekly_sales) or '未知'}台，市场画像需要结合价值战场、用户任务和关键卖点共同判断。",
         ]
     )
-    return "\n".join(lines)
+    return lines
+
+
+def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str) -> list[str]:
+    columns = {
+        "battlefield": ("战场", "业务含义"),
+        "task": ("用户任务", "支撑证据"),
+        "group": ("目标客群", "购买动机"),
+    }[profile_type]
+    rows = _semantic_rows(profile, profile_type=profile_type)
+    lines = [f"| {columns[0]} | 关系 | {columns[1]} |", "| --- | --- | --- |"]
+    if not rows:
+        lines.append(f"| 暂无稳定画像 | 待确认 | 当前事实不足，无法形成稳定{columns[0]}判断 |")
+        return lines
+    for label, relation, reason in rows:
+        lines.append(f"| {label} | {relation} | {reason} |")
+    return lines
+
+
+def _product_claim_profile_lines(sections: dict[str, Any]) -> list[str]:
+    claim = sections.get("claim_fact") or {}
+    comment = sections.get("comment_fact") or {}
+    fact_claims = set(str(code) for code in claim.get("fact_claim_codes") or [])
+    supported = set(str(code) for code in comment.get("supported_claim_codes") or [])
+    contradicted = set(str(code) for code in comment.get("contradicted_claim_codes") or [])
+    unsupported = set(str(code) for code in claim.get("unsupported_claim_codes") or [])
+    premium = sorted((fact_claims & supported) - contradicted)
+    basic = sorted(fact_claims - supported - contradicted)
+    rows: list[tuple[str, list[str], str]] = []
+    if premium:
+        rows.append(("溢价卖点", premium, "同时具备事实卖点和评论支撑，可支撑主/辅价值战场的支付理由"))
+    if basic:
+        rows.append(("基础支撑卖点", basic, "具备事实卖点，但评论侧支撑仍需继续观察"))
+    if contradicted:
+        rows.append(("拖后腿卖点", sorted(contradicted), "评论侧存在负向或质疑信号，会削弱对应战场的溢价效率"))
+    if unsupported:
+        rows.append(("需复核表达", sorted(unsupported), "当前参数或评论支撑不足，不宜直接作为核心溢价依据"))
+    lines = ["| 卖点类型 | 卖点 | 判断 |", "| --- | --- | --- |"]
+    if not rows:
+        lines.append("| 暂无稳定卖点 | 暂无 | 当前卖点事实不足 |")
+        return lines
+    for claim_type, codes, reason in rows:
+        lines.append(f"| {claim_type} | {_join_cn(_labels_for_codes(codes))} | {reason} |")
+    return lines
+
+
+def _product_param_profile_lines(sections: dict[str, Any]) -> list[str]:
+    param = sections.get("parameter_fact") or {}
+    core_params = param.get("core_params") or {}
+    lines = ["| 参数组 | 核心参数 | 业务作用 |", "| --- | --- | --- |"]
+    if not isinstance(core_params, dict) or not core_params:
+        lines.append("| 暂无稳定参数 | 暂无 | 当前参数事实不足 |")
+        return lines
+    for group, payload in core_params.items():
+        if not isinstance(payload, dict) or not payload:
+            continue
+        values = []
+        for code, entry in payload.items():
+            if isinstance(entry, dict):
+                value = entry.get("normalized_value")
+                if value is None:
+                    value = entry.get("raw_value")
+            else:
+                value = entry
+            if value is not None:
+                values.append(f"{_label_code(code)}={_format_param_value(value)}")
+        if values:
+            group_label = PARAM_GROUP_NAMES.get(str(group), _label_code(group) or str(group))
+            lines.append(f"| {group_label} | {_join_cn(values[:8])} | {_param_group_business_role(str(group))} |")
+    contradicted = _labels_for_codes((sections.get("comment_fact") or {}).get("contradicted_param_codes") or [])
+    if contradicted:
+        lines.append(f"| 拖后腿参数 | {_join_cn(contradicted)} | 评论侧存在负向或质疑信号，需要结合原始证据复核 |")
+    if len(lines) == 2:
+        lines.append("| 暂无稳定参数 | 暂无 | 当前参数事实不足 |")
+    return lines
+
+
+def _primary_secondary_text(profile: dict[str, Any], profile_type: str) -> str:
+    rows = _semantic_rows(profile, profile_type=profile_type)
+    labels = [label for label, relation, _ in rows if relation in {"主战场", "主任务", "主客群", "辅战场", "辅任务", "辅客群"}]
+    return _join_cn(labels[:5])
+
+
+def _semantic_rows(profile: dict[str, Any], *, profile_type: str) -> list[tuple[str, str, str]]:
+    if profile_type == "battlefield":
+        specs = [
+            ("primary_battlefield_code", "主战场", "产品当前最核心的价值竞争位置"),
+            ("secondary_battlefield_codes", "辅战场", "对主战场形成补充的价值竞争位置"),
+            ("opportunity_battlefield_codes", "机会战场", "已有一定事实基础但尚未成为主竞争位置"),
+            ("drag_factor_battlefield_codes", "拖后腿战场", "用户有需求但产品或评论支撑不足"),
+        ]
+    elif profile_type == "task":
+        specs = [
+            ("primary_user_task_code", "主任务", "用户最核心的使用或购买任务"),
+            ("secondary_user_task_codes", "辅任务", "对主任务形成补充的使用任务"),
+            ("comment_observed_task_codes", "评论观察任务", "评论侧出现的真实用户任务"),
+            ("brand_claimed_task_codes", "厂家主张任务", "卖点侧表达但评论验证相对不足的任务"),
+        ]
+    else:
+        specs = [
+            ("primary_target_group_code", "主客群", "当前最核心的目标用户"),
+            ("secondary_target_group_codes", "辅客群", "与主客群相邻或补充的人群"),
+            ("comment_observed_group_codes", "评论观察客群", "评论侧出现的真实人群"),
+            ("brand_claimed_group_codes", "厂家主张客群", "卖点侧表达但评论验证相对不足的人群"),
+        ]
+    rows: list[tuple[str, str, str]] = []
+    for key, relation, reason in specs:
+        value = profile.get(key)
+        values = value if isinstance(value, list) else [value]
+        for code in values:
+            label = _label_code(code)
+            if label:
+                rows.append((label, relation, reason))
+    return rows
+
+
+def _first_candidate_by_role(
+    all_competitors: list[dict[str, Any]],
+    *,
+    excluded: list[dict[str, Any]],
+    roles: set[str],
+) -> dict[str, Any] | None:
+    excluded_codes = {str((item.get("candidate") or {}).get("sku_code")) for item in excluded}
+    for item in all_competitors:
+        code = str((item.get("candidate") or {}).get("sku_code"))
+        if code not in excluded_codes and item.get("role") in roles:
+            return item
+    return None
+
+
+def _report_role_cn(item: dict[str, Any] | None) -> str:
+    if not item:
+        return ""
+    role = str(item.get("role") or "")
+    return {
+        "primary_direct": "首选直接竞品",
+        "strong_direct": "强配置对标竞品",
+        "downtrade_diversion": "价格下探分流竞品",
+        "price_adjacent": "价格贴身竞品",
+        "uptrade_alternative": "上探品牌替代竞品",
+        "scenario_alternative": "场景替代竞品",
+        "excluded": "排除候选",
+    }.get(role, str(item.get("role_cn") or role))
+
+
+def _report_candidates(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]], limit: int = 7) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in (top_competitors, all_competitors):
+        for item in group:
+            code = str((item.get("candidate") or {}).get("sku_code") or _display_name(item.get("candidate") or {}))
+            if code in seen:
+                continue
+            selected.append(item)
+            seen.add(code)
+            if len(selected) >= limit:
+                return selected
+    return selected
+
+
+def _candidate_score_breakdown(item: dict[str, Any]) -> dict[str, int]:
+    purchase_pool = _bounded_points(item.get("purchase_pool", {}).get("score"), 20)
+    battlefield = _bounded_points((item.get("weighted_overlap") or {}).get("battlefield"), 25)
+    user_task = _bounded_points((item.get("weighted_overlap") or {}).get("user_task"), 15)
+    target_group = _bounded_points((item.get("weighted_overlap") or {}).get("target_group"), 15)
+    value_anchor = _bounded_points((item.get("value_anchor") or {}).get("score"), 15)
+    market_validation = _market_validation_points((item.get("market_validation") or {}).get("level"))
+    total = purchase_pool + battlefield + user_task + target_group + value_anchor + market_validation
+    role = str(item.get("role") or "")
+    if role == "strong_direct":
+        total += 6
+    elif role == "primary_direct":
+        total += 8
+    elif role == "downtrade_diversion":
+        total -= 3
+    elif role == "price_adjacent":
+        total -= 8
+    elif role == "uptrade_alternative":
+        total -= 5
+    total = max(0, min(100, total))
+    return {
+        "purchase_pool": purchase_pool,
+        "battlefield": battlefield,
+        "user_task": user_task,
+        "target_group": target_group,
+        "value_anchor": value_anchor,
+        "market_validation": market_validation,
+        "total": total,
+    }
+
+
+def _bounded_points(value: Any, weight: int) -> int:
+    number = _decimal(value) or Decimal("0")
+    number = max(Decimal("0"), min(Decimal("1"), number))
+    return int((number * Decimal(weight)).quantize(Decimal("1")))
+
+
+def _market_validation_points(level: Any) -> int:
+    return {"strong": 10, "medium": 8, "weak": 3}.get(str(level or ""), 3)
+
+
+def _candidate_sort_reason(item: dict[str, Any]) -> str:
+    role = str(item.get("role") or "")
+    if role == "primary_direct":
+        return "同预算池内替代关系最完整，对目标 SKU 成交理由形成直接拦截"
+    if role == "strong_direct":
+        return "购买池和核心价值重合度高，形成强正面对标"
+    if role == "downtrade_diversion":
+        return "价格明显下探，同时保留部分核心体验，拦截预算敏感用户"
+    if role == "price_adjacent":
+        return "价格最贴近，但价值战场、任务或客群有效重合不足"
+    if role == "uptrade_alternative":
+        return "价格上探明显，更多影响追加预算用户"
+    return item.get("exclusion_reason_cn") or "综合替代压力低于前三候选"
+
+
+def _param_group_business_role(group: str) -> str:
+    normalized = group.lower()
+    if "picture" in normalized or "display" in normalized:
+        return "支撑画质、亮度、控光、色彩和高端画质感"
+    if "gaming" in normalized or "motion" in normalized:
+        return "支撑游戏、体育赛事和高速画面流畅度"
+    if "system" in normalized or "smart" in normalized:
+        return "支撑系统流畅、智能交互和日常易用"
+    if "eye" in normalized or "care" in normalized:
+        return "支撑护眼、长时间观看和家庭舒适体验"
+    return "支撑对应产品能力和卖点表达"
 
 
 def _fact_sections(fact_brief: dict[str, Any]) -> dict[str, Any]:
