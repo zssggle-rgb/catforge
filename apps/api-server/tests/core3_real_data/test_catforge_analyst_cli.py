@@ -1134,6 +1134,55 @@ def test_resolve_sku_strips_brand_words_from_query() -> None:
     assert result["target"]["sku_code"] == "TV00029112"
 
 
+def test_resolve_sku_latest_uses_latest_analyst_ready_batch_not_empty_source_batch() -> None:
+    session = make_session()
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id="m00_new_empty_comment_only",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["comment_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 23, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    session.commit()
+
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="tv",
+        query="海信 65E7Q",
+    )
+
+    assert result["status"] == "ok"
+    assert result["batch_id"] == BATCH_ID
+    assert result["target"]["sku_code"] == "TV00029112"
+
+
+def test_resolve_sku_tolerates_three_digit_size_typo_before_model_letter() -> None:
+    session = make_session()
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 657E7q",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["sku_code"] == "TV00029112"
+
+
 def test_resolve_sku_preserves_pro_suffix_priority() -> None:
     session = make_session()
     result = catforge_analyst.resolve_sku(

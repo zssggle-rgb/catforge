@@ -63,10 +63,56 @@ class AnalystRepository:
         self.category_code = category_code
 
     def latest_batch_id(self) -> str | None:
+        ready_batch = self._latest_semantic_market_batch_id()
+        if ready_batch:
+            return ready_batch
+        market_batch = self._latest_market_profile_batch_id()
+        if market_batch:
+            return market_batch
         stmt = (
             select(entities.Core3SourceBatch.batch_id)
             .where(entities.Core3SourceBatch.project_id == self.project_id)
             .where(entities.Core3SourceBatch.category_code == self.category_code)
+            .order_by(desc(entities.Core3SourceBatch.scan_started_at), desc(entities.Core3SourceBatch.batch_id))
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def _latest_semantic_market_batch_id(self) -> str | None:
+        stmt = (
+            select(entities.Core3SourceBatch.batch_id)
+            .join(
+                entities.Core3SemanticMarketDimensionSummary,
+                (entities.Core3SemanticMarketDimensionSummary.project_id == entities.Core3SourceBatch.project_id)
+                & (entities.Core3SemanticMarketDimensionSummary.category_code == entities.Core3SourceBatch.category_code)
+                & (entities.Core3SemanticMarketDimensionSummary.batch_id == entities.Core3SourceBatch.batch_id),
+            )
+            .where(entities.Core3SourceBatch.project_id == self.project_id)
+            .where(entities.Core3SourceBatch.category_code == self.category_code)
+            .where(entities.Core3SemanticMarketDimensionSummary.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
+            .group_by(entities.Core3SourceBatch.batch_id, entities.Core3SourceBatch.scan_started_at)
+            .having(func.count(entities.Core3SemanticMarketDimensionSummary.summary_id) > 0)
+            .order_by(desc(entities.Core3SourceBatch.scan_started_at), desc(entities.Core3SourceBatch.batch_id))
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def _latest_market_profile_batch_id(self) -> str | None:
+        stmt = (
+            select(entities.Core3SourceBatch.batch_id)
+            .join(
+                entities.Core3SkuMarketProfile,
+                (entities.Core3SkuMarketProfile.project_id == entities.Core3SourceBatch.project_id)
+                & (entities.Core3SkuMarketProfile.category_code == entities.Core3SourceBatch.category_code)
+                & (entities.Core3SkuMarketProfile.batch_id == entities.Core3SourceBatch.batch_id),
+            )
+            .where(entities.Core3SourceBatch.project_id == self.project_id)
+            .where(entities.Core3SourceBatch.category_code == self.category_code)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .group_by(entities.Core3SourceBatch.batch_id, entities.Core3SourceBatch.scan_started_at)
+            .having(func.count(entities.Core3SkuMarketProfile.profile_id) > 0)
             .order_by(desc(entities.Core3SourceBatch.scan_started_at), desc(entities.Core3SourceBatch.batch_id))
             .limit(1)
         )
@@ -130,24 +176,30 @@ class AnalystRepository:
             rows = list(self.db.execute(stmt.order_by(entities.Core3SkuMarketProfile.sku_code).limit(limit)).scalars())
         elif model_name:
             sku_prefix_filter = entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
-            exact_stmt = (
-                base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(model_name))
-                .where(sku_prefix_filter)
-                .order_by(entities.Core3SkuMarketProfile.sku_code)
-                .limit(limit)
-            )
-            exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_name)
-            if len(exact_rows) == 1:
-                rows = exact_rows
-            else:
-                like_value = f"%{_model_like_anchor(model_name)}%"
-                stmt = (
-                    base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(like_value))
+            rows = []
+            for model_variant in _model_query_variants(model_name):
+                exact_stmt = (
+                    base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(model_variant))
                     .where(sku_prefix_filter)
                     .order_by(entities.Core3SkuMarketProfile.sku_code)
-                    .limit(max(limit * 5, 50))
+                    .limit(limit)
                 )
-                rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_name)[:limit]
+                exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_variant)
+                if len(exact_rows) == 1:
+                    rows = exact_rows
+                    break
+            if not rows:
+                for model_variant in _model_query_variants(model_name):
+                    like_value = f"%{_model_like_anchor(model_variant)}%"
+                    stmt = (
+                        base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(like_value))
+                        .where(sku_prefix_filter)
+                        .order_by(entities.Core3SkuMarketProfile.sku_code)
+                        .limit(max(limit * 5, 50))
+                    )
+                    rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_variant)[:limit]
+                    if rows:
+                        break
         else:
             return []
         return [
@@ -188,24 +240,30 @@ class AnalystRepository:
             rows = list(self.db.execute(stmt.order_by(entities.Core3SkuParamProfile.sku_code).limit(limit)).scalars())
         elif model_name:
             sku_prefix_filter = entities.Core3SkuParamProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
-            exact_stmt = (
-                base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(model_name))
-                .where(sku_prefix_filter)
-                .order_by(entities.Core3SkuParamProfile.sku_code)
-                .limit(limit)
-            )
-            exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_name)
-            if len(exact_rows) == 1:
-                rows = exact_rows
-            else:
-                like_value = f"%{_model_like_anchor(model_name)}%"
-                stmt = (
-                    base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(like_value))
+            rows = []
+            for model_variant in _model_query_variants(model_name):
+                exact_stmt = (
+                    base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(model_variant))
                     .where(sku_prefix_filter)
                     .order_by(entities.Core3SkuParamProfile.sku_code)
-                    .limit(max(limit * 5, 50))
+                    .limit(limit)
                 )
-                rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_name)[:limit]
+                exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_variant)
+                if len(exact_rows) == 1:
+                    rows = exact_rows
+                    break
+            if not rows:
+                for model_variant in _model_query_variants(model_name):
+                    like_value = f"%{_model_like_anchor(model_variant)}%"
+                    stmt = (
+                        base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(like_value))
+                        .where(sku_prefix_filter)
+                        .order_by(entities.Core3SkuParamProfile.sku_code)
+                        .limit(max(limit * 5, 50))
+                    )
+                    rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_variant)[:limit]
+                    if rows:
+                        break
         else:
             return []
         return [
@@ -986,6 +1044,18 @@ def _rank_model_rows(rows: Sequence[Any], requested_model: str) -> list[Any]:
     if exact_rows:
         return sorted(exact_rows, key=lambda row: str(getattr(row, "sku_code", "")))
     return [row for rank, _sku_code, row in sorted(ranked, key=lambda item: (item[0], item[1])) if rank < 100]
+
+
+def _model_query_variants(requested_model: str) -> list[str]:
+    variants = [requested_model]
+    compact_key = _model_key(requested_model)
+    if re.match(r"^\d{3}[A-Z]", compact_key):
+        size_candidate = int(compact_key[:2])
+        if 24 <= size_candidate <= 99:
+            corrected = f"{compact_key[:2]}{compact_key[3:]}"
+            if corrected and corrected not in {_model_key(item) for item in variants}:
+                variants.append(corrected)
+    return variants
 
 
 def _model_match_rank(model_name: Any, requested_model: str) -> int:
