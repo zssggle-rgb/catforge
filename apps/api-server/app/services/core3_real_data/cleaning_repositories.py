@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 
 from app.models.entities import (
     Core3CleanAttribute,
@@ -20,6 +20,8 @@ from app.models.entities import (
     Core3SourceBatch,
     Core3SourceImpactedSku,
     Core3SourceRowRegistry,
+    new_id,
+    now_utc,
 )
 from app.services.core3_real_data.constants import (
     Core3ReviewStatus,
@@ -58,6 +60,14 @@ class CleanWriteResult:
     created: bool
 
 
+@dataclass(frozen=True)
+class BulkCleanWriteResult:
+    ids_by_key: dict[tuple[Any, ...], str]
+    created_count: int = 0
+    updated_count: int = 0
+    reused_count: int = 0
+
+
 class SourceBatchReader(Core3BaseRepository):
     consumable_statuses = (
         Core3SourceBatchStatus.REGISTERED.value,
@@ -86,10 +96,12 @@ class SourceRowRegistryReader(Core3BaseRepository):
         *,
         include_no_change: bool = False,
         operation_types: Sequence[Core3SourceOperationType | str] | None = None,
+        target_sku_codes: Sequence[str] = (),
     ) -> list[Core3SourceRowRegistry]:
         normalized_operations = _operation_values(operation_types)
         if include_no_change and operation_types is None:
             normalized_operations = (*normalized_operations, Core3SourceOperationType.NO_CHANGE.value)
+        normalized_target_skus = _unique_non_empty_values(target_sku_codes)
 
         stmt = (
             select(Core3SourceRowRegistry)
@@ -99,6 +111,8 @@ class SourceRowRegistryReader(Core3BaseRepository):
             .where(Core3SourceRowRegistry.operation_type.in_(normalized_operations))
             .order_by(Core3SourceRowRegistry.source_table, Core3SourceRowRegistry.source_pk)
         )
+        if normalized_target_skus:
+            stmt = stmt.where(Core3SourceRowRegistry.sku_code_candidate.in_(normalized_target_skus))
         return list(self.db.execute(stmt).scalars())
 
 
@@ -141,6 +155,126 @@ class _CleanFactRepository(Core3BaseRepository):
         self.db.flush()
         return CleanWriteResult(record=record, created=True)
 
+    def _bulk_upsert_clean_facts(
+        self,
+        payloads: Sequence[Mapping[str, Any]],
+        *,
+        id_field: str,
+    ) -> BulkCleanWriteResult:
+        normalized_payloads = [
+            self._normalize_bulk_payload(payload, id_field=id_field) for payload in payloads
+        ]
+        if not normalized_payloads:
+            return BulkCleanWriteResult(ids_by_key={})
+
+        existing_by_key = self._existing_rows_by_key(normalized_payloads, id_field=id_field)
+        ids_by_key: dict[tuple[Any, ...], str] = {}
+        insert_rows: list[dict[str, Any]] = []
+        created_count = 0
+        updated_count = 0
+        reused_count = 0
+
+        for payload in normalized_payloads:
+            key = self._unique_key(payload)
+            if _key_has_null(key):
+                saved = self._save_clean_fact(payload)
+                ids_by_key[key] = str(getattr(saved.record, id_field))
+                if saved.created:
+                    created_count += 1
+                else:
+                    reused_count += 1
+                continue
+
+            existing = existing_by_key.get(key)
+            if existing is not None:
+                ids_by_key[key] = str(existing[id_field])
+                if existing.get("clean_hash") is not None and existing.get("clean_hash") != payload.get("clean_hash"):
+                    existing_record = self._find_by_lookup(
+                        self.model_cls,
+                        {field: payload.get(field) for field in self.unique_fields},
+                    )
+                    if existing_record is not None:
+                        self._update_existing(existing_record, payload)
+                        updated_count += 1
+                    else:
+                        insert_rows.append(payload)
+                        created_count += 1
+                else:
+                    reused_count += 1
+                continue
+
+            insert_rows.append(payload)
+            ids_by_key[key] = str(payload[id_field])
+            created_count += 1
+
+        for chunk in _chunks(insert_rows, 1000):
+            self.db.bulk_insert_mappings(self.model_cls, chunk)
+        if insert_rows:
+            self.db.flush()
+
+        return BulkCleanWriteResult(
+            ids_by_key=ids_by_key,
+            created_count=created_count,
+            updated_count=updated_count,
+            reused_count=reused_count,
+        )
+
+    def _normalize_bulk_payload(self, payload: Mapping[str, Any], *, id_field: str) -> dict[str, Any]:
+        normalized_payload = self._model_payload(self.model_cls, self._with_project_defaults(payload))
+        normalized_payload.setdefault(id_field, new_id())
+        now = now_utc()
+        model_columns = self.model_cls.__table__.columns
+        if "created_at" in model_columns:
+            normalized_payload.setdefault("created_at", now)
+        if "updated_at" in model_columns:
+            normalized_payload.setdefault("updated_at", now)
+        for column in model_columns:
+            if column.name in normalized_payload:
+                continue
+            default = column.default
+            if default is None:
+                continue
+            if default.is_scalar:
+                normalized_payload[column.name] = default.arg
+            elif default.is_callable and default.arg in (list, dict):
+                normalized_payload[column.name] = default.arg()
+        return _jsonable(normalized_payload)
+
+    def _existing_rows_by_key(
+        self,
+        payloads: Sequence[Mapping[str, Any]],
+        *,
+        id_field: str,
+    ) -> dict[tuple[Any, ...], dict[str, Any]]:
+        keys = [self._unique_key(payload) for payload in payloads]
+        searchable_keys = [key for key in dict.fromkeys(keys) if not _key_has_null(key)]
+        if not searchable_keys:
+            return {}
+
+        existing_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+        columns = [getattr(self.model_cls, field) for field in self.unique_fields]
+        selected_columns = [getattr(self.model_cls, id_field), *columns]
+        if hasattr(self.model_cls, "clean_hash"):
+            selected_columns.append(getattr(self.model_cls, "clean_hash"))
+
+        for key_chunk in _chunks(searchable_keys, 500):
+            stmt = (
+                select(*selected_columns)
+                .where(self.model_cls.project_id == self.project_id)
+                .where(self.model_cls.category_code == self.category_code.value)
+            )
+            if len(columns) == 1:
+                stmt = stmt.where(columns[0].in_([key[0] for key in key_chunk]))
+            else:
+                stmt = stmt.where(tuple_(*columns).in_(key_chunk))
+            for row in self.db.execute(stmt).mappings():
+                key = tuple(row[field] for field in self.unique_fields)
+                existing_by_key[key] = dict(row)
+        return existing_by_key
+
+    def _unique_key(self, payload: Mapping[str, Any]) -> tuple[Any, ...]:
+        return tuple(payload.get(field) for field in self.unique_fields)
+
     def _with_project_defaults(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         normalized_payload = dict(payload)
         normalized_payload.setdefault("project_id", self.project_id)
@@ -175,6 +309,9 @@ class CleanSkuRepository(_CleanFactRepository):
 
     def save_sku(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         return self._save_clean_fact(payload)
+
+    def save_skus(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        return self._bulk_upsert_clean_facts(payloads, id_field="clean_sku_id")
 
     def list_clean_skus(
         self,
@@ -212,6 +349,9 @@ class CleanMarketRepository(_CleanFactRepository):
     def save_market(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         return self._save_clean_fact(payload)
 
+    def save_markets(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        return self._bulk_upsert_clean_facts(payloads, id_field="clean_market_id")
+
 
 class CleanAttributeRepository(_CleanFactRepository):
     model_cls = Core3CleanAttribute
@@ -220,6 +360,9 @@ class CleanAttributeRepository(_CleanFactRepository):
     def save_attribute(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         return self._save_clean_fact(payload)
 
+    def save_attributes(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        return self._bulk_upsert_clean_facts(payloads, id_field="clean_attribute_id")
+
 
 class CleanClaimRepository(_CleanFactRepository):
     def save_claim(self, payload: Mapping[str, Any]) -> CleanWriteResult:
@@ -227,10 +370,20 @@ class CleanClaimRepository(_CleanFactRepository):
         self.unique_fields = ("batch_id", "source_row_id")
         return self._save_clean_fact(payload)
 
+    def save_claims(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        self.model_cls = Core3CleanClaim
+        self.unique_fields = ("batch_id", "source_row_id")
+        return self._bulk_upsert_clean_facts(payloads, id_field="clean_claim_id")
+
     def save_claim_sentence(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         self.model_cls = Core3CleanClaimSentence
         self.unique_fields = ("batch_id", "source_row_id", "sentence_seq")
         return self._save_clean_fact(payload)
+
+    def save_claim_sentences(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        self.model_cls = Core3CleanClaimSentence
+        self.unique_fields = ("batch_id", "source_row_id", "sentence_seq")
+        return self._bulk_upsert_clean_facts(payloads, id_field="claim_sentence_id")
 
 
 class CleanCommentRepository(_CleanFactRepository):
@@ -239,15 +392,30 @@ class CleanCommentRepository(_CleanFactRepository):
         self.unique_fields = ("batch_id", "source_row_id")
         return self._save_clean_fact(payload)
 
+    def save_comments(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        self.model_cls = Core3CleanComment
+        self.unique_fields = ("batch_id", "source_row_id")
+        return self._bulk_upsert_clean_facts(payloads, id_field="clean_comment_id")
+
     def save_comment_sentence(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         self.model_cls = Core3CleanCommentSentence
         self.unique_fields = ("batch_id", "source_row_id", "sentence_source", "sentence_seq")
         return self._save_clean_fact(payload)
 
+    def save_comment_sentences(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        self.model_cls = Core3CleanCommentSentence
+        self.unique_fields = ("batch_id", "source_row_id", "sentence_source", "sentence_seq")
+        return self._bulk_upsert_clean_facts(payloads, id_field="comment_sentence_id")
+
     def save_comment_dimension(self, payload: Mapping[str, Any]) -> CleanWriteResult:
         self.model_cls = Core3CleanCommentDimension
         self.unique_fields = ("batch_id", "source_row_id")
         return self._save_clean_fact(payload)
+
+    def save_comment_dimensions(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        self.model_cls = Core3CleanCommentDimension
+        self.unique_fields = ("batch_id", "source_row_id")
+        return self._bulk_upsert_clean_facts(payloads, id_field="comment_dimension_id")
 
 
 class DataQualityIssueRepository(_CleanFactRepository):
@@ -266,6 +434,9 @@ class DataQualityIssueRepository(_CleanFactRepository):
         self.db.add(issue)
         self.db.flush()
         return CleanWriteResult(record=issue, created=True)
+
+    def save_issues(self, payloads: Sequence[Mapping[str, Any]]) -> BulkCleanWriteResult:
+        return self._bulk_upsert_clean_facts(payloads, id_field="issue_id")
 
     def list_quality_issues(
         self,
@@ -371,6 +542,26 @@ class CleaningQueryRepository(Core3BaseRepository):
 def _operation_values(operation_types: Sequence[Core3SourceOperationType | str] | None) -> tuple[str, ...]:
     source = operation_types or DEFAULT_M01_OPERATION_TYPES
     return tuple(item.value if hasattr(item, "value") else str(item) for item in source)
+
+
+def _unique_non_empty_values(values: Sequence[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return tuple(normalized)
+
+
+def _key_has_null(key: tuple[Any, ...]) -> bool:
+    return any(value is None for value in key)
+
+
+def _chunks(values: Sequence[Any], size: int) -> list[Sequence[Any]]:
+    return [values[index : index + size] for index in range(0, len(values), size)]
 
 
 def _count_by(values: Sequence[str]) -> dict[str, int]:

@@ -43,6 +43,7 @@ def test_evidence_id_service_keeps_key_stable_and_versions_id_by_clean_hash():
     key = service.build_evidence_key(
         project_id="core3_mvp",
         category_code=Core3CategoryCode.TV,
+        batch_id="m00_batch_001",
         evidence_type=Core3EvidenceType.PARAM_RAW,
         clean_table="core3_clean_attribute",
         clean_record_key="attribute:attribute_data:123",
@@ -51,6 +52,7 @@ def test_evidence_id_service_keeps_key_stable_and_versions_id_by_clean_hash():
     same_key = service.build_evidence_key(
         project_id="core3_mvp",
         category_code="TV",
+        batch_id="m00_batch_001",
         evidence_type="param_raw",
         clean_table="core3_clean_attribute",
         clean_record_key="attribute:attribute_data:123",
@@ -73,11 +75,47 @@ def test_evidence_id_service_keeps_key_stable_and_versions_id_by_clean_hash():
     assert first_id != changed_clean_hash_id
 
 
+def test_evidence_id_service_scopes_identity_by_batch_id():
+    service = EvidenceIdService()
+    first_key = service.build_evidence_key(
+        project_id="core3_mvp",
+        category_code="TV",
+        batch_id="m00_batch_001",
+        evidence_type="comment_sentence",
+        clean_table="core3_clean_comment_sentence",
+        clean_record_key="comment_sentence:comment_data:1:source_segment:1",
+        evidence_field="comment_sentence:source_segment:1",
+    )
+    second_key = service.build_evidence_key(
+        project_id="core3_mvp",
+        category_code="TV",
+        batch_id="m00_batch_002",
+        evidence_type="comment_sentence",
+        clean_table="core3_clean_comment_sentence",
+        clean_record_key="comment_sentence:comment_data:1:source_segment:1",
+        evidence_field="comment_sentence:source_segment:1",
+    )
+    first_id = service.build_evidence_id(
+        evidence_key=first_key,
+        clean_hash="sha256:m01_clean_hash_v1:comment",
+        source_row_hash="sha256:m00_row_hash_v1:source",
+    )
+    second_id = service.build_evidence_id(
+        evidence_key=second_key,
+        clean_hash="sha256:m01_clean_hash_v1:comment",
+        source_row_hash="sha256:m00_row_hash_v1:source",
+    )
+
+    assert first_key != second_key
+    assert first_id != second_id
+
+
 def test_evidence_id_service_preserves_source_hash_missing_like_values_as_distinct():
     service = EvidenceIdService()
     key = service.build_evidence_key(
         project_id="core3_mvp",
         category_code="TV",
+        batch_id="m00_batch_001",
         evidence_type="comment_raw",
         clean_table="core3_clean_comment",
         clean_record_key="comment:comment_data:1",

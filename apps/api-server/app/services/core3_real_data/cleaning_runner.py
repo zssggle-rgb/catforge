@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.entities import Core3CleanSku
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_quality_service import (
     AttributeCleaner,
@@ -78,6 +80,7 @@ class CleaningQualityRunner:
 
         module_run_id = target.metadata.get("module_run_id")
         include_no_change = bool(target.metadata.get("include_no_change", False))
+        skip_completed_skus = bool(target.metadata.get("skip_completed_skus", False))
         clean_version = str(target.metadata.get("clean_version") or CORE3_M01_CLEAN_VERSION)
         hash_version = str(target.metadata.get("hash_version") or CORE3_M01_CLEAN_HASH_VERSION)
         return self.run_batch(
@@ -89,6 +92,7 @@ class CleaningQualityRunner:
             clean_version=clean_version,
             hash_version=hash_version,
             include_no_change=include_no_change,
+            skip_completed_skus=skip_completed_skus,
             target_sku_codes=target.target_ids,
         )
 
@@ -103,6 +107,7 @@ class CleaningQualityRunner:
         clean_version: str = CORE3_M01_CLEAN_VERSION,
         hash_version: str = CORE3_M01_CLEAN_HASH_VERSION,
         include_no_change: bool = False,
+        skip_completed_skus: bool = False,
         target_sku_codes: tuple[str, ...] = (),
     ) -> Core3ModuleRunResultSchema:
         started_at = datetime.now(timezone.utc)
@@ -129,8 +134,30 @@ class CleaningQualityRunner:
         processable_rows = source_row_reader.list_processable_rows(
             batch_id,
             include_no_change=include_no_change,
+            target_sku_codes=target_sku_codes,
         )
-        processable_rows = _filter_target_rows(processable_rows, target_sku_codes)
+        registered_input_count = len(processable_rows)
+        skipped_completed_sku_codes: set[str] = set()
+        skipped_completed_input_row_count = 0
+        if skip_completed_skus:
+            skipped_completed_sku_codes = _completed_clean_sku_codes(
+                repository_context,
+                batch_id=batch_id,
+                target_sku_codes=target_sku_codes,
+            )
+            if skipped_completed_sku_codes:
+                rows_before_skip = len(processable_rows)
+                processable_rows = [
+                    row
+                    for row in processable_rows
+                    if row.sku_code_candidate not in skipped_completed_sku_codes
+                ]
+                skipped_completed_input_row_count = rows_before_skip - len(processable_rows)
+
+        raw_rows_by_source_ref = _load_raw_rows_by_source_ref(
+            raw_source_repository,
+            processable_rows,
+        )
 
         markets: list[dict[str, Any]] = []
         attributes: list[dict[str, Any]] = []
@@ -184,10 +211,7 @@ class CleaningQualityRunner:
                         )
                         continue
 
-                    raw_row = raw_source_repository.get_row_by_source_ref(
-                        source_row.source_table,
-                        source_row.source_pk,
-                    )
+                    raw_row = raw_rows_by_source_ref.get((source_row.source_table, str(source_row.source_pk)))
                     if raw_row is None:
                         row_quality_issues.append(
                             _source_row_issue(
@@ -286,6 +310,10 @@ class CleaningQualityRunner:
             "clean_version": clean_version,
             "hash_version": hash_version,
             "include_no_change": include_no_change,
+            "skip_completed_skus": skip_completed_skus,
+            "registered_input_row_count": registered_input_count,
+            "skipped_completed_sku_codes": sorted(skipped_completed_sku_codes),
+            "skipped_completed_input_row_count": skipped_completed_input_row_count,
             "clean_counts": clean_counts,
             "issue_counts": issue_counts,
             "review_required": summary["review_required"],
@@ -363,44 +391,33 @@ class CleaningQualityRunner:
         comment_repository = CleanCommentRepository(repository_context)
         issue_repository = DataQualityIssueRepository(repository_context)
 
-        for payload in markets:
-            market_repository.save_market(payload)
-        for payload in attributes:
-            attribute_repository.save_attribute(payload)
+        market_repository.save_markets(markets)
+        attribute_repository.save_attributes(attributes)
 
-        claim_ids_by_source_row: dict[str, str] = {}
-        for payload in claims:
-            saved = claim_repository.save_claim(payload)
-            claim_ids_by_source_row[payload["source_row_id"]] = saved.record.clean_claim_id
+        claim_ids_by_source_row = _ids_by_source_row(claim_repository.save_claims(claims))
+        claim_sentence_payloads: list[Mapping[str, Any]] = []
         for payload in claim_sentences:
             clean_claim_id = claim_ids_by_source_row.get(str(payload.get("source_row_id")))
             if clean_claim_id:
-                claim_repository.save_claim_sentence({**dict(payload), "clean_claim_id": clean_claim_id})
+                claim_sentence_payloads.append({**dict(payload), "clean_claim_id": clean_claim_id})
+        claim_repository.save_claim_sentences(claim_sentence_payloads)
 
-        comment_ids_by_source_row: dict[str, str] = {}
-        for payload in comments:
-            saved = comment_repository.save_comment(payload)
-            comment_ids_by_source_row[payload["source_row_id"]] = saved.record.clean_comment_id
+        comment_ids_by_source_row = _ids_by_source_row(comment_repository.save_comments(comments))
+        comment_sentence_payloads: list[Mapping[str, Any]] = []
         for payload in comment_sentences:
             clean_comment_id = comment_ids_by_source_row.get(str(payload.get("source_row_id")))
             if clean_comment_id:
-                comment_repository.save_comment_sentence({**dict(payload), "clean_comment_id": clean_comment_id})
+                comment_sentence_payloads.append({**dict(payload), "clean_comment_id": clean_comment_id})
+        comment_repository.save_comment_sentences(comment_sentence_payloads)
+        comment_dimension_payloads: list[Mapping[str, Any]] = []
         for payload in comment_dimensions:
             clean_comment_id = comment_ids_by_source_row.get(str(payload.get("source_row_id")))
             if clean_comment_id:
-                comment_repository.save_comment_dimension({**dict(payload), "clean_comment_id": clean_comment_id})
+                comment_dimension_payloads.append({**dict(payload), "clean_comment_id": clean_comment_id})
+        comment_repository.save_comment_dimensions(comment_dimension_payloads)
 
-        for payload in clean_skus:
-            sku_repository.save_sku(payload)
-        for payload in quality_issues:
-            issue_repository.save_issue(payload)
-
-
-def _filter_target_rows(rows: list[Any], target_sku_codes: tuple[str, ...]) -> list[Any]:
-    if not target_sku_codes:
-        return rows
-    target_set = set(target_sku_codes)
-    return [row for row in rows if row.sku_code_candidate in target_set]
+        sku_repository.save_skus(clean_skus)
+        issue_repository.save_issues(quality_issues)
 
 
 def _source_row_issue(
@@ -440,6 +457,52 @@ def _source_row_issue(
         "review_required": True,
         "review_status": Core3ReviewStatus.REVIEW_REQUIRED.value,
     }
+
+
+def _ids_by_source_row(result: Any) -> dict[str, str]:
+    ids_by_source_row: dict[str, str] = {}
+    for key, record_id in result.ids_by_key.items():
+        if len(key) < 2 or key[1] is None:
+            continue
+        ids_by_source_row[str(key[1])] = record_id
+    return ids_by_source_row
+
+
+def _load_raw_rows_by_source_ref(
+    raw_source_repository: RawSourceRepository,
+    processable_rows: Sequence[Any],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    source_pks_by_table: dict[str, list[str]] = {}
+    for source_row in processable_rows:
+        if not source_row.source_table or source_row.source_pk in (None, ""):
+            continue
+        source_pks_by_table.setdefault(source_row.source_table, []).append(str(source_row.source_pk))
+
+    rows_by_source_ref: dict[tuple[str, str], dict[str, Any]] = {}
+    for source_table, source_pks in source_pks_by_table.items():
+        for source_pk, raw_row in raw_source_repository.get_rows_by_source_refs(source_table, source_pks).items():
+            rows_by_source_ref[(source_table, source_pk)] = raw_row
+    return rows_by_source_ref
+
+
+def _completed_clean_sku_codes(
+    repository_context: Core3RepositoryContext,
+    *,
+    batch_id: str,
+    target_sku_codes: Sequence[str],
+) -> set[str]:
+    stmt = (
+        select(Core3CleanSku.sku_code)
+        .where(Core3CleanSku.project_id == repository_context.project_id)
+        .where(Core3CleanSku.category_code == repository_context.category_code.value)
+        .where(Core3CleanSku.batch_id == batch_id)
+    )
+    normalized_target_skus = tuple(
+        dict.fromkeys(str(sku_code).strip() for sku_code in target_sku_codes if str(sku_code).strip())
+    )
+    if normalized_target_skus:
+        stmt = stmt.where(Core3CleanSku.sku_code.in_(normalized_target_skus))
+    return {str(sku_code) for sku_code in repository_context.db.execute(stmt).scalars() if sku_code}
 
 
 def _downstream_impacts(clean_counts: Mapping[str, int]) -> list[dict[str, Any]]:

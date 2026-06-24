@@ -208,6 +208,38 @@ def test_m01_source_readers_consume_m00_scope_without_direct_raw_scan():
     RawSourceReadOnlyGuard.assert_repository_interface_read_only(RawSourceRepository(context))
 
 
+def test_m01_source_reader_filters_processable_rows_by_target_sku():
+    session = make_session()
+    context = make_context(session)
+    session.add(
+        entities.Core3SourceRowRegistry(
+            row_registry_id="m00rr_other_sku",
+            batch_id=BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            source_table="comment_data",
+            source_pk="999",
+            source_pk_strategy="id_column",
+            source_row_id="comment_data:999",
+            row_hash="sha256:m00_row_hash_v1:999",
+            hash_version="m00_row_hash_v1",
+            sku_code_candidate="TV00099999",
+            operation_type=Core3SourceOperationType.INSERT.value,
+            affected_modules=["M01"],
+            quality_hint={},
+            review_status=Core3ReviewStatus.AUTO_PASS.value,
+        )
+    )
+    session.flush()
+
+    rows = SourceRowRegistryReader(context).list_processable_rows(
+        BATCH_ID,
+        target_sku_codes=("TV00099999",),
+    )
+
+    assert [row.source_row_id for row in rows] == ["comment_data:999"]
+
+
 def test_clean_sku_repository_is_idempotent_and_rejects_hash_conflicts():
     session = make_session()
     repo = CleanSkuRepository(make_context(session))

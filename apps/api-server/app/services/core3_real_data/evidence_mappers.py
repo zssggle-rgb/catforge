@@ -208,6 +208,7 @@ class EvidenceIdService:
         *,
         project_id: str,
         category_code: Core3CategoryCode | str,
+        batch_id: str,
         evidence_type: Core3EvidenceType | str,
         clean_table: str,
         clean_record_key: str,
@@ -219,6 +220,7 @@ class EvidenceIdService:
         for field_name, value in {
             "project_id": project_id,
             "category_code": category_value,
+            "batch_id": batch_id,
             "evidence_type": evidence_type_value,
             "clean_table": clean_table,
             "clean_record_key": clean_record_key,
@@ -233,6 +235,7 @@ class EvidenceIdService:
             {
                 "project_id": project_id,
                 "category_code": category_value,
+                "batch_id": batch_id,
                 "evidence_type": evidence_type_value,
                 "clean_table": clean_table,
                 "clean_record_key": clean_record_key,
@@ -272,6 +275,7 @@ class EvidenceIdService:
         *,
         project_id: str,
         category_code: Core3CategoryCode | str,
+        batch_id: str,
         evidence_type: Core3EvidenceType | str,
         clean_table: str,
         clean_record_key: str,
@@ -283,6 +287,7 @@ class EvidenceIdService:
         evidence_key = self.build_evidence_key(
             project_id=project_id,
             category_code=category_code,
+            batch_id=batch_id,
             evidence_type=evidence_type,
             clean_table=clean_table,
             clean_record_key=clean_record_key,
@@ -324,6 +329,7 @@ class EvidenceMapper:
         identity = self.id_service.build_identity(
             project_id=base["project_id"],
             category_code=base["category_code"],
+            batch_id=base["batch_id"],
             evidence_type=rule.evidence_type,
             clean_table=rule.clean_table,
             clean_record_key=base["clean_record_key"],

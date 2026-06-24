@@ -50,7 +50,12 @@ class EvidenceAtomRepository(Core3BaseRepository):
         self._atom_by_id.clear()
         self._current_by_key.clear()
 
-    def count_current_atoms(self) -> int:
+    def count_current_atoms(
+        self,
+        *,
+        batch_id: str | None = None,
+        target_sku_codes: Sequence[str] = (),
+    ) -> int:
         stmt = (
             select(func.count())
             .select_from(Core3EvidenceAtom)
@@ -59,6 +64,10 @@ class EvidenceAtomRepository(Core3BaseRepository):
             .where(Core3EvidenceAtom.is_current.is_(True))
             .where(Core3EvidenceAtom.evidence_status == Core3EvidenceStatus.CURRENT.value)
         )
+        if batch_id is not None:
+            stmt = stmt.where(Core3EvidenceAtom.batch_id == batch_id)
+        if target_sku_codes:
+            stmt = stmt.where(Core3EvidenceAtom.sku_code.in_(tuple(target_sku_codes)))
         return int(self.db.execute(stmt).scalar_one())
 
     def save_atom(
@@ -421,9 +430,15 @@ class EvidenceLinkRepository(Core3BaseRepository):
         super().__init__(context)
         self._link_by_key: dict[tuple[str, str, str], Core3EvidenceLink] = {}
         self._skip_existing_lookup_batches: set[str] = set()
+        self._skip_existing_lookup_evidence_sets: dict[str, set[str]] = {}
 
     def skip_existing_lookup_for_batch(self, batch_id: str) -> None:
         self._skip_existing_lookup_batches.add(batch_id)
+
+    def skip_existing_lookup_for_evidence_set(self, batch_id: str, evidence_ids: Sequence[str]) -> None:
+        evidence_id_set = {str(evidence_id) for evidence_id in evidence_ids if evidence_id}
+        if evidence_id_set:
+            self._skip_existing_lookup_evidence_sets.setdefault(batch_id, set()).update(evidence_id_set)
 
     def clear_save_cache(self) -> None:
         self._link_by_key.clear()
@@ -456,7 +471,8 @@ class EvidenceLinkRepository(Core3BaseRepository):
         if cached is not None:
             self._refresh_existing_link(cached, normalized_payload)
             return EvidenceLinkWriteResult(record=cached, created=False)
-        if str(normalized_payload.get("batch_id") or "") not in self._skip_existing_lookup_batches:
+        batch_id = str(normalized_payload.get("batch_id") or "")
+        if not self._should_skip_existing_lookup(batch_id, link_key):
             with self.db.no_autoflush:
                 existing = self._find_existing_link(*link_key)
             if existing is not None:
@@ -468,6 +484,14 @@ class EvidenceLinkRepository(Core3BaseRepository):
         self.db.add(record)
         self._link_by_key[link_key] = record
         return EvidenceLinkWriteResult(record=record, created=True)
+
+    def _should_skip_existing_lookup(self, batch_id: str, link_key: tuple[str, str, str]) -> bool:
+        if batch_id in self._skip_existing_lookup_batches:
+            return True
+        evidence_id_set = self._skip_existing_lookup_evidence_sets.get(batch_id)
+        if not evidence_id_set:
+            return False
+        return link_key[0] in evidence_id_set and link_key[1] in evidence_id_set
 
     def get_by_id(self, link_id: str) -> Core3EvidenceLink | None:
         stmt = (

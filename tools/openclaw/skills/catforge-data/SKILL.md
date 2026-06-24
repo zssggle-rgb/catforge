@@ -17,7 +17,9 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 ## Execution Rules
 
 - Preliminary processing defaults to analysis-ready data preparation: create an incremental source batch, run cleaning, then prepare traceable evidence for later fact analysis.
-- To rerun cleaning for an existing source batch, explicitly use `--register-source-batch none --batch-id <batch_id-or-latest>`.
+- Run one product category at a time. `--category-code TV` processes raw TV categories only; AC data must be prepared in a separate AC run before AC-specific downstream work.
+- To rerun cleaning for an existing source batch, explicitly use `--register-source-batch none --batch-id <explicit_batch_id>`.
+- Never use `--register-source-batch none --batch-id latest` for newly uploaded data. That skips M00 source registration and can silently rerun an old batch.
 - Preliminary processing must not run comment semantic or business-profile stages such as M05 and later modules.
 - Run cleaning and evidence preparation by SKU chunks by default to avoid high CPU and memory pressure on 205.
 - Empty, default, and obvious low-value comments are filtered from sentence/evidence preparation in M01 and counted in the preliminary summary.
@@ -33,10 +35,10 @@ From the deployed CatForge repository on 205, prefer running inside the API cont
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
 ```
 
-If a source batch already exists and the user wants to prepare it for analysis:
+If a source batch already exists and the user explicitly wants to rerun that exact batch for analysis, pass the explicit batch id:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id <explicit_batch_id> --sku-batch-size 10 --evidence-sku-batch-size 1 --format json
 ```
 
 Inspect current preliminary quality without rerunning:
@@ -51,10 +53,10 @@ Inspect one SKU's preliminary quality:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data inspect-sku-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --sku-code TV00029115 --format json
 ```
 
-For a small smoke test:
+For a non-writing plan check before running:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --register-source-batch none --batch-id latest --limit-skus 5 --sku-batch-size 2 --evidence-sku-batch-size 1 --format json
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 10 --evidence-sku-batch-size 1 --dry-run --format json
 ```
 
 When checking whether a previous run finished, inspect by the explicit `batch_id` when available. If CLI counts are empty or inconsistent with the run log, cross-check `core3_clean_*`, `core3_source_batch`, and `core3_data_quality_issue` in PostgreSQL before replying.

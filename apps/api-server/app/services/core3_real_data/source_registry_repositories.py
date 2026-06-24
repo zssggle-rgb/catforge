@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 from uuid import uuid4
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import bindparam, inspect, select, text
 
 from app.models.entities import Core3SourceBatch, Core3SourceImpactedSku, Core3SourceRowRegistry
 from app.schemas.core3_real_data import Core3SourceBatchRegisterRequest
@@ -17,6 +17,7 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
     Core3SourceImpactLevel,
     Core3SourceBatchType,
+    Core3CategoryCode,
 )
 from app.services.core3_real_data.hash_utils import stable_hash
 from app.services.core3_real_data.repositories import (
@@ -87,6 +88,10 @@ RAW_SOURCE_HASH_COLUMNS: dict[str, tuple[str, ...]] = {
         "sentiment",
         "write_time",
     ),
+}
+RAW_CATEGORY_VALUES_BY_CATEGORY_CODE: dict[Core3CategoryCode, tuple[str, ...]] = {
+    Core3CategoryCode.TV: ("彩电", "电视", "TV"),
+    Core3CategoryCode.AC: ("空调", "空气调节器", "AC"),
 }
 
 
@@ -210,9 +215,8 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
     def get_table_watermark(self, source_table: str) -> SourceTableWatermark:
         config = self._config(source_table)
         columns = self._column_names(config.source_table)
-        row = self._execute_one(
-            _watermark_sql(config, columns),
-        )
+        sql, params = _watermark_sql(config, columns, raw_category_values=self._raw_category_values())
+        row = self._execute_one(sql, params)
         return SourceTableWatermark(
             source_table=config.source_table,
             row_count=int(row.get("row_count") or 0),
@@ -228,7 +232,7 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
         if scan_plan.source_table != config.source_table:
             raise ValueError("scan_plan source_table does not match requested source_table")
         columns = self._column_names(config.source_table)
-        sql, params = _scan_sql(config, columns, scan_plan)
+        sql, params = _scan_sql(config, columns, scan_plan, raw_category_values=self._raw_category_values())
         result = self.db.execute(text(sql), params)
         for row in result.mappings():
             yield dict(row)
@@ -276,6 +280,28 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
         row = self.db.execute(text(sql), {"source_pk": source_pk}).mappings().first()
         return dict(row) if row else None
 
+    def get_rows_by_source_refs(self, source_table: str, source_pks: Sequence[str]) -> dict[str, dict[str, Any]]:
+        config = self._config(source_table)
+        normalized_source_pks = tuple(
+            dict.fromkeys(str(source_pk) for source_pk in source_pks if source_pk not in (None, ""))
+        )
+        if not normalized_source_pks:
+            return {}
+
+        sql = (
+            f"SELECT * FROM {_quote_identifier(config.source_table)} "
+            f"WHERE {_quote_identifier(config.source_pk_column)} IN :source_pks"
+        )
+        self.raw_source_guard.ensure_read_only_sql(sql)
+        statement = text(sql).bindparams(bindparam("source_pks", expanding=True))
+        rows_by_source_pk: dict[str, dict[str, Any]] = {}
+        for chunk in _chunks(normalized_source_pks, 1000):
+            for row in self.db.execute(statement, {"source_pks": tuple(chunk)}).mappings():
+                source_pk = row.get(config.source_pk_column)
+                if source_pk not in (None, ""):
+                    rows_by_source_pk[str(source_pk)] = dict(row)
+        return rows_by_source_pk
+
     def _config(self, source_table: str) -> SourceTableConfig:
         table_name = self.ensure_source_table_name(source_table)
         if table_name not in self.source_table_configs:
@@ -285,6 +311,9 @@ class RawSourceRepository(Core3BaseRepository, RawSourceReadOnlyMixin):
     def _column_names(self, source_table: str) -> frozenset[str]:
         snapshot = self.inspect_table(source_table)
         return frozenset(column.name for column in snapshot.columns)
+
+    def _raw_category_values(self) -> tuple[str, ...]:
+        return RAW_CATEGORY_VALUES_BY_CATEGORY_CODE.get(self.category_code, ())
 
     def _execute_one(self, sql: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         self.raw_source_guard.ensure_read_only_sql(sql)
@@ -600,7 +629,12 @@ def default_source_table_configs() -> dict[str, SourceTableConfig]:
     }
 
 
-def _watermark_sql(config: SourceTableConfig, columns: frozenset[str]) -> str:
+def _watermark_sql(
+    config: SourceTableConfig,
+    columns: frozenset[str],
+    *,
+    raw_category_values: Sequence[str] = (),
+) -> tuple[str, dict[str, Any]]:
     table_name = _quote_identifier(config.source_table)
     source_pk = _nullable_aggregate("MIN", config.source_pk_column, columns, "min_source_pk")
     max_source_pk = _nullable_aggregate("MAX", config.source_pk_column, columns, "max_source_pk")
@@ -611,44 +645,56 @@ def _watermark_sql(config: SourceTableConfig, columns: frozenset[str]) -> str:
         if config.sku_column in columns
         else "0 AS distinct_sku_count"
     )
-    return (
+    where_sql, params = _raw_category_where_sql(config, columns, raw_category_values)
+    sql = (
         "SELECT COUNT(*) AS row_count, "
         f"{source_pk}, {max_source_pk}, {min_write_time}, {max_write_time}, {distinct_sku_count} "
-        f"FROM {table_name}"
+        f"FROM {table_name}{where_sql}"
     )
+    return sql, params
 
 
 def _scan_sql(
     config: SourceTableConfig,
     columns: frozenset[str],
     scan_plan: SourceScanPlan,
+    *,
+    raw_category_values: Sequence[str] = (),
 ) -> tuple[str, dict[str, Any]]:
     table_name = _quote_identifier(config.source_table)
     ordered_columns = ", ".join(_quote_identifier(column) for column in sorted(columns))
-    where_clauses: list[str] = []
+    scan_where_clauses: list[str] = []
     params: dict[str, Any] = {}
 
     if config.source_pk_column in columns:
         if scan_plan.min_source_pk is not None:
-            where_clauses.append(f"{_quote_identifier(config.source_pk_column)} >= :min_source_pk")
+            scan_where_clauses.append(f"{_quote_identifier(config.source_pk_column)} >= :min_source_pk")
             params["min_source_pk"] = scan_plan.min_source_pk
         if scan_plan.min_source_pk_exclusive is not None:
-            where_clauses.append(f"{_quote_identifier(config.source_pk_column)} > :min_source_pk_exclusive")
+            scan_where_clauses.append(f"{_quote_identifier(config.source_pk_column)} > :min_source_pk_exclusive")
             params["min_source_pk_exclusive"] = scan_plan.min_source_pk_exclusive
         if scan_plan.max_source_pk is not None:
-            where_clauses.append(f"{_quote_identifier(config.source_pk_column)} <= :max_source_pk")
+            scan_where_clauses.append(f"{_quote_identifier(config.source_pk_column)} <= :max_source_pk")
             params["max_source_pk"] = scan_plan.max_source_pk
 
     if config.write_time_column in columns:
         if scan_plan.min_write_time_exclusive is not None:
-            where_clauses.append(f"{_quote_identifier(config.write_time_column)} > :min_write_time_exclusive")
+            scan_where_clauses.append(f"{_quote_identifier(config.write_time_column)} > :min_write_time_exclusive")
             params["min_write_time_exclusive"] = scan_plan.min_write_time_exclusive
         if scan_plan.max_write_time_inclusive is not None:
-            where_clauses.append(f"{_quote_identifier(config.write_time_column)} <= :max_write_time_inclusive")
+            scan_where_clauses.append(f"{_quote_identifier(config.write_time_column)} <= :max_write_time_inclusive")
             params["max_write_time_inclusive"] = scan_plan.max_write_time_inclusive
 
     joiner = " OR " if scan_plan.combine_filters_with_or else " AND "
-    where_sql = f" WHERE {joiner.join(where_clauses)}" if where_clauses else ""
+    where_clauses: list[str] = []
+    category_where_sql, category_params = _raw_category_where_sql(config, columns, raw_category_values)
+    if category_where_sql:
+        where_clauses.append(category_where_sql.removeprefix(" WHERE "))
+        params.update(category_params)
+    if scan_where_clauses:
+        scan_where_sql = joiner.join(scan_where_clauses)
+        where_clauses.append(f"({scan_where_sql})" if scan_plan.combine_filters_with_or else scan_where_sql)
+    where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     order_column = config.source_pk_column if config.source_pk_column in columns else sorted(columns)[0]
     limit_sql = ""
     if scan_plan.limit is not None:
@@ -659,6 +705,21 @@ def _scan_sql(
     sql = f"SELECT {ordered_columns} FROM {table_name}{where_sql} ORDER BY {_quote_identifier(order_column)}{limit_sql}"
     RawSourceReadOnlyMixin.raw_source_guard.ensure_read_only_sql(sql)
     return sql, params
+
+
+def _raw_category_where_sql(
+    config: SourceTableConfig,
+    columns: frozenset[str],
+    raw_category_values: Sequence[str],
+) -> tuple[str, dict[str, Any]]:
+    if config.category_column not in columns or not raw_category_values:
+        return "", {}
+    normalized_values = tuple(str(value).strip() for value in raw_category_values if str(value).strip())
+    if not normalized_values:
+        return "", {}
+    params = {f"raw_category_{index}": value for index, value in enumerate(normalized_values)}
+    placeholders = ", ".join(f":{key}" for key in params)
+    return f" WHERE {_quote_identifier(config.category_column)} IN ({placeholders})", params
 
 
 def _nullable_aggregate(function_name: str, column_name: str, columns: frozenset[str], alias: str) -> str:
@@ -679,6 +740,11 @@ def _string_or_none(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _chunks(values: Sequence[Any], size: int) -> Iterable[Sequence[Any]]:
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
 
 
 def _new_m00_batch_id(started_at: datetime) -> str:

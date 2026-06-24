@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -32,15 +33,31 @@ def test_prepare_new_data_can_rerun_existing_batch_without_source_registration()
             "--register-source-batch",
             "none",
             "--batch-id",
-            "latest",
+            "m00_20260619084551_857df63b",
             "--limit-skus",
             "5",
         ]
     )
 
     assert args.register_source_batch == "none"
-    assert args.batch_id == "latest"
+    assert args.batch_id == "m00_20260619084551_857df63b"
     assert args.limit_skus == 5
+
+
+def test_prepare_new_data_blocks_existing_latest_batch_rerun_without_explicit_batch():
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "prepare-new-data",
+            "--register-source-batch",
+            "none",
+            "--batch-id",
+            "latest",
+        ]
+    )
+
+    with pytest.raises(catforge_data.CliError, match="不能使用 --register-source-batch none --batch-id latest"):
+        catforge_data._validate_prepare_new_data_args(args)
 
 
 def test_project_args_work_before_or_after_subcommand():

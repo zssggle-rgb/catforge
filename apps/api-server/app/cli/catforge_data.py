@@ -108,6 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--skip-evidence", action="store_true", help=argparse.SUPPRESS)
     prepare.add_argument("--limit-skus", type=int, default=None, help="Limit target SKUs for smoke tests.")
     prepare.add_argument("--include-no-change", action="store_true")
+    prepare.add_argument("--allow-latest-existing-batch", action="store_true", help=argparse.SUPPRESS)
     prepare.add_argument(
         "--allow-full-scan",
         action="store_true",
@@ -143,6 +144,7 @@ def _add_common_project_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
+    _validate_prepare_new_data_args(args)
     with SessionLocal() as db:
         batch_id = args.batch_id
         project_id = args.project_id
@@ -236,6 +238,7 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
                 run_id=run_id,
                 module_run_id=args.module_run_id,
                 include_no_change=bool(args.include_no_change),
+                skip_completed_skus=args.register_source_batch == "none",
                 target_sku_codes=tuple(chunk),
             )
             db.commit()
@@ -317,6 +320,19 @@ def _prepare_new_data(args: argparse.Namespace) -> dict[str, Any]:
             "m02_summary": last_evidence_result["summary_json"] if last_evidence_result else {},
             "message_cn": message_cn,
         }
+
+
+def _validate_prepare_new_data_args(args: argparse.Namespace) -> None:
+    if (
+        args.register_source_batch == "none"
+        and args.batch_id == "latest"
+        and not getattr(args, "allow_latest_existing_batch", False)
+    ):
+        raise CliError(
+            "prepare-new-data 处理新上传数据时不能使用 --register-source-batch none --batch-id latest；"
+            "这会跳过 M00 源数据登记并复跑旧 latest 批次。请去掉 --register-source-batch none 让 CLI "
+            "创建 incremental source batch；如确实要复跑已有批次，请传显式 batch_id。"
+        )
 
 
 def _inspect_data_quality(args: argparse.Namespace) -> dict[str, Any]:

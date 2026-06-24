@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -110,15 +110,8 @@ class CommentSemanticFilter:
     service_fulfillment_source_rows: set[str]
     duplicate_non_representative_source_rows: set[str]
     template_source_rows: set[str]
-
-    @property
-    def excluded_source_rows(self) -> set[str]:
-        return (
-            set(self.low_value_source_rows)
-            | set(self.service_fulfillment_source_rows)
-            | set(self.duplicate_non_representative_source_rows)
-            | set(self.template_source_rows)
-        )
+    consumable_source_rows: set[str]
+    excluded_source_rows: set[str]
 
 
 @dataclass(frozen=True)
@@ -206,9 +199,18 @@ class CleanFactReader:
                     & model_cls.issue_type.in_(tuple(NON_CONSUMABLE_COMMENT_QUALITY_TYPES))
                 )
             )
-            stmt = _exclude_comment_quality_source_rows(stmt, model_cls, comment_filter.excluded_source_rows)
+            stmt = _include_comment_quality_source_rows(stmt, model_cls, comment_filter.consumable_source_rows)
         elif clean_table in COMMENT_SEMANTIC_CLEAN_TABLES:
-            stmt = _exclude_source_rows(stmt, model_cls, comment_filter.excluded_source_rows)
+            records = self._list_table_by_source_row_chunks(
+                stmt,
+                model_cls,
+                comment_filter.consumable_source_rows,
+            )
+            return [
+                record
+                for record in records
+                if not _is_non_consumable_comment_semantic_record(record, comment_filter)
+            ]
         stmt = stmt.order_by(*_order_columns(model_cls))
         records = list(self.db.execute(stmt).scalars())
         if clean_table == "core3_data_quality_issue":
@@ -224,6 +226,23 @@ class CleanFactReader:
                 if not _is_non_consumable_comment_semantic_record(record, comment_filter)
             ]
         return records
+
+    def _list_table_by_source_row_chunks(
+        self,
+        stmt: Any,
+        model_cls: Any,
+        source_row_ids: set[str],
+    ) -> list[Any]:
+        if not hasattr(model_cls, "source_row_id"):
+            return list(self.db.execute(stmt.order_by(*_order_columns(model_cls))).scalars())
+        if not source_row_ids:
+            return []
+
+        records: list[Any] = []
+        for source_row_chunk in _chunks(sorted(source_row_ids), 1000):
+            chunk_stmt = stmt.where(model_cls.source_row_id.in_(tuple(source_row_chunk))).order_by(*_order_columns(model_cls))
+            records.extend(self.db.execute(chunk_stmt).scalars())
+        return _sort_clean_records(model_cls, records)
 
     def list_low_value_comment_source_rows(self, batch_id: str, target_sku_codes: Sequence[str] | set[str] = ()) -> set[str]:
         return self.build_comment_semantic_filter(batch_id, target_sku_codes).low_value_source_rows
@@ -309,11 +328,19 @@ class CleanFactReader:
             if representative_source_row_id and source_row_id != representative_source_row_id:
                 duplicate_non_representative_source_rows.add(source_row_id)
 
+        excluded_source_rows = (
+            low_value_source_rows
+            | service_fulfillment_source_rows
+            | duplicate_non_representative_source_rows
+            | template_source_rows
+        )
         return CommentSemanticFilter(
             low_value_source_rows=low_value_source_rows,
             service_fulfillment_source_rows=service_fulfillment_source_rows,
             duplicate_non_representative_source_rows=duplicate_non_representative_source_rows,
             template_source_rows=template_source_rows,
+            consumable_source_rows=set(target_rows_by_source) - excluded_source_rows,
+            excluded_source_rows=excluded_source_rows,
         )
 
 
@@ -348,7 +375,7 @@ class EvidenceAtomService:
     ) -> EvidenceAtomServiceResult:
         atom_repository = EvidenceAtomRepository(self.context)
         link_repository = EvidenceLinkRepository(self.context)
-        if atom_repository.count_current_atoms() == 0:
+        if atom_repository.count_current_atoms(batch_id=batch_id, target_sku_codes=target_sku_codes) == 0:
             atom_repository.skip_existing_lookup_when_empty()
         if link_repository.count_batch_links(batch_id) == 0:
             link_repository.skip_existing_lookup_for_batch(batch_id)
@@ -509,6 +536,8 @@ class EvidenceAtomService:
             evidence_ids=evidence_ids,
             link_types=desired_link_types,
         )
+        if preloaded_link_count == 0 and not superseded_pairs:
+            link_repository.skip_existing_lookup_for_evidence_set(batch_id, evidence_ids)
         for link in link_drafts:
             link_result = link_repository.save_link(link.to_payload())
             if link_result.created:
@@ -755,6 +784,12 @@ def _order_columns(model_cls: Any) -> list[Any]:
     return columns
 
 
+def _sort_clean_records(model_cls: Any, records: Sequence[Any]) -> list[Any]:
+    field_names = ["batch_id"]
+    field_names.extend(field_name for field_name in ("sku_code", "source_row_id", "clean_record_key") if hasattr(model_cls, field_name))
+    return sorted(records, key=lambda record: tuple(str(_record_value(record, field_name) or "") for field_name in field_names))
+
+
 def _quality_issue_payload(record: entities.Core3DataQualityIssue) -> dict[str, Any]:
     issue_key = record.clean_record_key or f"quality:{record.domain}:{record.issue_type}:{record.sku_code or record.issue_id}"
     source_payload = {
@@ -852,6 +887,14 @@ def _exclude_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) ->
     return stmt
 
 
+def _include_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) -> Any:
+    if not hasattr(model_cls, "source_row_id"):
+        return stmt
+    if not source_row_ids:
+        return stmt.where(false())
+    return stmt.where(_source_row_in_condition(model_cls.source_row_id, source_row_ids))
+
+
 def _exclude_comment_quality_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) -> Any:
     if not source_row_ids or not hasattr(model_cls, "source_row_id"):
         return stmt
@@ -864,6 +907,25 @@ def _exclude_comment_quality_source_rows(stmt: Any, model_cls: Any, source_row_i
             | ~model_cls.source_row_id.in_(tuple(source_row_chunk))
         )
     return stmt
+
+
+def _include_comment_quality_source_rows(stmt: Any, model_cls: Any, source_row_ids: set[str]) -> Any:
+    if not hasattr(model_cls, "source_row_id") or not hasattr(model_cls, "domain"):
+        return stmt
+    if not source_row_ids:
+        return stmt.where((model_cls.domain != "comment") | model_cls.source_row_id.is_(None))
+    return stmt.where(
+        (model_cls.domain != "comment")
+        | model_cls.source_row_id.is_(None)
+        | _source_row_in_condition(model_cls.source_row_id, source_row_ids)
+    )
+
+
+def _source_row_in_condition(column: Any, source_row_ids: set[str]) -> Any:
+    chunks = _chunks(sorted(source_row_ids), 1000)
+    if not chunks:
+        return false()
+    return or_(*(column.in_(tuple(source_row_chunk)) for source_row_chunk in chunks))
 
 
 def _chunks(values: Sequence[str], size: int) -> list[Sequence[str]]:

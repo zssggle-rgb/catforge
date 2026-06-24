@@ -57,7 +57,8 @@ def make_session() -> Session:
                 ) VALUES
                     (1, 'TV00029115', '彩电', '海信', '85E7Q', '26W01', '线上', '专业电商', 10, 59990, 5999, '2026-06-11 10:00:00'),
                     (2, 'TV00029115', '彩电', '海信', '85E7Q', '26W02', '线上', '平台电商', 12, 71988, 5999, '2026-06-12 10:00:00'),
-                    (3, 'TV00010001', '彩电', '海信', '85Q6N', '26W01', '线上', '专业电商', 7, 41993, 5999, '2026-06-12 11:00:00')
+                    (3, 'TV00010001', '彩电', '海信', '85Q6N', '26W01', '线上', '专业电商', 7, 41993, 5999, '2026-06-12 11:00:00'),
+                    (4, 'AC00010001', '空调', '海信', 'KFR-35GW', '26W01', '线上', '专业电商', 5, 14995, 2999, '2026-06-12 12:00:00')
                 """
             )
         )
@@ -156,6 +157,30 @@ def test_raw_source_repository_iterates_incremental_rows_by_write_time():
     rows = list(repo.iter_rows("week_sales_data", scan_plan))
 
     assert [row["id"] for row in rows] == [3]
+
+
+def test_raw_source_repository_filters_raw_rows_by_category_code():
+    repo = make_repo()
+    full_rows = list(repo.iter_rows("week_sales_data", SourceScanPlan(source_table="week_sales_data")))
+    watermark = repo.get_table_watermark("week_sales_data")
+
+    assert [row["id"] for row in full_rows] == [1, 2, 3]
+    assert watermark.row_count == 3
+    assert watermark.max_source_pk == "3"
+    assert watermark.distinct_sku_count == 2
+
+
+def test_raw_source_repository_can_filter_ac_raw_rows_by_category_code():
+    session = make_session()
+    repo = RawSourceRepository(Core3RepositoryContext(db=session, project_id="core3_mvp", category_code="AC"))
+
+    full_rows = list(repo.iter_rows("week_sales_data", SourceScanPlan(source_table="week_sales_data")))
+    watermark = repo.get_table_watermark("week_sales_data")
+
+    assert [row["id"] for row in full_rows] == [4]
+    assert watermark.row_count == 1
+    assert watermark.max_source_pk == "4"
+    assert watermark.distinct_sku_count == 1
 
 
 def test_raw_source_repository_gets_row_by_source_reference():
