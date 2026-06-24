@@ -840,7 +840,15 @@ def _semantic_space_with_label(rows: list[tuple[str, str, str, str]], code: str,
 def _semantic_performance_with_label(rows: list[tuple[str, str, str, str]], code: str, position: dict[str, Any]) -> str:
     label = _label_for_semantic_code(rows, code)
     prefix = f"{label}：" if label else ""
-    return f"{prefix}{_semantic_sku_performance_text(position)}"
+    relation = _relation_for_semantic_code(rows, code)
+    return f"{prefix}{_semantic_sku_performance_text(position, relation=relation)}"
+
+
+def _relation_for_semantic_code(rows: list[tuple[str, str, str, str]], code: str) -> str:
+    for row_code, _label, relation, _reason in rows:
+        if row_code == code:
+            return relation
+    return ""
 
 
 def _extract_claim_value_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -1086,7 +1094,7 @@ def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str,
     for code, label, relation, reason in rows:
         position = positions.get(code, {})
         lines.append(
-            f"| {label} | {relation} | {_semantic_market_space_text(position)} | {_semantic_sku_performance_text(position)} | {reason} |"
+            f"| {label} | {relation} | {_semantic_market_space_text(position)} | {_semantic_sku_performance_text(position, relation=relation)} | {reason} |"
         )
     return lines
 
@@ -1261,11 +1269,13 @@ def _semantic_market_space_text(position: dict[str, Any]) -> str:
     return "；".join(parts)
 
 
-def _semantic_sku_performance_text(position: dict[str, Any]) -> str:
+def _semantic_sku_performance_text(position: dict[str, Any], *, relation: str = "") -> str:
     allocation = position.get("sku_allocation") or {}
     contribution = position.get("sku_contribution") or {}
     if not allocation:
-        return "未分配销量，仅作机会或风险证据"
+        if any(marker in relation for marker in ("机会", "拖后腿", "厂家主张", "评论观察", "用户观察")):
+            return "未分配销量，仅作机会或观察证据"
+        return "当前图谱未分配本品销量"
     share = contribution.get("sku_share_in_dimension_volume")
     if share is None:
         market_space = position.get("market_space") or {}

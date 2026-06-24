@@ -2288,7 +2288,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
     assert "分配700台；周均58台；权重60%；维度内第1名；占维度销量78%" in markdown
     assert "主流客厅均衡体验 | 辅战场 | 空间600台" in markdown
-    assert "未分配销量，仅作机会或风险证据" in markdown
+    assert "当前图谱未分配本品销量" in markdown
     assert "影院沉浸观影 | 主任务和评论观察任务 | 空间1,100台" in markdown
     assert "高端影音体验用户 | 主客群和评论观察客群 | 空间1,000台" in markdown
     assert "MiniLED 高端画质路线" in markdown
@@ -2319,6 +2319,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "图谱空间待生成",
         "暂无该分类市场空间数据",
         "本品未进入该分类销量承接分配",
+        "未分配销量，仅作机会或风险证据",
         "产品经理策略",
         "市场导购话术",
         "海信应对策略",
