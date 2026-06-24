@@ -1249,7 +1249,7 @@ def _semantic_position_by_code(sections: dict[str, Any], *, profile_type: str) -
 def _semantic_market_space_text(position: dict[str, Any]) -> str:
     market_space = position.get("market_space") or {}
     if not market_space:
-        return "暂无该分类市场空间数据"
+        return "未纳入当前销量空间测算"
     parts = [
         f"空间{_format_unit_count(market_space.get('estimated_sales_volume')) or '未知'}台",
         f"周均{_format_unit_count(market_space.get('estimated_avg_weekly_sales_volume')) or '未知'}台",
@@ -1265,7 +1265,7 @@ def _semantic_sku_performance_text(position: dict[str, Any]) -> str:
     allocation = position.get("sku_allocation") or {}
     contribution = position.get("sku_contribution") or {}
     if not allocation:
-        return "本品未进入该分类销量承接分配"
+        return "未分配销量，仅作机会或风险证据"
     share = contribution.get("sku_share_in_dimension_volume")
     if share is None:
         market_space = position.get("market_space") or {}

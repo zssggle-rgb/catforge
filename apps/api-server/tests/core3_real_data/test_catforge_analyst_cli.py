@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -2287,7 +2288,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
     assert "分配700台；周均58台；权重60%；维度内第1名；占维度销量78%" in markdown
     assert "主流客厅均衡体验 | 辅战场 | 空间600台" in markdown
-    assert "本品未进入该分类销量承接分配" in markdown
+    assert "未分配销量，仅作机会或风险证据" in markdown
     assert "影院沉浸观影 | 主任务和评论观察任务 | 空间1,100台" in markdown
     assert "高端影音体验用户 | 主客群和评论观察客群 | 空间1,000台" in markdown
     assert "MiniLED 高端画质路线" in markdown
@@ -2316,11 +2317,14 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         '"unit"',
         "其他关系状态",
         "图谱空间待生成",
+        "暂无该分类市场空间数据",
+        "本品未进入该分类销量承接分配",
         "产品经理策略",
         "市场导购话术",
         "海信应对策略",
     ):
         assert forbidden not in markdown
+    assert not re.search(r"\d+\.\d+台", markdown)
     short_answer = answer["short_answer"]
     assert len(short_answer) <= 600
     assert "创维 65A7H PRO" in short_answer
