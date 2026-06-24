@@ -23,7 +23,10 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_MODULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
@@ -447,11 +450,218 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
     )
 
 
+def ac_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
+    claims = (
+        _claim(
+            "ac_claim_energy_efficiency_apf",
+            "高能效/APF/省电",
+            "energy_efficiency",
+            "apf_energy_grade",
+            ("巨省电", "省电", "节能", "一级能效", "新一级", "apf", "能效比", "能耗"),
+            support_param_codes=("energy_grade_normalized", "energy_efficiency_ratio", "inverter_flag"),
+            support_keywords=("一级", "1级", "新一级", "apf", "变频"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_ai_energy_saving",
+            "AI 省电算法",
+            "energy_efficiency",
+            "ai_energy_algorithm",
+            ("ai.*省电", "ai.*节能", "酷省算法", "灵云节能", "air\\s*magic", "动态节能", "云端省电", "倍省电"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_fast_cooling_heating",
+            "速冷速热",
+            "temperature_performance",
+            "fast_response",
+            ("速冷", "速热", "秒速冷", "秒速热", "快速制冷", "快速制热", "高频速冷", "15秒", "30秒", "60秒"),
+            support_param_codes=("cooling_capacity_w", "heating_capacity_w", "horsepower_hp", "heat_cool_mode"),
+            support_keywords=("冷暖", "制冷", "制热"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_wide_temperature_operation",
+            "宽温域可靠运行",
+            "temperature_performance",
+            "wide_temperature",
+            ("宽温", "极寒", "极热", "严寒", "酷暑", "低温制热", "高温制冷", "-35", "-32", "60°?c", "65°?c"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_large_airflow_coverage",
+            "大风量/全域送风",
+            "airflow_comfort",
+            "airflow_coverage",
+            ("大风量", "循环风量", "送风范围", "广角送风", "宽幅送风", "远距离送风", "全域.*送风", "全屋.*送风", "立体送风", "上下.*出风", "分布式送风", "扫风"),
+            support_param_codes=("airflow_volume_m3h", "installation_type", "horsepower_hp"),
+            support_keywords=("挂机", "柜机", "立柜", "m3/h"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_soft_wind_no_direct",
+            "柔风/防直吹",
+            "airflow_comfort",
+            "soft_wind",
+            ("柔风", "无风感", "不直吹", "防直吹", "防冷风", "舒适风", "自然风", "风不吹人", "沐浴风"),
+            support_param_codes=("comfort_airflow_flag", "airflow_volume_m3h"),
+            support_keywords=("舒适风", "柔风"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_quiet_sleep",
+            "静音睡眠",
+            "airflow_comfort",
+            "quiet_sleep",
+            ("静音", "低噪", "轻音", "超静音", "\\d+\\s*d?b", "睡眠", "安睡", "静眠"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_precision_temperature_control",
+            "精准控温/恒温",
+            "airflow_comfort",
+            "temperature_precision",
+            ("0\\.5°?c", "±0\\.5", "精准控温", "精确控温", "恒温", "衡温", "温控"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_humidity_dehumidification",
+            "除湿/温湿双控",
+            "health_clean_air",
+            "humidity_control",
+            ("除湿", "温湿双控", "湿度", "控湿", "防潮", "干爽"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_fresh_air",
+            "新风换气",
+            "health_clean_air",
+            "fresh_air",
+            ("新风", "鲜氧", "换气"),
+            support_param_codes=("fresh_air_flag",),
+            support_keywords=("新风",),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_purification_antibacterial",
+            "净化/除菌/抗菌",
+            "health_clean_air",
+            "purification_antibacterial",
+            ("净化", "除pm2\\.5", "pm2\\.5", "抗病毒", "除菌", "杀菌", "抑菌", "抗菌", "防霉", "净菌"),
+            support_param_codes=("purification_flag",),
+            support_keywords=("净化",),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_self_cleaning",
+            "自清洁/自洁",
+            "health_clean_air",
+            "self_cleaning",
+            ("自清洁", "自洁", "56°?c", "水洗", "高温烘干", "蒸发器清洁", "内机清洁", "外机清洁", "易清洗", "可拆洗"),
+            support_param_codes=("self_cleaning_flag",),
+            support_keywords=("自清洁", "自洁"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_smart_app_voice_iot",
+            "APP/语音/IoT 智控",
+            "smart_control",
+            "remote_voice_iot",
+            ("app", "远程", "语音", "小爱", "米家", "wifi", "wi-fi", "蓝牙", "智控", "智能控制", "联动", "生态", "ota"),
+            support_param_codes=("wifi_control_flag", "voice_control_flag", "smart_sensing_flag"),
+            support_keywords=("wifi", "语音", "智能"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_installation_space_design",
+            "外观/空间适配",
+            "installation_design",
+            "space_design",
+            ("贴合", "节省空间", "高颜值", "外观", "圆柱", "纤薄", "简约", "融入家居", "占地"),
+            support_param_codes=("installation_type", "indoor_unit_dimensions_mm", "product_type_combo"),
+            support_keywords=("挂机", "柜机", "壁挂", "立式"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_durability_core_material",
+            "耐用品质/核心材料",
+            "durability_quality",
+            "core_material",
+            ("铜管", "耐腐蚀", "压缩机", "核心部件", "真材实料", "耐用", "缺氟保护", "液冷散热", "冷媒环", "双排"),
+            claim_kind="product_function",
+        ),
+        _claim(
+            "ac_claim_warranty_install_service",
+            "包修/安装/售后服务",
+            "service_fulfillment",
+            "service",
+            ("包修", "保修", "质保", "售后", "安装", "免费安装", "以旧换新", "服务"),
+            support_required=False,
+            service_separate=True,
+            claim_kind="service_fulfillment",
+        ),
+        _claim(
+            "ac_claim_authority_sales_certification",
+            "行业背书/认证/销量",
+            "authority",
+            "certification_sales",
+            ("行业", "认证", "top", "热销", "销量", "满意度", "专利", "国家", "领先", "榜"),
+            support_required=False,
+            claim_kind="authority",
+        ),
+        _claim(
+            "ac_claim_price_value_subsidy",
+            "价格/补贴/性价比",
+            "price_value",
+            "subsidy_value",
+            ("性价比", "补贴", "划算", "省钱", "电费", "成本", "入门", "同价位", "价格"),
+            support_required=False,
+            claim_kind="market_position",
+        ),
+    )
+    positions = (
+        _position("energy_efficiency", "energy_ai_saving_leader", "AI 省电领先型", 40, "AI 省电算法与能效/APF 卖点同时出现。"),
+        _position("energy_efficiency", "energy_high_efficiency", "高能效型", 30, "命中能效/APF/省电，且有能效参数支撑。"),
+        _position("energy_efficiency", "energy_basic_saving_mentioned", "基础节能提及型", 10, "只出现节能/省电表达，参数支撑不足。"),
+        _position("temperature_performance", "temperature_extreme_fast", "宽温速冷热型", 40, "宽温域和速冷速热同时出现。"),
+        _position("temperature_performance", "temperature_fast_response", "快速冷暖型", 30, "命中速冷速热，并有冷暖能力参数支撑。"),
+        _position("temperature_performance", "temperature_wide_reliable", "极端环境可靠型", 20, "命中宽温域或极端温度运行。"),
+        _position("temperature_performance", "temperature_basic", "基础冷暖提及型", 10, "只出现普通制冷制热表达。"),
+        _position("airflow_comfort", "airflow_comfort_full", "大风量柔风静音复合型", 40, "大风量、柔风/防直吹、静音、精准控温中至少三类出现。"),
+        _position("airflow_comfort", "airflow_large_coverage", "大风量全屋覆盖型", 30, "命中大风量/全域送风，并有循环风量参数。"),
+        _position("airflow_comfort", "airflow_soft_sleep", "柔风静音睡眠型", 20, "柔风/防直吹与静音睡眠同时出现。"),
+        _position("airflow_comfort", "airflow_basic", "基础送风提及型", 10, "有送风舒适表达但缺少复合支撑。"),
+        _position("health_clean_air", "health_self_clean_purify", "自清洁净化复合型", 40, "自清洁与净化/除菌同时出现。"),
+        _position("health_clean_air", "health_fresh_air", "新风健康型", 35, "命中新风换气。"),
+        _position("health_clean_air", "health_self_clean", "自清洁型", 25, "命中自清洁/自洁。"),
+        _position("health_clean_air", "health_purification", "净化抗菌型", 20, "命中净化/除菌/抗菌。"),
+        _position("health_clean_air", "health_humidity_control", "除湿控湿型", 15, "命中除湿或温湿双控。"),
+        _position("smart_control", "smart_iot_voice_full", "IoT 语音全链路型", 30, "APP/远程、语音、生态联动多类表达同时出现。"),
+        _position("smart_control", "smart_remote_control", "远程智控型", 20, "命中 APP/WiFi/蓝牙远程控制。"),
+        _position("smart_control", "smart_basic", "基础智能提及型", 10, "只有普通智能/智控表达。"),
+        _position("installation_design", "installation_space_design", "外观空间适配型", 10, "命中外观、空间占用或家居适配表达。"),
+        _position("durability_quality", "durability_core_quality", "耐用品质型", 10, "命中核心材料、压缩机、铜管或保护机制表达。"),
+        _position("authority", "authority_certified_sales", "认证销量背书型", 10, "命中认证、销量、TOP、满意度或行业领先。"),
+        _position("price_value", "price_subsidy_value", "补贴性价比表达型", 10, "命中补贴、性价比、同价位或省钱表达。"),
+    )
+    return M04CClaimTaxonomy(
+        taxonomy_version=CORE3_M04C_AC_TAXONOMY_VERSION,
+        product_category="AC",
+        product_category_label_cn="空调",
+        raw_category_label_cn="空调",
+        sku_code_prefix="AC",
+        claims=claims,
+        positions=positions,
+    )
+
+
 class M04CTaxonomyLoader:
     def load(self, taxonomy_version: str, *, product_category: str = "TV") -> M04CClaimTaxonomy:
         normalized = str(product_category or "TV").upper()
         if normalized == "TV" and taxonomy_version == CORE3_M04C_TV_TAXONOMY_VERSION:
             return tv_claim_taxonomy_v0_1()
+        if normalized == "AC" and taxonomy_version == CORE3_M04C_AC_TAXONOMY_VERSION:
+            return ac_claim_taxonomy_v0_1()
         raise ValueError(f"{product_category} 标准卖点 taxonomy 未发布，不能生成 M04C 卖点事实画像。")
 
 
@@ -851,7 +1061,11 @@ class M04CService:
             input_source=input_source,
             target_sku_codes=target_sku_codes,
         )
-        param_profiles = self._read_param_profiles(batch_id, sku_codes=sorted({record.sku_code for record in records}))
+        param_profiles = self._read_param_profiles(
+            batch_id,
+            sku_codes=sorted({record.sku_code for record in records}),
+            product_category=taxonomy.product_category,
+        )
         profiles, facts, positions, coverages, summary = M04CProfileBuilder(
             project_id=self.context.project_id,
             category_code=self.context.category_code.value,
@@ -920,15 +1134,16 @@ class M04CService:
         )
         return records, INPUT_SOURCE_RAW
 
-    def _read_param_profiles(self, batch_id: str, *, sku_codes: Sequence[str]) -> dict[str, entities.Core3SkuParamProfile]:
+    def _read_param_profiles(self, batch_id: str, *, sku_codes: Sequence[str], product_category: str = "TV") -> dict[str, entities.Core3SkuParamProfile]:
         if not sku_codes:
             return {}
+        param_rule_version = CORE3_M03B_AC_RULE_VERSION if str(product_category or "").upper() == "AC" else CORE3_M03B_RULE_VERSION
         stmt = (
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.context.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.context.category_code.value)
             .where(entities.Core3SkuParamProfile.batch_id == batch_id)
-            .where(entities.Core3SkuParamProfile.rule_version == CORE3_M03B_RULE_VERSION)
+            .where(entities.Core3SkuParamProfile.rule_version == param_rule_version)
             .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
             .order_by(entities.Core3SkuParamProfile.updated_at.desc(), entities.Core3SkuParamProfile.created_at.desc())
         )
@@ -1537,6 +1752,14 @@ def _entry_supports_claim(param_code: str, entry: Mapping[str, Any], claim: M04C
     if param_code == "local_dimming_zone_count":
         numeric = _to_decimal(numeric_value)
         return numeric is not None and numeric > Decimal("0")
+    if claim.claim_code == "ac_claim_energy_efficiency_apf" and param_code == "energy_grade_normalized":
+        return any(keyword in value_text for keyword in ("一级", "1级", "新一级", "1"))
+    if claim.claim_code == "ac_claim_energy_efficiency_apf" and param_code == "energy_efficiency_ratio":
+        numeric = _to_decimal(numeric_value)
+        return numeric is not None and numeric > Decimal("0")
+    if claim.claim_code == "ac_claim_large_airflow_coverage" and param_code == "airflow_volume_m3h":
+        numeric = _to_decimal(numeric_value)
+        return numeric is not None and numeric > Decimal("0")
     if isinstance(normalized_value, bool):
         return normalized_value
     if isinstance(normalized_value, (int, float, Decimal)):
@@ -1631,6 +1854,57 @@ def _position_for_dimension(dimension_code: str, claim_codes: set[str]) -> str |
             return "energy_value_efficient"
         if "tv_claim_value_price" in claim_codes:
             return "price_value_mentioned"
+    if dimension_code == "energy_efficiency":
+        if {"ac_claim_ai_energy_saving", "ac_claim_energy_efficiency_apf"}.issubset(claim_codes):
+            return "energy_ai_saving_leader"
+        if "ac_claim_energy_efficiency_apf" in claim_codes:
+            return "energy_high_efficiency"
+        return "energy_basic_saving_mentioned"
+    if dimension_code == "temperature_performance":
+        if {"ac_claim_wide_temperature_operation", "ac_claim_fast_cooling_heating"}.issubset(claim_codes):
+            return "temperature_extreme_fast"
+        if "ac_claim_fast_cooling_heating" in claim_codes:
+            return "temperature_fast_response"
+        if "ac_claim_wide_temperature_operation" in claim_codes:
+            return "temperature_wide_reliable"
+        return "temperature_basic"
+    if dimension_code == "airflow_comfort":
+        airflow_codes = {
+            "ac_claim_large_airflow_coverage",
+            "ac_claim_soft_wind_no_direct",
+            "ac_claim_quiet_sleep",
+            "ac_claim_precision_temperature_control",
+        }
+        if len(claim_codes & airflow_codes) >= 3:
+            return "airflow_comfort_full"
+        if "ac_claim_large_airflow_coverage" in claim_codes:
+            return "airflow_large_coverage"
+        if {"ac_claim_soft_wind_no_direct", "ac_claim_quiet_sleep"}.issubset(claim_codes):
+            return "airflow_soft_sleep"
+        return "airflow_basic"
+    if dimension_code == "health_clean_air":
+        if {"ac_claim_self_cleaning", "ac_claim_purification_antibacterial"}.issubset(claim_codes):
+            return "health_self_clean_purify"
+        if "ac_claim_fresh_air" in claim_codes:
+            return "health_fresh_air"
+        if "ac_claim_self_cleaning" in claim_codes:
+            return "health_self_clean"
+        if "ac_claim_purification_antibacterial" in claim_codes:
+            return "health_purification"
+        if "ac_claim_humidity_dehumidification" in claim_codes:
+            return "health_humidity_control"
+    if dimension_code == "smart_control":
+        if "ac_claim_smart_app_voice_iot" in claim_codes:
+            return "smart_remote_control"
+        return "smart_basic"
+    if dimension_code == "installation_design":
+        return "installation_space_design"
+    if dimension_code == "durability_quality":
+        return "durability_core_quality"
+    if dimension_code == "authority":
+        return "authority_certified_sales"
+    if dimension_code == "price_value":
+        return "price_subsidy_value"
     return None
 
 

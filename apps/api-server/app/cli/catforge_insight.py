@@ -23,6 +23,8 @@ from app.models import entities
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
@@ -42,7 +44,7 @@ from app.services.core3_real_data.m03b_param_profile_service import (
     ac_param_taxonomy_v0_1,
     tv_param_taxonomy_v0_1,
 )
-from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, tv_claim_taxonomy_v0_1
+from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, ac_claim_taxonomy_v0_1, tv_claim_taxonomy_v0_1
 from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CCommentTaxonomy, tv_comment_fact_taxonomy_v0_1
 from app.services.core3_real_data.m09c_user_task_service import M09CUserTaskTaxonomy, tv_user_task_taxonomy_v0_1
 from app.services.core3_real_data.m10c_target_group_service import M10CTargetGroupTaxonomy, tv_target_group_taxonomy_v0_1
@@ -85,9 +87,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "rule_version": CORE3_M03B_AC_RULE_VERSION,
         "sku_prefix": "AC",
         "taxonomy_factory": ac_param_taxonomy_v0_1,
-        "claim_rule_version": None,
-        "claim_taxonomy_version": None,
-        "claim_taxonomy_factory": None,
+        "claim_rule_version": CORE3_M04C_AC_RULE_VERSION,
+        "claim_taxonomy_version": CORE3_M04C_AC_TAXONOMY_VERSION,
+        "claim_taxonomy_factory": ac_claim_taxonomy_v0_1,
         "comment_rule_version": None,
         "comment_taxonomy_version": None,
         "comment_taxonomy_factory": None,
@@ -3012,7 +3014,7 @@ def answer_natural_language(
             result = query_claim_taxonomy(
                 product_category=resolved_product_category,
                 dimension=None,
-                search=extract_claim_taxonomy_search(question),
+                search=extract_claim_taxonomy_search(question, product_category=resolved_product_category),
             )
             result["routed_command"] = "claim-taxonomy"
             return result
@@ -4906,13 +4908,13 @@ def extract_taxonomy_search(question: str, *, product_category: str = "TV") -> s
     return None
 
 
-def extract_claim_taxonomy_search(question: str) -> str | None:
+def extract_claim_taxonomy_search(question: str, *, product_category: str = "TV") -> str | None:
     for marker in ("查", "看", "搜索"):
         if marker in question:
             tail = question.split(marker, 1)[1].strip()
             for suffix in ("标准卖点", "卖点分类", "卖点维度", "卖点体系"):
                 tail = tail.replace(suffix, "").strip()
-            category_words = {"彩电", "电视", "tv"}
+            category_words = {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
             return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
     return None
 

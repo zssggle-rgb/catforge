@@ -7,6 +7,7 @@ from enum import StrEnum
 
 class Core3CategoryCode(StrEnum):
     TV = "TV"
+    AC = "AC"
 
 
 class Core3ModuleCode(StrEnum):
@@ -353,6 +354,8 @@ CORE3_M04A_RULE_VERSION = "m04a_claim_activation_v1"
 CORE3_M04C_MODULE_VERSION = "m04c-claim-fact-profile-0.1.0"
 CORE3_M04C_TV_TAXONOMY_VERSION = "tv_claim_taxonomy_manual_v0.1"
 CORE3_M04C_TV_RULE_VERSION = "m04c_tv_claim_fact_profile_v0.1"
+CORE3_M04C_AC_TAXONOMY_VERSION = "ac_claim_taxonomy_manual_v0.1"
+CORE3_M04C_AC_RULE_VERSION = "m04c_ac_claim_fact_profile_v0.1"
 CORE3_M05_MODULE_VERSION = "m05-comment-evidence-0.1.0"
 CORE3_M05_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M05_RULE_VERSION = "m05_comment_evidence_v1"

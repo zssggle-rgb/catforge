@@ -8,7 +8,10 @@ from sqlalchemy.pool import StaticPool
 from app.cli import catforge_insight
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
     Core3SourceBatchStatus,
@@ -144,6 +147,98 @@ def promo_evidence(evidence_id: str, claim_text: str, *, evidence_type: str = "p
     )
 
 
+def ac_promo_evidence(evidence_id: str, claim_text: str, *, sku_code: str = "AC00000001") -> entities.Core3EvidenceAtom:
+    return entities.Core3EvidenceAtom(
+        evidence_id=evidence_id,
+        evidence_key=evidence_id,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        sku_code=sku_code,
+        model_name="KFR-35GW-Test",
+        brand_name="测试空调",
+        evidence_type="promo_sentence",
+        evidence_grain="sentence",
+        evidence_field="卖点",
+        source_table="selling_points_data",
+        source_pk=evidence_id,
+        source_row_id=evidence_id,
+        clean_table="core3_clean_claim_sentence",
+        clean_record_key=evidence_id,
+        clean_hash=f"sha256:{evidence_id}",
+        clean_version="m01-cleaning-quality-0.1.0",
+        raw_field="selling_point",
+        raw_value=claim_text,
+        clean_field="claim_sentence",
+        clean_value=claim_text,
+        text_value=claim_text,
+        sentence_seq=1,
+        quality_status="ok",
+        quality_flags=[],
+        base_confidence=Decimal("0.9000"),
+        confidence_level="high",
+        evidence_payload_json={},
+        evidence_status="current",
+    )
+
+
+def seed_ac_claim_inputs(session: Session) -> None:
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id="param-profile-ac-00001",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code="AC00000001",
+            model_name="KFR-35GW-Test",
+            param_values_json={
+                "energy_grade_normalized": {"normalized_value": "一级", "value_text": "新一级", "value_presence": "present"},
+                "energy_efficiency_ratio": {"normalized_value": 5.3, "numeric_value": 5.3, "value_presence": "present"},
+                "inverter_flag": {"normalized_value": True, "value_presence": "present"},
+                "cooling_capacity_w": {"normalized_value": 3500, "numeric_value": 3500, "value_presence": "present"},
+                "heating_capacity_w": {"normalized_value": 5000, "numeric_value": 5000, "value_presence": "present"},
+                "horsepower_hp": {"normalized_value": 1.5, "numeric_value": 1.5, "value_presence": "present"},
+                "heat_cool_mode": {"normalized_value": "冷暖", "value_text": "冷暖", "value_presence": "present"},
+                "airflow_volume_m3h": {"normalized_value": 800, "numeric_value": 800, "value_presence": "present"},
+                "comfort_airflow_flag": {"normalized_value": True, "value_text": "舒适风", "value_presence": "present"},
+                "fresh_air_flag": {"normalized_value": True, "value_text": "新风", "value_presence": "present"},
+                "purification_flag": {"normalized_value": True, "value_text": "净化", "value_presence": "present"},
+                "self_cleaning_flag": {"normalized_value": True, "value_text": "自清洁", "value_presence": "present"},
+                "wifi_control_flag": {"normalized_value": True, "value_text": "WiFi", "value_presence": "present"},
+                "voice_control_flag": {"normalized_value": True, "value_text": "语音", "value_presence": "present"},
+                "smart_sensing_flag": {"normalized_value": True, "value_text": "智能感应", "value_presence": "present"},
+                "installation_type": {"normalized_value": "wall_mounted", "value_text": "挂机", "value_presence": "present"},
+                "indoor_unit_dimensions_mm": {"normalized_value": {"width": 885, "height": 293, "depth": 196}, "value_presence": "present"},
+                "product_type_combo": {"normalized_value": "挂机冷暖", "value_text": "挂机冷暖", "value_presence": "present"},
+            },
+            core_picture_params_json={},
+            core_gaming_params_json={},
+            core_system_params_json={},
+            core_eye_care_params_json={},
+            param_completeness=Decimal("0.900000"),
+            known_param_count=18,
+            unknown_param_count=0,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=[],
+            quality_summary_json={"taxonomy_category_code": "AC"},
+            profile_hash="sha256:test-ac-param-profile",
+            seed_version="ac_param_taxonomy_manual_v0.1",
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
+        )
+    )
+    session.add_all(
+        [
+            ac_promo_evidence(
+                "ev_ac_claim_full",
+                "新一级能效 APF5.3 30秒速冷 60秒速热 800m3/h大风量 柔风不直吹 56°C自清洁 新风净化 APP远程语音智控",
+            ),
+            ac_promo_evidence("ev_ac_claim_service", "10年整机包修 基础安装免费 售后无忧"),
+        ]
+    )
+    session.commit()
+
+
 def test_m04c_runner_generates_claim_fact_profile_and_service_separation():
     session = make_session()
 
@@ -237,3 +332,66 @@ def test_m04c_insight_queries_claim_profile_taxonomy_and_coverage():
     assert coverage["coverages"][0]["sku_codes"] == [SKU_CODE]
     assert natural["routed_command"] == "sku-claim-profile"
     assert natural["sku"]["sku_code"] == SKU_CODE
+
+
+def test_ac_claim_taxonomy_query_is_published():
+    taxonomy = catforge_insight.query_claim_taxonomy(product_category="AC", search="自清洁")
+    natural = catforge_insight.answer_natural_language(
+        make_session(),
+        question="查空调标准卖点",
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="auto",
+        output_format="json",
+        sku_limit=10,
+    )
+
+    assert taxonomy["taxonomy_version"] == CORE3_M04C_AC_TAXONOMY_VERSION
+    assert taxonomy["total_claim_count"] == 18
+    assert any(item["claim_code"] == "ac_claim_self_cleaning" for item in taxonomy["claims"])
+    assert natural["category_code"] == "AC"
+    assert natural["taxonomy_version"] == CORE3_M04C_AC_TAXONOMY_VERSION
+    assert any(item["claim_code"] == "ac_claim_energy_efficiency_apf" for item in natural["claims"])
+
+
+def test_m04c_runner_generates_ac_claim_fact_profile():
+    session = make_session()
+    seed_ac_claim_inputs(session)
+
+    result = M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="AC",
+        taxonomy_version=CORE3_M04C_AC_TAXONOMY_VERSION,
+        rule_version=CORE3_M04C_AC_RULE_VERSION,
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status == "success"
+    assert result.summary_json["taxonomy_version"] == CORE3_M04C_AC_TAXONOMY_VERSION
+    assert result.summary_json["sku_profile_count"] == 1
+    assert result.summary_json["service_separate_claim_count"] == 1
+    assert result.summary_json["fact_claim_count"] >= 7
+
+    profile = session.execute(
+        select(entities.Core3SkuClaimFactProfile).where(entities.Core3SkuClaimFactProfile.product_category == "AC")
+    ).scalar_one()
+    assert profile.rule_version == CORE3_M04C_AC_RULE_VERSION
+    assert "ac_claim_warranty_install_service" in profile.service_claim_codes
+    assert profile.dimension_position_profile_json["supported:energy_efficiency"]["position_code"] == "energy_high_efficiency"
+    assert profile.dimension_position_profile_json["supported:health_clean_air"]["position_code"] == "health_self_clean_purify"
+
+    service_fact = session.execute(
+        select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.claim_code == "ac_claim_warranty_install_service")
+    ).scalar_one()
+    assert service_fact.service_separate_flag is True
+    assert service_fact.fact_claim_flag is False
+
+    energy_fact = session.execute(
+        select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.claim_code == "ac_claim_energy_efficiency_apf")
+    ).scalar_one()
+    assert energy_fact.param_support_status == "supported"
