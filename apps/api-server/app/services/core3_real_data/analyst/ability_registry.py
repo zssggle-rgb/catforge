@@ -126,7 +126,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="claim-contribution",
         ability_type="atom",
-        description_cn="查询单 SKU 在不同市场/语义上下文中的卖点贡献归因，解释哪些卖点支撑价格和销量表现。",
+        description_cn="查询单 SKU 在不同市场场景中的卖点商业价值分析，解释哪些卖点支撑价格和销量表现。",
         required_inputs=("sku_code|query",),
         optional_inputs=("dimension_type", "dimension_code", "size_tier", "price_band", "limit"),
         source_modules=("M12C",),

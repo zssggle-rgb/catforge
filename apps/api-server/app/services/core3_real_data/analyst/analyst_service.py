@@ -193,7 +193,7 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
         command = "claim-opportunity-gaps"
         matched_rule = "claim_opportunity_gaps"
         confidence = "high" if _has_sku_target(routing_params) else "medium"
-    elif re.search(r"卖点.*贡献|贡献归因|支撑.*定价|支撑.*销量|贵.*卖点", normalized):
+    elif re.search(r"卖点.*贡献|贡献归因|卖点.*商业价值|支撑.*定价|支撑.*销量|贵.*卖点", normalized):
         command = "claim-contribution"
         matched_rule = "claim_contribution"
         confidence = "high" if _has_sku_target(routing_params) else "medium"

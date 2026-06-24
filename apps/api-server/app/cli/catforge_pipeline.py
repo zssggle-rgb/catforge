@@ -1981,7 +1981,7 @@ def should_run_claim_value_quantification(question: str) -> bool:
     normalized = normalize_token(question)
     if "m12c" in normalized:
         return True
-    if not any(term in question for term in ("卖点价值量化", "卖点贡献归因", "卖点价值", "卖点贡献", "溢价卖点量化")):
+    if not any(term in question for term in ("卖点价值量化", "卖点商业价值", "卖点贡献归因", "卖点价值", "卖点贡献", "溢价卖点量化")):
         return False
     return any(
         word in normalized
@@ -2246,7 +2246,7 @@ def render_text(result: dict[str, Any]) -> str:
         job_name = "SKU 评论事实画像批量并行"
         input_label = "调度 SKU"
     elif is_claim_value_quantification:
-        job_name = "卖点价值量化与贡献归因"
+        job_name = "卖点价值量化与商业价值分析"
         input_label = "输入 SKU"
     elif is_market_profile:
         job_name = "SKU 市场画像"

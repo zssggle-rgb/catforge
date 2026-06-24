@@ -583,9 +583,9 @@ class AtomicAnalystHandlers:
                 {"ability_code": "claim-contribution", "status": "not_found" if missing else "ok"},
             ],
             evidence=[{"source_module": "M12C", "row_count": payload.get("attribution_count", 0)}],
-            limitations=["目标 SKU 没有 M12C 卖点贡献归因结果，请先执行 M12C。"] if missing else [],
-            answer_outline=[f"已返回 {candidate.sku_code} 的卖点贡献归因结果。"] if not missing else [],
-            message_cn="目标 SKU 没有 M12C 卖点贡献归因结果。" if missing else None,
+            limitations=["目标 SKU 没有 M12C 卖点商业价值分析结果，请先执行 M12C。"] if missing else [],
+            answer_outline=[f"已返回 {candidate.sku_code} 的卖点商业价值分析结果。"] if not missing else [],
+            message_cn="目标 SKU 没有 M12C 卖点商业价值分析结果。" if missing else None,
         )
 
     def claim_opportunity_gaps(

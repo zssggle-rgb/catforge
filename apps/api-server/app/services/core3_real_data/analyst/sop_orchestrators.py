@@ -648,7 +648,7 @@ def _premium_claim_driver_payload(
         "comment_support": comment_support,
         "opportunity_gaps": (gaps.get("result") or {}).get("opportunity_gaps") or {},
         "primary_battlefield_space": (primary_space.get("result") or {}) if primary_space else {},
-        "method_note_cn": "优先采用 M12C 在同尺寸价格带与语义上下文中的可观测卖点价值量化；如 M12C 未生成，则保留事实卖点、评论支撑和主/辅战场交叉结果作为候选判断。",
+        "method_note_cn": "优先采用 M12C 在同尺寸价格带与市场场景中的可观测卖点价值量化；如 M12C 未生成，则保留事实卖点、评论支撑和主/辅战场交叉结果作为候选判断。",
     }
 
 

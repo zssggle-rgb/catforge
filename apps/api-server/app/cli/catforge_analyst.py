@@ -1165,7 +1165,7 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
 def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     target = result.get("target") or {}
     payload = ((result.get("result") or {}).get("sku_claim_value") or {})
-    rows = payload.get("claim_values") or []
+    rows = _dedupe_claim_value_cli_rows(payload.get("claim_values") or [])
     if not rows:
         return result.get("message_cn") or "当前 SKU 没有 M12C 卖点价值量化结果。"
     lines = [f"{_brand_model(target)} 的卖点价值量化结果："]
@@ -1174,15 +1174,37 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
         pool_effect = row.get("pool_effect") or {}
         sku_excess = row.get("sku_excess_explanation") or {}
         label = row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))
+        market_contexts = row.get("market_contexts") or []
+        context_text = "、".join(str(item) for item in market_contexts[:3] if item) or row.get("context_name") or row.get("context_code")
         lines.append(
             f"- {row.get('claim_name') or row.get('claim_code')}：{label}；"
-            f"可比池价格差异约{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}；"
-            f"可比池周均销量差异约{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台；"
-            f"本品超额价格解释份额约{_format_money(sku_excess.get('sku_excess_price_explained_abs') or contribution.get('price_premium_abs')) or '0元'}；"
-            f"上下文：{row.get('context_name') or row.get('context_code')}。"
+            f"可比产品价格差异约{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}；"
+            f"可比产品周均销量差异约{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台；"
+            f"本品可解释价差份额约{_format_money(sku_excess.get('sku_excess_price_explained_abs') or contribution.get('price_premium_abs')) or '0元'}；"
+            f"市场场景：{context_text or '当前可比市场'}。"
         )
-    lines.append("说明：可比池差异是有卖点组与对照组的可观测差异；本品超额解释份额是解释性分摊，不是单一卖点因果增量。")
+    lines.append("说明：可比产品差异是有卖点组与对照组的可观测差异；本品可解释价差份额是解释性分摊，不是单一卖点因果增量。")
     return "\n".join(lines)
+
+
+def _dedupe_claim_value_cli_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("claim_code") or row.get("claim_name") or "")
+        if not key:
+            key = f"claim-{len(deduped)}"
+        context = str(row.get("context_name") or row.get("context_code") or "").strip()
+        if key not in deduped:
+            item = dict(row)
+            item["market_contexts"] = [context] if context else []
+            deduped[key] = item
+            continue
+        contexts = deduped[key].setdefault("market_contexts", [])
+        if context and context not in contexts:
+            contexts.append(context)
+    return list(deduped.values())
 
 
 def _format_claim_contribution_text(result: dict[str, Any]) -> str:
@@ -1190,18 +1212,18 @@ def _format_claim_contribution_text(result: dict[str, Any]) -> str:
     payload = ((result.get("result") or {}).get("claim_contribution") or {})
     rows = payload.get("attributions") or []
     if not rows:
-        return result.get("message_cn") or "当前 SKU 没有 M12C 卖点贡献归因结果。"
-    lines = [f"{_brand_model(target)} 的卖点贡献归因："]
+        return result.get("message_cn") or "当前 SKU 没有 M12C 卖点商业价值分析结果。"
+    lines = [f"{_brand_model(target)} 的卖点商业价值分析："]
     for row in rows[:8]:
         gap = row.get("sku_gap_vs_baseline") or {}
         positives = row.get("positive_claims") or []
         names = "、".join(str(item.get("claim_name") or item.get("claim_code")) for item in positives[:4]) or "未形成高置信正向卖点"
         lines.append(
             f"- {row.get('context_name') or row.get('context_code')}：{names}；"
-            f"相对池基准价格差约{_format_money(gap.get('price_premium_abs')) or '0元'}；"
+            f"相对可比产品基准价格差约{_format_money(gap.get('price_premium_abs')) or '0元'}；"
             f"周均销量差约{_format_volume(gap.get('weekly_sales_lift_abs')) or '0'}台。"
         )
-    lines.append("说明：归因结果用于解释本品相对同池基准的可观测超额表现，不可直接视为因果增量。")
+    lines.append("说明：该结果用于解释本品相对可比产品基准的可观测表现差异，不可直接视为因果增量。")
     return "\n".join(lines)
 
 

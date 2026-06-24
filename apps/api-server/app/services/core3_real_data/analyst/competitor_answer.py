@@ -688,8 +688,21 @@ def _product_comparison_lines(
     lines.extend(
         _comparison_table_lines(
             products,
-            ["Top5 卖点价值", "强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点", "用户感知不足/拖后腿", "高价竞品拦截/上探机会"],
+            [
+                "Top5 核心卖点商业价值",
+                "价格溢价卖点",
+                "销量驱动卖点",
+                "基础门槛卖点",
+                "组合型增值卖点",
+                "竞品拦截与补强建议",
+                "卖点有效市场",
+                "可比产品价格差异",
+                "可比产品销量差异",
+                "本品可解释价差份额",
+                "证据支撑强度",
+            ],
             _claim_value_comparison_values,
+            skip_empty_rows=True,
         )
     )
     lines.extend(["", _claim_value_footnote()])
@@ -734,6 +747,8 @@ def _comparison_table_lines(
     products: list[dict[str, Any]],
     row_labels: list[str],
     value_builder: Any,
+    *,
+    skip_empty_rows: bool = False,
 ) -> list[str]:
     value_maps = [value_builder(product) for product in products]
     lines = [
@@ -741,9 +756,17 @@ def _comparison_table_lines(
         "| --- | " + " | ".join("---" for _product in products) + " |",
     ]
     for label in row_labels:
-        values = [_markdown_cell(values.get(label) or "暂无稳定证据") for values in value_maps]
+        raw_values = [values.get(label) for values in value_maps]
+        if skip_empty_rows and all(_is_empty_claim_value_cell(value) for value in raw_values):
+            continue
+        values = [_markdown_cell(value if value else "未形成稳定量化证据") for value in raw_values]
         lines.append("| " + " | ".join([_markdown_cell(label), *values]) + " |")
     return lines
+
+
+def _is_empty_claim_value_cell(value: Any) -> bool:
+    text = str(value or "").strip()
+    return not text or text in {"暂无稳定证据", "未形成稳定量化证据"}
 
 
 def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
@@ -920,8 +943,39 @@ def _claim_value_rows_with_index(payload: dict[str, Any]) -> list[dict[str, Any]
         row["claim_premium_index"] = row["claim_value_index"]
         row["business_value_label"] = label
         row.setdefault("business_value_meaning_cn", _claim_business_meaning(label))
-    return sorted(
+    sorted_rows = sorted(
         rows,
+        key=lambda row: (
+            -int(row.get("claim_value_index") or 0),
+            str(row.get("claim_name") or row.get("claim_code") or ""),
+        ),
+    )
+    return _dedupe_claim_value_rows(sorted_rows)
+
+
+def _dedupe_claim_value_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        key = str(row.get("claim_code") or row.get("claim_name") or "")
+        if not key:
+            key = f"claim-{len(deduped)}"
+        context = _claim_context_text(row)
+        if key not in deduped:
+            item = dict(row)
+            item["market_contexts"] = [context] if context else []
+            item["value_role_labels"] = [str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))]
+            deduped[key] = item
+            continue
+        item = deduped[key]
+        contexts = item.setdefault("market_contexts", [])
+        if context and context not in contexts:
+            contexts.append(context)
+        labels = item.setdefault("value_role_labels", [])
+        label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+        if label and label not in labels:
+            labels.append(label)
+    return sorted(
+        deduped.values(),
         key=lambda row: (
             -int(row.get("claim_value_index") or 0),
             str(row.get("claim_name") or row.get("claim_code") or ""),
@@ -952,12 +1006,12 @@ def _claim_role_cn(value: Any) -> str:
 
 def _claim_business_meaning(label: str) -> str:
     return {
-        "强溢价卖点": "同池有卖点组价格更高，能支撑更高定价解释",
-        "强销量卖点": "价格不一定更高，但更能解释同池周均销量或销额优势",
-        "基础门槛卖点": "同池普遍具备，有了不加价，缺了会掉队",
+        "强溢价卖点": "可比产品中具备该卖点的一组 SKU 价格更高，能支撑更高定价解释",
+        "强销量卖点": "价格不一定更高，但更能解释可比产品中的周均销量或销额优势",
+        "基础门槛卖点": "可比产品普遍具备，有了不加价，缺失会削弱入围资格",
         "组合型增值卖点": "单点不一定独立溢价，但与一组高价值卖点组合后支撑高端解释",
         "用户感知不足卖点": "参数或卖点存在，但评论验证弱、负向明显，或弱于高价竞品",
-        "高价竞品拦截卖点": "同池高价竞品具备并能成交，本品缺失、表达弱或评论弱",
+        "高价竞品拦截卖点": "可比高价竞品具备并能成交，本品缺失、表达弱或评论弱",
         "价格上探机会卖点": "高价 SKU 反复具备且有市场价值，本品补强后可能提升上探空间",
         "拖后腿卖点": "厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群",
     }.get(label, "当前证据不足，需要结合样本和评论继续复核")
@@ -1013,19 +1067,58 @@ def _claim_value_label_text(rows: list[dict[str, Any]], *, limit: int = 5) -> st
         sales = _claim_pool_sales_text(pool.get("pool_claim_weekly_sales_delta_abs"))
         sku_price = _claim_sku_excess_price_text(row, sku_excess)
         if price:
-            parts.append(f"池价差{price}")
+            parts.append(f"可比价格差{price}")
         if sales:
-            parts.append(f"池销量差{sales}")
+            parts.append(f"可比销量差{sales}")
         if sku_price:
-            parts.append(f"本品解释份额{sku_price}")
+            parts.append(f"可解释价差份额{sku_price}")
         values.append("，".join(parts))
+    return "；".join(values)
+
+
+def _claim_effective_market_text(rows: list[dict[str, Any]], *, limit: int = 5) -> str:
+    markets: list[str] = []
+    for row in rows:
+        market = _claim_market_text(row)
+        if market and market not in markets:
+            markets.append(market)
+    return "；".join(markets[:limit])
+
+
+def _claim_value_pool_price_delta_text(rows: list[dict[str, Any]], *, limit: int = 5) -> str:
+    values: list[str] = []
+    for row in rows[:limit]:
+        values.append(f"{_claim_value_name(row)}：{_claim_pool_price_text(row)}")
+    return "；".join(values)
+
+
+def _claim_value_pool_sales_delta_text(rows: list[dict[str, Any]], *, limit: int = 5) -> str:
+    values: list[str] = []
+    for row in rows[:limit]:
+        pool = row.get("pool_effect") or {}
+        values.append(f"{_claim_value_name(row)}：{_claim_pool_sales_text(pool.get('pool_claim_weekly_sales_delta_abs'))}")
+    return "；".join(values)
+
+
+def _claim_value_sku_price_explain_text(rows: list[dict[str, Any]], *, limit: int = 5) -> str:
+    values: list[str] = []
+    for row in rows[:limit]:
+        sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+        values.append(f"{_claim_value_name(row)}：{_claim_sku_excess_price_text(row, sku_excess) or '不作为正向分摊'}")
+    return "；".join(values)
+
+
+def _claim_value_evidence_summary_text(rows: list[dict[str, Any]], *, limit: int = 5) -> str:
+    values: list[str] = []
+    for row in rows[:limit]:
+        values.append(f"{_claim_value_name(row)}：{_claim_evidence_status_text(row)}")
     return "；".join(values)
 
 
 def _claim_value_footnote() -> str:
     return (
-        "说明：可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异，不是单一卖点因果贡献；"
-        "本品超额解释份额是把本品高于同池基准的价格、销量、销额表现按卖点证据权重做解释性分摊，"
+        "说明：可比产品价格差异/销量差异是有卖点组与对照组的可观测差异，不是单一卖点因果贡献；"
+        "本品可解释价差份额和销量差份额，是把本品相对可比产品基准的价格、销量、销额表现按卖点证据权重做解释性分摊，"
         "不能理解为“一个卖点单独增加 X 元或 X 台/周”。"
     )
 
@@ -1035,7 +1128,7 @@ def _claim_value_reason_text(row: dict[str, Any]) -> str:
     reason = str(row.get("reason_cn") or "").strip()
     if reason and "价格溢价约" not in reason and "估算价格支撑" not in reason:
         return reason.replace("估算溢价卖点", "强溢价卖点").replace("估算销量卖点", "强销量卖点")
-    return f"{label}，依据来自可比池量价差异、参数/卖点证据、评论验证和语义上下文；数值用于排序和解释，不作单点因果归因。"
+    return f"{label}，依据来自可比产品量价差异、参数/卖点证据、评论验证，以及价值战场、用户任务和目标客群匹配；数值用于排序和解释，不作单点因果归因。"
 
 
 def _claim_pool_price_text(row: dict[str, Any]) -> str:
@@ -1049,6 +1142,11 @@ def _claim_pool_price_text(row: dict[str, Any]) -> str:
 def _claim_pool_sales_text(value: Any) -> str:
     formatted = _format_unit_count(value)
     return f"{formatted}台/周" if formatted else "未知"
+
+
+def _claim_pool_amount_text(value: Any) -> str:
+    formatted = _format_money(value)
+    return f"{formatted}/周" if formatted else "未知"
 
 
 def _claim_sku_excess_price_text(row: dict[str, Any], sku_excess: dict[str, Any]) -> str:
@@ -1067,7 +1165,83 @@ def _claim_sku_excess_sales_text(row: dict[str, Any], sku_excess: dict[str, Any]
 
 
 def _claim_context_text(row: dict[str, Any]) -> str:
-    return str(row.get("context_name") or row.get("context_code") or "当前可比语境")
+    return str(row.get("context_name") or row.get("context_code") or "当前可比市场")
+
+
+def _claim_market_text(row: dict[str, Any]) -> str:
+    contexts = [str(item) for item in row.get("market_contexts") or [] if item]
+    context_text = _join_cn(contexts[:3]) or _claim_context_text(row)
+    size_tier = SIZE_TIER_NAMES.get(str(row.get("size_tier") or ""), str(row.get("size_tier") or ""))
+    price_band = PRICE_BAND_NAMES.get(str(row.get("price_band_group") or ""), str(row.get("price_band_group") or ""))
+    market_pool = " × ".join(part for part in [size_tier, price_band] if part)
+    if market_pool and context_text:
+        return f"{market_pool}；{context_text}"
+    return market_pool or context_text or "当前可比市场"
+
+
+def _claim_evidence_status_text(row: dict[str, Any]) -> str:
+    evidence = row.get("evidence_strength") or {}
+    parts = []
+    for key, label in (("param", "参数"), ("comment", "评论"), ("semantic", "市场场景")):
+        level = _evidence_level_cn(evidence.get(key))
+        if level:
+            parts.append(f"{label}{level}")
+    return "，".join(parts) or "证据待补充"
+
+
+def _evidence_level_cn(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    if number >= Decimal("0.75"):
+        return "强"
+    if number >= Decimal("0.50"):
+        return "中"
+    if number > 0:
+        return "弱"
+    return "缺"
+
+
+def _claim_value_business_notes(rows: list[dict[str, Any]]) -> list[str]:
+    labels: list[str] = []
+    for row in rows:
+        label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+        if label and label not in labels:
+            labels.append(label)
+    lines: list[str] = []
+    if labels:
+        lines.append("业务类型说明：")
+        lines.extend([f"- {label}：{_claim_business_meaning(label)}。" for label in labels])
+    explanations = []
+    for row in rows[:5]:
+        explanations.append(f"- {_claim_value_name(row)}：{_claim_value_reason_text(row)}")
+    if explanations:
+        lines.extend(["", "卖点解释：", *explanations])
+    return lines
+
+
+def _claim_value_action_lines(rows: list[dict[str, Any]]) -> list[str]:
+    by_label: dict[str, list[str]] = {}
+    for row in rows:
+        label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+        by_label.setdefault(label, []).append(_claim_value_name(row))
+    actions: list[str] = []
+    premium = by_label.get("强溢价卖点", [])
+    sales = by_label.get("强销量卖点", [])
+    basic = by_label.get("基础门槛卖点", [])
+    weak = [*by_label.get("用户感知不足卖点", []), *by_label.get("拖后腿卖点", [])]
+    opportunity = [*by_label.get("高价竞品拦截卖点", []), *by_label.get("价格上探机会卖点", []), *by_label.get("机会缺口", [])]
+    if premium:
+        actions.append(f"- 价格溢价表达：{_join_cn(premium[:5])}，用于解释本品在可比产品中的高价理由。")
+    if sales:
+        actions.append(f"- 销量转化支撑：{_join_cn(sales[:5])}，用于强化用户选择理由和转化效率。")
+    if basic:
+        actions.append(f"- 基础门槛保持完整：{_join_cn(basic[:5])}，具备不一定加价，缺失会削弱入围资格。")
+    if weak:
+        actions.append(f"- 证据复核与表达降级：{_join_cn(weak[:5])}，避免把用户未认可的点包装成溢价点。")
+    if opportunity:
+        actions.append(f"- 竞品拦截与补强：{_join_cn(opportunity[:5])}，适合对标高价竞品补强参数、评论证据或详情页表达。")
+    return actions
 
 
 def _claim_fact_comparison_values(product: dict[str, Any]) -> dict[str, str]:
@@ -1093,16 +1267,7 @@ def _claim_fact_comparison_values(product: dict[str, Any]) -> dict[str, str]:
 def _claim_value_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     claim_value_rows = _claim_value_rows_with_index(product.get("claim_value") or {})
     if not claim_value_rows:
-        quantified_missing = "卖点价值量化待生成"
-        return {
-            "Top5 卖点价值": quantified_missing,
-            "强溢价卖点": quantified_missing,
-            "强销量卖点": quantified_missing,
-            "组合型增值卖点": quantified_missing,
-            "基础门槛卖点": quantified_missing,
-            "用户感知不足/拖后腿": quantified_missing,
-            "高价竞品拦截/上探机会": quantified_missing,
-        }
+        return {"Top5 核心卖点商业价值": "卖点价值量化待生成"}
     premium_rows = _claim_rows_by_business_label(claim_value_rows, "强溢价卖点")
     sales_rows = _claim_rows_by_business_label(claim_value_rows, "强销量卖点")
     bundle_rows = _claim_rows_by_business_label(claim_value_rows, "组合型增值卖点")
@@ -1110,13 +1275,17 @@ def _claim_value_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     weak_rows = _claim_rows_by_business_label(claim_value_rows, "用户感知不足卖点", "拖后腿卖点")
     intercept_rows = _claim_rows_by_business_label(claim_value_rows, "高价竞品拦截卖点", "价格上探机会卖点", "机会缺口")
     return {
-        "Top5 卖点价值": _claim_value_top_text(claim_value_rows, limit=5),
-        "强溢价卖点": _claim_value_label_text(premium_rows) or "暂无稳定证据",
-        "强销量卖点": _claim_value_label_text(sales_rows) or "暂无稳定证据",
-        "组合型增值卖点": _claim_value_label_text(bundle_rows) or "暂无稳定证据",
-        "基础门槛卖点": _claim_value_label_text(basic_rows) or "暂无稳定证据",
-        "用户感知不足/拖后腿": _claim_value_label_text(weak_rows) or "暂无稳定证据",
-        "高价竞品拦截/上探机会": _claim_value_label_text(intercept_rows) or "暂无稳定证据",
+        "Top5 核心卖点商业价值": _claim_value_top_text(claim_value_rows, limit=5),
+        "价格溢价卖点": _claim_value_label_text(premium_rows),
+        "销量驱动卖点": _claim_value_label_text(sales_rows),
+        "基础门槛卖点": _claim_value_label_text(basic_rows),
+        "组合型增值卖点": _claim_value_label_text(bundle_rows),
+        "竞品拦截与补强建议": _claim_value_label_text([*intercept_rows, *weak_rows]),
+        "卖点有效市场": _claim_effective_market_text(claim_value_rows),
+        "可比产品价格差异": _claim_value_pool_price_delta_text(claim_value_rows),
+        "可比产品销量差异": _claim_value_pool_sales_delta_text(claim_value_rows),
+        "本品可解释价差份额": _claim_value_sku_price_explain_text(claim_value_rows),
+        "证据支撑强度": _claim_value_evidence_summary_text(claim_value_rows),
     }
 
 
@@ -1285,14 +1454,14 @@ def _product_claim_value_quantification_lines(
     if not claim_rows:
         return ["卖点价值量化待生成。"]
     lines = [
-        "| 排名 | 卖点 | 业务类型 | 业务含义 | 可比池卖点价格差异 | 可比池卖点销量差异 | 本品超额价格解释份额 | 本品超额销量解释份额 | 值钱的市场 | 业务解释 |",
-        "| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 卖点 | 业务类型 | 业务含义 | 卖点有效市场 | 可比产品价格差异 | 可比产品销量差异 | 可比产品销额差异 | 本品可解释价差份额 | 本品可解释销量差份额 | 证据支撑强度 | 业务解释 |",
+        "| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    for index, row in enumerate(claim_rows[:5], start=1):
+    top_rows = claim_rows[:5]
+    for index, row in enumerate(top_rows, start=1):
         pool = row.get("pool_effect") or {}
         sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
         label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-        meaning = str(row.get("business_value_meaning_cn") or _claim_business_meaning(label))
         lines.append(
             "| "
             + " | ".join(
@@ -1300,12 +1469,14 @@ def _product_claim_value_quantification_lines(
                     str(index),
                     _claim_value_name(row),
                     label,
-                    meaning,
+                    _claim_business_meaning(label),
+                    _claim_market_text(row),
                     _claim_pool_price_text(row),
                     _claim_pool_sales_text(pool.get("pool_claim_weekly_sales_delta_abs")),
+                    _claim_pool_amount_text(pool.get("pool_claim_weekly_sales_amount_delta_abs")),
                     _claim_sku_excess_price_text(row, sku_excess) or "不作为正向分摊",
                     _claim_sku_excess_sales_text(row, sku_excess) or "不作为正向分摊",
-                    _claim_context_text(row),
+                    _claim_evidence_status_text(row),
                     _claim_value_reason_text(row),
                 ]
             )
@@ -1314,8 +1485,12 @@ def _product_claim_value_quantification_lines(
     attribution_payload = _extract_claim_contribution_payload(claim_contribution)
     attribution_lines = _claim_contribution_profile_lines(attribution_payload)
     lines.extend(["", _claim_value_footnote()])
+    lines.extend(["", *_claim_value_business_notes(top_rows)])
+    action_lines = _claim_value_action_lines(claim_rows)
+    if action_lines:
+        lines.extend(["", "竞品拦截与补强建议：", "", *action_lines])
     if attribution_lines:
-        lines.extend(["", "卖点贡献归因：", "", *attribution_lines])
+        lines.extend(["", "本品相对可比产品表现差异：", "", *attribution_lines])
     return lines
 
 
@@ -1323,13 +1498,13 @@ def _claim_contribution_profile_lines(payload: dict[str, Any]) -> list[str]:
     rows = [row for row in payload.get("attributions") or [] if isinstance(row, dict)]
     if not rows:
         return []
-    lines = ["| 语义上下文 | 正向卖点 | 本品相对同池基准价格差 | 本品相对同池基准周均销量差 | 置信度 |", "| --- | --- | --- | --- | --- |"]
+    lines = ["| 市场场景 | 参与解释的正向卖点 | 高于可比产品基准的均价差 | 高于可比产品基准的周均销量差 | 解释置信度 |", "| --- | --- | --- | --- | --- |"]
     for row in rows[:5]:
         positive_claims = row.get("positive_claims") or []
         names = _join_cn([str(item.get("claim_name") or _label_code(item.get("claim_code"))) for item in positive_claims[:4] if isinstance(item, dict)]) or "未形成高置信正向卖点"
         gap = row.get("sku_gap_vs_baseline") or {}
         lines.append(
-            f"| {row.get('context_name') or row.get('context_code') or '当前可比语境'} | {names} | {_format_money(gap.get('price_premium_abs')) or '0元'} | {_format_unit_count(gap.get('weekly_sales_lift_abs')) or '0'}台/周 | {_pct_or_unknown(row.get('confidence'))} |"
+            f"| {row.get('context_name') or row.get('context_code') or '当前可比市场'} | {names} | {_format_money(gap.get('price_premium_abs')) or '0元'} | {_format_unit_count(gap.get('weekly_sales_lift_abs')) or '0'}台/周 | {_pct_or_unknown(row.get('confidence'))} |"
         )
     return lines
 

@@ -1797,8 +1797,8 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
 
     assert "溢价卖点" in text
     assert "强销量卖点" in text
-    assert "可比池价格差异" in text
-    assert "本品超额价格解释份额" in text
+    assert "可比产品价格差异" in text
+    assert "本品可解释价差份额" in text
     assert "MiniLED" in text
 
 
@@ -2331,10 +2331,12 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
     assert "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |" in markdown
-    assert "| Top5 卖点价值 | MiniLED（强溢价卖点）；高刷（强销量卖点）；音响体验（拖后腿卖点） | 壁画贴墙（强溢价卖点） | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 强溢价卖点 | MiniLED，池价差400元，池销量差20台/周，本品解释份额280元 | 壁画贴墙，池价差400元，池销量差20台/周，本品解释份额180元 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 强销量卖点 | 高刷，池价差400元，池销量差20台/周，本品解释份额80元 | 暂无稳定证据 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 用户感知不足/拖后腿 | 音响体验，池价差不作为价格支撑，池销量差20台/周 | 暂无稳定证据 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| Top5 核心卖点商业价值 | MiniLED（强溢价卖点）；高刷（强销量卖点）；音响体验（拖后腿卖点） | 壁画贴墙（强溢价卖点） | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 价格溢价卖点 | MiniLED，可比价格差400元，可比销量差20台/周，可解释价差份额280元 | 壁画贴墙，可比价格差400元，可比销量差20台/周，可解释价差份额180元 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
+    assert "| 销量驱动卖点 | 高刷，可比价格差400元，可比销量差20台/周，可解释价差份额80元 | 未形成稳定量化证据 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
+    assert "| 竞品拦截与补强建议 | 音响体验，可比价格差不作为价格支撑，可比销量差20台/周 | 未形成稳定量化证据 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
+    assert "| 组合型增值卖点 |" not in markdown
+    assert "| 基础门槛卖点 |" not in markdown
     assert "卖点溢价指数 Top" not in markdown
     assert "## 五、海信 65E7Q 产品画像" in markdown
     assert "市场画像" in markdown
@@ -2358,11 +2360,16 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "5200尼特" in markdown
     assert "控光分区：1,920" in markdown
     assert "溢价卖点" in markdown
-    assert "| 排名 | 卖点 | 业务类型 | 业务含义 | 可比池卖点价格差异 | 可比池卖点销量差异 | 本品超额价格解释份额 | 本品超额销量解释份额 | 值钱的市场 | 业务解释 |" in markdown
-    assert "| 1 | MiniLED | 强溢价卖点 | 同尺寸、同价格带、同语义市场中，有该卖点且证据成立的一组 SKU 价格更高。 | 400元 | 20台/周 | 280元 | 15台/周 | 高端画质升级战场 | MiniLED 是海信 65E7Q 在高端画质战场的强溢价卖点。 |" in markdown
-    assert "| 3 | 音响体验 | 拖后腿卖点 | 厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群。 | 不作为价格支撑 | 20台/周 | 不作为正向分摊 | 不作为正向分摊 | 高端画质升级战场 | 音响体验在评论或参数支撑上存在拖后腿风险。 |" in markdown
-    assert "可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异" in markdown
-    assert "卖点贡献归因" in markdown
+    assert "| 排名 | 卖点 | 业务类型 | 业务含义 | 卖点有效市场 | 可比产品价格差异 | 可比产品销量差异 | 可比产品销额差异 | 本品可解释价差份额 | 本品可解释销量差份额 | 证据支撑强度 | 业务解释 |" in markdown
+    assert "| 1 | MiniLED | 强溢价卖点 | 可比产品中具备该卖点的一组 SKU 价格更高，能支撑更高定价解释 | 60-69 寸主流大屏段 × 中高价带；高端画质升级战场 | 400元 | 20台/周 | 132,000元/周 | 280元 | 15台/周 | 参数强，评论强，市场场景强 |" in markdown
+    assert "| 3 | 音响体验 | 拖后腿卖点 | 厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群 | 60-69 寸主流大屏段 × 中高价带；高端画质升级战场 | 不作为价格支撑 | 20台/周 | 132,000元/周 | 不作为正向分摊 | 不作为正向分摊 | 参数强，评论强，市场场景强 |" in markdown
+    assert "可比产品价格差异/销量差异是有卖点组与对照组的可观测差异" in markdown
+    assert "业务类型说明：" in markdown
+    assert "卖点解释：" in markdown
+    assert "竞品拦截与补强建议：" in markdown
+    assert "本品相对可比产品表现差异" in markdown
+    assert "卖点贡献归因" not in markdown
+    assert "语义上下文" not in markdown
     assert "卖点价值量化待生成" in markdown
     for forbidden in (
         "CLI",
