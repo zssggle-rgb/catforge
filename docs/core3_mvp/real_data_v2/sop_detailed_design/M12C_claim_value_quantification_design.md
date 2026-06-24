@@ -615,11 +615,62 @@ python -m app.cli.catforge_pipeline run-claim-value-quantification \
 
 ## 10. CLI 查询设计
 
-### 10.1 `claim-value-space`
+### 10.1 统一 CLI 约定
 
-用途：查询某卖点在某市场池或语义维度中的价值表现。
+M12C 查询能力统一放在 `catforge_analyst` 下，由 `catforge_analyst ask` 做自然语言路由，原子 CLI 负责稳定输出。
 
-示例：
+所有 M12C CLI 都必须支持：
+
+| 参数 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `--project-id` | 否 | 当前配置 | 项目 ID |
+| `--category-code` | 否 | `TV` | 源品类 |
+| `--product-category` | 否 | `tv` | 业务品类 |
+| `--batch-id` | 否 | `latest` | 批次 |
+| `--market-window` | 否 | `full_observed_window` | 市场窗口 |
+| `--analysis-population` | 否 | `claim_value_ready_with_comment` | 分析 SKU 集 |
+| `--format` | 否 | `text` | `text` 或 `json` |
+| `--top-n` | 否 | `3` | 业务答案默认展示数量 |
+| `--debug` | 否 | `false` | 是否暴露技术字段 |
+
+统一 JSON 外壳：
+
+```json
+{
+  "status": "ok",
+  "question_type": "claim_contribution",
+  "result": {},
+  "business_answer": {
+    "short_answer_cn": "",
+    "key_findings": [],
+    "limitations": [],
+    "report_payload": {}
+  },
+  "data_scope": {
+    "batch_id": "",
+    "market_window": "",
+    "analysis_population": "",
+    "sample_status": ""
+  }
+}
+```
+
+状态码：
+
+| status | 含义 | 用户侧处理 |
+| --- | --- | --- |
+| `ok` | 成功 | 输出业务结论 |
+| `not_found` | SKU、卖点或维度不存在 | 给出可选搜索建议 |
+| `ambiguous` | SKU 或卖点匹配多个候选 | 要求二次选择 |
+| `insufficient_data` | 数据不足，不能稳定量化 | 输出限制和可观察事实 |
+| `not_supported` | 当前品类或层级尚未支持 | 说明边界，不套用其他品类 |
+| `error` | 程序错误 | 输出简短失败信息，debug 模式给技术信息 |
+
+### 10.2 `claim-value-space`
+
+用途：查询某卖点在某市场池、价值战场、用户任务或目标客群中的价值表现。
+
+命令：
 
 ```bash
 catforge_analyst claim-value-space \
@@ -627,109 +678,392 @@ catforge_analyst claim-value-space \
   --dimension-type battlefield \
   --dimension "高端画质升级" \
   --size-tier large_60_69 \
-  --price-band mid_high
+  --price-band mid_high \
+  --format json
 ```
 
-输出要点：
+专属参数：
 
-- 样本数。
-- 有卖点组和对照组。
-- 价格溢价。
-- 周均销量优势。
-- 周均销额优势。
-- 置信度和样本限制。
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `--claim` 或 `--claim-code` | 是 | 卖点名称或标准卖点 code |
+| `--dimension-type` | 否 | `market_pool`、`battlefield`、`user_task`、`target_group` |
+| `--dimension` 或 `--dimension-code` | 否 | 战场、任务、客群名称或 code |
+| `--size-tier` | 否 | 五档尺寸 |
+| `--price-band` | 否 | 尺寸内价格带 |
+| `--include-relaxed-pool` | 否 | 是否允许样本不足时展示放宽池 |
 
-### 10.2 `sku-claim-value`
+`result` 结构：
+
+```json
+{
+  "claim": {"claim_code": "", "claim_name": ""},
+  "context": {"dimension_type": "", "dimension_code": "", "dimension_name": "", "size_tier": "", "price_band": ""},
+  "pool": {
+    "pool_sku_count": 0,
+    "with_claim_sku_count": 0,
+    "without_claim_sku_count": 0,
+    "sample_status": "",
+    "relaxation_path": []
+  },
+  "market_effect": {
+    "price_premium_abs": 0,
+    "price_premium_rate": 0,
+    "weekly_sales_lift_abs": 0,
+    "weekly_sales_amount_lift_abs": 0,
+    "market_share_lift": 0,
+    "effect_confidence": 0
+  },
+  "representative_skus": {"with_claim": [], "without_claim": []}
+}
+```
+
+业务短答要点：
+
+- 先说这个卖点在该池中是否具备可观测价值。
+- 再说价格溢价、周均销量优势、周均销额优势。
+- 最后说明样本是否足够。
+
+### 10.3 `sku-claim-value`
 
 用途：查询某 SKU 的全部卖点价值量化。
 
-输出要点：
+命令：
 
-- 溢价卖点。
-- 销量卖点。
-- 基础门槛卖点。
-- 机会缺口。
-- 拖后腿卖点。
-- 每个卖点的参数、评论、语义、市场证据。
+```bash
+catforge_analyst sku-claim-value \
+  --sku "海信 65E7Q" \
+  --context-type battlefield \
+  --context "高端画质升级" \
+  --format json
+```
 
-### 10.3 `claim-contribution`
+专属参数：
 
-用途：回答“这个 SKU 卖得好，哪些卖点贡献最大”。
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `--sku` 或 `--sku-code` | 是 | SKU、型号或品牌型号 |
+| `--context-type` | 否 | `market_pool`、`battlefield`、`user_task`、`target_group` |
+| `--context` 或 `--context-code` | 否 | 指定分析上下文 |
+| `--role` | 否 | 过滤 `premium_driver_estimated`、`sales_driver_estimated` 等 |
 
-输出结构：
+`result` 结构：
+
+```json
+{
+  "sku": {"sku_code": "", "brand_name": "", "model_name": ""},
+  "context": {},
+  "claim_roles": {
+    "premium_drivers": [],
+    "sales_drivers": [],
+    "basic_thresholds": [],
+    "brand_claim_only": [],
+    "opportunity_gaps": [],
+    "drag_factors": [],
+    "sample_insufficient": []
+  },
+  "claim_details": [
+    {
+      "claim_code": "",
+      "claim_name": "",
+      "claim_value_role": "",
+      "estimated_price_premium_abs": 0,
+      "estimated_weekly_sales_lift_abs": 0,
+      "estimated_weekly_sales_amount_lift_abs": 0,
+      "param_support_strength": 0,
+      "comment_support_strength": 0,
+      "semantic_support_strength": 0,
+      "attribution_confidence": 0,
+      "reason_cn": ""
+    }
+  ]
+}
+```
+
+### 10.4 `claim-contribution`
+
+用途：回答“某 SKU 卖得好，哪些卖点贡献最大”。
+
+命令：
+
+```bash
+catforge_analyst claim-contribution \
+  --sku "海信 65E7Q" \
+  --context-type battlefield \
+  --context "高端画质升级" \
+  --top-n 3 \
+  --format json
+```
+
+专属参数：
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
+| `--context-type` | 否 | 默认优先主价值战场 |
+| `--context` 或 `--context-code` | 否 | 指定战场、任务、客群或市场池 |
+| `--include-drag` | 否 | 是否同时输出拖后腿卖点 |
+| `--include-opportunity` | 否 | 是否同时输出机会缺口 |
+
+`result` 结构：
+
+```json
+{
+  "sku": {},
+  "baseline": {
+    "pool_name": "",
+    "baseline_price": 0,
+    "baseline_weekly_sales_volume": 0,
+    "baseline_weekly_sales_amount": 0
+  },
+  "sku_excess_performance": {
+    "sku_price_premium_abs": 0,
+    "sku_weekly_sales_lift_abs": 0,
+    "sku_weekly_sales_amount_lift_abs": 0
+  },
+  "top_contributing_claims": [],
+  "drag_claims": [],
+  "opportunity_claims": [],
+  "attribution_summary_cn": "",
+  "confidence": 0
+}
+```
+
+业务短答模板：
+
+```text
+结论：本品当前超额表现主要由 A、B、C 三类卖点解释。
+
+A 是第一溢价卖点，在{可比池}中对应约 X 元价格溢价，并支撑本品的{主战场/主任务/主客群}。
+B 更偏销量卖点，价格溢价不明显，但对应周均销量优势约 Y 台。
+C 是基础门槛，用户默认期待，缺失会拖累成交，但不应单独包装成高溢价。
+
+以上是可观测贡献估计，不代表严格因果。
+```
+
+### 10.5 `claim-opportunity-gaps`
+
+用途：查询本品相对竞品或可比池缺哪些有市场价值的卖点。
+
+命令：
+
+```bash
+catforge_analyst claim-opportunity-gaps \
+  --sku "海信 65E7Q" \
+  --competitor "创维 65A7H PRO" \
+  --format json
+```
+
+专属参数：
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
+| `--competitor` 或 `--competitor-sku-code` | 否 | 指定竞品；为空则使用当前竞品集 |
+| `--competitor-set-source` | 否 | `existing_competitor_set` 或 `same_pool_top_skus` |
+| `--context-type` | 否 | 指定战场/任务/客群 |
+| `--min-opportunity-score` | 否 | 机会阈值 |
+
+`result` 结构：
+
+```json
+{
+  "sku": {},
+  "competitors": [],
+  "opportunity_gaps": [
+    {
+      "claim_code": "",
+      "claim_name": "",
+      "competitor_support": "",
+      "target_support": "",
+      "market_effect": {},
+      "related_dimensions": [],
+      "opportunity_priority": "high|medium|low",
+      "reason_cn": ""
+    }
+  ],
+  "not_actionable_claims": []
+}
+```
+
+业务回答必须区分：
+
+- 竞品有、本品没有，且该卖点在同池有价值。
+- 竞品有、本品也有，但竞品评论或场景表达更强。
+- 竞品有，但该卖点只是基础门槛，不建议作为机会重点。
+
+### 10.6 `claim-value-compare`
+
+用途：比较本品和一个或多个竞品在核心卖点上的价值差异。
+
+命令：
+
+```bash
+catforge_analyst claim-value-compare \
+  --sku "海信 65E7Q" \
+  --competitor "创维 65A7H PRO" \
+  --competitor "TCL 65Q9L PRO" \
+  --format json
+```
+
+专属参数：
+
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
+| `--competitor` 或 `--competitor-sku-code` | 是 | 可重复，最多默认 3 个 |
+| `--claim` 或 `--claim-code` | 否 | 限定某些卖点 |
+| `--context-type` | 否 | 默认使用主价值战场和共同竞品池 |
+| `--explain-delta` | 否 | 是否输出价差/销量差解释 |
+
+`result` 结构：
+
+```json
+{
+  "target_sku": {},
+  "competitor_skus": [],
+  "comparison_matrix": [
+    {
+      "claim_code": "",
+      "claim_name": "",
+      "target_role": "",
+      "competitor_roles": {},
+      "pair_price_delta_explained_abs": {},
+      "pair_weekly_sales_delta_explained_abs": {},
+      "explanation_role": "target_advantage|competitor_intercept|shared_threshold|not_decisive",
+      "reason_cn": ""
+    }
+  ],
+  "summary_cn": ""
+}
+```
+
+`claim-value-compare` 是回答“本品比某竞品贵多少、销量高多少，哪些卖点能解释”的主入口。判断规则：
+
+- 如果本品和竞品都有同一卖点，只有本品在参数强度、评论验证、语义支撑或市场效果上更强，才能解释本品价差。
+- 如果双方都有且强度相近，该卖点应标为共同门槛，不解释价差。
+- 如果竞品有且市场价值强，本品缺失或弱，该卖点是竞品拦截或本品机会缺口。
+- 如果卖点只有厂家表达，没有评论或市场验证，不能用于解释价差。
+
+### 10.7 `catforge_analyst ask` 路由
+
+自然语言入口必须优先解析三类对象：
+
+1. SKU：型号、品牌型号、sku_code。
+2. 卖点：卖点名称、同义词、标准卖点 code。
+3. 对比对象：竞品、价值战场、用户任务、目标客群、尺寸价格池。
+
+路由表：
+
+| 用户问法 | 主 CLI | 组合 CLI |
+| --- | --- | --- |
+| “某 SKU 哪些卖点是溢价卖点” | `sku-claim-value` | `claim-contribution` |
+| “某 SKU 卖得好靠什么卖点” | `claim-contribution` | `sku-claim-value` |
+| “某卖点在某池里值多少钱” | `claim-value-space` | 无 |
+| “某 SKU 比竞品贵在哪里” | `claim-value-compare` | `claim-contribution` |
+| “竞品靠哪些卖点拦截本品” | `claim-value-compare` | `claim-opportunity-gaps` |
+| “本品怎么扩大销量” | `claim-opportunity-gaps` | `claim-contribution`、`claim-value-space` |
+| “某卖点是不是基础门槛” | `claim-value-space` | `sku-claim-value` |
+
+歧义处理：
+
+- 多个 SKU 命中：返回候选列表，要求二次选择。
+- 多个卖点命中：返回候选卖点，例如 MiniLED、高亮 HDR、精细分区控光。
+- 指定 AC 但 AC 卖点或评论 taxonomy 未发布：返回 `not_supported`，不得套用 TV taxonomy。
+
+## 11. Skill 与智能体设计
+
+### 11.1 Skill 文件职责
+
+M12C 完成后需要更新两个 Skill。
+
+| Skill | 文件 | 职责 |
+| --- | --- | --- |
+| `catforge-insight` | `tools/claude/skills/catforge-insight/SKILL.md`、`tools/openclaw/skills/catforge-insight/SKILL.md` | 提供 M12C 原子查询命令和自然语言示例 |
+| `xiaoao-home-appliance-market-analysis` | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` | 规定小奥如何组织卖点价值分析答案 |
+
+### 11.2 Skill 路由规则
+
+Skill 必须把用户问题转成以下 SOP。
+
+#### SOP A：某 SKU 哪些卖点是溢价卖点
+
+1. 调 `sku-claim-value` 获取卖点角色。
+2. 调 `claim-contribution` 获取超额表现拆解。
+3. 只在短答中讲前三个核心卖点。
+4. 对每个卖点说明：支撑哪个战场、任务、客群；价格溢价或销量优势；置信度。
+5. 如果生成报告，附飞书链接。
+
+#### SOP B：某卖点值多少钱
+
+1. 调 `claim-value-space`。
+2. 必须确认上下文：尺寸、价格带、战场/任务/客群。
+3. 样本不足时只讲观察，不给强结论。
+4. 输出价格溢价、周均销量优势、周均销额优势。
+
+#### SOP C：本品比竞品贵在哪里
+
+1. 调 `claim-value-compare`。
+2. 若没有指定竞品，先调用现有竞品 SOP 获取前三竞品。
+3. 区分本品优势、竞品拦截、共同门槛、不构成差异的卖点。
+4. 不能把双方都有且强度相近的卖点写成价差支撑。
+
+#### SOP D：怎么扩大销量
+
+1. 调 `claim-contribution` 看当前正向卖点。
+2. 调 `claim-opportunity-gaps` 看竞品有价值卖点。
+3. 调 `claim-value-space` 验证机会卖点所在池空间。
+4. 输出机会优先级：高价值且本品弱、客群/战场匹配、样本可靠的优先。
+
+### 11.3 小奥回答结构
+
+默认短答控制在 600 字以内：
 
 ```text
 结论：
-  本品主要由 A、B、C 三类卖点解释超额表现。
+本品当前最有价值的卖点是 A、B、C。A 是定价支撑，B 是销量支撑，C 是基础门槛或机会缺口。
 
-贡献拆解：
-  A：支撑主战场，价格溢价估计 X 元，周均销量优势估计 Y 台。
-  B：支撑主客群，价格溢价不明显，但销量优势明显。
-  C：基础门槛，缺失会拖累，但不单独支撑溢价。
+分析：
+A 在{可比池}中对应约 X 元价格溢价/约 Y 台周均销量优势，并支撑{主战场/主任务/主客群}。
+B 价格溢价不明显，但在同池中对应更高周均销量，适合解释成交规模。
+C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会被竞品拦截。
 
 限制：
-  当前为可观测贡献估计，不代表严格因果。
+以上是可观测贡献估计，不是严格因果。详细分析见飞书报告链接。
 ```
 
-### 10.4 `claim-opportunity-gaps`
+禁止回答：
 
-用途：查询本品相对竞品缺哪些有市场价值的卖点。
+- “A 卖点导致销量增加 X 台。”
+- “A 卖点绝对值 X 元。”
+- “所有 SKU 的 A 卖点平均值多少钱。”
+- “服务好所以产品可以溢价。”
+- “空调用彩电卖点规则判断。”
 
-输入：
+### 11.4 飞书报告集成
 
-- target SKU。
-- competitor SKU 或 competitor set。
-- 可选战场、任务、客群。
+现有竞品报告应新增章节：`卖点价值量化与贡献归因`。
 
-输出：
+章节结构：
 
-- 竞品具备且有价值的卖点。
-- 本品缺失、弱表达或评论负向的卖点。
-- 该卖点所在市场空间。
-- 机会优先级。
+1. **本品卖点价值结论**：前三个溢价/销量卖点。
+2. **本品卖点贡献拆解**：卖点、角色、价格溢价、周均销量优势、销额优势、贡献份额、置信度。
+3. **本品与竞品卖点价值对比**：横轴为本品和前三竞品，纵轴为核心卖点。
+4. **卖点-战场-任务-客群证据表**：说明卖点支撑哪些业务维度。
+5. **机会缺口与拖后腿卖点**：竞品拦截、本品缺失、用户负向。
+6. **样本和口径限制**：可比池、样本数、是否放宽、是否评论不足。
 
-### 10.5 `claim-value-compare`
+飞书正文不得展示内部表名、rule version、JSON 字段和代码枚举；必要时用业务中文替代，例如：
 
-用途：比较本品和若干竞品在核心卖点上的价值差异。
-
-输出矩阵：
-
-| 维度 | 本品 | 竞品 A | 竞品 B | 竞品 C |
-| --- | --- | --- | --- | --- |
-| 溢价卖点 | ... | ... | ... | ... |
-| 基础门槛 | ... | ... | ... | ... |
-| 拖后腿 | ... | ... | ... | ... |
-| 机会缺口 | ... | ... | ... | ... |
-| 价格溢价估计 | ... | ... | ... | ... |
-| 周均销量优势估计 | ... | ... | ... | ... |
-
-## 11. 智能体回答约束
-
-M12C 支撑小奥回答时必须遵守：
-
-1. 先给业务结论，再给证据拆解。
-2. 不暴露表名、字段名、JSON、rule_version，除非用户明确要求技术口径。
-3. 不说“因果导致”，使用“可观测贡献估计”“对应优势”“支撑解释”。
-4. 默认只讲前三个核心卖点，详细报告再展开。
-5. 必须说明卖点价值成立的上下文，例如 65 寸高价池、高端画质战场、主流家庭客群。
-6. 对样本不足必须直接说明，不强行给金额。
-7. 对服务履约类内容必须说明不是产品溢价卖点。
-
-推荐短答模板：
-
-```text
-结论：这款 SKU 的主要溢价卖点建议看 A、B、C。
-
-A 是第一卖点，不是因为厂家说了这个卖点，而是它同时满足三个条件：
-一是支撑本品的主价值战场和主用户任务；
-二是有参数或评论证据支撑；
-三是在同尺寸、同价格带、同战场的可比池中，对应更高的价格或周均销额表现。
-
-B 更偏销量卖点，价格溢价不明显，但能解释本品在同池中的周均销量优势。
-C 是基础门槛，用户默认期待，缺失会拖累成交，但不应单独包装成溢价。
-
-详细量化和竞品对比见报告链接。
-```
+| 内部角色 | 飞书展示 |
+| --- | --- |
+| `premium_driver_estimated` | 估算溢价卖点 |
+| `sales_driver_estimated` | 估算销量卖点 |
+| `basic_threshold` | 基础门槛卖点 |
+| `brand_claim_only` | 厂家主张，市场验证不足 |
+| `drag_factor` | 拖后腿卖点 |
+| `opportunity_gap` | 机会缺口 |
+| `sample_insufficient` | 样本不足 |
 
 ## 12. 测试设计
 

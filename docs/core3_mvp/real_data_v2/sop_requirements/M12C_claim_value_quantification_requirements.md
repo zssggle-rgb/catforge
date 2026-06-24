@@ -223,24 +223,114 @@ M12C 输出的卖点价值分类必须是业务可解释的，不只输出分数
 | `core3_claim_value_dimension_summary` | claim + 语义维度 | 某卖点在战场/任务/客群中的市场表现 |
 | `core3_claim_value_review_issue` | SKU 或 claim | 样本不足、对照不足、异常、需复核问题 |
 
-### 7.2 CLI 和 Skill 要求
+### 7.2 CLI 输出能力要求
 
-M12C 完成后应提供以下原子能力：
+M12C 完成后必须提供一组可被 `catforge_analyst`、OpenClaw Skill、小奥智能体和飞书报告复用的原子能力。
 
-| CLI | 作用 |
+| CLI | 主要回答 | 必须输出 |
+| --- | --- | --- |
+| `claim-value-space` | 某卖点在某市场池、价值战场、用户任务或目标客群里值不值钱 | 可比池样本、有卖点组/对照组、价格溢价、周均销量优势、周均销额优势、置信度、样本限制 |
+| `sku-claim-value` | 某 SKU 的每个卖点分别是什么价值角色 | 溢价卖点、销量卖点、基础门槛、厂家主张、机会缺口、拖后腿、样本不足及证据 |
+| `claim-contribution` | 某 SKU 卖得好主要由哪些卖点解释 | SKU 相对同池基准的价格/销量/销额超额表现、前三个贡献卖点、贡献份额、限制说明 |
+| `claim-opportunity-gaps` | 本品相对竞品缺哪些有市场价值的卖点 | 竞品有价值卖点、本品缺失或弱表达、对应市场空间、机会优先级 |
+| `claim-value-compare` | 本品和竞品在核心卖点上的价值差异 | 横向对比矩阵、共同门槛、本品优势、竞品拦截、可解释价差/销量差 |
+
+每个 CLI 都必须支持：
+
+- `--project-id`
+- `--category-code`
+- `--product-category`
+- `--batch-id`
+- `--market-window`
+- `--analysis-population`
+- `--format json|text`
+- `--top-n`
+- `--debug`
+
+其中 `--debug=false` 时不得暴露表名、字段名、rule version、JSON 原始字段和内部 code；`--debug=true` 可以返回技术排查信息。
+
+### 7.3 CLI 业务输出结构
+
+所有 CLI 的 JSON 输出必须遵循统一外壳：
+
+```json
+{
+  "status": "ok|not_found|ambiguous|insufficient_data|error",
+  "question_type": "claim_value_space|sku_claim_value|claim_contribution|claim_opportunity_gaps|claim_value_compare",
+  "result": {},
+  "business_answer": {
+    "short_answer_cn": "",
+    "key_findings": [],
+    "limitations": [],
+    "report_payload": {}
+  },
+  "data_scope": {
+    "batch_id": "",
+    "market_window": "",
+    "analysis_population": "",
+    "sku_count": 0,
+    "sample_status": ""
+  }
+}
+```
+
+业务回答必须优先输出：
+
+1. 结论。
+2. 卖点角色。
+3. 可比池口径。
+4. 价格溢价、周均销量优势、周均销额优势。
+5. 参数、评论、用户任务、目标客群、价值战场证据。
+6. 样本限制和置信度。
+
+### 7.4 自然语言路由要求
+
+M12C 必须接入 `catforge_analyst ask`，支持自然语言问题路由。
+
+| 用户问题类型 | 路由 CLI | 示例 |
+| --- | --- | --- |
+| 问某卖点值多少钱 | `claim-value-space` | “MiniLED 在 65 寸高端电视里值多少钱？” |
+| 问某 SKU 哪些卖点溢价 | `sku-claim-value` | “海信 65E7Q 哪些卖点是溢价卖点？” |
+| 问某 SKU 为什么卖得好 | `claim-contribution` | “这款为什么卖得好，靠哪些卖点？” |
+| 问比竞品贵在哪里 | `claim-value-compare` | “海信 65E7Q 比创维 65A7H PRO 贵在哪里？” |
+| 问怎么扩大销量 | `claim-opportunity-gaps` + `claim-contribution` | “这款要扩大销量应该补哪些卖点？” |
+| 问竞品靠什么拦截 | `claim-value-compare` + `claim-opportunity-gaps` | “创维靠哪些卖点拦截海信？” |
+
+自然语言路由必须先解析 SKU 和卖点。如果 SKU 或型号匹配到多个候选，返回 `ambiguous`，列出候选让用户二次选择；不得自动猜测。
+
+### 7.5 Skill 要求
+
+M12C 必须更新两类 Skill：
+
+| Skill | 职责 |
 | --- | --- |
-| `claim-value-space` | 查询某卖点在某市场池、战场、任务或客群中的价值表现 |
-| `sku-claim-value` | 查询某 SKU 的卖点价值量化 |
-| `claim-contribution` | 查询某 SKU 卖得好由哪些卖点解释 |
-| `claim-opportunity-gaps` | 查询本品相对竞品缺哪些有市场价值的卖点 |
-| `claim-value-compare` | 比较本品和竞品在核心卖点上的价值差异 |
+| `catforge-insight` | 查询卖点价值空间、SKU 卖点价值、卖点贡献、机会缺口和横向对比 |
+| `xiaoao-home-appliance-market-analysis` | 面向业务用户组织回答，不暴露 CLI、表名、JSON 和模块编号 |
 
-Skill 需要把自然语言路由到这些原子能力，例如：
+Skill 必须包含：
 
-- “海信 65E7Q 哪些卖点是溢价卖点？”
-- “MiniLED 在 65 寸高端电视里值多少钱？”
-- “创维比海信卖得好是靠哪些卖点？”
-- “这款电视如果想扩大销量，应该补哪些卖点？”
+1. 固定问题到 CLI 的路由表。
+2. 多 CLI 组合 SOP。
+3. 回答结构模板。
+4. 样本不足、无评论、无卖点、无竞品时的边界回答。
+5. 飞书报告链接生成规则。
+6. 禁止事项：不得把可观测贡献写成因果，不得把服务履约写成产品溢价，不得跨不可比池比较。
+
+### 7.6 飞书报告集成要求
+
+M12C 结果必须支持写入现有竞品分析飞书报告，并新增“卖点价值量化”章节。
+
+报告至少包含：
+
+1. 本品核心卖点价值结论。
+2. 本品卖点贡献拆解表。
+3. 本品与前三竞品核心卖点横向对比表。
+4. 卖点对应的价值战场、用户任务、目标客群证据。
+5. 价格溢价、周均销量优势、周均销额优势。
+6. 机会缺口和拖后腿卖点。
+7. 样本限制和置信度说明。
+
+飞书报告中的表达必须是业务语言，例如“可解释价格溢价约 X 元”“对应周均销量优势约 Y 台”，不得出现内部字段名或规则版本。
 
 ## 8. 质量与校验
 
