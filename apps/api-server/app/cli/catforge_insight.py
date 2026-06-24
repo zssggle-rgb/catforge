@@ -32,10 +32,16 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_AC_RULE_VERSION,
+    CORE3_M09C_AC_TAXONOMY_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
     CORE3_M09C_TV_TAXONOMY_VERSION,
+    CORE3_M10C_AC_RULE_VERSION,
+    CORE3_M10C_AC_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
+    CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
@@ -46,16 +52,29 @@ from app.services.core3_real_data.m03b_param_profile_service import (
     ac_param_taxonomy_v0_1,
     tv_param_taxonomy_v0_1,
 )
-from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, ac_claim_taxonomy_v0_1, tv_claim_taxonomy_v0_1
+from app.services.core3_real_data.m04c_claim_fact_profile_service import (
+    M04CClaimTaxonomy,
+    ac_claim_taxonomy_v0_1,
+    tv_claim_taxonomy_v0_1,
+)
 from app.services.core3_real_data.m05c_comment_fact_profile_service import (
     M05CCommentTaxonomy,
     ac_comment_fact_taxonomy_v0_1,
     tv_comment_fact_taxonomy_v0_1,
 )
-from app.services.core3_real_data.m09c_user_task_service import M09CUserTaskTaxonomy, tv_user_task_taxonomy_v0_1
-from app.services.core3_real_data.m10c_target_group_service import M10CTargetGroupTaxonomy, tv_target_group_taxonomy_v0_1
+from app.services.core3_real_data.m09c_user_task_service import (
+    M09CUserTaskTaxonomy,
+    ac_user_task_taxonomy_v0_1,
+    tv_user_task_taxonomy_v0_1,
+)
+from app.services.core3_real_data.m10c_target_group_service import (
+    M10CTargetGroupTaxonomy,
+    ac_target_group_taxonomy_v0_1,
+    tv_target_group_taxonomy_v0_1,
+)
 from app.services.core3_real_data.m11c_value_battlefield_service import (
     M11CValueBattlefieldTaxonomy,
+    ac_value_battlefield_taxonomy_v0_1,
     tv_value_battlefield_taxonomy_v0_2,
 )
 
@@ -99,15 +118,15 @@ PRODUCT_CATEGORY_CONFIGS = {
         "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION,
         "comment_taxonomy_factory": ac_comment_fact_taxonomy_v0_1,
-        "user_task_rule_version": None,
-        "user_task_taxonomy_version": None,
-        "user_task_taxonomy_factory": None,
-        "target_group_rule_version": None,
-        "target_group_taxonomy_version": None,
-        "target_group_taxonomy_factory": None,
-        "value_battlefield_rule_version": None,
-        "value_battlefield_taxonomy_version": None,
-        "value_battlefield_taxonomy_factory": None,
+        "user_task_rule_version": CORE3_M09C_AC_RULE_VERSION,
+        "user_task_taxonomy_version": CORE3_M09C_AC_TAXONOMY_VERSION,
+        "user_task_taxonomy_factory": ac_user_task_taxonomy_v0_1,
+        "target_group_rule_version": CORE3_M10C_AC_RULE_VERSION,
+        "target_group_taxonomy_version": CORE3_M10C_AC_TAXONOMY_VERSION,
+        "target_group_taxonomy_factory": ac_target_group_taxonomy_v0_1,
+        "value_battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
+        "value_battlefield_taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION,
+        "value_battlefield_taxonomy_factory": ac_value_battlefield_taxonomy_v0_1,
         "semantic_market_rule_version": None,
     },
 }
@@ -247,7 +266,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with SessionLocal() as db:
             if args.command == "sku-param-profile":
-                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                )
                 result = query_sku_param_profile(
                     db,
                     project_id=args.project_id,
@@ -276,13 +300,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "param-taxonomy":
                 result = query_param_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     group=args.group,
                     search=args.search,
                     include_excluded=args.include_excluded,
                 )
             elif args.command == "tier-coverage":
-                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.tier_code)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    dimension=args.dimension_code,
+                    tier=args.tier_code,
+                )
                 result = query_tier_coverage(
                     db,
                     project_id=args.project_id,
@@ -296,12 +327,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "claim-taxonomy":
                 result = query_claim_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     dimension=args.dimension,
                     search=args.search,
                 )
             elif args.command == "sku-claim-profile":
-                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                )
                 result = query_sku_claim_profile(
                     db,
                     project_id=args.project_id,
@@ -314,7 +352,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_claim_facts=args.include_claim_facts,
                 )
             elif args.command == "claim-position-coverage":
-                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.position_code)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    dimension=args.dimension_code,
+                    tier=args.position_code,
+                )
                 result = query_claim_position_coverage(
                     db,
                     project_id=args.project_id,
@@ -329,12 +372,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "comment-taxonomy":
                 result = query_comment_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     dimension=args.dimension,
                     search=args.search,
                 )
             elif args.command == "sku-comment-profile":
-                product_category = resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    sku_code=args.sku_code,
+                    model_name=args.model_name,
+                )
                 result = query_sku_comment_profile(
                     db,
                     project_id=args.project_id,
@@ -347,7 +397,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_comment_facts=args.include_comment_facts,
                 )
             elif args.command == "comment-dimension-coverage":
-                product_category = resolve_product_category(args.product_category, query=args.query, dimension=args.dimension_code, tier=args.coverage_key)
+                product_category = resolve_product_category(
+                    args.product_category,
+                    query=args.query,
+                    dimension=args.dimension_code,
+                    tier=args.coverage_key,
+                )
                 result = query_comment_dimension_coverage(
                     db,
                     project_id=args.project_id,
@@ -400,7 +455,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "user-task-taxonomy":
                 result = query_user_task_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     user_task_code=args.user_task_code,
                     search=args.search,
                 )
@@ -410,7 +467,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    product_category=resolve_product_category(
+                        args.product_category,
+                        query=args.query,
+                        sku_code=args.sku_code,
+                        model_name=args.model_name,
+                    ),
                     query=args.query,
                     sku_code=args.sku_code,
                     model_name=args.model_name,
@@ -422,7 +484,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     user_task_code=args.user_task_code,
                     relation_status=args.relation_status,
                     query=args.query,
@@ -430,7 +494,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "target-group-taxonomy":
                 result = query_target_group_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     target_group_code=args.target_group_code,
                     search=args.search,
                 )
@@ -440,7 +506,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    product_category=resolve_product_category(
+                        args.product_category,
+                        query=args.query,
+                        sku_code=args.sku_code,
+                        model_name=args.model_name,
+                    ),
                     query=args.query,
                     sku_code=args.sku_code,
                     model_name=args.model_name,
@@ -452,7 +523,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     target_group_code=args.target_group_code,
                     relation_status=args.relation_status,
                     query=args.query,
@@ -460,7 +533,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             elif args.command == "value-battlefield-taxonomy":
                 result = query_value_battlefield_taxonomy(
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     battlefield_code=args.battlefield_code,
                     search=args.search,
                 )
@@ -470,7 +545,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    product_category=resolve_product_category(
+                        args.product_category,
+                        query=args.query,
+                        sku_code=args.sku_code,
+                        model_name=args.model_name,
+                    ),
                     query=args.query,
                     sku_code=args.sku_code,
                     model_name=args.model_name,
@@ -482,7 +562,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     battlefield_code=args.battlefield_code,
                     relation_status=args.relation_status,
                     query=args.query,
@@ -494,7 +576,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                 )
             elif args.command == "semantic-market-map":
                 result = query_semantic_market_map(
@@ -502,7 +586,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=normalize_product_category_arg(args.product_category),
+                    product_category=normalize_product_category_arg(
+                        args.product_category
+                    ),
                     analysis_population=args.analysis_population,
                     market_window=args.market_window,
                     dimension_type=args.dimension_type,
@@ -516,7 +602,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     category_code=args.category_code,
                     batch_id=args.batch_id,
-                    product_category=resolve_product_category(args.product_category, query=args.query, sku_code=args.sku_code, model_name=args.model_name),
+                    product_category=resolve_product_category(
+                        args.product_category,
+                        query=args.query,
+                        sku_code=args.sku_code,
+                        model_name=args.model_name,
+                    ),
                     analysis_population=args.analysis_population,
                     market_window=args.market_window,
                     query=args.query,
@@ -554,85 +645,194 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    profile = subparsers.add_parser("sku-param-profile", help="Query one SKU/model parameter fact profile.")
+    profile = subparsers.add_parser(
+        "sku-param-profile", help="Query one SKU/model parameter fact profile."
+    )
     add_common_args(profile)
     add_product_category_arg(profile)
-    profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
     profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
-    profile.add_argument("--include-param-values", action="store_true", help="Include all extracted standard parameter values.")
-    profile.add_argument("--param-limit", type=int, default=120, help="Maximum parameter values to include when --include-param-values is set.")
+    profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 100A4F."
+    )
+    profile.add_argument(
+        "--include-param-values",
+        action="store_true",
+        help="Include all extracted standard parameter values.",
+    )
+    profile.add_argument(
+        "--param-limit",
+        type=int,
+        default=120,
+        help="Maximum parameter values to include when --include-param-values is set.",
+    )
     add_format_arg(profile)
 
-    taxonomy = subparsers.add_parser("tv-param-taxonomy", help="Query the TV standard parameter taxonomy.")
-    taxonomy.add_argument("--group", help="Filter by parameter group, such as picture, smart, performance.")
+    taxonomy = subparsers.add_parser(
+        "tv-param-taxonomy", help="Query the TV standard parameter taxonomy."
+    )
+    taxonomy.add_argument(
+        "--group",
+        help="Filter by parameter group, such as picture, smart, performance.",
+    )
     taxonomy.add_argument("--search", help="Search parameter code/name/raw fields.")
-    taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
+    taxonomy.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Include raw fields intentionally excluded from standard params.",
+    )
     add_format_arg(taxonomy)
 
-    ac_taxonomy = subparsers.add_parser("ac-param-taxonomy", help="Query the AC standard parameter taxonomy.")
-    ac_taxonomy.add_argument("--group", help="Filter by parameter group, such as capacity, smart, energy.")
+    ac_taxonomy = subparsers.add_parser(
+        "ac-param-taxonomy", help="Query the AC standard parameter taxonomy."
+    )
+    ac_taxonomy.add_argument(
+        "--group", help="Filter by parameter group, such as capacity, smart, energy."
+    )
     ac_taxonomy.add_argument("--search", help="Search parameter code/name/raw fields.")
-    ac_taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
+    ac_taxonomy.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Include raw fields intentionally excluded from standard params.",
+    )
     add_format_arg(ac_taxonomy)
 
-    generic_taxonomy = subparsers.add_parser("param-taxonomy", help="Query a product category standard parameter taxonomy.")
+    generic_taxonomy = subparsers.add_parser(
+        "param-taxonomy", help="Query a product category standard parameter taxonomy."
+    )
     add_product_category_arg(generic_taxonomy, default="tv", allow_auto=False)
     generic_taxonomy.add_argument("--group", help="Filter by parameter group.")
-    generic_taxonomy.add_argument("--search", help="Search parameter code/name/raw fields.")
-    generic_taxonomy.add_argument("--include-excluded", action="store_true", help="Include raw fields intentionally excluded from standard params.")
+    generic_taxonomy.add_argument(
+        "--search", help="Search parameter code/name/raw fields."
+    )
+    generic_taxonomy.add_argument(
+        "--include-excluded",
+        action="store_true",
+        help="Include raw fields intentionally excluded from standard params.",
+    )
     add_format_arg(generic_taxonomy)
 
-    coverage = subparsers.add_parser("tier-coverage", help="Query SKU coverage for parameter dimension tiers.")
+    coverage = subparsers.add_parser(
+        "tier-coverage", help="Query SKU coverage for parameter dimension tiers."
+    )
     add_common_args(coverage)
     add_product_category_arg(coverage)
-    coverage.add_argument("--dimension-code", help="Dimension code or alias, such as display_tech, 画质, 尺寸.")
-    coverage.add_argument("--tier-code", help="Tier code, tier name, or alias, such as miniled or 旗舰画质.")
-    coverage.add_argument("--query", help="Natural tier query text. Matching uses dimension/tier code, Chinese names, and rule summary.")
-    coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    coverage.add_argument(
+        "--dimension-code",
+        help="Dimension code or alias, such as display_tech, 画质, 尺寸.",
+    )
+    coverage.add_argument(
+        "--tier-code",
+        help="Tier code, tier name, or alias, such as miniled or 旗舰画质.",
+    )
+    coverage.add_argument(
+        "--query",
+        help="Natural tier query text. Matching uses dimension/tier code, Chinese names, and rule summary.",
+    )
+    coverage.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(coverage)
 
-    claim_taxonomy = subparsers.add_parser("claim-taxonomy", help="Query a product category standard claim taxonomy.")
+    claim_taxonomy = subparsers.add_parser(
+        "claim-taxonomy", help="Query a product category standard claim taxonomy."
+    )
     add_product_category_arg(claim_taxonomy, default="tv", allow_auto=False)
     claim_taxonomy.add_argument("--dimension", help="Filter by claim dimension.")
-    claim_taxonomy.add_argument("--search", help="Search claim code/name/dimension/subtype/support params.")
+    claim_taxonomy.add_argument(
+        "--search", help="Search claim code/name/dimension/subtype/support params."
+    )
     add_format_arg(claim_taxonomy)
 
-    claim_profile = subparsers.add_parser("sku-claim-profile", help="Query one SKU/model claim fact profile.")
+    claim_profile = subparsers.add_parser(
+        "sku-claim-profile", help="Query one SKU/model claim fact profile."
+    )
     add_common_args(claim_profile)
     add_product_category_arg(claim_profile)
-    claim_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    claim_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
     claim_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    claim_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
-    claim_profile.add_argument("--include-claim-facts", action="store_true", help="Include matched claim fact rows.")
+    claim_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 100A4F."
+    )
+    claim_profile.add_argument(
+        "--include-claim-facts",
+        action="store_true",
+        help="Include matched claim fact rows.",
+    )
     add_format_arg(claim_profile)
 
-    claim_coverage = subparsers.add_parser("claim-position-coverage", help="Query SKU coverage for claim dimension positions.")
+    claim_coverage = subparsers.add_parser(
+        "claim-position-coverage",
+        help="Query SKU coverage for claim dimension positions.",
+    )
     add_common_args(claim_coverage)
     add_product_category_arg(claim_coverage)
-    claim_coverage.add_argument("--dimension-code", help="Claim dimension code or alias, such as picture_quality or 画质.")
-    claim_coverage.add_argument("--position-code", help="Claim position code or name, such as picture_flagship_miniled_composite.")
-    claim_coverage.add_argument("--position-source", choices=("supported", "claimed", "all"), default="supported", help="Use parameter-supported positions by default.")
+    claim_coverage.add_argument(
+        "--dimension-code",
+        help="Claim dimension code or alias, such as picture_quality or 画质.",
+    )
+    claim_coverage.add_argument(
+        "--position-code",
+        help="Claim position code or name, such as picture_flagship_miniled_composite.",
+    )
+    claim_coverage.add_argument(
+        "--position-source",
+        choices=("supported", "claimed", "all"),
+        default="supported",
+        help="Use parameter-supported positions by default.",
+    )
     claim_coverage.add_argument("--query", help="Natural position query text.")
-    claim_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    claim_coverage.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(claim_coverage)
 
-    comment_taxonomy = subparsers.add_parser("comment-taxonomy", help="Query a product category comment fact taxonomy.")
+    comment_taxonomy = subparsers.add_parser(
+        "comment-taxonomy", help="Query a product category comment fact taxonomy."
+    )
     add_product_category_arg(comment_taxonomy, default="tv", allow_auto=False)
     comment_taxonomy.add_argument("--dimension", help="Filter by comment dimension.")
-    comment_taxonomy.add_argument("--search", help="Search dimension/subdimension code, name, linked params, or linked claims.")
+    comment_taxonomy.add_argument(
+        "--search",
+        help="Search dimension/subdimension code, name, linked params, or linked claims.",
+    )
     add_format_arg(comment_taxonomy)
 
-    comment_profile = subparsers.add_parser("sku-comment-profile", help="Query one SKU/model comment fact profile.")
+    comment_profile = subparsers.add_parser(
+        "sku-comment-profile", help="Query one SKU/model comment fact profile."
+    )
     add_common_args(comment_profile)
     add_product_category_arg(comment_profile)
-    comment_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    comment_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    comment_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 100A4F.")
-    comment_profile.add_argument("--include-comment-facts", action="store_true", help="Include matched comment fact atom rows.")
+    comment_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    comment_profile.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    comment_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 100A4F."
+    )
+    comment_profile.add_argument(
+        "--include-comment-facts",
+        action="store_true",
+        help="Include matched comment fact atom rows.",
+    )
     add_format_arg(comment_profile)
 
-    comment_coverage = subparsers.add_parser("comment-dimension-coverage", help="Query SKU coverage for comment fact dimensions, signals, params, or claims.")
+    comment_coverage = subparsers.add_parser(
+        "comment-dimension-coverage",
+        help="Query SKU coverage for comment fact dimensions, signals, params, or claims.",
+    )
     add_common_args(comment_coverage)
     add_product_category_arg(comment_coverage)
     comment_coverage.add_argument(
@@ -654,153 +854,410 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Coverage type to query.",
     )
-    comment_coverage.add_argument("--dimension-code", help="Comment dimension code or alias, such as brand_power_signal or 品牌力.")
-    comment_coverage.add_argument("--coverage-key", help="Coverage key, such as brand_trust, declared_refresh_rate_hz, or tv_claim_high_refresh_rate.")
+    comment_coverage.add_argument(
+        "--dimension-code",
+        help="Comment dimension code or alias, such as brand_power_signal or 品牌力.",
+    )
+    comment_coverage.add_argument(
+        "--coverage-key",
+        help="Coverage key, such as brand_trust, declared_refresh_rate_hz, or tv_claim_high_refresh_rate.",
+    )
     comment_coverage.add_argument("--query", help="Natural coverage query text.")
-    comment_coverage.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    comment_coverage.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(comment_coverage)
 
-    market_profile = subparsers.add_parser("sku-market-profile", help="Query one SKU/model market profile.")
+    market_profile = subparsers.add_parser(
+        "sku-market-profile", help="Query one SKU/model market profile."
+    )
     add_common_args(market_profile)
-    market_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    market_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    market_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
-    market_profile.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
-    market_profile.add_argument("--include-signals", action="store_true", help="Include market signal rows for the selected window.")
-    market_profile.add_argument("--include-pools", action="store_true", help="Include comparable-pool summaries for the selected window.")
-    market_profile.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of pool member SKU codes to include; 0 means all.")
+    market_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    market_profile.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    market_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 85E7Q."
+    )
+    market_profile.add_argument(
+        "--analysis-window",
+        default="full_observed_window",
+        choices=(
+            "full_observed_window",
+            "latest_week",
+            "recent_4w",
+            "recent_8w",
+            "recent_12w",
+        ),
+    )
+    market_profile.add_argument(
+        "--include-signals",
+        action="store_true",
+        help="Include market signal rows for the selected window.",
+    )
+    market_profile.add_argument(
+        "--include-pools",
+        action="store_true",
+        help="Include comparable-pool summaries for the selected window.",
+    )
+    market_profile.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of pool member SKU codes to include; 0 means all.",
+    )
     add_format_arg(market_profile)
 
-    market_bucket = subparsers.add_parser("market-bucket-coverage", help="Query price-band, size, or size-price market bucket coverage.")
+    market_bucket = subparsers.add_parser(
+        "market-bucket-coverage",
+        help="Query price-band, size, or size-price market bucket coverage.",
+    )
     add_common_args(market_bucket)
-    market_bucket.add_argument("--bucket-type", choices=("all", "price", "size", "size_price"), default="all", help="Bucket type to query. Current implementation uses M07 price band and size segment until business buckets are persisted.")
-    market_bucket.add_argument("--query", help="Natural bucket query text, such as high price band, 85 size, or mid_high.")
-    market_bucket.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
-    market_bucket.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include per bucket; 0 means all.")
+    market_bucket.add_argument(
+        "--bucket-type",
+        choices=("all", "price", "size", "size_price"),
+        default="all",
+        help="Bucket type to query. Current implementation uses M07 price band and size segment until business buckets are persisted.",
+    )
+    market_bucket.add_argument(
+        "--query",
+        help="Natural bucket query text, such as high price band, 85 size, or mid_high.",
+    )
+    market_bucket.add_argument(
+        "--analysis-window",
+        default="full_observed_window",
+        choices=(
+            "full_observed_window",
+            "latest_week",
+            "recent_4w",
+            "recent_8w",
+            "recent_12w",
+        ),
+    )
+    market_bucket.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include per bucket; 0 means all.",
+    )
     add_format_arg(market_bucket)
 
-    comparable_pools = subparsers.add_parser("comparable-pools", help="Query comparable-pool baselines for one SKU/model.")
+    comparable_pools = subparsers.add_parser(
+        "comparable-pools", help="Query comparable-pool baselines for one SKU/model."
+    )
     add_common_args(comparable_pools)
-    comparable_pools.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    comparable_pools.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    comparable_pools.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
-    comparable_pools.add_argument("--pool-type", choices=("same_size", "adjacent_size", "same_price_band", "size_price_band", "platform_overlap", "market_active"), help="Optional pool type filter.")
-    comparable_pools.add_argument("--analysis-window", default="full_observed_window", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"))
-    comparable_pools.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of candidate SKU codes to include per pool; 0 means all.")
+    comparable_pools.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    comparable_pools.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    comparable_pools.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 85E7Q."
+    )
+    comparable_pools.add_argument(
+        "--pool-type",
+        choices=(
+            "same_size",
+            "adjacent_size",
+            "same_price_band",
+            "size_price_band",
+            "platform_overlap",
+            "market_active",
+        ),
+        help="Optional pool type filter.",
+    )
+    comparable_pools.add_argument(
+        "--analysis-window",
+        default="full_observed_window",
+        choices=(
+            "full_observed_window",
+            "latest_week",
+            "recent_4w",
+            "recent_8w",
+            "recent_12w",
+        ),
+    )
+    comparable_pools.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of candidate SKU codes to include per pool; 0 means all.",
+    )
     add_format_arg(comparable_pools)
 
-    user_task_taxonomy = subparsers.add_parser("user-task-taxonomy", help="Query a product category user-task taxonomy.")
+    user_task_taxonomy = subparsers.add_parser(
+        "user-task-taxonomy", help="Query a product category user-task taxonomy."
+    )
     add_product_category_arg(user_task_taxonomy, default="tv", allow_auto=False)
-    user_task_taxonomy.add_argument("--user-task-code", help="Filter by user-task code.")
-    user_task_taxonomy.add_argument("--search", help="Search code/name/comments/claims/params.")
+    user_task_taxonomy.add_argument(
+        "--user-task-code", help="Filter by user-task code."
+    )
+    user_task_taxonomy.add_argument(
+        "--search", help="Search code/name/comments/claims/params."
+    )
     add_format_arg(user_task_taxonomy)
 
-    user_task_profile = subparsers.add_parser("sku-user-task", help="Query one SKU/model user-task profile.")
+    user_task_profile = subparsers.add_parser(
+        "sku-user-task", help="Query one SKU/model user-task profile."
+    )
     add_common_args(user_task_profile)
     add_product_category_arg(user_task_profile)
-    user_task_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    user_task_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    user_task_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
-    user_task_profile.add_argument("--include-scores", action="store_true", help="Include all SKU x user-task score rows.")
+    user_task_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    user_task_profile.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    user_task_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 85E7Q."
+    )
+    user_task_profile.add_argument(
+        "--include-scores",
+        action="store_true",
+        help="Include all SKU x user-task score rows.",
+    )
     add_format_arg(user_task_profile)
 
-    user_task_skus = subparsers.add_parser("user-task-skus", help="Query SKUs covered by one user task.")
+    user_task_skus = subparsers.add_parser(
+        "user-task-skus", help="Query SKUs covered by one user task."
+    )
     add_common_args(user_task_skus)
     add_product_category_arg(user_task_skus, default="tv", allow_auto=False)
-    user_task_skus.add_argument("--user-task-code", help="User task code, such as TASK_VALUE_FOR_MONEY_PURCHASE.")
+    user_task_skus.add_argument(
+        "--user-task-code",
+        help="User task code, such as TASK_VALUE_FOR_MONEY_PURCHASE.",
+    )
     user_task_skus.add_argument(
         "--relation-status",
-        choices=("all", "primary_user_task", "secondary_user_task", "comment_observed_task", "brand_claimed_task", "latent_capability_task", "drag_factor_task"),
+        choices=(
+            "all",
+            "primary_user_task",
+            "secondary_user_task",
+            "comment_observed_task",
+            "brand_claimed_task",
+            "latent_capability_task",
+            "drag_factor_task",
+        ),
         default="all",
     )
     user_task_skus.add_argument("--query", help="Natural user-task query text.")
-    user_task_skus.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    user_task_skus.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(user_task_skus)
 
-    target_group_taxonomy = subparsers.add_parser("target-group-taxonomy", help="Query a product category target-group taxonomy.")
+    target_group_taxonomy = subparsers.add_parser(
+        "target-group-taxonomy", help="Query a product category target-group taxonomy."
+    )
     add_product_category_arg(target_group_taxonomy, default="tv", allow_auto=False)
-    target_group_taxonomy.add_argument("--target-group-code", help="Filter by target-group code.")
-    target_group_taxonomy.add_argument("--search", help="Search code/name/tasks/claims/params/comments.")
+    target_group_taxonomy.add_argument(
+        "--target-group-code", help="Filter by target-group code."
+    )
+    target_group_taxonomy.add_argument(
+        "--search", help="Search code/name/tasks/claims/params/comments."
+    )
     add_format_arg(target_group_taxonomy)
 
-    target_group_profile = subparsers.add_parser("sku-target-group", help="Query one SKU/model target-group profile.")
+    target_group_profile = subparsers.add_parser(
+        "sku-target-group", help="Query one SKU/model target-group profile."
+    )
     add_common_args(target_group_profile)
     add_product_category_arg(target_group_profile)
-    target_group_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    target_group_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    target_group_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
-    target_group_profile.add_argument("--include-scores", action="store_true", help="Include all SKU x target-group score rows.")
+    target_group_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    target_group_profile.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    target_group_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 85E7Q."
+    )
+    target_group_profile.add_argument(
+        "--include-scores",
+        action="store_true",
+        help="Include all SKU x target-group score rows.",
+    )
     add_format_arg(target_group_profile)
 
-    target_group_skus = subparsers.add_parser("target-group-skus", help="Query SKUs covered by one target group.")
+    target_group_skus = subparsers.add_parser(
+        "target-group-skus", help="Query SKUs covered by one target group."
+    )
     add_common_args(target_group_skus)
     add_product_category_arg(target_group_skus, default="tv", allow_auto=False)
-    target_group_skus.add_argument("--target-group-code", help="Target group code, such as TG_VALUE_MAXIMIZER.")
+    target_group_skus.add_argument(
+        "--target-group-code", help="Target group code, such as TG_VALUE_MAXIMIZER."
+    )
     target_group_skus.add_argument(
         "--relation-status",
-        choices=("all", "primary_target_group", "secondary_target_group", "comment_observed_group", "brand_claimed_group", "latent_group", "unmet_group_need"),
+        choices=(
+            "all",
+            "primary_target_group",
+            "secondary_target_group",
+            "comment_observed_group",
+            "brand_claimed_group",
+            "latent_group",
+            "unmet_group_need",
+        ),
         default="all",
     )
     target_group_skus.add_argument("--query", help="Natural target-group query text.")
-    target_group_skus.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    target_group_skus.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(target_group_skus)
 
-    value_taxonomy = subparsers.add_parser("value-battlefield-taxonomy", help="Query a product category value battlefield taxonomy.")
+    value_taxonomy = subparsers.add_parser(
+        "value-battlefield-taxonomy",
+        help="Query a product category value battlefield taxonomy.",
+    )
     add_product_category_arg(value_taxonomy, default="tv", allow_auto=False)
-    value_taxonomy.add_argument("--battlefield-code", help="Filter by battlefield code.")
-    value_taxonomy.add_argument("--search", help="Search code/name/tasks/groups/claims/params.")
+    value_taxonomy.add_argument(
+        "--battlefield-code", help="Filter by battlefield code."
+    )
+    value_taxonomy.add_argument(
+        "--search", help="Search code/name/tasks/groups/claims/params."
+    )
     add_format_arg(value_taxonomy)
 
-    value_profile = subparsers.add_parser("sku-value-battlefield", help="Query one SKU/model value battlefield profile.")
+    value_profile = subparsers.add_parser(
+        "sku-value-battlefield", help="Query one SKU/model value battlefield profile."
+    )
     add_common_args(value_profile)
     add_product_category_arg(value_profile)
-    value_profile.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
+    value_profile.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
     value_profile.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    value_profile.add_argument("--model-name", help="Exact or fuzzy model name, such as 85E7Q.")
-    value_profile.add_argument("--include-scores", action="store_true", help="Include all SKU x battlefield score rows.")
+    value_profile.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 85E7Q."
+    )
+    value_profile.add_argument(
+        "--include-scores",
+        action="store_true",
+        help="Include all SKU x battlefield score rows.",
+    )
     add_format_arg(value_profile)
 
-    value_skus = subparsers.add_parser("value-battlefield-skus", help="Query SKUs covered by one value battlefield.")
+    value_skus = subparsers.add_parser(
+        "value-battlefield-skus", help="Query SKUs covered by one value battlefield."
+    )
     add_common_args(value_skus)
     add_product_category_arg(value_skus, default="tv", allow_auto=False)
-    value_skus.add_argument("--battlefield-code", help="Battlefield code, such as BF_LARGE_SCREEN_VALUE_UPGRADE.")
-    value_skus.add_argument("--relation-status", choices=("all", "primary_battlefield", "secondary_battlefield", "opportunity_battlefield", "brand_claimed_battlefield", "user_observed_battlefield", "drag_factor_battlefield"), default="all")
+    value_skus.add_argument(
+        "--battlefield-code",
+        help="Battlefield code, such as BF_LARGE_SCREEN_VALUE_UPGRADE.",
+    )
+    value_skus.add_argument(
+        "--relation-status",
+        choices=(
+            "all",
+            "primary_battlefield",
+            "secondary_battlefield",
+            "opportunity_battlefield",
+            "brand_claimed_battlefield",
+            "user_observed_battlefield",
+            "drag_factor_battlefield",
+        ),
+        default="all",
+    )
     value_skus.add_argument("--query", help="Natural battlefield query text.")
-    value_skus.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include; 0 means all.")
+    value_skus.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include; 0 means all.",
+    )
     add_format_arg(value_skus)
 
-    value_graph = subparsers.add_parser("value-battlefield-graph", help="Query the latest value battlefield graph snapshot.")
+    value_graph = subparsers.add_parser(
+        "value-battlefield-graph",
+        help="Query the latest value battlefield graph snapshot.",
+    )
     add_common_args(value_graph)
     add_product_category_arg(value_graph, default="tv", allow_auto=False)
     add_format_arg(value_graph)
 
-    semantic_map = subparsers.add_parser("semantic-market-map", help="Query M11D market map and allocation summary by task, target group, or battlefield.")
+    semantic_map = subparsers.add_parser(
+        "semantic-market-map",
+        help="Query M11D market map and allocation summary by task, target group, or battlefield.",
+    )
     add_common_args(semantic_map)
     add_product_category_arg(semantic_map, default="tv", allow_auto=False)
-    semantic_map.add_argument("--analysis-population", choices=("fact_complete_with_comment", "all_semantic_profiles"), default="fact_complete_with_comment")
+    semantic_map.add_argument(
+        "--analysis-population",
+        choices=("fact_complete_with_comment", "all_semantic_profiles"),
+        default="fact_complete_with_comment",
+    )
     semantic_map.add_argument("--market-window", default="full_observed_window")
-    semantic_map.add_argument("--dimension-type", choices=("user_task", "target_group", "battlefield"), help="Dimension type to query.")
-    semantic_map.add_argument("--dimension-code", help="Dimension code, such as BF_LARGE_SCREEN_FAMILY_CINEMA.")
+    semantic_map.add_argument(
+        "--dimension-type",
+        choices=("user_task", "target_group", "battlefield"),
+        help="Dimension type to query.",
+    )
+    semantic_map.add_argument(
+        "--dimension-code",
+        help="Dimension code, such as BF_LARGE_SCREEN_FAMILY_CINEMA.",
+    )
     semantic_map.add_argument("--query", help="Natural dimension query text.")
-    semantic_map.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of top SKU contributions to include; 0 means all.")
+    semantic_map.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of top SKU contributions to include; 0 means all.",
+    )
     add_format_arg(semantic_map)
 
-    sku_allocation = subparsers.add_parser("sku-sales-allocation", help="Query M11D sales allocation for one SKU/model.")
+    sku_allocation = subparsers.add_parser(
+        "sku-sales-allocation", help="Query M11D sales allocation for one SKU/model."
+    )
     add_common_args(sku_allocation)
     add_product_category_arg(sku_allocation)
-    sku_allocation.add_argument("--analysis-population", choices=("fact_complete_with_comment", "all_semantic_profiles"), default="fact_complete_with_comment")
+    sku_allocation.add_argument(
+        "--analysis-population",
+        choices=("fact_complete_with_comment", "all_semantic_profiles"),
+        default="fact_complete_with_comment",
+    )
     sku_allocation.add_argument("--market-window", default="full_observed_window")
-    sku_allocation.add_argument("--query", help="SKU code or model name. Fuzzy model search is supported.")
-    sku_allocation.add_argument("--sku-code", help="Exact SKU code, such as TV00027354.")
-    sku_allocation.add_argument("--model-name", help="Exact or fuzzy model name, such as 65E7Q.")
-    sku_allocation.add_argument("--dimension-type", choices=("all", "user_task", "target_group", "battlefield"), default="all")
+    sku_allocation.add_argument(
+        "--query", help="SKU code or model name. Fuzzy model search is supported."
+    )
+    sku_allocation.add_argument(
+        "--sku-code", help="Exact SKU code, such as TV00027354."
+    )
+    sku_allocation.add_argument(
+        "--model-name", help="Exact or fuzzy model name, such as 65E7Q."
+    )
+    sku_allocation.add_argument(
+        "--dimension-type",
+        choices=("all", "user_task", "target_group", "battlefield"),
+        default="all",
+    )
     add_format_arg(sku_allocation)
 
-    ask = subparsers.add_parser("ask", help="Route a natural-language question to the right read-only query.")
+    ask = subparsers.add_parser(
+        "ask", help="Route a natural-language question to the right read-only query."
+    )
     add_common_args(ask)
     add_product_category_arg(ask)
     ask.add_argument("question", nargs="+", help="Natural-language question.")
-    ask.add_argument("--sku-limit", type=int, default=DEFAULT_SKU_LIMIT, help="Number of SKU codes to include for tier coverage.")
+    ask.add_argument(
+        "--sku-limit",
+        type=int,
+        default=DEFAULT_SKU_LIMIT,
+        help="Number of SKU codes to include for tier coverage.",
+    )
     add_format_arg(ask)
     return parser
 
@@ -811,9 +1268,16 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--batch-id", default=LATEST_BATCH)
 
 
-def add_product_category_arg(parser: argparse.ArgumentParser, *, default: str = "auto", allow_auto: bool = True) -> None:
+def add_product_category_arg(
+    parser: argparse.ArgumentParser, *, default: str = "auto", allow_auto: bool = True
+) -> None:
     choices = ("auto", "tv", "ac") if allow_auto else ("tv", "ac")
-    parser.add_argument("--product-category", choices=choices, default=default, help="Business product category. Use auto for natural-language routing.")
+    parser.add_argument(
+        "--product-category",
+        choices=choices,
+        default=default,
+        help="Business product category. Use auto for natural-language routing.",
+    )
 
 
 def add_format_arg(parser: argparse.ArgumentParser) -> None:
@@ -834,7 +1298,14 @@ def query_sku_param_profile(
     param_limit: int = 120,
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
-    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["rule_version"])
+    resolved_batch_id = resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["rule_version"],
+    )
     profile = find_sku_profile(
         db,
         project_id=project_id,
@@ -880,7 +1351,9 @@ def query_sku_param_profile(
             "conflict_count": profile.conflict_count,
             "review_required_count": profile.review_required_count,
         },
-        "dimension_tier_profile": extract_dimension_tier_profile(profile, dimension_tiers),
+        "dimension_tier_profile": extract_dimension_tier_profile(
+            profile, dimension_tiers
+        ),
         "dimension_tiers": [
             {
                 "dimension_code": row.dimension_code,
@@ -916,7 +1389,12 @@ def query_tv_param_taxonomy(
     search: str | None = None,
     include_excluded: bool = False,
 ) -> dict[str, Any]:
-    return query_param_taxonomy(product_category="TV", group=group, search=search, include_excluded=include_excluded)
+    return query_param_taxonomy(
+        product_category="TV",
+        group=group,
+        search=search,
+        include_excluded=include_excluded,
+    )
 
 
 def query_param_taxonomy(
@@ -976,7 +1454,9 @@ def query_param_taxonomy(
         "total_param_count": len(taxonomy.standard_params),
         "group_counts": dict(sorted(group_counts.items())),
         "params": params,
-        "raw_field_mapping": {field: codes for field, codes in sorted(raw_field_mapping.items())},
+        "raw_field_mapping": {
+            field: codes for field, codes in sorted(raw_field_mapping.items())
+        },
         "dimension_tiers": [
             {
                 "dimension_code": tier.dimension_code,
@@ -1006,17 +1486,29 @@ def query_tier_coverage(
     sku_limit: int = DEFAULT_SKU_LIMIT,
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
-    resolved_batch_id = resolve_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["rule_version"])
+    resolved_batch_id = resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["rule_version"],
+    )
     taxonomy = config["taxonomy_factory"]()
     matched_dimension = resolve_dimension(dimension, query)
-    matched_tiers = resolve_tiers(taxonomy.dimension_tiers, dimension=matched_dimension, tier=tier, query=query)
+    matched_tiers = resolve_tiers(
+        taxonomy.dimension_tiers, dimension=matched_dimension, tier=tier, query=query
+    )
     stmt = (
         select(entities.Core3ParamTierCoverage)
         .where(entities.Core3ParamTierCoverage.project_id == project_id)
         .where(entities.Core3ParamTierCoverage.category_code == category_code)
         .where(entities.Core3ParamTierCoverage.batch_id == resolved_batch_id)
         .where(entities.Core3ParamTierCoverage.rule_version == config["rule_version"])
-        .where(entities.Core3ParamTierCoverage.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3ParamTierCoverage.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3ParamTierCoverage.is_current.is_(True))
         .order_by(
             entities.Core3ParamTierCoverage.dimension_code,
@@ -1025,14 +1517,17 @@ def query_tier_coverage(
         )
     )
     if matched_dimension:
-        stmt = stmt.where(entities.Core3ParamTierCoverage.dimension_code == matched_dimension)
+        stmt = stmt.where(
+            entities.Core3ParamTierCoverage.dimension_code == matched_dimension
+        )
     if matched_tiers:
         tier_pairs = {(item.dimension_code, item.tier_code) for item in matched_tiers}
         stmt = stmt.where(
             or_(
                 *[
                     and_(
-                        entities.Core3ParamTierCoverage.dimension_code == dimension_code,
+                        entities.Core3ParamTierCoverage.dimension_code
+                        == dimension_code,
                         entities.Core3ParamTierCoverage.tier_code == tier_code,
                     )
                     for dimension_code, tier_code in tier_pairs
@@ -1056,7 +1551,8 @@ def query_tier_coverage(
                 "coverage_status": row.coverage_status,
                 "sku_codes": visible_skus,
                 "sku_codes_returned": len(visible_skus),
-                "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+                "sku_codes_truncated": sku_limit != 0
+                and len(sku_codes) > len(visible_skus),
                 "sample_sku_codes": row.sample_sku_codes or [],
             }
         )
@@ -1131,7 +1627,10 @@ def query_claim_taxonomy(
         "total_claim_count": len(taxonomy.claims),
         "dimension_counts": dict(sorted(dimension_counts.items())),
         "claims": claims,
-        "support_param_mapping": {param_code: codes for param_code, codes in sorted(raw_support_mapping.items())},
+        "support_param_mapping": {
+            param_code: codes
+            for param_code, codes in sorted(raw_support_mapping.items())
+        },
         "positions": [
             {
                 "dimension_code": position.dimension_code,
@@ -1160,7 +1659,14 @@ def query_sku_claim_profile(
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
     ensure_claim_taxonomy_available(product_category)
-    resolved_batch_id = resolve_claim_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["claim_rule_version"])
+    resolved_batch_id = resolve_claim_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["claim_rule_version"],
+    )
     profile = find_sku_claim_profile(
         db,
         project_id=project_id,
@@ -1269,16 +1775,31 @@ def query_claim_position_coverage(
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
     taxonomy = claim_taxonomy_for_product_category(product_category)
-    resolved_batch_id = resolve_claim_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["claim_rule_version"])
+    resolved_batch_id = resolve_claim_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["claim_rule_version"],
+    )
     matched_dimension = resolve_claim_dimension(dimension, query)
-    matched_positions = resolve_claim_positions(taxonomy, dimension=matched_dimension, position=position, query=query)
+    matched_positions = resolve_claim_positions(
+        taxonomy, dimension=matched_dimension, position=position, query=query
+    )
     stmt = (
         select(entities.Core3ClaimPositionCoverage)
         .where(entities.Core3ClaimPositionCoverage.project_id == project_id)
         .where(entities.Core3ClaimPositionCoverage.category_code == category_code)
         .where(entities.Core3ClaimPositionCoverage.batch_id == resolved_batch_id)
-        .where(entities.Core3ClaimPositionCoverage.rule_version == config["claim_rule_version"])
-        .where(entities.Core3ClaimPositionCoverage.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3ClaimPositionCoverage.rule_version
+            == config["claim_rule_version"]
+        )
+        .where(
+            entities.Core3ClaimPositionCoverage.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3ClaimPositionCoverage.is_current.is_(True))
         .order_by(
             entities.Core3ClaimPositionCoverage.position_source.desc(),
@@ -1288,17 +1809,25 @@ def query_claim_position_coverage(
         )
     )
     if position_source != "all":
-        stmt = stmt.where(entities.Core3ClaimPositionCoverage.position_source == position_source)
+        stmt = stmt.where(
+            entities.Core3ClaimPositionCoverage.position_source == position_source
+        )
     if matched_dimension:
-        stmt = stmt.where(entities.Core3ClaimPositionCoverage.dimension_code == matched_dimension)
+        stmt = stmt.where(
+            entities.Core3ClaimPositionCoverage.dimension_code == matched_dimension
+        )
     if matched_positions:
-        pairs = {(item.dimension_code, item.position_code) for item in matched_positions}
+        pairs = {
+            (item.dimension_code, item.position_code) for item in matched_positions
+        }
         stmt = stmt.where(
             or_(
                 *[
                     and_(
-                        entities.Core3ClaimPositionCoverage.dimension_code == dimension_code,
-                        entities.Core3ClaimPositionCoverage.position_code == position_code,
+                        entities.Core3ClaimPositionCoverage.dimension_code
+                        == dimension_code,
+                        entities.Core3ClaimPositionCoverage.position_code
+                        == position_code,
                     )
                     for dimension_code, position_code in pairs
                 ]
@@ -1323,7 +1852,8 @@ def query_claim_position_coverage(
                 "basis_claim_codes": row.basis_claim_codes or [],
                 "sku_codes": visible_skus,
                 "sku_codes_returned": len(visible_skus),
-                "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+                "sku_codes_truncated": sku_limit != 0
+                and len(sku_codes) > len(visible_skus),
                 "sample_sku_codes": row.sample_sku_codes or [],
             }
         )
@@ -1433,7 +1963,14 @@ def query_sku_comment_profile(
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
     ensure_comment_taxonomy_available(product_category)
-    resolved_batch_id = resolve_comment_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["comment_rule_version"])
+    resolved_batch_id = resolve_comment_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["comment_rule_version"],
+    )
     profile = find_sku_comment_profile(
         db,
         project_id=project_id,
@@ -1521,17 +2058,32 @@ def query_comment_dimension_coverage(
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
     taxonomy = comment_taxonomy_for_product_category(product_category)
-    resolved_batch_id = resolve_comment_batch_id(db, project_id, category_code, batch_id, require_profile=True, rule_version=config["comment_rule_version"])
+    resolved_batch_id = resolve_comment_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=True,
+        rule_version=config["comment_rule_version"],
+    )
     matched_dimension = resolve_comment_dimension(dimension, query)
     matched_type = resolve_comment_coverage_type(coverage_type, query)
-    matched_key = resolve_comment_coverage_key(taxonomy, coverage_key=coverage_key, query=query, dimension=matched_dimension)
+    matched_key = resolve_comment_coverage_key(
+        taxonomy, coverage_key=coverage_key, query=query, dimension=matched_dimension
+    )
     stmt = (
         select(entities.Core3CommentFactCoverage)
         .where(entities.Core3CommentFactCoverage.project_id == project_id)
         .where(entities.Core3CommentFactCoverage.category_code == category_code)
         .where(entities.Core3CommentFactCoverage.batch_id == resolved_batch_id)
-        .where(entities.Core3CommentFactCoverage.rule_version == config["comment_rule_version"])
-        .where(entities.Core3CommentFactCoverage.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3CommentFactCoverage.rule_version
+            == config["comment_rule_version"]
+        )
+        .where(
+            entities.Core3CommentFactCoverage.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3CommentFactCoverage.product_category == product_category)
         .where(entities.Core3CommentFactCoverage.is_current.is_(True))
         .order_by(
@@ -1541,9 +2093,13 @@ def query_comment_dimension_coverage(
         )
     )
     if matched_type != "all":
-        stmt = stmt.where(entities.Core3CommentFactCoverage.coverage_type == matched_type)
+        stmt = stmt.where(
+            entities.Core3CommentFactCoverage.coverage_type == matched_type
+        )
     if matched_dimension:
-        stmt = stmt.where(entities.Core3CommentFactCoverage.dimension_code == matched_dimension)
+        stmt = stmt.where(
+            entities.Core3CommentFactCoverage.dimension_code == matched_dimension
+        )
     if matched_key:
         stmt = stmt.where(entities.Core3CommentFactCoverage.coverage_key == matched_key)
     rows = list(db.execute(stmt).scalars())
@@ -1578,7 +2134,8 @@ def query_comment_dimension_coverage(
                 "contradicted_claim_codes": row.contradicted_claim_codes or [],
                 "sku_codes": visible_skus,
                 "sku_codes_returned": len(visible_skus),
-                "sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+                "sku_codes_truncated": sku_limit != 0
+                and len(sku_codes) > len(visible_skus),
                 "sample_sku_codes": row.sample_sku_codes or [],
                 "top_skus": row.top_skus_json or [],
                 "sample_evidence": row.sample_evidence_json or [],
@@ -1616,7 +2173,9 @@ def query_sku_market_profile(
     include_pools: bool = False,
     sku_limit: int = DEFAULT_SKU_LIMIT,
 ) -> dict[str, Any]:
-    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    resolved_batch_id = resolve_market_batch_id(
+        db, project_id, category_code, batch_id, require_profile=True
+    )
     profile = find_sku_market_profile(
         db,
         project_id=project_id,
@@ -1681,15 +2240,31 @@ def query_sku_market_profile(
         "price_position": {
             "price_band_category": profile.price_band_category,
             "price_band_size": profile.price_band_size,
-            "price_percentile_in_category": decimal_to_float(profile.price_percentile_in_category),
-            "price_percentile_in_size": decimal_to_float(profile.price_percentile_in_size),
-            "volume_percentile_in_category": decimal_to_float(profile.volume_percentile_in_category),
-            "volume_percentile_in_size": decimal_to_float(profile.volume_percentile_in_size),
-            "same_pool_volume_percentile": decimal_to_float(profile.same_pool_volume_percentile),
+            "price_percentile_in_category": decimal_to_float(
+                profile.price_percentile_in_category
+            ),
+            "price_percentile_in_size": decimal_to_float(
+                profile.price_percentile_in_size
+            ),
+            "volume_percentile_in_category": decimal_to_float(
+                profile.volume_percentile_in_category
+            ),
+            "volume_percentile_in_size": decimal_to_float(
+                profile.volume_percentile_in_size
+            ),
+            "same_pool_volume_percentile": decimal_to_float(
+                profile.same_pool_volume_percentile
+            ),
             "same_pool_sku_count": profile.same_pool_sku_count,
-            "price_gap_to_category_median": decimal_to_float(profile.price_gap_to_category_median),
-            "price_gap_to_size_median": decimal_to_float(profile.price_gap_to_size_median),
-            "volume_gap_to_size_median": decimal_to_float(profile.volume_gap_to_size_median),
+            "price_gap_to_category_median": decimal_to_float(
+                profile.price_gap_to_category_median
+            ),
+            "price_gap_to_size_median": decimal_to_float(
+                profile.price_gap_to_size_median
+            ),
+            "volume_gap_to_size_median": decimal_to_float(
+                profile.volume_gap_to_size_median
+            ),
         },
         "size_position": {
             "screen_size_inch": decimal_to_float(profile.screen_size_inch),
@@ -1713,7 +2288,9 @@ def query_sku_market_profile(
     if include_signals:
         result["signals"] = [market_signal_payload(row) for row in signals]
     if include_pools:
-        result["comparable_pools"] = [comparable_pool_payload(row, sku_limit=sku_limit) for row in pools]
+        result["comparable_pools"] = [
+            comparable_pool_payload(row, sku_limit=sku_limit) for row in pools
+        ]
     return result
 
 
@@ -1728,20 +2305,26 @@ def query_market_bucket_coverage(
     analysis_window: str = "full_observed_window",
     sku_limit: int = DEFAULT_SKU_LIMIT,
 ) -> dict[str, Any]:
-    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    resolved_batch_id = resolve_market_batch_id(
+        db, project_id, category_code, batch_id, require_profile=True
+    )
     rows = list(
         db.execute(
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == project_id)
             .where(entities.Core3SkuMarketProfile.category_code == category_code)
             .where(entities.Core3SkuMarketProfile.batch_id == resolved_batch_id)
-            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(
+                entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION
+            )
             .where(entities.Core3SkuMarketProfile.analysis_window == analysis_window)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
             .order_by(entities.Core3SkuMarketProfile.sku_code)
         ).scalars()
     )
-    bucket_types = ("price", "size", "size_price") if bucket_type == "all" else (bucket_type,)
+    bucket_types = (
+        ("price", "size", "size_price") if bucket_type == "all" else (bucket_type,)
+    )
     query_norm = normalize_token(query)
     query_tokens = set(extract_match_tokens(query or ""))
     coverages: list[dict[str, Any]] = []
@@ -1750,12 +2333,18 @@ def query_market_bucket_coverage(
         labels: dict[str, str] = {}
         for row in rows:
             code, label = market_bucket_identity(row, type_code)
-            if query_norm and not market_bucket_query_matches(code, label, query_norm, query_tokens):
+            if query_norm and not market_bucket_query_matches(
+                code, label, query_norm, query_tokens
+            ):
                 continue
             grouped[code].append(row)
             labels[code] = label
         for code, profiles in grouped.items():
-            coverages.append(market_bucket_coverage_payload(type_code, code, labels[code], profiles, sku_limit=sku_limit))
+            coverages.append(
+                market_bucket_coverage_payload(
+                    type_code, code, labels[code], profiles, sku_limit=sku_limit
+                )
+            )
     coverages.sort(key=lambda item: (item["bucket_type"], item["bucket_code"]))
     return {
         "status": "ok",
@@ -1785,7 +2374,9 @@ def query_comparable_pools(
     analysis_window: str = "full_observed_window",
     sku_limit: int = DEFAULT_SKU_LIMIT,
 ) -> dict[str, Any]:
-    resolved_batch_id = resolve_market_batch_id(db, project_id, category_code, batch_id, require_profile=True)
+    resolved_batch_id = resolve_market_batch_id(
+        db, project_id, category_code, batch_id, require_profile=True
+    )
     profile = find_sku_market_profile(
         db,
         project_id=project_id,
@@ -1861,7 +2452,10 @@ def query_value_battlefield_taxonomy(
                 ]
             )
         )
-        if battlefield_code_norm and battlefield.battlefield_code != battlefield_code_norm:
+        if (
+            battlefield_code_norm
+            and battlefield.battlefield_code != battlefield_code_norm
+        ):
             continue
         if search_norm and search_norm not in haystack:
             continue
@@ -1878,8 +2472,12 @@ def query_value_battlefield_taxonomy(
                 },
                 "primary_task_codes": list(battlefield.primary_task_codes),
                 "secondary_task_codes": list(battlefield.secondary_task_codes),
-                "primary_target_group_codes": list(battlefield.primary_target_group_codes),
-                "comment_subdimension_codes": list(battlefield.comment_subdimension_codes),
+                "primary_target_group_codes": list(
+                    battlefield.primary_target_group_codes
+                ),
+                "comment_subdimension_codes": list(
+                    battlefield.comment_subdimension_codes
+                ),
                 "claim_codes": list(battlefield.claim_codes),
                 "param_codes": list(battlefield.param_codes),
             }
@@ -1940,7 +2538,9 @@ def query_user_task_taxonomy(
                     "adjacent_size_tiers": list(user_task.adjacent_size_tiers),
                     "adjacent_price_bands": list(user_task.adjacent_price_bands),
                 },
-                "comment_subdimension_codes": list(user_task.comment_subdimension_codes),
+                "comment_subdimension_codes": list(
+                    user_task.comment_subdimension_codes
+                ),
                 "comment_keywords": list(user_task.comment_keywords),
                 "claim_codes": list(user_task.claim_codes),
                 "param_codes": list(user_task.param_codes),
@@ -1970,7 +2570,9 @@ def query_sku_user_task(
     include_scores: bool = False,
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
-    if not config.get("user_task_taxonomy_factory") or not config.get("user_task_rule_version"):
+    if not config.get("user_task_taxonomy_factory") or not config.get(
+        "user_task_rule_version"
+    ):
         raise CatForgeInsightError(f"{config['label_cn']}用户任务 taxonomy 尚未发布。")
     resolved_batch_id = resolve_user_task_batch_id(
         db,
@@ -2023,7 +2625,9 @@ def query_sku_user_task(
         "market_position": {
             "size_tier": profile.size_tier,
             "price_band_in_size_tier": profile.price_band_in_size_tier,
-            "price_percentile_in_size_tier": decimal_to_float(profile.price_percentile_in_size_tier),
+            "price_percentile_in_size_tier": decimal_to_float(
+                profile.price_percentile_in_size_tier
+            ),
         },
         "primary_user_task_code": profile.primary_user_task_code,
         "primary_relation_status": profile.primary_relation_status,
@@ -2065,7 +2669,9 @@ def query_user_task_skus(
     if taxonomy_factory is None:
         raise CatForgeInsightError(f"{config['label_cn']}用户任务 taxonomy 尚未发布。")
     taxonomy: M09CUserTaskTaxonomy = taxonomy_factory()
-    resolved_code = resolve_user_task_code(taxonomy, user_task_code=user_task_code, query=query)
+    resolved_code = resolve_user_task_code(
+        taxonomy, user_task_code=user_task_code, query=query
+    )
     resolved_batch_id = resolve_user_task_batch_id(
         db,
         project_id,
@@ -2079,8 +2685,14 @@ def query_user_task_skus(
         .where(entities.Core3M09cSkuUserTaskScore.project_id == project_id)
         .where(entities.Core3M09cSkuUserTaskScore.category_code == category_code)
         .where(entities.Core3M09cSkuUserTaskScore.batch_id == resolved_batch_id)
-        .where(entities.Core3M09cSkuUserTaskScore.rule_version == config["user_task_rule_version"])
-        .where(entities.Core3M09cSkuUserTaskScore.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3M09cSkuUserTaskScore.rule_version
+            == config["user_task_rule_version"]
+        )
+        .where(
+            entities.Core3M09cSkuUserTaskScore.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3M09cSkuUserTaskScore.is_current.is_(True))
         .where(entities.Core3M09cSkuUserTaskScore.user_task_code == resolved_code)
         .where(entities.Core3M09cSkuUserTaskScore.relation_status != "not_supported")
@@ -2090,7 +2702,9 @@ def query_user_task_skus(
         )
     )
     if relation_status != "all":
-        stmt = stmt.where(entities.Core3M09cSkuUserTaskScore.relation_status == relation_status)
+        stmt = stmt.where(
+            entities.Core3M09cSkuUserTaskScore.relation_status == relation_status
+        )
     rows = list(db.execute(stmt).scalars())
     visible = rows if sku_limit == 0 else rows[: max(sku_limit, 0)]
     status_counts = Counter(row.relation_status for row in rows)
@@ -2146,7 +2760,10 @@ def query_target_group_taxonomy(
                 ]
             )
         )
-        if target_group_code_norm and target_group.target_group_code != target_group_code_norm:
+        if (
+            target_group_code_norm
+            and target_group.target_group_code != target_group_code_norm
+        ):
             continue
         if search_norm and search_norm not in haystack:
             continue
@@ -2162,7 +2779,9 @@ def query_target_group_taxonomy(
                     "adjacent_size_tiers": list(target_group.adjacent_size_tiers),
                     "adjacent_price_bands": list(target_group.adjacent_price_bands),
                 },
-                "comment_subdimension_codes": list(target_group.comment_subdimension_codes),
+                "comment_subdimension_codes": list(
+                    target_group.comment_subdimension_codes
+                ),
                 "comment_keywords": list(target_group.comment_keywords),
                 "claim_codes": list(target_group.claim_codes),
                 "param_codes": list(target_group.param_codes),
@@ -2192,7 +2811,9 @@ def query_sku_target_group(
     include_scores: bool = False,
 ) -> dict[str, Any]:
     config = product_category_config(product_category)
-    if not config.get("target_group_taxonomy_factory") or not config.get("target_group_rule_version"):
+    if not config.get("target_group_taxonomy_factory") or not config.get(
+        "target_group_rule_version"
+    ):
         raise CatForgeInsightError(f"{config['label_cn']}目标客群 taxonomy 尚未发布。")
     resolved_batch_id = resolve_target_group_batch_id(
         db,
@@ -2245,7 +2866,9 @@ def query_sku_target_group(
         "market_position": {
             "size_tier": profile.size_tier,
             "price_band_in_size_tier": profile.price_band_in_size_tier,
-            "price_percentile_in_size_tier": decimal_to_float(profile.price_percentile_in_size_tier),
+            "price_percentile_in_size_tier": decimal_to_float(
+                profile.price_percentile_in_size_tier
+            ),
         },
         "primary_target_group_code": profile.primary_target_group_code,
         "primary_relation_status": profile.primary_relation_status,
@@ -2286,7 +2909,9 @@ def query_target_group_skus(
     if taxonomy_factory is None:
         raise CatForgeInsightError(f"{config['label_cn']}目标客群 taxonomy 尚未发布。")
     taxonomy: M10CTargetGroupTaxonomy = taxonomy_factory()
-    resolved_code = resolve_target_group_code(taxonomy, target_group_code=target_group_code, query=query)
+    resolved_code = resolve_target_group_code(
+        taxonomy, target_group_code=target_group_code, query=query
+    )
     resolved_batch_id = resolve_target_group_batch_id(
         db,
         project_id,
@@ -2300,8 +2925,14 @@ def query_target_group_skus(
         .where(entities.Core3M10cSkuTargetGroupScore.project_id == project_id)
         .where(entities.Core3M10cSkuTargetGroupScore.category_code == category_code)
         .where(entities.Core3M10cSkuTargetGroupScore.batch_id == resolved_batch_id)
-        .where(entities.Core3M10cSkuTargetGroupScore.rule_version == config["target_group_rule_version"])
-        .where(entities.Core3M10cSkuTargetGroupScore.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3M10cSkuTargetGroupScore.rule_version
+            == config["target_group_rule_version"]
+        )
+        .where(
+            entities.Core3M10cSkuTargetGroupScore.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3M10cSkuTargetGroupScore.is_current.is_(True))
         .where(entities.Core3M10cSkuTargetGroupScore.target_group_code == resolved_code)
         .where(entities.Core3M10cSkuTargetGroupScore.relation_status != "not_supported")
@@ -2311,7 +2942,9 @@ def query_target_group_skus(
         )
     )
     if relation_status != "all":
-        stmt = stmt.where(entities.Core3M10cSkuTargetGroupScore.relation_status == relation_status)
+        stmt = stmt.where(
+            entities.Core3M10cSkuTargetGroupScore.relation_status == relation_status
+        )
     rows = list(db.execute(stmt).scalars())
     visible = rows if sku_limit == 0 else rows[: max(sku_limit, 0)]
     status_counts = Counter(row.relation_status for row in rows)
@@ -2325,7 +2958,9 @@ def query_target_group_skus(
         "taxonomy_version": taxonomy.taxonomy_version,
         "rule_version": config["target_group_rule_version"],
         "target_group_code": resolved_code,
-        "target_group_name": taxonomy.target_groups_by_code[resolved_code].target_group_name,
+        "target_group_name": taxonomy.target_groups_by_code[
+            resolved_code
+        ].target_group_name,
         "relation_status": relation_status,
         "sku_count": len(rows),
         "status_counts": dict(sorted(status_counts.items())),
@@ -2400,13 +3035,17 @@ def query_sku_value_battlefield(
         "market_position": {
             "size_tier": profile.size_tier,
             "price_band_in_size_tier": profile.price_band_in_size_tier,
-            "price_percentile_in_size_tier": decimal_to_float(profile.price_percentile_in_size_tier),
+            "price_percentile_in_size_tier": decimal_to_float(
+                profile.price_percentile_in_size_tier
+            ),
         },
         "primary_battlefield_code": profile.primary_battlefield_code,
         "primary_relation_status": profile.primary_relation_status,
         "secondary_battlefield_codes": profile.secondary_battlefield_codes_json or [],
-        "opportunity_battlefield_codes": profile.opportunity_battlefield_codes_json or [],
-        "drag_factor_battlefield_codes": profile.drag_factor_battlefield_codes_json or [],
+        "opportunity_battlefield_codes": profile.opportunity_battlefield_codes_json
+        or [],
+        "drag_factor_battlefield_codes": profile.drag_factor_battlefield_codes_json
+        or [],
         "battlefield_summary": profile.battlefield_summary_json or {},
         "quality": {
             "review_required": profile.review_required,
@@ -2439,7 +3078,9 @@ def query_value_battlefield_skus(
     if taxonomy_factory is None:
         raise CatForgeInsightError(f"{config['label_cn']}价值战场 taxonomy 尚未发布。")
     taxonomy: M11CValueBattlefieldTaxonomy = taxonomy_factory()
-    resolved_code = resolve_value_battlefield_code(taxonomy, battlefield_code=battlefield_code, query=query)
+    resolved_code = resolve_value_battlefield_code(
+        taxonomy, battlefield_code=battlefield_code, query=query
+    )
     resolved_batch_id = resolve_value_battlefield_batch_id(
         db,
         project_id,
@@ -2453,8 +3094,14 @@ def query_value_battlefield_skus(
         .where(entities.Core3SkuValueBattlefieldScore.project_id == project_id)
         .where(entities.Core3SkuValueBattlefieldScore.category_code == category_code)
         .where(entities.Core3SkuValueBattlefieldScore.batch_id == resolved_batch_id)
-        .where(entities.Core3SkuValueBattlefieldScore.rule_version == config["value_battlefield_rule_version"])
-        .where(entities.Core3SkuValueBattlefieldScore.taxonomy_version == taxonomy.taxonomy_version)
+        .where(
+            entities.Core3SkuValueBattlefieldScore.rule_version
+            == config["value_battlefield_rule_version"]
+        )
+        .where(
+            entities.Core3SkuValueBattlefieldScore.taxonomy_version
+            == taxonomy.taxonomy_version
+        )
         .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
         .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == resolved_code)
         .where(entities.Core3SkuValueBattlefieldScore.relation_status != "excluded")
@@ -2464,7 +3111,9 @@ def query_value_battlefield_skus(
         )
     )
     if relation_status != "all":
-        stmt = stmt.where(entities.Core3SkuValueBattlefieldScore.relation_status == relation_status)
+        stmt = stmt.where(
+            entities.Core3SkuValueBattlefieldScore.relation_status == relation_status
+        )
     rows = list(db.execute(stmt).scalars())
     visible = rows if sku_limit == 0 else rows[: max(sku_limit, 0)]
     status_counts = Counter(row.relation_status for row in rows)
@@ -2478,7 +3127,9 @@ def query_value_battlefield_skus(
         "taxonomy_version": taxonomy.taxonomy_version,
         "rule_version": config["value_battlefield_rule_version"],
         "battlefield_code": resolved_code,
-        "battlefield_name": taxonomy.battlefields_by_code[resolved_code].battlefield_name,
+        "battlefield_name": taxonomy.battlefields_by_code[
+            resolved_code
+        ].battlefield_name,
         "relation_status": relation_status,
         "sku_count": len(rows),
         "status_counts": dict(sorted(status_counts.items())),
@@ -2509,9 +3160,16 @@ def query_value_battlefield_graph(
     row = db.execute(
         select(entities.Core3ValueBattlefieldGraphSnapshot)
         .where(entities.Core3ValueBattlefieldGraphSnapshot.project_id == project_id)
-        .where(entities.Core3ValueBattlefieldGraphSnapshot.category_code == category_code)
-        .where(entities.Core3ValueBattlefieldGraphSnapshot.batch_id == resolved_batch_id)
-        .where(entities.Core3ValueBattlefieldGraphSnapshot.rule_version == config["value_battlefield_rule_version"])
+        .where(
+            entities.Core3ValueBattlefieldGraphSnapshot.category_code == category_code
+        )
+        .where(
+            entities.Core3ValueBattlefieldGraphSnapshot.batch_id == resolved_batch_id
+        )
+        .where(
+            entities.Core3ValueBattlefieldGraphSnapshot.rule_version
+            == config["value_battlefield_rule_version"]
+        )
         .where(entities.Core3ValueBattlefieldGraphSnapshot.is_current.is_(True))
         .order_by(entities.Core3ValueBattlefieldGraphSnapshot.created_at.desc())
         .limit(1)
@@ -2558,7 +3216,9 @@ def query_semantic_market_map(
     config = product_category_config(product_category)
     rule_version = config.get("semantic_market_rule_version")
     if not rule_version:
-        raise CatForgeInsightError(f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。")
+        raise CatForgeInsightError(
+            f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。"
+        )
     resolved_batch_id = resolve_semantic_market_batch_id(
         db,
         project_id,
@@ -2572,11 +3232,22 @@ def query_semantic_market_map(
     stmt = (
         select(entities.Core3SemanticMarketDimensionSummary)
         .where(entities.Core3SemanticMarketDimensionSummary.project_id == project_id)
-        .where(entities.Core3SemanticMarketDimensionSummary.category_code == category_code)
-        .where(entities.Core3SemanticMarketDimensionSummary.batch_id == resolved_batch_id)
-        .where(entities.Core3SemanticMarketDimensionSummary.rule_version == rule_version)
-        .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
-        .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+        .where(
+            entities.Core3SemanticMarketDimensionSummary.category_code == category_code
+        )
+        .where(
+            entities.Core3SemanticMarketDimensionSummary.batch_id == resolved_batch_id
+        )
+        .where(
+            entities.Core3SemanticMarketDimensionSummary.rule_version == rule_version
+        )
+        .where(
+            entities.Core3SemanticMarketDimensionSummary.analysis_population
+            == analysis_population
+        )
+        .where(
+            entities.Core3SemanticMarketDimensionSummary.market_window == market_window
+        )
         .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
         .order_by(
             entities.Core3SemanticMarketDimensionSummary.dimension_type,
@@ -2585,19 +3256,29 @@ def query_semantic_market_map(
         )
     )
     if dimension_type:
-        stmt = stmt.where(entities.Core3SemanticMarketDimensionSummary.dimension_type == dimension_type)
+        stmt = stmt.where(
+            entities.Core3SemanticMarketDimensionSummary.dimension_type
+            == dimension_type
+        )
     query_terms = semantic_market_query_terms(query)
     if dimension_code:
-        stmt = stmt.where(entities.Core3SemanticMarketDimensionSummary.dimension_code == dimension_code)
+        stmt = stmt.where(
+            entities.Core3SemanticMarketDimensionSummary.dimension_code
+            == dimension_code
+        )
     elif query_terms:
         stmt = stmt.where(
             or_(
                 *[
-                    func.lower(entities.Core3SemanticMarketDimensionSummary.dimension_code).like(f"%{escape_like(term.lower())}%", escape="\\")
+                    func.lower(
+                        entities.Core3SemanticMarketDimensionSummary.dimension_code
+                    ).like(f"%{escape_like(term.lower())}%", escape="\\")
                     for term in query_terms
                 ],
                 *[
-                    func.lower(entities.Core3SemanticMarketDimensionSummary.dimension_name).like(f"%{escape_like(term.lower())}%", escape="\\")
+                    func.lower(
+                        entities.Core3SemanticMarketDimensionSummary.dimension_name
+                    ).like(f"%{escape_like(term.lower())}%", escape="\\")
                     for term in query_terms
                 ],
             )
@@ -2632,7 +3313,9 @@ def query_semantic_market_map(
         result_items.append(
             {
                 **semantic_market_summary_payload(row),
-                "contributions": [semantic_market_contribution_payload(item) for item in contributions],
+                "contributions": [
+                    semantic_market_contribution_payload(item) for item in contributions
+                ],
             }
         )
     return {
@@ -2671,7 +3354,9 @@ def query_sku_sales_allocation(
     config = product_category_config(product_category)
     rule_version = config.get("semantic_market_rule_version")
     if not rule_version:
-        raise CatForgeInsightError(f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。")
+        raise CatForgeInsightError(
+            f"{config['label_cn']}M11D 语义市场图谱规则尚未发布。"
+        )
     resolved_batch_id = resolve_semantic_market_batch_id(
         db,
         project_id,
@@ -2702,7 +3387,11 @@ def query_sku_sales_allocation(
             "batch_id": resolved_batch_id,
             "query": query or sku_code or model_name,
         }
-    if isinstance(rows_or_candidates, list) and rows_or_candidates and isinstance(rows_or_candidates[0], dict):
+    if (
+        isinstance(rows_or_candidates, list)
+        and rows_or_candidates
+        and isinstance(rows_or_candidates[0], dict)
+    ):
         return {
             "status": "ambiguous",
             "message_cn": "匹配到多个 SKU，请用 --sku-code 精确查询。",
@@ -2732,8 +3421,12 @@ def query_sku_sales_allocation(
         bucket["allocation_weight_sum"] += float(row.allocation_weight or 0)
         bucket["allocated_sales_volume"] += float(row.allocated_sales_volume or 0)
         bucket["allocated_sales_amount"] += float(row.allocated_sales_amount or 0)
-        bucket["allocated_avg_weekly_sales_volume"] += float(row.allocated_avg_weekly_sales_volume or 0)
-        bucket["allocated_avg_weekly_sales_amount"] += float(row.allocated_avg_weekly_sales_amount or 0)
+        bucket["allocated_avg_weekly_sales_volume"] += float(
+            row.allocated_avg_weekly_sales_volume or 0
+        )
+        bucket["allocated_avg_weekly_sales_amount"] += float(
+            row.allocated_avg_weekly_sales_amount or 0
+        )
     first = rows[0]
     return {
         "status": "ok",
@@ -2778,13 +3471,24 @@ def list_semantic_market_contributions(
     stmt = (
         select(entities.Core3SemanticMarketSkuContribution)
         .where(entities.Core3SemanticMarketSkuContribution.project_id == project_id)
-        .where(entities.Core3SemanticMarketSkuContribution.category_code == category_code)
+        .where(
+            entities.Core3SemanticMarketSkuContribution.category_code == category_code
+        )
         .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
         .where(entities.Core3SemanticMarketSkuContribution.rule_version == rule_version)
-        .where(entities.Core3SemanticMarketSkuContribution.analysis_population == analysis_population)
-        .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
-        .where(entities.Core3SemanticMarketSkuContribution.dimension_type == dimension_type)
-        .where(entities.Core3SemanticMarketSkuContribution.dimension_code == dimension_code)
+        .where(
+            entities.Core3SemanticMarketSkuContribution.analysis_population
+            == analysis_population
+        )
+        .where(
+            entities.Core3SemanticMarketSkuContribution.market_window == market_window
+        )
+        .where(
+            entities.Core3SemanticMarketSkuContribution.dimension_type == dimension_type
+        )
+        .where(
+            entities.Core3SemanticMarketSkuContribution.dimension_code == dimension_code
+        )
         .where(entities.Core3SemanticMarketSkuContribution.is_current.is_(True))
         .order_by(
             entities.Core3SemanticMarketSkuContribution.sku_rank_in_dimension,
@@ -2808,9 +3512,22 @@ def answer_natural_language(
     sku_limit: int,
 ) -> dict[str, Any]:
     normalized = normalize_token(question)
-    resolved_product_category = resolve_product_category(product_category, query=question)
+    resolved_product_category = resolve_product_category(
+        product_category, query=question
+    )
     if should_route_to_semantic_market_query(question, normalized):
-        if any(term in question for term in ("某个sku", "某个 SKU", "这款", "这个sku", "这个 SKU", "销量分配", "销量切分")) and extract_sku_or_model_query(question):
+        if any(
+            term in question
+            for term in (
+                "某个sku",
+                "某个 SKU",
+                "这款",
+                "这个sku",
+                "这个 SKU",
+                "销量分配",
+                "销量切分",
+            )
+        ) and extract_sku_or_model_query(question):
             result = query_sku_sales_allocation(
                 db,
                 project_id=project_id,
@@ -2835,7 +3552,9 @@ def answer_natural_language(
             product_category=resolved_product_category,
             analysis_population="fact_complete_with_comment",
             market_window="full_observed_window",
-            dimension_type=semantic_dimension_type_from_question(question, allow_all=True),
+            dimension_type=semantic_dimension_type_from_question(
+                question, allow_all=True
+            ),
             dimension_code=None,
             query=question,
             sku_limit=sku_limit,
@@ -2844,7 +3563,17 @@ def answer_natural_language(
         result["question"] = question
         return result
     if should_route_to_user_task_query(question, normalized):
-        if any(word in question for word in ("用户任务预设", "任务预设", "用户任务体系", "任务体系", "用户任务分类", "用户任务 taxonomy")):
+        if any(
+            word in question
+            for word in (
+                "用户任务预设",
+                "任务预设",
+                "用户任务体系",
+                "任务体系",
+                "用户任务分类",
+                "用户任务 taxonomy",
+            )
+        ):
             result = query_user_task_taxonomy(
                 product_category=resolved_product_category,
                 user_task_code=None,
@@ -2879,7 +3608,18 @@ def answer_natural_language(
         result["question"] = question
         return result
     if should_route_to_target_group_query(question, normalized):
-        if any(word in question for word in ("目标客群预设", "目标客户预设", "目标用户预设", "客群预设", "客群体系", "客群分类", "目标客群 taxonomy")):
+        if any(
+            word in question
+            for word in (
+                "目标客群预设",
+                "目标客户预设",
+                "目标用户预设",
+                "客群预设",
+                "客群体系",
+                "客群分类",
+                "目标客群 taxonomy",
+            )
+        ):
             result = query_target_group_taxonomy(
                 product_category=resolved_product_category,
                 target_group_code=None,
@@ -2914,7 +3654,17 @@ def answer_natural_language(
         result["question"] = question
         return result
     if should_route_to_value_battlefield_query(question, normalized):
-        if any(word in question for word in ("标准战场", "战场预设", "价值战场预设", "战场 taxonomy", "战场体系", "战场分类")):
+        if any(
+            word in question
+            for word in (
+                "标准战场",
+                "战场预设",
+                "价值战场预设",
+                "战场 taxonomy",
+                "战场体系",
+                "战场分类",
+            )
+        ):
             result = query_value_battlefield_taxonomy(
                 product_category=resolved_product_category,
                 battlefield_code=None,
@@ -2959,7 +3709,10 @@ def answer_natural_language(
         result["question"] = question
         return result
     if should_route_to_comment_query(question, normalized):
-        if any(word in question for word in ("评论维度", "评论事实维度", "标准评论", "评论体系", "评论分类")):
+        if any(
+            word in question
+            for word in ("评论维度", "评论事实维度", "标准评论", "评论体系", "评论分类")
+        ):
             result = query_comment_taxonomy(
                 product_category=resolved_product_category,
                 dimension=question,
@@ -3034,11 +3787,16 @@ def answer_natural_language(
         result["question"] = question
         return result
     if "卖点" in question or "claim" in normalized:
-        if any(word in question for word in ("标准卖点", "卖点分类", "卖点维度", "卖点体系")):
+        if any(
+            word in question
+            for word in ("标准卖点", "卖点分类", "卖点维度", "卖点体系")
+        ):
             result = query_claim_taxonomy(
                 product_category=resolved_product_category,
                 dimension=None,
-                search=extract_claim_taxonomy_search(question, product_category=resolved_product_category),
+                search=extract_claim_taxonomy_search(
+                    question, product_category=resolved_product_category
+                ),
             )
             result["routed_command"] = "claim-taxonomy"
             return result
@@ -3073,7 +3831,9 @@ def answer_natural_language(
     if "标准参数" in question or "参数表" in question or "参数分类" in question:
         result = query_param_taxonomy(
             product_category=resolved_product_category,
-            search=extract_taxonomy_search(question, product_category=resolved_product_category),
+            search=extract_taxonomy_search(
+                question, product_category=resolved_product_category
+            ),
             include_excluded="排除" in question,
         )
         result["routed_command"] = "param-taxonomy"
@@ -3125,7 +3885,10 @@ def resolve_batch_id(
             .where(entities.Core3SkuParamProfile.project_id == project_id)
             .where(entities.Core3SkuParamProfile.category_code == category_code)
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
-            .order_by(entities.Core3SkuParamProfile.created_at.desc(), entities.Core3SkuParamProfile.batch_id.desc())
+            .order_by(
+                entities.Core3SkuParamProfile.created_at.desc(),
+                entities.Core3SkuParamProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
@@ -3134,12 +3897,17 @@ def resolve_batch_id(
         select(entities.Core3SourceBatch.batch_id)
         .where(entities.Core3SourceBatch.project_id == project_id)
         .where(entities.Core3SourceBatch.category_code == category_code)
-        .order_by(entities.Core3SourceBatch.created_at.desc(), entities.Core3SourceBatch.batch_id.desc())
+        .order_by(
+            entities.Core3SourceBatch.created_at.desc(),
+            entities.Core3SourceBatch.batch_id.desc(),
+        )
         .limit(1)
     ).scalar_one_or_none()
     if source_batch_id:
         return str(source_batch_id)
-    raise CatForgeInsightError(f"没有找到项目 {project_id} / {category_code} 的可用批次。")
+    raise CatForgeInsightError(
+        f"没有找到项目 {project_id} / {category_code} 的可用批次。"
+    )
 
 
 def resolve_claim_batch_id(
@@ -3160,12 +3928,22 @@ def resolve_claim_batch_id(
             .where(entities.Core3SkuClaimFactProfile.category_code == category_code)
             .where(entities.Core3SkuClaimFactProfile.rule_version == rule_version)
             .where(entities.Core3SkuClaimFactProfile.is_current.is_(True))
-            .order_by(entities.Core3SkuClaimFactProfile.created_at.desc(), entities.Core3SkuClaimFactProfile.batch_id.desc())
+            .order_by(
+                entities.Core3SkuClaimFactProfile.created_at.desc(),
+                entities.Core3SkuClaimFactProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def resolve_comment_batch_id(
@@ -3186,12 +3964,22 @@ def resolve_comment_batch_id(
             .where(entities.Core3SkuCommentFactProfile.category_code == category_code)
             .where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
             .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
-            .order_by(entities.Core3SkuCommentFactProfile.created_at.desc(), entities.Core3SkuCommentFactProfile.batch_id.desc())
+            .order_by(
+                entities.Core3SkuCommentFactProfile.created_at.desc(),
+                entities.Core3SkuCommentFactProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def resolve_market_batch_id(
@@ -3209,14 +3997,26 @@ def resolve_market_batch_id(
             select(entities.Core3SkuMarketProfile.batch_id)
             .where(entities.Core3SkuMarketProfile.project_id == project_id)
             .where(entities.Core3SkuMarketProfile.category_code == category_code)
-            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(
+                entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION
+            )
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
-            .order_by(entities.Core3SkuMarketProfile.created_at.desc(), entities.Core3SkuMarketProfile.batch_id.desc())
+            .order_by(
+                entities.Core3SkuMarketProfile.created_at.desc(),
+                entities.Core3SkuMarketProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=CORE3_M07_RULE_VERSION)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=CORE3_M07_RULE_VERSION,
+    )
 
 
 def resolve_value_battlefield_batch_id(
@@ -3234,15 +4034,29 @@ def resolve_value_battlefield_batch_id(
         profile_batch_id = db.execute(
             select(entities.Core3SkuValueBattlefieldProfile.batch_id)
             .where(entities.Core3SkuValueBattlefieldProfile.project_id == project_id)
-            .where(entities.Core3SkuValueBattlefieldProfile.category_code == category_code)
-            .where(entities.Core3SkuValueBattlefieldProfile.rule_version == rule_version)
+            .where(
+                entities.Core3SkuValueBattlefieldProfile.category_code == category_code
+            )
+            .where(
+                entities.Core3SkuValueBattlefieldProfile.rule_version == rule_version
+            )
             .where(entities.Core3SkuValueBattlefieldProfile.is_current.is_(True))
-            .order_by(entities.Core3SkuValueBattlefieldProfile.created_at.desc(), entities.Core3SkuValueBattlefieldProfile.batch_id.desc())
+            .order_by(
+                entities.Core3SkuValueBattlefieldProfile.created_at.desc(),
+                entities.Core3SkuValueBattlefieldProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def resolve_user_task_batch_id(
@@ -3263,12 +4077,22 @@ def resolve_user_task_batch_id(
             .where(entities.Core3M09cSkuUserTaskProfile.category_code == category_code)
             .where(entities.Core3M09cSkuUserTaskProfile.rule_version == rule_version)
             .where(entities.Core3M09cSkuUserTaskProfile.is_current.is_(True))
-            .order_by(entities.Core3M09cSkuUserTaskProfile.created_at.desc(), entities.Core3M09cSkuUserTaskProfile.batch_id.desc())
+            .order_by(
+                entities.Core3M09cSkuUserTaskProfile.created_at.desc(),
+                entities.Core3M09cSkuUserTaskProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def resolve_target_group_batch_id(
@@ -3286,15 +4110,27 @@ def resolve_target_group_batch_id(
         profile_batch_id = db.execute(
             select(entities.Core3M10cSkuTargetGroupProfile.batch_id)
             .where(entities.Core3M10cSkuTargetGroupProfile.project_id == project_id)
-            .where(entities.Core3M10cSkuTargetGroupProfile.category_code == category_code)
+            .where(
+                entities.Core3M10cSkuTargetGroupProfile.category_code == category_code
+            )
             .where(entities.Core3M10cSkuTargetGroupProfile.rule_version == rule_version)
             .where(entities.Core3M10cSkuTargetGroupProfile.is_current.is_(True))
-            .order_by(entities.Core3M10cSkuTargetGroupProfile.created_at.desc(), entities.Core3M10cSkuTargetGroupProfile.batch_id.desc())
+            .order_by(
+                entities.Core3M10cSkuTargetGroupProfile.created_at.desc(),
+                entities.Core3M10cSkuTargetGroupProfile.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def resolve_semantic_market_batch_id(
@@ -3313,18 +4149,42 @@ def resolve_semantic_market_batch_id(
     if require_profile:
         profile_batch_id = db.execute(
             select(entities.Core3SemanticMarketDimensionSummary.batch_id)
-            .where(entities.Core3SemanticMarketDimensionSummary.project_id == project_id)
-            .where(entities.Core3SemanticMarketDimensionSummary.category_code == category_code)
-            .where(entities.Core3SemanticMarketDimensionSummary.rule_version == rule_version)
-            .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
-            .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+            .where(
+                entities.Core3SemanticMarketDimensionSummary.project_id == project_id
+            )
+            .where(
+                entities.Core3SemanticMarketDimensionSummary.category_code
+                == category_code
+            )
+            .where(
+                entities.Core3SemanticMarketDimensionSummary.rule_version
+                == rule_version
+            )
+            .where(
+                entities.Core3SemanticMarketDimensionSummary.analysis_population
+                == analysis_population
+            )
+            .where(
+                entities.Core3SemanticMarketDimensionSummary.market_window
+                == market_window
+            )
             .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
-            .order_by(entities.Core3SemanticMarketDimensionSummary.created_at.desc(), entities.Core3SemanticMarketDimensionSummary.batch_id.desc())
+            .order_by(
+                entities.Core3SemanticMarketDimensionSummary.created_at.desc(),
+                entities.Core3SemanticMarketDimensionSummary.batch_id.desc(),
+            )
             .limit(1)
         ).scalar_one_or_none()
         if profile_batch_id:
             return str(profile_batch_id)
-    return resolve_batch_id(db, project_id, category_code, batch_id, require_profile=False, rule_version=rule_version)
+    return resolve_batch_id(
+        db,
+        project_id,
+        category_code,
+        batch_id,
+        require_profile=False,
+        rule_version=rule_version,
+    )
 
 
 def find_sku_sales_allocations(
@@ -3342,30 +4202,46 @@ def find_sku_sales_allocations(
     dimension_type: str,
 ) -> list[entities.Core3SemanticMarketAllocation] | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 销量分配需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 销量分配需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SemanticMarketAllocation.project_id == project_id,
         entities.Core3SemanticMarketAllocation.category_code == category_code,
         entities.Core3SemanticMarketAllocation.batch_id == batch_id,
         entities.Core3SemanticMarketAllocation.rule_version == rule_version,
-        entities.Core3SemanticMarketAllocation.analysis_population == analysis_population,
+        entities.Core3SemanticMarketAllocation.analysis_population
+        == analysis_population,
         entities.Core3SemanticMarketAllocation.market_window == market_window,
         entities.Core3SemanticMarketAllocation.is_current.is_(True),
     ]
     if dimension_type != "all":
-        filters.append(entities.Core3SemanticMarketAllocation.dimension_type == dimension_type)
+        filters.append(
+            entities.Core3SemanticMarketAllocation.dimension_type == dimension_type
+        )
     if sku_code:
-        filters.append(func.lower(entities.Core3SemanticMarketAllocation.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SemanticMarketAllocation.sku_code)
+            == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SemanticMarketAllocation.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SemanticMarketAllocation.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
-                func.lower(entities.Core3SemanticMarketAllocation.sku_code) == query_norm,
-                func.lower(entities.Core3SemanticMarketAllocation.model_name) == query_norm,
-                func.lower(entities.Core3SemanticMarketAllocation.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SemanticMarketAllocation.sku_code)
+                == query_norm,
+                func.lower(entities.Core3SemanticMarketAllocation.model_name)
+                == query_norm,
+                func.lower(entities.Core3SemanticMarketAllocation.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3389,7 +4265,8 @@ def find_sku_sales_allocations(
         {
             row.sku_code
             for row in rows
-            if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query
+            if row.sku_code.lower() == exact_query
+            or (row.model_name or "").lower() == exact_query
         }
     )
     if len(exact_skus) == 1:
@@ -3424,7 +4301,9 @@ def find_sku_profile(
     model_name: str | None,
 ) -> entities.Core3SkuParamProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 参数画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 参数画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SkuParamProfile.project_id == project_id,
         entities.Core3SkuParamProfile.category_code == category_code,
@@ -3432,17 +4311,25 @@ def find_sku_profile(
         entities.Core3SkuParamProfile.rule_version == rule_version,
     ]
     if sku_code:
-        filters.append(func.lower(entities.Core3SkuParamProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SkuParamProfile.sku_code) == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SkuParamProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SkuParamProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
                 func.lower(entities.Core3SkuParamProfile.sku_code) == query_norm,
                 func.lower(entities.Core3SkuParamProfile.model_name) == query_norm,
-                func.lower(entities.Core3SkuParamProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SkuParamProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3458,10 +4345,17 @@ def find_sku_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name} for row in rows[:10]]
+    return [
+        {"sku_code": row.sku_code, "model_name": row.model_name} for row in rows[:10]
+    ]
 
 
 def find_sku_claim_profile(
@@ -3476,7 +4370,9 @@ def find_sku_claim_profile(
     model_name: str | None,
 ) -> entities.Core3SkuClaimFactProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 卖点事实画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 卖点事实画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SkuClaimFactProfile.project_id == project_id,
         entities.Core3SkuClaimFactProfile.category_code == category_code,
@@ -3485,17 +4381,25 @@ def find_sku_claim_profile(
         entities.Core3SkuClaimFactProfile.is_current.is_(True),
     ]
     if sku_code:
-        filters.append(func.lower(entities.Core3SkuClaimFactProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SkuClaimFactProfile.sku_code) == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SkuClaimFactProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SkuClaimFactProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
                 func.lower(entities.Core3SkuClaimFactProfile.sku_code) == query_norm,
                 func.lower(entities.Core3SkuClaimFactProfile.model_name) == query_norm,
-                func.lower(entities.Core3SkuClaimFactProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SkuClaimFactProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3511,10 +4415,22 @@ def find_sku_claim_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
 def find_sku_comment_profile(
@@ -3529,7 +4445,9 @@ def find_sku_comment_profile(
     model_name: str | None,
 ) -> entities.Core3SkuCommentFactProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 评论事实画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 评论事实画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SkuCommentFactProfile.project_id == project_id,
         entities.Core3SkuCommentFactProfile.category_code == category_code,
@@ -3538,17 +4456,26 @@ def find_sku_comment_profile(
         entities.Core3SkuCommentFactProfile.is_current.is_(True),
     ]
     if sku_code:
-        filters.append(func.lower(entities.Core3SkuCommentFactProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SkuCommentFactProfile.sku_code) == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SkuCommentFactProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SkuCommentFactProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
                 func.lower(entities.Core3SkuCommentFactProfile.sku_code) == query_norm,
-                func.lower(entities.Core3SkuCommentFactProfile.model_name) == query_norm,
-                func.lower(entities.Core3SkuCommentFactProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SkuCommentFactProfile.model_name)
+                == query_norm,
+                func.lower(entities.Core3SkuCommentFactProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3564,10 +4491,22 @@ def find_sku_comment_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
 def find_sku_value_battlefield_profile(
@@ -3583,7 +4522,9 @@ def find_sku_value_battlefield_profile(
     model_name: str | None,
 ) -> entities.Core3SkuValueBattlefieldProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 价值战场画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 价值战场画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SkuValueBattlefieldProfile.project_id == project_id,
         entities.Core3SkuValueBattlefieldProfile.category_code == category_code,
@@ -3592,19 +4533,33 @@ def find_sku_value_battlefield_profile(
         entities.Core3SkuValueBattlefieldProfile.is_current.is_(True),
     ]
     if taxonomy_version:
-        filters.append(entities.Core3SkuValueBattlefieldProfile.taxonomy_version == taxonomy_version)
+        filters.append(
+            entities.Core3SkuValueBattlefieldProfile.taxonomy_version
+            == taxonomy_version
+        )
     if sku_code:
-        filters.append(func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code)
+            == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
-                func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code) == query_norm,
-                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name) == query_norm,
-                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SkuValueBattlefieldProfile.sku_code)
+                == query_norm,
+                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name)
+                == query_norm,
+                func.lower(entities.Core3SkuValueBattlefieldProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3620,10 +4575,22 @@ def find_sku_value_battlefield_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
 def find_sku_user_task_profile(
@@ -3639,7 +4606,9 @@ def find_sku_user_task_profile(
     model_name: str | None,
 ) -> entities.Core3M09cSkuUserTaskProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 用户任务画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 用户任务画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3M09cSkuUserTaskProfile.project_id == project_id,
         entities.Core3M09cSkuUserTaskProfile.category_code == category_code,
@@ -3648,19 +4617,31 @@ def find_sku_user_task_profile(
         entities.Core3M09cSkuUserTaskProfile.is_current.is_(True),
     ]
     if taxonomy_version:
-        filters.append(entities.Core3M09cSkuUserTaskProfile.taxonomy_version == taxonomy_version)
+        filters.append(
+            entities.Core3M09cSkuUserTaskProfile.taxonomy_version == taxonomy_version
+        )
     if sku_code:
-        filters.append(func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code)
+            == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
                 func.lower(entities.Core3M09cSkuUserTaskProfile.sku_code) == query_norm,
-                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name) == query_norm,
-                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name)
+                == query_norm,
+                func.lower(entities.Core3M09cSkuUserTaskProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3676,10 +4657,22 @@ def find_sku_user_task_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
 def find_sku_target_group_profile(
@@ -3695,7 +4688,9 @@ def find_sku_target_group_profile(
     model_name: str | None,
 ) -> entities.Core3M10cSkuTargetGroupProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 目标客群画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 目标客群画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3M10cSkuTargetGroupProfile.project_id == project_id,
         entities.Core3M10cSkuTargetGroupProfile.category_code == category_code,
@@ -3704,19 +4699,32 @@ def find_sku_target_group_profile(
         entities.Core3M10cSkuTargetGroupProfile.is_current.is_(True),
     ]
     if taxonomy_version:
-        filters.append(entities.Core3M10cSkuTargetGroupProfile.taxonomy_version == taxonomy_version)
+        filters.append(
+            entities.Core3M10cSkuTargetGroupProfile.taxonomy_version == taxonomy_version
+        )
     if sku_code:
-        filters.append(func.lower(entities.Core3M10cSkuTargetGroupProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3M10cSkuTargetGroupProfile.sku_code)
+            == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
-                func.lower(entities.Core3M10cSkuTargetGroupProfile.sku_code) == query_norm,
-                func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name) == query_norm,
-                func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3M10cSkuTargetGroupProfile.sku_code)
+                == query_norm,
+                func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name)
+                == query_norm,
+                func.lower(entities.Core3M10cSkuTargetGroupProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -3732,10 +4740,22 @@ def find_sku_target_group_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
 def list_sku_user_task_scores(
@@ -3746,11 +4766,19 @@ def list_sku_user_task_scores(
         db.execute(
             select(entities.Core3M09cSkuUserTaskScore)
             .where(entities.Core3M09cSkuUserTaskScore.project_id == profile.project_id)
-            .where(entities.Core3M09cSkuUserTaskScore.category_code == profile.category_code)
+            .where(
+                entities.Core3M09cSkuUserTaskScore.category_code
+                == profile.category_code
+            )
             .where(entities.Core3M09cSkuUserTaskScore.batch_id == profile.batch_id)
             .where(entities.Core3M09cSkuUserTaskScore.sku_code == profile.sku_code)
-            .where(entities.Core3M09cSkuUserTaskScore.rule_version == profile.rule_version)
-            .where(entities.Core3M09cSkuUserTaskScore.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3M09cSkuUserTaskScore.rule_version == profile.rule_version
+            )
+            .where(
+                entities.Core3M09cSkuUserTaskScore.taxonomy_version
+                == profile.taxonomy_version
+            )
             .where(entities.Core3M09cSkuUserTaskScore.is_current.is_(True))
             .order_by(
                 entities.Core3M09cSkuUserTaskScore.relation_status,
@@ -3800,12 +4828,15 @@ def resolve_user_task_code(
     matches = [
         item
         for item in taxonomy.user_tasks
-        if normalize_token(item.user_task_code) in query_norm or normalize_token(item.user_task_name) in query_norm
+        if normalize_token(item.user_task_code) in query_norm
+        or normalize_token(item.user_task_name) in query_norm
     ]
     if len(matches) == 1:
         return matches[0].user_task_code
     if len(matches) > 1:
-        raise CatForgeInsightError("自然语言匹配到多个用户任务，请补充 user task code。")
+        raise CatForgeInsightError(
+            "自然语言匹配到多个用户任务，请补充 user task code。"
+        )
     for item in taxonomy.user_tasks:
         tokens = set(extract_match_tokens(query or ""))
         haystack = normalize_token(
@@ -3832,12 +4863,23 @@ def list_sku_target_group_scores(
     return list(
         db.execute(
             select(entities.Core3M10cSkuTargetGroupScore)
-            .where(entities.Core3M10cSkuTargetGroupScore.project_id == profile.project_id)
-            .where(entities.Core3M10cSkuTargetGroupScore.category_code == profile.category_code)
+            .where(
+                entities.Core3M10cSkuTargetGroupScore.project_id == profile.project_id
+            )
+            .where(
+                entities.Core3M10cSkuTargetGroupScore.category_code
+                == profile.category_code
+            )
             .where(entities.Core3M10cSkuTargetGroupScore.batch_id == profile.batch_id)
             .where(entities.Core3M10cSkuTargetGroupScore.sku_code == profile.sku_code)
-            .where(entities.Core3M10cSkuTargetGroupScore.rule_version == profile.rule_version)
-            .where(entities.Core3M10cSkuTargetGroupScore.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3M10cSkuTargetGroupScore.rule_version
+                == profile.rule_version
+            )
+            .where(
+                entities.Core3M10cSkuTargetGroupScore.taxonomy_version
+                == profile.taxonomy_version
+            )
             .where(entities.Core3M10cSkuTargetGroupScore.is_current.is_(True))
             .order_by(
                 entities.Core3M10cSkuTargetGroupScore.relation_status,
@@ -3847,7 +4889,9 @@ def list_sku_target_group_scores(
     )
 
 
-def target_group_score_payload(row: entities.Core3M10cSkuTargetGroupScore) -> dict[str, Any]:
+def target_group_score_payload(
+    row: entities.Core3M10cSkuTargetGroupScore,
+) -> dict[str, Any]:
     return {
         "sku_code": row.sku_code,
         "model_name": row.model_name,
@@ -3858,7 +4902,9 @@ def target_group_score_payload(row: entities.Core3M10cSkuTargetGroupScore) -> di
         "target_group_score": decimal_to_float(row.target_group_score),
         "size_tier": row.size_tier,
         "price_band_in_size_tier": row.price_band_in_size_tier,
-        "comment_audience_motivation_score": decimal_to_float(row.comment_audience_motivation_score),
+        "comment_audience_motivation_score": decimal_to_float(
+            row.comment_audience_motivation_score
+        ),
         "task_support_score": decimal_to_float(row.task_support_score),
         "size_price_fit_score": decimal_to_float(row.size_price_fit_score),
         "claim_alignment_score": decimal_to_float(row.claim_alignment_score),
@@ -3888,12 +4934,15 @@ def resolve_target_group_code(
     matches = [
         item
         for item in taxonomy.target_groups
-        if normalize_token(item.target_group_code) in query_norm or normalize_token(item.target_group_name) in query_norm
+        if normalize_token(item.target_group_code) in query_norm
+        or normalize_token(item.target_group_name) in query_norm
     ]
     if len(matches) == 1:
         return matches[0].target_group_code
     if len(matches) > 1:
-        raise CatForgeInsightError("自然语言匹配到多个目标客群，请补充 target group code。")
+        raise CatForgeInsightError(
+            "自然语言匹配到多个目标客群，请补充 target group code。"
+        )
     for item in taxonomy.target_groups:
         tokens = set(extract_match_tokens(query or ""))
         haystack = normalize_token(
@@ -3909,7 +4958,9 @@ def resolve_target_group_code(
         )
         if any(normalize_token(token) in haystack for token in tokens):
             return item.target_group_code
-    raise CatForgeInsightError("没有识别出要查询的目标客群，请提供 --target-group-code。")
+    raise CatForgeInsightError(
+        "没有识别出要查询的目标客群，请提供 --target-group-code。"
+    )
 
 
 def list_sku_value_battlefield_scores(
@@ -3919,12 +4970,23 @@ def list_sku_value_battlefield_scores(
     return list(
         db.execute(
             select(entities.Core3SkuValueBattlefieldScore)
-            .where(entities.Core3SkuValueBattlefieldScore.project_id == profile.project_id)
-            .where(entities.Core3SkuValueBattlefieldScore.category_code == profile.category_code)
+            .where(
+                entities.Core3SkuValueBattlefieldScore.project_id == profile.project_id
+            )
+            .where(
+                entities.Core3SkuValueBattlefieldScore.category_code
+                == profile.category_code
+            )
             .where(entities.Core3SkuValueBattlefieldScore.batch_id == profile.batch_id)
             .where(entities.Core3SkuValueBattlefieldScore.sku_code == profile.sku_code)
-            .where(entities.Core3SkuValueBattlefieldScore.rule_version == profile.rule_version)
-            .where(entities.Core3SkuValueBattlefieldScore.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3SkuValueBattlefieldScore.rule_version
+                == profile.rule_version
+            )
+            .where(
+                entities.Core3SkuValueBattlefieldScore.taxonomy_version
+                == profile.taxonomy_version
+            )
             .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
             .order_by(
                 entities.Core3SkuValueBattlefieldScore.relation_status,
@@ -3934,7 +4996,9 @@ def list_sku_value_battlefield_scores(
     )
 
 
-def value_battlefield_score_payload(row: entities.Core3SkuValueBattlefieldScore) -> dict[str, Any]:
+def value_battlefield_score_payload(
+    row: entities.Core3SkuValueBattlefieldScore,
+) -> dict[str, Any]:
     return {
         "sku_code": row.sku_code,
         "model_name": row.model_name,
@@ -3960,7 +5024,9 @@ def value_battlefield_score_payload(row: entities.Core3SkuValueBattlefieldScore)
     }
 
 
-def semantic_market_summary_payload(row: entities.Core3SemanticMarketDimensionSummary) -> dict[str, Any]:
+def semantic_market_summary_payload(
+    row: entities.Core3SemanticMarketDimensionSummary,
+) -> dict[str, Any]:
     return {
         "summary_id": row.summary_id,
         "dimension_type": row.dimension_type,
@@ -3977,18 +5043,30 @@ def semantic_market_summary_payload(row: entities.Core3SemanticMarketDimensionSu
         "drag_risk_sku_count": row.drag_risk_sku_count,
         "estimated_sales_volume": decimal_to_float(row.estimated_sales_volume),
         "estimated_sales_amount": decimal_to_float(row.estimated_sales_amount),
-        "estimated_avg_weekly_sales_volume": decimal_to_float(row.estimated_avg_weekly_sales_volume),
-        "estimated_avg_weekly_sales_amount": decimal_to_float(row.estimated_avg_weekly_sales_amount),
+        "estimated_avg_weekly_sales_volume": decimal_to_float(
+            row.estimated_avg_weekly_sales_volume
+        ),
+        "estimated_avg_weekly_sales_amount": decimal_to_float(
+            row.estimated_avg_weekly_sales_amount
+        ),
         "observed_need_sales_volume": decimal_to_float(row.observed_need_sales_volume),
         "observed_need_sales_amount": decimal_to_float(row.observed_need_sales_amount),
         "drag_risk_market_volume": decimal_to_float(row.drag_risk_market_volume),
         "drag_risk_market_amount": decimal_to_float(row.drag_risk_market_amount),
         "total_market_sales_volume": decimal_to_float(row.total_market_sales_volume),
         "total_market_sales_amount": decimal_to_float(row.total_market_sales_amount),
-        "allocated_market_sales_volume": decimal_to_float(row.allocated_market_sales_volume),
-        "allocated_market_sales_amount": decimal_to_float(row.allocated_market_sales_amount),
-        "unallocated_market_sales_volume": decimal_to_float(row.unallocated_market_sales_volume),
-        "unallocated_market_sales_amount": decimal_to_float(row.unallocated_market_sales_amount),
+        "allocated_market_sales_volume": decimal_to_float(
+            row.allocated_market_sales_volume
+        ),
+        "allocated_market_sales_amount": decimal_to_float(
+            row.allocated_market_sales_amount
+        ),
+        "unallocated_market_sales_volume": decimal_to_float(
+            row.unallocated_market_sales_volume
+        ),
+        "unallocated_market_sales_amount": decimal_to_float(
+            row.unallocated_market_sales_amount
+        ),
         "sales_volume_share": decimal_to_float(row.sales_volume_share),
         "sales_amount_share": decimal_to_float(row.sales_amount_share),
         "allocation_coverage_rate": decimal_to_float(row.allocation_coverage_rate),
@@ -4001,7 +5079,9 @@ def semantic_market_summary_payload(row: entities.Core3SemanticMarketDimensionSu
     }
 
 
-def semantic_market_contribution_payload(row: entities.Core3SemanticMarketSkuContribution) -> dict[str, Any]:
+def semantic_market_contribution_payload(
+    row: entities.Core3SemanticMarketSkuContribution,
+) -> dict[str, Any]:
     return {
         "sku_code": row.sku_code,
         "brand_name": row.brand_name,
@@ -4013,10 +5093,18 @@ def semantic_market_contribution_payload(row: entities.Core3SemanticMarketSkuCon
         "allocation_weight": decimal_to_float(row.allocation_weight),
         "allocated_sales_volume": decimal_to_float(row.allocated_sales_volume),
         "allocated_sales_amount": decimal_to_float(row.allocated_sales_amount),
-        "allocated_avg_weekly_sales_volume": decimal_to_float(row.allocated_avg_weekly_sales_volume),
-        "allocated_avg_weekly_sales_amount": decimal_to_float(row.allocated_avg_weekly_sales_amount),
-        "sku_share_in_dimension_volume": decimal_to_float(row.sku_share_in_dimension_volume),
-        "sku_share_in_dimension_amount": decimal_to_float(row.sku_share_in_dimension_amount),
+        "allocated_avg_weekly_sales_volume": decimal_to_float(
+            row.allocated_avg_weekly_sales_volume
+        ),
+        "allocated_avg_weekly_sales_amount": decimal_to_float(
+            row.allocated_avg_weekly_sales_amount
+        ),
+        "sku_share_in_dimension_volume": decimal_to_float(
+            row.sku_share_in_dimension_volume
+        ),
+        "sku_share_in_dimension_amount": decimal_to_float(
+            row.sku_share_in_dimension_amount
+        ),
         "is_primary_dimension": row.is_primary_dimension,
         "allocation_role": row.allocation_role,
         "relation_status": row.relation_status,
@@ -4026,7 +5114,9 @@ def semantic_market_contribution_payload(row: entities.Core3SemanticMarketSkuCon
     }
 
 
-def semantic_market_allocation_payload(row: entities.Core3SemanticMarketAllocation) -> dict[str, Any]:
+def semantic_market_allocation_payload(
+    row: entities.Core3SemanticMarketAllocation,
+) -> dict[str, Any]:
     return {
         "allocation_id": row.allocation_id,
         "sku_code": row.sku_code,
@@ -4050,8 +5140,12 @@ def semantic_market_allocation_payload(row: entities.Core3SemanticMarketAllocati
         "avg_weekly_sales_amount": decimal_to_float(row.avg_weekly_sales_amount),
         "allocated_sales_volume": decimal_to_float(row.allocated_sales_volume),
         "allocated_sales_amount": decimal_to_float(row.allocated_sales_amount),
-        "allocated_avg_weekly_sales_volume": decimal_to_float(row.allocated_avg_weekly_sales_volume),
-        "allocated_avg_weekly_sales_amount": decimal_to_float(row.allocated_avg_weekly_sales_amount),
+        "allocated_avg_weekly_sales_volume": decimal_to_float(
+            row.allocated_avg_weekly_sales_volume
+        ),
+        "allocated_avg_weekly_sales_amount": decimal_to_float(
+            row.allocated_avg_weekly_sales_amount
+        ),
         "allocation_confidence": decimal_to_float(row.allocation_confidence),
         "allocation_basis_json": row.allocation_basis_json or {},
         "evidence_id_count": len(row.evidence_ids_json or []),
@@ -4074,18 +5168,32 @@ def resolve_value_battlefield_code(
     matches = [
         item
         for item in taxonomy.battlefields
-        if normalize_token(item.battlefield_code) in query_norm or normalize_token(item.battlefield_name) in query_norm
+        if normalize_token(item.battlefield_code) in query_norm
+        or normalize_token(item.battlefield_name) in query_norm
     ]
     if len(matches) == 1:
         return matches[0].battlefield_code
     if len(matches) > 1:
-        raise CatForgeInsightError("自然语言匹配到多个价值战场，请补充 battlefield code。")
+        raise CatForgeInsightError(
+            "自然语言匹配到多个价值战场，请补充 battlefield code。"
+        )
     for item in taxonomy.battlefields:
         tokens = set(extract_match_tokens(query or ""))
-        haystack = normalize_token(" ".join([item.battlefield_name, item.definition, " ".join(item.primary_task_codes), " ".join(item.primary_target_group_codes)]))
+        haystack = normalize_token(
+            " ".join(
+                [
+                    item.battlefield_name,
+                    item.definition,
+                    " ".join(item.primary_task_codes),
+                    " ".join(item.primary_target_group_codes),
+                ]
+            )
+        )
         if any(normalize_token(token) in haystack for token in tokens):
             return item.battlefield_code
-    raise CatForgeInsightError("没有识别出要查询的价值战场，请提供 --battlefield-code。")
+    raise CatForgeInsightError(
+        "没有识别出要查询的价值战场，请提供 --battlefield-code。"
+    )
 
 
 def find_sku_market_profile(
@@ -4101,7 +5209,9 @@ def find_sku_market_profile(
     analysis_window: str,
 ) -> entities.Core3SkuMarketProfile | list[dict[str, Any]] | None:
     if not any([query, sku_code, model_name]):
-        raise CatForgeInsightError("查询 SKU 市场画像需要提供 --query、--sku-code 或 --model-name。")
+        raise CatForgeInsightError(
+            "查询 SKU 市场画像需要提供 --query、--sku-code 或 --model-name。"
+        )
     filters = [
         entities.Core3SkuMarketProfile.project_id == project_id,
         entities.Core3SkuMarketProfile.category_code == category_code,
@@ -4111,17 +5221,25 @@ def find_sku_market_profile(
         entities.Core3SkuMarketProfile.is_current.is_(True),
     ]
     if sku_code:
-        filters.append(func.lower(entities.Core3SkuMarketProfile.sku_code) == sku_code.lower())
+        filters.append(
+            func.lower(entities.Core3SkuMarketProfile.sku_code) == sku_code.lower()
+        )
     elif model_name:
         model_norm = model_name.strip().lower()
-        filters.append(func.lower(entities.Core3SkuMarketProfile.model_name).like(f"%{escape_like(model_norm)}%", escape="\\"))
+        filters.append(
+            func.lower(entities.Core3SkuMarketProfile.model_name).like(
+                f"%{escape_like(model_norm)}%", escape="\\"
+            )
+        )
     else:
         query_norm = str(query or "").strip().lower()
         filters.append(
             or_(
                 func.lower(entities.Core3SkuMarketProfile.sku_code) == query_norm,
                 func.lower(entities.Core3SkuMarketProfile.model_name) == query_norm,
-                func.lower(entities.Core3SkuMarketProfile.model_name).like(f"%{escape_like(query_norm)}%", escape="\\"),
+                func.lower(entities.Core3SkuMarketProfile.model_name).like(
+                    f"%{escape_like(query_norm)}%", escape="\\"
+                ),
             )
         )
     rows = list(
@@ -4137,29 +5255,53 @@ def find_sku_market_profile(
     if len(rows) == 1:
         return rows[0]
     exact_query = (sku_code or model_name or query or "").strip().lower()
-    exact = [row for row in rows if row.sku_code.lower() == exact_query or (row.model_name or "").lower() == exact_query]
+    exact = [
+        row
+        for row in rows
+        if row.sku_code.lower() == exact_query
+        or (row.model_name or "").lower() == exact_query
+    ]
     if len(exact) == 1:
         return exact[0]
-    return [{"sku_code": row.sku_code, "model_name": row.model_name, "brand_name": row.brand_name} for row in rows[:10]]
+    return [
+        {
+            "sku_code": row.sku_code,
+            "model_name": row.model_name,
+            "brand_name": row.brand_name,
+        }
+        for row in rows[:10]
+    ]
 
 
-def list_dimension_tiers(db: Session, profile: entities.Core3SkuParamProfile) -> list[entities.Core3SkuParamDimensionTier]:
+def list_dimension_tiers(
+    db: Session, profile: entities.Core3SkuParamProfile
+) -> list[entities.Core3SkuParamDimensionTier]:
     return list(
         db.execute(
             select(entities.Core3SkuParamDimensionTier)
             .where(entities.Core3SkuParamDimensionTier.project_id == profile.project_id)
-            .where(entities.Core3SkuParamDimensionTier.category_code == profile.category_code)
+            .where(
+                entities.Core3SkuParamDimensionTier.category_code
+                == profile.category_code
+            )
             .where(entities.Core3SkuParamDimensionTier.batch_id == profile.batch_id)
             .where(entities.Core3SkuParamDimensionTier.sku_code == profile.sku_code)
-            .where(entities.Core3SkuParamDimensionTier.rule_version == profile.rule_version)
-            .where(entities.Core3SkuParamDimensionTier.taxonomy_version == profile.seed_version)
+            .where(
+                entities.Core3SkuParamDimensionTier.rule_version == profile.rule_version
+            )
+            .where(
+                entities.Core3SkuParamDimensionTier.taxonomy_version
+                == profile.seed_version
+            )
             .where(entities.Core3SkuParamDimensionTier.is_current.is_(True))
             .order_by(entities.Core3SkuParamDimensionTier.dimension_code)
         ).scalars()
     )
 
 
-def list_sku_claim_facts(db: Session, profile: entities.Core3SkuClaimFactProfile) -> list[entities.Core3SkuClaimFact]:
+def list_sku_claim_facts(
+    db: Session, profile: entities.Core3SkuClaimFactProfile
+) -> list[entities.Core3SkuClaimFact]:
     return list(
         db.execute(
             select(entities.Core3SkuClaimFact)
@@ -4168,30 +5310,54 @@ def list_sku_claim_facts(db: Session, profile: entities.Core3SkuClaimFactProfile
             .where(entities.Core3SkuClaimFact.batch_id == profile.batch_id)
             .where(entities.Core3SkuClaimFact.sku_code == profile.sku_code)
             .where(entities.Core3SkuClaimFact.rule_version == profile.rule_version)
-            .where(entities.Core3SkuClaimFact.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3SkuClaimFact.taxonomy_version == profile.taxonomy_version
+            )
             .where(entities.Core3SkuClaimFact.is_current.is_(True))
-            .order_by(entities.Core3SkuClaimFact.claim_dimension, entities.Core3SkuClaimFact.claim_code, entities.Core3SkuClaimFact.source_claim_key)
+            .order_by(
+                entities.Core3SkuClaimFact.claim_dimension,
+                entities.Core3SkuClaimFact.claim_code,
+                entities.Core3SkuClaimFact.source_claim_key,
+            )
         ).scalars()
     )
 
 
-def list_sku_claim_positions(db: Session, profile: entities.Core3SkuClaimFactProfile) -> list[entities.Core3SkuClaimDimensionPosition]:
+def list_sku_claim_positions(
+    db: Session, profile: entities.Core3SkuClaimFactProfile
+) -> list[entities.Core3SkuClaimDimensionPosition]:
     return list(
         db.execute(
             select(entities.Core3SkuClaimDimensionPosition)
-            .where(entities.Core3SkuClaimDimensionPosition.project_id == profile.project_id)
-            .where(entities.Core3SkuClaimDimensionPosition.category_code == profile.category_code)
+            .where(
+                entities.Core3SkuClaimDimensionPosition.project_id == profile.project_id
+            )
+            .where(
+                entities.Core3SkuClaimDimensionPosition.category_code
+                == profile.category_code
+            )
             .where(entities.Core3SkuClaimDimensionPosition.batch_id == profile.batch_id)
             .where(entities.Core3SkuClaimDimensionPosition.sku_code == profile.sku_code)
-            .where(entities.Core3SkuClaimDimensionPosition.rule_version == profile.rule_version)
-            .where(entities.Core3SkuClaimDimensionPosition.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3SkuClaimDimensionPosition.rule_version
+                == profile.rule_version
+            )
+            .where(
+                entities.Core3SkuClaimDimensionPosition.taxonomy_version
+                == profile.taxonomy_version
+            )
             .where(entities.Core3SkuClaimDimensionPosition.is_current.is_(True))
-            .order_by(entities.Core3SkuClaimDimensionPosition.position_source, entities.Core3SkuClaimDimensionPosition.dimension_code)
+            .order_by(
+                entities.Core3SkuClaimDimensionPosition.position_source,
+                entities.Core3SkuClaimDimensionPosition.dimension_code,
+            )
         ).scalars()
     )
 
 
-def list_sku_comment_facts(db: Session, profile: entities.Core3SkuCommentFactProfile) -> list[entities.Core3CommentFactAtom]:
+def list_sku_comment_facts(
+    db: Session, profile: entities.Core3SkuCommentFactProfile
+) -> list[entities.Core3CommentFactAtom]:
     return list(
         db.execute(
             select(entities.Core3CommentFactAtom)
@@ -4200,7 +5366,10 @@ def list_sku_comment_facts(db: Session, profile: entities.Core3SkuCommentFactPro
             .where(entities.Core3CommentFactAtom.batch_id == profile.batch_id)
             .where(entities.Core3CommentFactAtom.sku_code == profile.sku_code)
             .where(entities.Core3CommentFactAtom.rule_version == profile.rule_version)
-            .where(entities.Core3CommentFactAtom.taxonomy_version == profile.taxonomy_version)
+            .where(
+                entities.Core3CommentFactAtom.taxonomy_version
+                == profile.taxonomy_version
+            )
             .where(entities.Core3CommentFactAtom.is_current.is_(True))
             .order_by(
                 entities.Core3CommentFactAtom.dimension_code,
@@ -4211,7 +5380,9 @@ def list_sku_comment_facts(db: Session, profile: entities.Core3SkuCommentFactPro
     )
 
 
-def list_market_signals(db: Session, profile: entities.Core3SkuMarketProfile) -> list[entities.Core3MarketSignal]:
+def list_market_signals(
+    db: Session, profile: entities.Core3SkuMarketProfile
+) -> list[entities.Core3MarketSignal]:
     return list(
         db.execute(
             select(entities.Core3MarketSignal)
@@ -4219,10 +5390,15 @@ def list_market_signals(db: Session, profile: entities.Core3SkuMarketProfile) ->
             .where(entities.Core3MarketSignal.category_code == profile.category_code)
             .where(entities.Core3MarketSignal.batch_id == profile.batch_id)
             .where(entities.Core3MarketSignal.sku_code == profile.sku_code)
-            .where(entities.Core3MarketSignal.analysis_window == profile.analysis_window)
+            .where(
+                entities.Core3MarketSignal.analysis_window == profile.analysis_window
+            )
             .where(entities.Core3MarketSignal.rule_version == profile.rule_version)
             .where(entities.Core3MarketSignal.is_current.is_(True))
-            .order_by(entities.Core3MarketSignal.signal_code, entities.Core3MarketSignal.comparison_scope)
+            .order_by(
+                entities.Core3MarketSignal.signal_code,
+                entities.Core3MarketSignal.comparison_scope,
+            )
         ).scalars()
     )
 
@@ -4273,7 +5449,9 @@ def resolve_dimension(dimension: str | None, query: str | None) -> str | None:
         for alias, code in DIMENSION_ALIASES.items():
             if normalize_token(alias) in candidate_norm:
                 return code
-        if candidate_norm in {normalize_token(code) for code in DIMENSION_ALIASES.values()}:
+        if candidate_norm in {
+            normalize_token(code) for code in DIMENSION_ALIASES.values()
+        }:
             return candidate_norm
     return None
 
@@ -4298,13 +5476,17 @@ def resolve_tiers(
             continue
         if should_skip_negative_tier_match(query_text, item):
             continue
-        identity_haystack = normalize_token(" ".join([item.dimension_code, item.tier_code, item.tier_name]))
+        identity_haystack = normalize_token(
+            " ".join([item.dimension_code, item.tier_code, item.tier_name])
+        )
         exact_terms = {
             normalize_token(item.dimension_code),
             normalize_token(item.tier_code),
             normalize_token(item.tier_name),
         }
-        if query_norm in exact_terms or any(token and token in identity_haystack for token in query_tokens):
+        if query_norm in exact_terms or any(
+            token and token in identity_haystack for token in query_tokens
+        ):
             matches.append(item)
     if tier and not matches:
         tier_norm = normalize_token(tier)
@@ -4312,7 +5494,10 @@ def resolve_tiers(
             item
             for item in tiers
             if (not dimension or item.dimension_code == dimension)
-            and (normalize_token(item.tier_code) == tier_norm or normalize_token(item.tier_name) == tier_norm)
+            and (
+                normalize_token(item.tier_code) == tier_norm
+                or normalize_token(item.tier_name) == tier_norm
+            )
         ]
     return matches
 
@@ -4345,13 +5530,24 @@ def resolve_claim_positions(
     for item in taxonomy.positions:
         if dimension and item.dimension_code != dimension:
             continue
-        identity_haystack = normalize_token(" ".join([item.dimension_code, item.position_code, item.position_name, item.rule_summary]))
+        identity_haystack = normalize_token(
+            " ".join(
+                [
+                    item.dimension_code,
+                    item.position_code,
+                    item.position_name,
+                    item.rule_summary,
+                ]
+            )
+        )
         exact_terms = {
             normalize_token(item.dimension_code),
             normalize_token(item.position_code),
             normalize_token(item.position_name),
         }
-        if query_norm in exact_terms or any(token and token in identity_haystack for token in query_tokens):
+        if query_norm in exact_terms or any(
+            token and token in identity_haystack for token in query_tokens
+        ):
             matches.append(item)
     if position and not matches:
         position_norm = normalize_token(position)
@@ -4359,7 +5555,10 @@ def resolve_claim_positions(
             item
             for item in taxonomy.positions
             if (not dimension or item.dimension_code == dimension)
-            and (normalize_token(item.position_code) == position_norm or normalize_token(item.position_name) == position_norm)
+            and (
+                normalize_token(item.position_code) == position_norm
+                or normalize_token(item.position_name) == position_norm
+            )
         ]
     return matches
 
@@ -4373,7 +5572,9 @@ def resolve_comment_dimension(dimension: str | None, query: str | None) -> str |
         for alias, code in COMMENT_DIMENSION_ALIASES.items():
             if normalize_token(alias) in candidate_norm:
                 return code
-        if candidate_norm in {normalize_token(code) for code in COMMENT_DIMENSION_ALIASES.values()}:
+        if candidate_norm in {
+            normalize_token(code) for code in COMMENT_DIMENSION_ALIASES.values()
+        }:
             return candidate_norm
     return None
 
@@ -4388,7 +5589,10 @@ def resolve_comment_coverage_type(coverage_type: str, query: str | None) -> str:
         return "brand_power_signal"
     if any(token in query_norm for token in ("人群", "客群", "老人", "儿童", "家庭")):
         return "audience_signal"
-    if any(token in query_norm for token in ("用途", "任务", "客厅", "卧室", "游戏", "投屏")):
+    if any(
+        token in query_norm
+        for token in ("用途", "任务", "客厅", "卧室", "游戏", "投屏")
+    ):
         return "use_case_signal"
     if any(token in query_norm for token in ("竞品", "对比", "替换")):
         return "competitor_comparison_signal"
@@ -4418,8 +5622,20 @@ def resolve_comment_coverage_key(
     for item in taxonomy.subdimensions:
         if dimension and item.dimension_code != dimension:
             continue
-        haystack = normalize_token(" ".join([item.subdimension_code, item.subdimension_name, item.dimension_code, item.dimension_name]))
-        if normalize_token(item.subdimension_code) in query_norm or normalize_token(item.subdimension_name) in query_norm:
+        haystack = normalize_token(
+            " ".join(
+                [
+                    item.subdimension_code,
+                    item.subdimension_name,
+                    item.dimension_code,
+                    item.dimension_name,
+                ]
+            )
+        )
+        if (
+            normalize_token(item.subdimension_code) in query_norm
+            or normalize_token(item.subdimension_name) in query_norm
+        ):
             return item.subdimension_code
         if any(token and token in haystack for token in extract_match_tokens(query)):
             return item.subdimension_code
@@ -4467,7 +5683,9 @@ def market_signal_payload(row: entities.Core3MarketSignal) -> dict[str, Any]:
     }
 
 
-def comparable_pool_payload(row: entities.Core3ComparablePoolBaseline, *, sku_limit: int) -> dict[str, Any]:
+def comparable_pool_payload(
+    row: entities.Core3ComparablePoolBaseline, *, sku_limit: int
+) -> dict[str, Any]:
     sku_codes = list(row.candidate_sku_codes or [])
     visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
     return {
@@ -4487,12 +5705,15 @@ def comparable_pool_payload(row: entities.Core3ComparablePoolBaseline, *, sku_li
         "basis": row.basis,
         "candidate_sku_codes": visible_skus,
         "candidate_sku_codes_returned": len(visible_skus),
-        "candidate_sku_codes_truncated": sku_limit != 0 and len(sku_codes) > len(visible_skus),
+        "candidate_sku_codes_truncated": sku_limit != 0
+        and len(sku_codes) > len(visible_skus),
         "quality_flags": row.quality_flags or [],
     }
 
 
-def current_market_bucket_fallback(profile: entities.Core3SkuMarketProfile) -> dict[str, Any]:
+def current_market_bucket_fallback(
+    profile: entities.Core3SkuMarketProfile,
+) -> dict[str, Any]:
     price_code, price_label = market_bucket_identity(profile, "price")
     size_code, size_label = market_bucket_identity(profile, "size")
     size_price_code, size_price_label = market_bucket_identity(profile, "size_price")
@@ -4510,14 +5731,31 @@ def current_market_bucket_fallback(profile: entities.Core3SkuMarketProfile) -> d
     }
 
 
-def market_bucket_identity(profile: entities.Core3SkuMarketProfile, bucket_type: str) -> tuple[str, str]:
+def market_bucket_identity(
+    profile: entities.Core3SkuMarketProfile, bucket_type: str
+) -> tuple[str, str]:
     if bucket_type == "price":
-        code = str(getattr(profile, "business_price_bucket_code", None) or profile.price_band_category or "unknown")
-        label = str(getattr(profile, "business_price_bucket_label", None) or price_band_label(code))
+        code = str(
+            getattr(profile, "business_price_bucket_code", None)
+            or profile.price_band_category
+            or "unknown"
+        )
+        label = str(
+            getattr(profile, "business_price_bucket_label", None)
+            or price_band_label(code)
+        )
         return code, label
     if bucket_type == "size":
-        code = str(getattr(profile, "size_bucket_code", None) or profile.size_segment or profile.screen_size_class or "unknown")
-        label = str(getattr(profile, "size_bucket_label", None) or size_bucket_label(code, profile.screen_size_inch))
+        code = str(
+            getattr(profile, "size_bucket_code", None)
+            or profile.size_segment
+            or profile.screen_size_class
+            or "unknown"
+        )
+        label = str(
+            getattr(profile, "size_bucket_label", None)
+            or size_bucket_label(code, profile.screen_size_inch)
+        )
         return code, label
     if bucket_type == "size_price":
         price_code, price_label = market_bucket_identity(profile, "price")
@@ -4526,7 +5764,9 @@ def market_bucket_identity(profile: entities.Core3SkuMarketProfile, bucket_type:
     raise CatForgeInsightError(f"不支持的市场区间类型：{bucket_type}")
 
 
-def market_bucket_query_matches(code: str, label: str, query_norm: str, query_tokens: set[str]) -> bool:
+def market_bucket_query_matches(
+    code: str, label: str, query_norm: str, query_tokens: set[str]
+) -> bool:
     haystack = normalize_token(" ".join([code, label]))
     if query_norm in haystack or haystack in query_norm:
         return True
@@ -4577,17 +5817,33 @@ def market_bucket_coverage_payload(
     )
     sku_codes = [item.sku_code for item in sorted_profiles]
     visible_skus = sku_codes if sku_limit == 0 else sku_codes[: max(sku_limit, 0)]
-    volumes = [decimal_value(item.sales_volume_total) for item in profiles if item.sales_volume_total is not None]
-    amounts = [decimal_value(item.sales_amount_total) for item in profiles if item.sales_amount_total is not None]
-    prices = [decimal_value(item.price_wavg) for item in profiles if item.price_wavg is not None]
+    volumes = [
+        decimal_value(item.sales_volume_total)
+        for item in profiles
+        if item.sales_volume_total is not None
+    ]
+    amounts = [
+        decimal_value(item.sales_amount_total)
+        for item in profiles
+        if item.sales_amount_total is not None
+    ]
+    prices = [
+        decimal_value(item.price_wavg)
+        for item in profiles
+        if item.price_wavg is not None
+    ]
     return {
         "bucket_type": bucket_type,
         "bucket_code": code,
         "bucket_label": label,
         "sku_count": len(profiles),
         "valid_volume_sku_count": len(volumes),
-        "total_sales_volume": decimal_to_float(sum(volumes, Decimal("0"))) if volumes else None,
-        "total_sales_amount": decimal_to_float(sum(amounts, Decimal("0"))) if amounts else None,
+        "total_sales_volume": decimal_to_float(sum(volumes, Decimal("0")))
+        if volumes
+        else None,
+        "total_sales_amount": decimal_to_float(sum(amounts, Decimal("0")))
+        if amounts
+        else None,
         "median_price": decimal_to_float(decimal_median(prices)),
         "median_volume": decimal_to_float(decimal_median(volumes)),
         "median_amount": decimal_to_float(decimal_median(amounts)),
@@ -4639,8 +5895,21 @@ def sample_status_from_count(count: int) -> str:
 def should_route_to_semantic_market_query(question: str, normalized: str) -> bool:
     if "m11d" in normalized or "semanticmarket" in normalized:
         return True
-    if any(word in question for word in ("用户任务", "目标客群", "目标客户", "目标用户", "价值战场", "任务", "客群", "战场")) and any(
-        word in question for word in ("市场空间", "市场规模", "销量", "销额", "市场贡献", "贡献销量")
+    if any(
+        word in question
+        for word in (
+            "用户任务",
+            "目标客群",
+            "目标客户",
+            "目标用户",
+            "价值战场",
+            "任务",
+            "客群",
+            "战场",
+        )
+    ) and any(
+        word in question
+        for word in ("市场空间", "市场规模", "销量", "销额", "市场贡献", "贡献销量")
     ):
         return True
     return any(
@@ -4660,10 +5929,15 @@ def should_route_to_semantic_market_query(question: str, normalized: str) -> boo
     )
 
 
-def semantic_dimension_type_from_question(question: str, *, allow_all: bool = False) -> str | None:
+def semantic_dimension_type_from_question(
+    question: str, *, allow_all: bool = False
+) -> str | None:
     if "用户任务" in question or "任务图谱" in question:
         return "user_task"
-    if any(word in question for word in ("目标客群", "目标客户", "目标用户", "客群图谱", "客户图谱")):
+    if any(
+        word in question
+        for word in ("目标客群", "目标客户", "目标用户", "客群图谱", "客户图谱")
+    ):
         return "target_group"
     if "价值战场" in question or "战场图谱" in question or "战场市场" in question:
         return "battlefield"
@@ -4709,17 +5983,58 @@ def semantic_market_query_terms(query: str | None) -> list[str]:
 
 
 def should_route_to_target_group_query(question: str, normalized: str) -> bool:
-    return any(word in question for word in ("目标客群", "目标客户", "目标用户", "客群画像", "客户画像", "人群画像", "客群预设")) or "targetgroup" in normalized
+    return (
+        any(
+            word in question
+            for word in (
+                "目标客群",
+                "目标客户",
+                "目标用户",
+                "客群画像",
+                "客户画像",
+                "人群画像",
+                "客群预设",
+            )
+        )
+        or "targetgroup" in normalized
+    )
 
 
 def should_route_to_user_task_query(question: str, normalized: str) -> bool:
-    return any(word in question for word in ("用户任务", "使用任务", "主任务", "任务画像", "任务预设", "购买目的", "使用目的")) or "usertask" in normalized
+    return (
+        any(
+            word in question
+            for word in (
+                "用户任务",
+                "使用任务",
+                "主任务",
+                "任务画像",
+                "任务预设",
+                "购买目的",
+                "使用目的",
+            )
+        )
+        or "usertask" in normalized
+    )
 
 
 def should_route_to_user_task_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+    if any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")
+    ):
         return True
-    return any(token in normalized for token in ("主任务sku", "次任务sku", "拖后腿", "厂家主打", "潜在任务", "评论观察"))
+    return any(
+        token in normalized
+        for token in (
+            "主任务sku",
+            "次任务sku",
+            "拖后腿",
+            "厂家主打",
+            "潜在任务",
+            "评论观察",
+        )
+    )
 
 
 def user_task_relation_from_question(question: str) -> str:
@@ -4740,9 +6055,22 @@ def user_task_relation_from_question(question: str) -> str:
 
 
 def should_route_to_target_group_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+    if any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")
+    ):
         return True
-    return any(token in normalized for token in ("主客群sku", "次客群sku", "未满足", "厂家主打", "潜在客群", "评论观察"))
+    return any(
+        token in normalized
+        for token in (
+            "主客群sku",
+            "次客群sku",
+            "未满足",
+            "厂家主打",
+            "潜在客群",
+            "评论观察",
+        )
+    )
 
 
 def target_group_relation_from_question(question: str) -> str:
@@ -4763,13 +6091,24 @@ def target_group_relation_from_question(question: str) -> str:
 
 
 def should_route_to_value_battlefield_query(question: str, normalized: str) -> bool:
-    return "价值战场" in question or "战场图谱" in question or "战场预设" in question or "battlefield" in normalized
+    return (
+        "价值战场" in question
+        or "战场图谱" in question
+        or "战场预设" in question
+        or "battlefield" in normalized
+    )
 
 
 def should_route_to_value_battlefield_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+    if any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")
+    ):
         return True
-    return any(token in normalized for token in ("拖后腿", "机会战场", "主战场sku", "辅战场sku"))
+    return any(
+        token in normalized
+        for token in ("拖后腿", "机会战场", "主战场sku", "辅战场sku")
+    )
 
 
 def value_battlefield_relation_from_question(question: str) -> str:
@@ -4803,11 +6142,19 @@ def should_route_to_comment_query(question: str, normalized: str) -> bool:
             "复购",
             "口碑",
         )
-    ) or ("评论" in question and any(token in normalized for token in ("sku", "画像", "覆盖", "维度", "评价")))
+    ) or (
+        "评论" in question
+        and any(
+            token in normalized for token in ("sku", "画像", "覆盖", "维度", "评价")
+        )
+    )
 
 
 def should_route_to_comment_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")):
+    if any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")
+    ):
         return True
     return any(
         token in normalized
@@ -4847,15 +6194,22 @@ def should_route_to_market_query(question: str, normalized: str) -> bool:
 
 
 def should_route_to_market_bucket_coverage(question: str, normalized: str) -> bool:
-    if any(token in normalized for token in ("价格区间", "尺寸区间", "价格带", "价位", "同价位", "销量位置")):
+    if any(
+        token in normalized
+        for token in ("价格区间", "尺寸区间", "价格带", "价位", "同价位", "销量位置")
+    ):
         return True
-    return any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")) and any(
-        token in normalized for token in ("市场", "价格", "尺寸", "量价")
-    )
+    return any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表")
+    ) and any(token in normalized for token in ("市场", "价格", "尺寸", "量价"))
 
 
 def should_route_to_comparable_pools(question: str, normalized: str) -> bool:
-    return any(token in normalized for token in ("可比池", "市场池", "同尺寸池", "同价池", "同价格带"))
+    return any(
+        token in normalized
+        for token in ("可比池", "市场池", "同尺寸池", "同价池", "同价格带")
+    )
 
 
 def market_bucket_type_from_question(question: str, normalized: str) -> str:
@@ -4880,18 +6234,44 @@ def should_skip_negative_tier_match(query_text: str, item: M03BTierDefinition) -
     }
     if item.tier_code not in negative_tier_codes:
         return False
-    return any(normalize_token(term) in query_norm for term in positive_terms.get(item.dimension_code, ()))
+    return any(
+        normalize_token(term) in query_norm
+        for term in positive_terms.get(item.dimension_code, ())
+    )
 
 
 def should_route_to_tier_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("档位", "覆盖", "有哪些 SKU", "哪些 SKU", "sku列表", "SKU列表")):
+    if any(
+        word in question
+        for word in ("档位", "覆盖", "有哪些 SKU", "哪些 SKU", "sku列表", "SKU列表")
+    ):
         return True
-    tier_words = ("miniled", "oled", "lcd", "qled", "旗舰画质", "高端画质", "一级能效", "巨幕", "无分区", "挂机", "柜机", "新风", "舒适风", "自清洁", "循环风量", "匹")
+    tier_words = (
+        "miniled",
+        "oled",
+        "lcd",
+        "qled",
+        "旗舰画质",
+        "高端画质",
+        "一级能效",
+        "巨幕",
+        "无分区",
+        "挂机",
+        "柜机",
+        "新风",
+        "舒适风",
+        "自清洁",
+        "循环风量",
+        "匹",
+    )
     return any(word in normalized for word in tier_words)
 
 
 def should_route_to_claim_position_coverage(question: str, normalized: str) -> bool:
-    if any(word in question for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表", "位置")):
+    if any(
+        word in question
+        for word in ("覆盖", "哪些 SKU", "有哪些 SKU", "sku列表", "SKU列表", "位置")
+    ):
         return True
     position_words = (
         "miniled复合",
@@ -4921,25 +6301,43 @@ def extract_sku_or_model_query(question: str) -> str | None:
     return None
 
 
-def extract_taxonomy_search(question: str, *, product_category: str = "TV") -> str | None:
+def extract_taxonomy_search(
+    question: str, *, product_category: str = "TV"
+) -> str | None:
     for marker in ("查", "看", "搜索"):
         if marker in question:
             tail = question.split(marker, 1)[1].strip()
             for suffix in ("标准参数", "参数表", "参数分类"):
                 tail = tail.replace(suffix, "").strip()
-            category_words = {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
-            return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
+            category_words = (
+                {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
+            )
+            return (
+                None
+                if normalize_token(tail)
+                in {normalize_token(item) for item in category_words}
+                else tail or None
+            )
     return None
 
 
-def extract_claim_taxonomy_search(question: str, *, product_category: str = "TV") -> str | None:
+def extract_claim_taxonomy_search(
+    question: str, *, product_category: str = "TV"
+) -> str | None:
     for marker in ("查", "看", "搜索"):
         if marker in question:
             tail = question.split(marker, 1)[1].strip()
             for suffix in ("标准卖点", "卖点分类", "卖点维度", "卖点体系"):
                 tail = tail.replace(suffix, "").strip()
-            category_words = {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
-            return None if normalize_token(tail) in {normalize_token(item) for item in category_words} else tail or None
+            category_words = (
+                {"彩电", "电视", "tv"} if product_category == "TV" else {"空调", "ac"}
+            )
+            return (
+                None
+                if normalize_token(tail)
+                in {normalize_token(item) for item in category_words}
+                else tail or None
+            )
     return None
 
 
@@ -4964,11 +6362,17 @@ def resolve_product_category(
     normalized = normalize_token(value or "auto")
     if normalized != "auto":
         return normalize_product_category_arg(value)
-    text = " ".join(item for item in (query, sku_code, model_name, dimension, tier) if item)
+    text = " ".join(
+        item for item in (query, sku_code, model_name, dimension, tier) if item
+    )
     text_norm = normalize_token(text)
     if "空调" in text_norm or re.search(r"\bAC\d{4,}\b", text.upper()):
         return "AC"
-    if "彩电" in text_norm or "电视" in text_norm or re.search(r"\bTV\d{4,}\b", text.upper()):
+    if (
+        "彩电" in text_norm
+        or "电视" in text_norm
+        or re.search(r"\bTV\d{4,}\b", text.upper())
+    ):
         return "TV"
     return "TV"
 
@@ -4981,7 +6385,9 @@ def product_category_config(product_category: str) -> dict[str, Any]:
 def ensure_claim_taxonomy_available(product_category: str) -> None:
     config = product_category_config(product_category)
     if not config.get("claim_taxonomy_factory") or not config.get("claim_rule_version"):
-        raise CatForgeInsightError(f"{config['label_cn']}标准卖点 taxonomy 尚未发布，不能查询 SKU 卖点事实画像。")
+        raise CatForgeInsightError(
+            f"{config['label_cn']}标准卖点 taxonomy 尚未发布，不能查询 SKU 卖点事实画像。"
+        )
 
 
 def claim_taxonomy_for_product_category(product_category: str) -> M04CClaimTaxonomy:
@@ -4991,8 +6397,12 @@ def claim_taxonomy_for_product_category(product_category: str) -> M04CClaimTaxon
 
 def ensure_comment_taxonomy_available(product_category: str) -> None:
     config = product_category_config(product_category)
-    if not config.get("comment_taxonomy_factory") or not config.get("comment_rule_version"):
-        raise CatForgeInsightError(f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能查询 SKU 评论事实画像。")
+    if not config.get("comment_taxonomy_factory") or not config.get(
+        "comment_rule_version"
+    ):
+        raise CatForgeInsightError(
+            f"{config['label_cn']}评论事实 taxonomy 尚未发布，不能查询 SKU 评论事实画像。"
+        )
 
 
 def comment_taxonomy_for_product_category(product_category: str) -> M05CCommentTaxonomy:
@@ -5054,7 +6464,11 @@ def decimal_to_float(value: Any) -> float | None:
 
 def emit_result(result: dict[str, Any], output_format: str) -> None:
     if output_format == "json":
-        print(json.dumps(to_jsonable(result), ensure_ascii=False, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                to_jsonable(result), ensure_ascii=False, indent=2, sort_keys=True
+            )
+        )
         return
     print(render_text(result))
 
@@ -5072,7 +6486,11 @@ def to_jsonable(value: Any) -> Any:
 def render_text(result: dict[str, Any]) -> str:
     status = result.get("status")
     if status != "ok":
-        return result.get("message_cn") or result.get("error") or json.dumps(to_jsonable(result), ensure_ascii=False)
+        return (
+            result.get("message_cn")
+            or result.get("error")
+            or json.dumps(to_jsonable(result), ensure_ascii=False)
+        )
     if "claim_summary" in result:
         sku = result["sku"]
         summary = result["claim_summary"]
@@ -5082,7 +6500,9 @@ def render_text(result: dict[str, Any]) -> str:
             "卖点位置：",
         ]
         for item in result.get("positions", []):
-            lines.append(f"- {item['position_source']} / {item['dimension_code']}: {item['position_name']} ({item['position_code']})")
+            lines.append(
+                f"- {item['position_source']} / {item['dimension_code']}: {item['position_name']} ({item['position_code']})"
+            )
         if result.get("quality_flags"):
             lines.append("质量标记：" + ", ".join(result["quality_flags"]))
         return "\n".join(lines)
@@ -5129,7 +6549,11 @@ def render_text(result: dict[str, Any]) -> str:
             f"批次：{result['batch_id']}；窗口：{result['analysis_window']}；可比池：{result['pool_count']} 个",
         ]
         for item in result["pools"]:
-            sku_codes = ", ".join(item["candidate_sku_codes"]) if item["candidate_sku_codes"] else "-"
+            sku_codes = (
+                ", ".join(item["candidate_sku_codes"])
+                if item["candidate_sku_codes"]
+                else "-"
+            )
             suffix = "（已截断）" if item["candidate_sku_codes_truncated"] else ""
             lines.append(
                 f"- {item['pool_type']}: {item['pool_sku_count']} 个 SKU；样本={item['sample_status']}；SKU：{sku_codes}{suffix}"
@@ -5167,7 +6591,11 @@ def render_text(result: dict[str, Any]) -> str:
             lines.append(f"无主战场原因：{summary['no_primary_reason_cn']}")
         return "\n".join(lines)
     if "target_groups" in result:
-        label = result.get("product_category_label_cn") or result.get("product_category") or "品类"
+        label = (
+            result.get("product_category_label_cn")
+            or result.get("product_category")
+            or "品类"
+        )
         lines = [
             f"{label}目标客群预设：{result['target_group_count']}/{result['total_target_group_count']} 个；taxonomy={result['taxonomy_version']}",
         ]
@@ -5177,7 +6605,11 @@ def render_text(result: dict[str, Any]) -> str:
             )
         return "\n".join(lines)
     if "battlefields" in result:
-        label = result.get("product_category_label_cn") or result.get("product_category") or "品类"
+        label = (
+            result.get("product_category_label_cn")
+            or result.get("product_category")
+            or "品类"
+        )
         lines = [
             f"{label}价值战场预设：{result['battlefield_count']}/{result['total_battlefield_count']} 个；taxonomy={result['taxonomy_version']}",
         ]
@@ -5211,49 +6643,86 @@ def render_text(result: dict[str, Any]) -> str:
             "维度档位：",
         ]
         for item in result.get("dimension_tiers", []):
-            lines.append(f"- {item['dimension_code']}: {item['tier_name']} ({item['tier_code']})")
+            lines.append(
+                f"- {item['dimension_code']}: {item['tier_name']} ({item['tier_code']})"
+            )
         return "\n".join(lines)
     if "params" in result:
-        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
+        label = (
+            result.get("product_category_label_cn")
+            or result.get("category_code")
+            or "品类"
+        )
         lines = [
             f"{label}标准参数：{result['param_count']}/{result['total_param_count']} 个；taxonomy={result['taxonomy_version']}",
-            "分组数量：" + ", ".join(f"{key}={value}" for key, value in result["group_counts"].items()),
+            "分组数量："
+            + ", ".join(
+                f"{key}={value}" for key, value in result["group_counts"].items()
+            ),
         ]
         for item in result["params"][:80]:
             raw_fields = ", ".join(item["raw_fields"]) or "-"
             core = "核心" if item["required_for_core"] else "辅助"
-            lines.append(f"- {item['param_group']} / {item['param_code']} / {item['param_name']} / {core} / 原始字段：{raw_fields}")
+            lines.append(
+                f"- {item['param_group']} / {item['param_code']} / {item['param_name']} / {core} / 原始字段：{raw_fields}"
+            )
         if len(result["params"]) > 80:
-            lines.append(f"... 还有 {len(result['params']) - 80} 个参数，使用 --format json 查看完整结果。")
+            lines.append(
+                f"... 还有 {len(result['params']) - 80} 个参数，使用 --format json 查看完整结果。"
+            )
         return "\n".join(lines)
     if "claims" in result:
-        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
+        label = (
+            result.get("product_category_label_cn")
+            or result.get("category_code")
+            or "品类"
+        )
         lines = [
             f"{label}标准卖点：{result['claim_count']}/{result['total_claim_count']} 个；taxonomy={result['taxonomy_version']}",
-            "维度数量：" + ", ".join(f"{key}={value}" for key, value in result["dimension_counts"].items()),
+            "维度数量："
+            + ", ".join(
+                f"{key}={value}" for key, value in result["dimension_counts"].items()
+            ),
         ]
         for item in result["claims"][:80]:
             support = ", ".join(item["support_param_codes"]) or "不按参数判断"
             kind = "服务履约单列" if item["service_separate"] else item["claim_kind"]
-            lines.append(f"- {item['dimension_code']} / {item['claim_code']} / {item['claim_name']} / {kind} / 参数支撑：{support}")
+            lines.append(
+                f"- {item['dimension_code']} / {item['claim_code']} / {item['claim_name']} / {kind} / 参数支撑：{support}"
+            )
         if len(result["claims"]) > 80:
-            lines.append(f"... 还有 {len(result['claims']) - 80} 个卖点，使用 --format json 查看完整结果。")
+            lines.append(
+                f"... 还有 {len(result['claims']) - 80} 个卖点，使用 --format json 查看完整结果。"
+            )
         return "\n".join(lines)
     if "subdimensions" in result:
-        label = result.get("product_category_label_cn") or result.get("category_code") or "品类"
+        label = (
+            result.get("product_category_label_cn")
+            or result.get("category_code")
+            or "品类"
+        )
         lines = [
             f"{label}评论事实维度：{result['subdimension_count']}/{result['total_subdimension_count']} 个；taxonomy={result['taxonomy_version']}",
-            "维度数量：" + ", ".join(f"{key}={value}" for key, value in result["dimension_counts"].items()),
+            "维度数量："
+            + ", ".join(
+                f"{key}={value}" for key, value in result["dimension_counts"].items()
+            ),
         ]
         for item in result["subdimensions"][:80]:
             params = ", ".join(item["linked_param_codes"]) or "-"
             claims = ", ".join(item["linked_claim_codes"]) or "-"
-            lines.append(f"- {item['dimension_code']} / {item['subdimension_code']} / {item['subdimension_name']} / 参数：{params} / 卖点：{claims}")
+            lines.append(
+                f"- {item['dimension_code']} / {item['subdimension_code']} / {item['subdimension_name']} / 参数：{params} / 卖点：{claims}"
+            )
         if len(result["subdimensions"]) > 80:
-            lines.append(f"... 还有 {len(result['subdimensions']) - 80} 个评论子维度，使用 --format json 查看完整结果。")
+            lines.append(
+                f"... 还有 {len(result['subdimensions']) - 80} 个评论子维度，使用 --format json 查看完整结果。"
+            )
         return "\n".join(lines)
     if result.get("bucket_source"):
-        lines = [f"市场区间覆盖：批次 {result['batch_id']}，窗口 {result['analysis_window']}，命中 {result['coverage_count']} 个区间"]
+        lines = [
+            f"市场区间覆盖：批次 {result['batch_id']}，窗口 {result['analysis_window']}，命中 {result['coverage_count']} 个区间"
+        ]
         for item in result["coverages"]:
             sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
             suffix = "（已截断）" if item["sku_codes_truncated"] else ""
@@ -5264,7 +6733,9 @@ def render_text(result: dict[str, Any]) -> str:
         lines.append(result.get("bucket_source_note_cn", ""))
         return "\n".join(line for line in lines if line)
     if result.get("coverage_type") is not None:
-        lines = [f"评论事实覆盖：批次 {result['batch_id']}，命中 {result['coverage_count']} 个覆盖项"]
+        lines = [
+            f"评论事实覆盖：批次 {result['batch_id']}，命中 {result['coverage_count']} 个覆盖项"
+        ]
         for item in result["coverages"]:
             sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
             suffix = "（已截断）" if item["sku_codes_truncated"] else ""
@@ -5276,7 +6747,9 @@ def render_text(result: dict[str, Any]) -> str:
     if "coverages" in result:
         is_claim_coverage = "position_source" in result
         unit_name = "位置" if is_claim_coverage else "档位"
-        lines = [f"{'卖点位置覆盖' if is_claim_coverage else '参数档位覆盖'}：批次 {result['batch_id']}，命中 {result['coverage_count']} 个{unit_name}"]
+        lines = [
+            f"{'卖点位置覆盖' if is_claim_coverage else '参数档位覆盖'}：批次 {result['batch_id']}，命中 {result['coverage_count']} 个{unit_name}"
+        ]
         for item in result["coverages"]:
             sku_codes = ", ".join(item["sku_codes"]) if item["sku_codes"] else "-"
             suffix = "（已截断）" if item["sku_codes_truncated"] else ""

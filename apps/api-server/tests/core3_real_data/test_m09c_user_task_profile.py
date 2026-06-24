@@ -6,11 +6,17 @@ from sqlalchemy.orm import Session
 from app.cli import catforge_insight, catforge_pipeline
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_M09C_AC_TAXONOMY_VERSION,
     Core3ModuleCode,
     CORE3_M09C_TV_TAXONOMY_VERSION,
     Core3RunStatus,
 )
-from app.services.core3_real_data.m09c_user_task_service import M09CRunner, _failed_result
+from app.services.core3_real_data.m09c_user_task_service import (
+    M09CUserTaskTaxonomyLoader,
+    M09CRunner,
+    _failed_result,
+    ac_user_task_taxonomy_v0_1,
+)
 from tests.core3_real_data.test_m10c_target_group_profile import (
     BATCH_ID,
     PROJECT_ID,
@@ -50,7 +56,9 @@ def test_m09c_runner_generates_user_task_profiles_and_coverage() -> None:
     assert result.summary_json["user_task_count"] == 12
 
     family_profile = session.execute(
-        select(entities.Core3M09cSkuUserTaskProfile).where(entities.Core3M09cSkuUserTaskProfile.sku_code == SKU_FAMILY)
+        select(entities.Core3M09cSkuUserTaskProfile).where(
+            entities.Core3M09cSkuUserTaskProfile.sku_code == SKU_FAMILY
+        )
     ).scalar_one()
     assert family_profile.primary_user_task_code == "TASK_MAINSTREAM_LIVING_VIEWING"
     assert family_profile.size_tier == "xlarge_70_85"
@@ -59,18 +67,26 @@ def test_m09c_runner_generates_user_task_profiles_and_coverage() -> None:
     smart_score = session.execute(
         select(entities.Core3M09cSkuUserTaskScore)
         .where(entities.Core3M09cSkuUserTaskScore.sku_code == SKU_SMART)
-        .where(entities.Core3M09cSkuUserTaskScore.user_task_code == "TASK_SMART_CASTING_IOT")
+        .where(
+            entities.Core3M09cSkuUserTaskScore.user_task_code
+            == "TASK_SMART_CASTING_IOT"
+        )
     ).scalar_one()
     assert smart_score.relation_status == "brand_claimed_task"
 
     senior_score = session.execute(
         select(entities.Core3M09cSkuUserTaskScore)
         .where(entities.Core3M09cSkuUserTaskScore.sku_code == SKU_SENIOR)
-        .where(entities.Core3M09cSkuUserTaskScore.user_task_code == "TASK_SENIOR_EASY_OPERATION")
+        .where(
+            entities.Core3M09cSkuUserTaskScore.user_task_code
+            == "TASK_SENIOR_EASY_OPERATION"
+        )
     ).scalar_one()
     assert senior_score.relation_status == "drag_factor_task"
 
-    coverage_rows = session.execute(select(entities.Core3M09cUserTaskCoverage)).scalars().all()
+    coverage_rows = (
+        session.execute(select(entities.Core3M09cUserTaskCoverage)).scalars().all()
+    )
     assert len(coverage_rows) == 12
 
 
@@ -118,12 +134,31 @@ def test_m09c_pipeline_and_insight_cli_query_user_tasks() -> None:
 
     assert sku_profile["status"] == "ok"
     assert sku_profile["primary_user_task_code"] == "TASK_MAINSTREAM_LIVING_VIEWING"
-    assert any(item["user_task_code"] == "TASK_MAINSTREAM_LIVING_VIEWING" for item in sku_profile["scores"])
+    assert any(
+        item["user_task_code"] == "TASK_MAINSTREAM_LIVING_VIEWING"
+        for item in sku_profile["scores"]
+    )
     assert SKU_FAMILY in coverage["sku_codes"]
     assert natural["routed_command"] == "sku-user-task"
     assert natural["primary_user_task_code"] == "TASK_MAINSTREAM_LIVING_VIEWING"
     assert taxonomy["user_task_count"] == 12
     assert taxonomy["taxonomy_version"] == CORE3_M09C_TV_TAXONOMY_VERSION
+
+
+def test_m09c_ac_user_task_taxonomy_is_published() -> None:
+    taxonomy = ac_user_task_taxonomy_v0_1()
+    loaded = M09CUserTaskTaxonomyLoader().load(
+        CORE3_M09C_AC_TAXONOMY_VERSION, product_category="AC"
+    )
+    config = catforge_pipeline.product_category_config("ac")
+    insight_result = catforge_insight.query_user_task_taxonomy(product_category="AC")
+
+    assert taxonomy.taxonomy_version == CORE3_M09C_AC_TAXONOMY_VERSION
+    assert loaded.product_category == "AC"
+    assert config["user_task_taxonomy_version"] == CORE3_M09C_AC_TAXONOMY_VERSION
+    assert insight_result["user_task_count"] == 12
+    assert "TASK_FAST_COOL_HEAT" in taxonomy.user_tasks_by_code
+    assert "TASK_LARGE_SPACE_COVERAGE" in taxonomy.user_tasks_by_code
 
 
 def test_m09c_failed_result_uses_current_review_issue_schema() -> None:

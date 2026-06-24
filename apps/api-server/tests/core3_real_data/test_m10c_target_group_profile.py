@@ -15,11 +15,16 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M10C_AC_TAXONOMY_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
     Core3RunStatus,
     Core3SourceBatchStatus,
 )
-from app.services.core3_real_data.m10c_target_group_service import M10CRunner
+from app.services.core3_real_data.m10c_target_group_service import (
+    M10CTargetGroupTaxonomyLoader,
+    M10CRunner,
+    ac_target_group_taxonomy_v0_1,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -56,8 +61,28 @@ def make_session() -> Session:
     return session
 
 
+def test_m10c_ac_target_group_taxonomy_is_published() -> None:
+    taxonomy = ac_target_group_taxonomy_v0_1()
+    loaded = M10CTargetGroupTaxonomyLoader().load(
+        CORE3_M10C_AC_TAXONOMY_VERSION, product_category="AC"
+    )
+    config = catforge_pipeline.product_category_config("ac")
+    insight_result = catforge_insight.query_target_group_taxonomy(product_category="AC")
+
+    assert taxonomy.taxonomy_version == CORE3_M10C_AC_TAXONOMY_VERSION
+    assert loaded.product_category == "AC"
+    assert config["target_group_taxonomy_version"] == CORE3_M10C_AC_TAXONOMY_VERSION
+    assert insight_result["target_group_count"] == 10
+    assert "TG_LIVING_ROOM_LARGE_SPACE" in taxonomy.target_groups_by_code
+    assert "TG_BEDROOM_SLEEP_SENSITIVE" in taxonomy.target_groups_by_code
+
+
 def seed_foundation(session: Session) -> None:
-    session.add(entities.CategoryProject(project_id=PROJECT_ID, name="Core3 MVP", category_code="TV"))
+    session.add(
+        entities.CategoryProject(
+            project_id=PROJECT_ID, name="Core3 MVP", category_code="TV"
+        )
+    )
     session.add(
         entities.Core3SourceBatch(
             batch_id=BATCH_ID,
@@ -66,7 +91,12 @@ def seed_foundation(session: Session) -> None:
             batch_type="incremental",
             source_system="postgresql_205",
             source_database="catforge_dev",
-            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            source_tables=[
+                "week_sales_data",
+                "attribute_data",
+                "selling_points_data",
+                "comment_data",
+            ],
             ruleset_version="tv-core3-real-data-v2-0.1.0",
             module_version="m00-source-registry-0.1.0",
             hash_version="m00_row_hash_v1",
@@ -74,22 +104,55 @@ def seed_foundation(session: Session) -> None:
             status=Core3SourceBatchStatus.REGISTERED.value,
         )
     )
-    seed_sku(session, SKU_FAMILY, "75F-Family", "海信", size=75, price=Decimal("2999"), volume=Decimal("900"))
-    seed_sku(session, SKU_SMART, "75S-Smart", "TCL", size=75, price=Decimal("5999"), volume=Decimal("300"))
-    seed_sku(session, SKU_SENIOR, "43P-Parent", "创维", size=43, price=Decimal("1599"), volume=Decimal("120"))
+    seed_sku(
+        session,
+        SKU_FAMILY,
+        "75F-Family",
+        "海信",
+        size=75,
+        price=Decimal("2999"),
+        volume=Decimal("900"),
+    )
+    seed_sku(
+        session,
+        SKU_SMART,
+        "75S-Smart",
+        "TCL",
+        size=75,
+        price=Decimal("5999"),
+        volume=Decimal("300"),
+    )
+    seed_sku(
+        session,
+        SKU_SENIOR,
+        "43P-Parent",
+        "创维",
+        size=43,
+        price=Decimal("1599"),
+        volume=Decimal("120"),
+    )
     seed_claims(
         session,
         SKU_FAMILY,
         "75F-Family",
         "海信",
-        ["tv_claim_theater_scene", "tv_claim_hdr_high_brightness", "tv_claim_speaker_sound"],
+        [
+            "tv_claim_theater_scene",
+            "tv_claim_hdr_high_brightness",
+            "tv_claim_speaker_sound",
+        ],
     )
     seed_claims(
         session,
         SKU_SMART,
         "75S-Smart",
         "TCL",
-        ["tv_claim_voice_control", "tv_claim_casting_connectivity", "tv_claim_ai_large_model", "tv_claim_smart_home_iot"],
+        [
+            "tv_claim_voice_control",
+            "tv_claim_casting_connectivity",
+            "tv_claim_ai_large_model",
+            "tv_claim_smart_home_iot",
+        ],
     )
     seed_comments(
         session,
@@ -97,8 +160,20 @@ def seed_foundation(session: Session) -> None:
         "75F-Family",
         "海信",
         [
-            ("audience_child_family", "一家人客厅追剧都说画质不错", "audience_signal", "人群信号", "positive"),
-            ("use_living_room_cinema", "客厅看电影大屏很震撼", "use_case_signal", "用途信号", "positive"),
+            (
+                "audience_child_family",
+                "一家人客厅追剧都说画质不错",
+                "audience_signal",
+                "人群信号",
+                "positive",
+            ),
+            (
+                "use_living_room_cinema",
+                "客厅看电影大屏很震撼",
+                "use_case_signal",
+                "用途信号",
+                "positive",
+            ),
         ],
     )
     seed_comments(
@@ -107,13 +182,28 @@ def seed_foundation(session: Session) -> None:
         "43P-Parent",
         "创维",
         [
-            ("audience_senior", "买给爸妈用，但是广告多操作也不简单", "audience_signal", "人群信号", "negative"),
+            (
+                "audience_senior",
+                "买给爸妈用，但是广告多操作也不简单",
+                "audience_signal",
+                "人群信号",
+                "negative",
+            ),
         ],
     )
     session.commit()
 
 
-def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, *, size: int, price: Decimal, volume: Decimal) -> None:
+def seed_sku(
+    session: Session,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    *,
+    size: int,
+    price: Decimal,
+    volume: Decimal,
+) -> None:
     size_tier = "small_32_45" if size <= 45 else "xlarge_70_85"
     amount = price * volume
     session.add(
@@ -125,18 +215,58 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
             sku_code=sku_code,
             model_name=model_name,
             param_values_json={
-                "screen_size_inch": {"normalized_value": size, "numeric_value": size, "value_presence": "present"},
-                "resolution_class": {"normalized_value": "4K", "value_text": "4K", "value_presence": "present"},
-                "hdr_support_flag": {"normalized_value": True, "value_presence": "present"},
-                "memory_capacity_gb": {"normalized_value": 4, "numeric_value": 4, "value_presence": "present"},
-                "speaker_power_w": {"normalized_value": 40, "numeric_value": 40, "value_presence": "present"},
-                "voice_recognition_flag": {"normalized_value": True, "value_presence": "present"},
-                "far_field_voice_flag": {"normalized_value": True, "value_presence": "present"},
-                "network_tv_flag": {"normalized_value": True, "value_presence": "present"},
-                "wifi_builtin_flag": {"normalized_value": True, "value_presence": "present"},
-                "smart_tv_flag": {"normalized_value": True, "value_presence": "present"},
-                "ai_large_model_flag": {"normalized_value": True, "value_presence": "present"},
-                "iot_control_flag": {"normalized_value": True, "value_presence": "present"},
+                "screen_size_inch": {
+                    "normalized_value": size,
+                    "numeric_value": size,
+                    "value_presence": "present",
+                },
+                "resolution_class": {
+                    "normalized_value": "4K",
+                    "value_text": "4K",
+                    "value_presence": "present",
+                },
+                "hdr_support_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "memory_capacity_gb": {
+                    "normalized_value": 4,
+                    "numeric_value": 4,
+                    "value_presence": "present",
+                },
+                "speaker_power_w": {
+                    "normalized_value": 40,
+                    "numeric_value": 40,
+                    "value_presence": "present",
+                },
+                "voice_recognition_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "far_field_voice_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "network_tv_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "wifi_builtin_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "smart_tv_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "ai_large_model_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
+                "iot_control_flag": {
+                    "normalized_value": True,
+                    "value_presence": "present",
+                },
                 "dimension_tier_profile": {"size": size_tier},
             },
             core_picture_params_json={},
@@ -177,8 +307,12 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
             price_wavg=price,
             price_median=price,
             price_per_inch=price / Decimal(size),
-            volume_percentile_in_size=Decimal("0.900000") if sku_code == SKU_FAMILY else Decimal("0.300000"),
-            amount_percentile_in_size=Decimal("0.800000") if sku_code == SKU_FAMILY else Decimal("0.200000"),
+            volume_percentile_in_size=Decimal("0.900000")
+            if sku_code == SKU_FAMILY
+            else Decimal("0.300000"),
+            amount_percentile_in_size=Decimal("0.800000")
+            if sku_code == SKU_FAMILY
+            else Decimal("0.200000"),
             market_confidence=Decimal("0.9000"),
             confidence_level="high",
             sample_status="sufficient",
@@ -227,7 +361,13 @@ def seed_sku(session: Session, sku_code: str, model_name: str, brand_name: str, 
         )
 
 
-def seed_claims(session: Session, sku_code: str, model_name: str, brand_name: str, claim_codes: list[str]) -> None:
+def seed_claims(
+    session: Session,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    claim_codes: list[str],
+) -> None:
     session.add(
         entities.Core3SkuClaimFactProfile(
             claim_profile_id=f"claim-profile-{sku_code}",
@@ -319,8 +459,12 @@ def seed_comments(
             matched_sentence_count=len(comments),
             fact_atom_count=len(comments),
             product_fact_sentence_count=len(comments),
-            positive_sentence_count=sum(1 for item in comments if item[4] == "positive"),
-            negative_sentence_count=sum(1 for item in comments if item[4] == "negative"),
+            positive_sentence_count=sum(
+                1 for item in comments if item[4] == "positive"
+            ),
+            negative_sentence_count=sum(
+                1 for item in comments if item[4] == "negative"
+            ),
             dimension_summary_json={},
             signal_summary_json={},
             param_comment_support_json={},
@@ -340,7 +484,13 @@ def seed_comments(
             rule_version=CORE3_M05C_TV_RULE_VERSION,
         )
     )
-    for index, (subdimension_code, text, dimension_code, dimension_name, polarity) in enumerate(comments, start=1):
+    for index, (
+        subdimension_code,
+        text,
+        dimension_code,
+        dimension_name,
+        polarity,
+    ) in enumerate(comments, start=1):
         session.add(
             entities.Core3CommentFactAtom(
                 comment_fact_id=f"comment-fact-{sku_code}-{index}",
@@ -397,7 +547,9 @@ def test_m10c_runner_generates_target_group_profiles_and_coverage() -> None:
     assert result.summary_json["target_group_count"] == 10
 
     family_profile = session.execute(
-        select(entities.Core3M10cSkuTargetGroupProfile).where(entities.Core3M10cSkuTargetGroupProfile.sku_code == SKU_FAMILY)
+        select(entities.Core3M10cSkuTargetGroupProfile).where(
+            entities.Core3M10cSkuTargetGroupProfile.sku_code == SKU_FAMILY
+        )
     ).scalar_one()
     assert family_profile.primary_target_group_code == "TG_MAINSTREAM_FAMILY_VIEWER"
     assert family_profile.size_tier == "xlarge_70_85"
@@ -406,18 +558,26 @@ def test_m10c_runner_generates_target_group_profiles_and_coverage() -> None:
     smart_score = session.execute(
         select(entities.Core3M10cSkuTargetGroupScore)
         .where(entities.Core3M10cSkuTargetGroupScore.sku_code == SKU_SMART)
-        .where(entities.Core3M10cSkuTargetGroupScore.target_group_code == "TG_SMART_CONNECTED_USER")
+        .where(
+            entities.Core3M10cSkuTargetGroupScore.target_group_code
+            == "TG_SMART_CONNECTED_USER"
+        )
     ).scalar_one()
     assert smart_score.relation_status == "brand_claimed_group"
 
     senior_score = session.execute(
         select(entities.Core3M10cSkuTargetGroupScore)
         .where(entities.Core3M10cSkuTargetGroupScore.sku_code == SKU_SENIOR)
-        .where(entities.Core3M10cSkuTargetGroupScore.target_group_code == "TG_SENIOR_PARENT_FRIENDLY")
+        .where(
+            entities.Core3M10cSkuTargetGroupScore.target_group_code
+            == "TG_SENIOR_PARENT_FRIENDLY"
+        )
     ).scalar_one()
     assert senior_score.relation_status == "unmet_group_need"
 
-    coverage_count = session.execute(select(entities.Core3M10cTargetGroupCoverage)).scalars().all()
+    coverage_count = (
+        session.execute(select(entities.Core3M10cTargetGroupCoverage)).scalars().all()
+    )
     assert len(coverage_count) == 10
 
 
@@ -465,7 +625,10 @@ def test_m10c_pipeline_and_insight_cli_query_target_groups() -> None:
 
     assert sku_profile["status"] == "ok"
     assert sku_profile["primary_target_group_code"] == "TG_MAINSTREAM_FAMILY_VIEWER"
-    assert any(item["target_group_code"] == "TG_MAINSTREAM_FAMILY_VIEWER" for item in sku_profile["scores"])
+    assert any(
+        item["target_group_code"] == "TG_MAINSTREAM_FAMILY_VIEWER"
+        for item in sku_profile["scores"]
+    )
     assert SKU_FAMILY in coverage["sku_codes"]
     assert natural["routed_command"] == "sku-target-group"
     assert natural["primary_target_group_code"] == "TG_MAINSTREAM_FAMILY_VIEWER"
