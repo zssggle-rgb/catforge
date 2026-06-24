@@ -22,6 +22,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11D_RULE_VERSION,
+    CORE3_M12C_RULE_VERSION,
 )
 
 
@@ -54,6 +55,19 @@ BRAND_QUERY_WORDS = (
     "康佳",
     "konka",
 )
+
+M12C_POSITIVE_ROLES = {"premium_driver_estimated", "sales_driver_estimated"}
+M12C_GAP_ROLES = {"opportunity_gap", "drag_factor"}
+M12C_ROLE_PRIORITY = {
+    "premium_driver_estimated": 0,
+    "sales_driver_estimated": 1,
+    "basic_threshold": 2,
+    "user_validated_need": 3,
+    "drag_factor": 4,
+    "opportunity_gap": 5,
+    "brand_claim_only": 6,
+    "sample_insufficient": 7,
+}
 
 
 class AnalystRepository:
@@ -728,6 +742,432 @@ class AnalystRepository:
                 semantic_allocations=allocations,
             ),
         }
+
+    def claim_value_space(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        market_window: str,
+        analysis_population: str,
+        claim_code: str | None = None,
+        query: str | None = None,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        del role
+        population = _m12c_population(analysis_population)
+        stmt = (
+            select(entities.Core3ClaimValueDimensionSummary)
+            .where(entities.Core3ClaimValueDimensionSummary.project_id == self.project_id)
+            .where(entities.Core3ClaimValueDimensionSummary.category_code == self.category_code)
+            .where(entities.Core3ClaimValueDimensionSummary.batch_id == batch_id)
+            .where(entities.Core3ClaimValueDimensionSummary.product_category == product_category.upper())
+            .where(entities.Core3ClaimValueDimensionSummary.market_window == market_window)
+            .where(entities.Core3ClaimValueDimensionSummary.analysis_population == population)
+            .where(entities.Core3ClaimValueDimensionSummary.rule_version == CORE3_M12C_RULE_VERSION)
+            .where(entities.Core3ClaimValueDimensionSummary.is_current.is_(True))
+        )
+        if claim_code:
+            stmt = stmt.where(entities.Core3ClaimValueDimensionSummary.claim_code == claim_code)
+        if context_type:
+            stmt = stmt.where(entities.Core3ClaimValueDimensionSummary.dimension_type == context_type)
+        if context_code:
+            stmt = stmt.where(entities.Core3ClaimValueDimensionSummary.dimension_code == context_code)
+        if size_tier:
+            stmt = stmt.where(entities.Core3ClaimValueDimensionSummary.size_tier == size_tier)
+        if price_band:
+            stmt = stmt.where(entities.Core3ClaimValueDimensionSummary.price_band_group == price_band)
+        stmt = _apply_m12c_query_filter(
+            stmt,
+            query=query,
+            code_columns=(
+                entities.Core3ClaimValueDimensionSummary.claim_code,
+                entities.Core3ClaimValueDimensionSummary.dimension_code,
+            ),
+            name_columns=(
+                entities.Core3ClaimValueDimensionSummary.claim_name,
+                entities.Core3ClaimValueDimensionSummary.dimension_name,
+            ),
+        )
+        stmt = stmt.order_by(
+            entities.Core3ClaimValueDimensionSummary.premium_driver_sku_count.desc(),
+            entities.Core3ClaimValueDimensionSummary.sales_driver_sku_count.desc(),
+            entities.Core3ClaimValueDimensionSummary.estimated_avg_weekly_sales_amount.desc(),
+            entities.Core3ClaimValueDimensionSummary.claim_code,
+        )
+        if limit != 0:
+            stmt = stmt.limit(max(limit, 0))
+        rows = list(self.db.execute(stmt).scalars())
+        return {
+            "market_window": market_window,
+            "analysis_population": population,
+            "filters": {
+                "claim_code": claim_code,
+                "query": query,
+                "context_type": context_type,
+                "context_code": context_code,
+                "size_tier": size_tier,
+                "price_band": price_band,
+                "limit": limit,
+            },
+            "summary_count": len(rows),
+            "items": [_claim_value_dimension_summary_payload(row) for row in rows],
+            "method_note_cn": "卖点价值空间来自 M12C 维度汇总，用于观察某类卖点在市场池、用户任务、目标客群、价值战场中的可观测价值分布。",
+        }
+
+    def sku_claim_value(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        claim_code: str | None = None,
+        query: str | None = None,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        population = _m12c_population(analysis_population)
+        quant_rows = self._m12c_sku_claim_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            claim_code=claim_code,
+            query=query,
+            context_type=context_type,
+            context_code=context_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            role=role,
+            limit=limit,
+        )
+        attr_rows = self._m12c_attribution_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            context_type=context_type,
+            context_code=context_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            limit=limit,
+        )
+        return {
+            "sku_code": sku_code,
+            "market_window": market_window,
+            "analysis_population": population,
+            "filters": {
+                "claim_code": claim_code,
+                "query": query,
+                "context_type": context_type,
+                "context_code": context_code,
+                "size_tier": size_tier,
+                "price_band": price_band,
+                "role": role,
+                "limit": limit,
+            },
+            "role_counts": _count_by([row.claim_value_role for row in quant_rows]),
+            "claim_values": [_sku_claim_value_payload(row) for row in quant_rows],
+            "attributions": [_claim_attribution_payload(row) for row in attr_rows],
+            "method_note_cn": "金额与销量贡献为同尺寸价格带、同语义上下文内的可观测差异分摊，不代表严格因果或可直接加总的真实增量。",
+        }
+
+    def claim_contribution(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        population = _m12c_population(analysis_population)
+        rows = self._m12c_attribution_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            context_type=context_type,
+            context_code=context_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            limit=limit,
+        )
+        return {
+            "sku_code": sku_code,
+            "market_window": market_window,
+            "analysis_population": population,
+            "filters": {
+                "context_type": context_type,
+                "context_code": context_code,
+                "size_tier": size_tier,
+                "price_band": price_band,
+                "limit": limit,
+            },
+            "attribution_count": len(rows),
+            "attributions": [_claim_attribution_payload(row) for row in rows],
+            "method_note_cn": "SKU 归因把同一上下文中的正向卖点按可观测超额价格、销量和语义支撑权重分摊，用于解释哪些卖点更像成交支撑。",
+        }
+
+    def claim_opportunity_gaps(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        candidate_sku_code: str | None = None,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        population = _m12c_population(analysis_population)
+        target_rows = self._m12c_sku_claim_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            context_type=context_type,
+            context_code=context_code,
+            role=None,
+            limit=0,
+        )
+        target_positive = {row.claim_code for row in target_rows if row.claim_value_role in M12C_POSITIVE_ROLES}
+        target_gap_rows = [
+            row
+            for row in target_rows
+            if row.claim_value_role in M12C_GAP_ROLES or (row.claim_value_role == "user_validated_need" and row.claim_code not in target_positive)
+        ]
+        candidate_advantages: list[Any] = []
+        if candidate_sku_code:
+            candidate_rows = self._m12c_sku_claim_rows(
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_code=candidate_sku_code,
+                market_window=market_window,
+                analysis_population=population,
+                context_type=context_type,
+                context_code=context_code,
+                role=None,
+                limit=0,
+            )
+            candidate_advantages = [
+                row
+                for row in candidate_rows
+                if row.claim_value_role in M12C_POSITIVE_ROLES and row.claim_code not in target_positive
+            ]
+        target_gap_rows = _sort_m12c_claim_rows(target_gap_rows)[: max(limit, 0) if limit else None]
+        candidate_advantages = _sort_m12c_claim_rows(candidate_advantages)[: max(limit, 0) if limit else None]
+        return {
+            "sku_code": sku_code,
+            "candidate_sku_code": candidate_sku_code,
+            "market_window": market_window,
+            "analysis_population": population,
+            "filters": {
+                "context_type": context_type,
+                "context_code": context_code,
+                "limit": limit,
+            },
+            "target_opportunity_or_drag_claims": [_sku_claim_value_payload(row) for row in target_gap_rows],
+            "candidate_positive_claims_missing_on_target": [_sku_claim_value_payload(row) for row in candidate_advantages],
+            "method_note_cn": "机会缺口优先看本品机会/拖后腿卖点；如提供竞品，则补充竞品已形成正向贡献而本品未形成正向贡献的卖点。",
+        }
+
+    def claim_value_compare(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        target_sku_code: str,
+        candidate_sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        population = _m12c_population(analysis_population)
+        target_rows = self._m12c_sku_claim_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=target_sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            context_type=context_type,
+            context_code=context_code,
+            limit=0,
+        )
+        candidate_rows = self._m12c_sku_claim_rows(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=candidate_sku_code,
+            market_window=market_window,
+            analysis_population=population,
+            context_type=context_type,
+            context_code=context_code,
+            limit=0,
+        )
+        target_best = _best_claim_row_by_code(target_rows)
+        candidate_best = _best_claim_row_by_code(candidate_rows)
+        all_codes = sorted(set(target_best) | set(candidate_best))
+        paired = []
+        target_advantage = []
+        candidate_advantage = []
+        shared_positive = []
+        for claim_code in all_codes:
+            target_row = target_best.get(claim_code)
+            candidate_row = candidate_best.get(claim_code)
+            item = {
+                "claim_code": claim_code,
+                "claim_name": (target_row.claim_name if target_row else None) or (candidate_row.claim_name if candidate_row else None),
+                "target": _sku_claim_value_payload(target_row) if target_row else {},
+                "candidate": _sku_claim_value_payload(candidate_row) if candidate_row else {},
+                "relation": _claim_compare_relation(target_row, candidate_row),
+            }
+            paired.append(item)
+            if item["relation"] == "shared_positive":
+                shared_positive.append(item)
+            elif item["relation"] == "target_advantage":
+                target_advantage.append(item)
+            elif item["relation"] == "candidate_advantage":
+                candidate_advantage.append(item)
+        paired = sorted(paired, key=_claim_compare_sort_key)[: max(limit, 0) if limit else None]
+        return {
+            "target_sku_code": target_sku_code,
+            "candidate_sku_code": candidate_sku_code,
+            "market_window": market_window,
+            "analysis_population": population,
+            "filters": {
+                "context_type": context_type,
+                "context_code": context_code,
+                "limit": limit,
+            },
+            "shared_positive_claims": shared_positive[: max(limit, 0) if limit else None],
+            "target_advantage_claims": target_advantage[: max(limit, 0) if limit else None],
+            "candidate_advantage_claims": candidate_advantage[: max(limit, 0) if limit else None],
+            "paired_claims": paired,
+            "method_note_cn": "对比使用两款 SKU 各自在同类语义上下文中的 M12C 最强卖点角色，用于判断卖点层面的替代和差异压力。",
+        }
+
+    def _m12c_sku_claim_rows(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        claim_code: str | None = None,
+        query: str | None = None,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+    ) -> list[entities.Core3SkuClaimValueQuantification]:
+        stmt = (
+            select(entities.Core3SkuClaimValueQuantification)
+            .where(entities.Core3SkuClaimValueQuantification.project_id == self.project_id)
+            .where(entities.Core3SkuClaimValueQuantification.category_code == self.category_code)
+            .where(entities.Core3SkuClaimValueQuantification.batch_id == batch_id)
+            .where(entities.Core3SkuClaimValueQuantification.product_category == product_category.upper())
+            .where(entities.Core3SkuClaimValueQuantification.market_window == market_window)
+            .where(entities.Core3SkuClaimValueQuantification.analysis_population == analysis_population)
+            .where(entities.Core3SkuClaimValueQuantification.sku_code == sku_code)
+            .where(entities.Core3SkuClaimValueQuantification.rule_version == CORE3_M12C_RULE_VERSION)
+            .where(entities.Core3SkuClaimValueQuantification.is_current.is_(True))
+        )
+        if claim_code:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.claim_code == claim_code)
+        if context_type:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.context_type == context_type)
+        if context_code:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.context_code == context_code)
+        if size_tier:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.size_tier == size_tier)
+        if price_band:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.price_band_group == price_band)
+        if role:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.claim_value_role == role)
+        stmt = _apply_m12c_query_filter(
+            stmt,
+            query=query,
+            code_columns=(
+                entities.Core3SkuClaimValueQuantification.claim_code,
+                entities.Core3SkuClaimValueQuantification.context_code,
+            ),
+            name_columns=(
+                entities.Core3SkuClaimValueQuantification.claim_name,
+                entities.Core3SkuClaimValueQuantification.context_name,
+            ),
+        )
+        rows = _sort_m12c_claim_rows(list(self.db.execute(stmt).scalars()))
+        return rows[: max(limit, 0)] if limit else rows
+
+    def _m12c_attribution_rows(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        market_window: str,
+        analysis_population: str,
+        context_type: str | None = None,
+        context_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        limit: int = 20,
+    ) -> list[entities.Core3SkuClaimContributionAttribution]:
+        stmt = (
+            select(entities.Core3SkuClaimContributionAttribution)
+            .where(entities.Core3SkuClaimContributionAttribution.project_id == self.project_id)
+            .where(entities.Core3SkuClaimContributionAttribution.category_code == self.category_code)
+            .where(entities.Core3SkuClaimContributionAttribution.batch_id == batch_id)
+            .where(entities.Core3SkuClaimContributionAttribution.product_category == product_category.upper())
+            .where(entities.Core3SkuClaimContributionAttribution.market_window == market_window)
+            .where(entities.Core3SkuClaimContributionAttribution.analysis_population == analysis_population)
+            .where(entities.Core3SkuClaimContributionAttribution.sku_code == sku_code)
+            .where(entities.Core3SkuClaimContributionAttribution.rule_version == CORE3_M12C_RULE_VERSION)
+            .where(entities.Core3SkuClaimContributionAttribution.is_current.is_(True))
+        )
+        if context_type:
+            stmt = stmt.where(entities.Core3SkuClaimContributionAttribution.context_type == context_type)
+        if context_code:
+            stmt = stmt.where(entities.Core3SkuClaimContributionAttribution.context_code == context_code)
+        if size_tier:
+            stmt = stmt.where(entities.Core3SkuClaimContributionAttribution.size_tier == size_tier)
+        if price_band:
+            stmt = stmt.where(entities.Core3SkuClaimContributionAttribution.price_band_group == price_band)
+        stmt = stmt.order_by(
+            entities.Core3SkuClaimContributionAttribution.sku_weekly_sales_amount_lift_abs.desc(),
+            entities.Core3SkuClaimContributionAttribution.sku_price_premium_abs.desc(),
+            entities.Core3SkuClaimContributionAttribution.confidence.desc(),
+        )
+        if limit != 0:
+            stmt = stmt.limit(max(limit, 0))
+        return list(self.db.execute(stmt).scalars())
 
     def _sales_overlap_market_fallback(
         self,
@@ -1638,6 +2078,104 @@ def _allocation_payload(row: entities.Core3SemanticMarketAllocation) -> dict[str
     }
 
 
+def _claim_value_dimension_summary_payload(row: entities.Core3ClaimValueDimensionSummary) -> dict[str, Any]:
+    return {
+        "claim_code": row.claim_code,
+        "claim_name": row.claim_name,
+        "dimension_type": row.dimension_type,
+        "dimension_code": row.dimension_code,
+        "dimension_name": row.dimension_name,
+        "size_tier": row.size_tier,
+        "price_band_group": row.price_band_group,
+        "sku_count": row.sku_count,
+        "role_counts": {
+            "premium_driver_estimated": row.premium_driver_sku_count,
+            "sales_driver_estimated": row.sales_driver_sku_count,
+            "basic_threshold": row.basic_threshold_sku_count,
+            "brand_claim_only": row.brand_claim_only_sku_count,
+            "drag_factor": row.drag_factor_sku_count,
+            "opportunity_gap": row.opportunity_gap_sku_count,
+        },
+        "market_space": {
+            "estimated_sales_volume": _number(row.estimated_sales_volume),
+            "estimated_avg_weekly_sales_volume": _number(row.estimated_avg_weekly_sales_volume),
+            "estimated_sales_amount": _number(row.estimated_sales_amount),
+            "estimated_avg_weekly_sales_amount": _number(row.estimated_avg_weekly_sales_amount),
+        },
+        "top_skus": row.top_skus_json or [],
+        "business_summary_cn": row.business_summary_cn,
+    }
+
+
+def _sku_claim_value_payload(row: entities.Core3SkuClaimValueQuantification | None) -> dict[str, Any]:
+    if row is None:
+        return {}
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "claim_code": row.claim_code,
+        "claim_name": row.claim_name,
+        "claim_dimension": row.claim_dimension,
+        "claim_value_role": row.claim_value_role,
+        "context_type": row.context_type,
+        "context_code": row.context_code,
+        "context_name": row.context_name,
+        "size_tier": row.size_tier,
+        "price_band_group": row.price_band_group,
+        "evidence_strength": {
+            "claim": _number(row.claim_evidence_strength),
+            "param": _number(row.param_support_strength),
+            "comment": _number(row.comment_support_strength),
+            "semantic": _number(row.semantic_support_strength),
+        },
+        "estimated_contribution": {
+            "price_premium_abs": _number(row.estimated_price_premium_abs),
+            "weekly_sales_lift_abs": _number(row.estimated_weekly_sales_lift_abs),
+            "weekly_sales_amount_lift_abs": _number(row.estimated_weekly_sales_amount_lift_abs),
+            "contribution_share_in_sku": _number(row.contribution_share_in_sku),
+        },
+        "attribution_confidence": _number(row.attribution_confidence),
+        "supporting_dimensions": row.supporting_dimensions_json or {},
+        "reason_cn": row.reason_cn,
+        "quality_flags": row.quality_flags_json or [],
+        "evidence_id_count": len(row.evidence_ids_json or []),
+    }
+
+
+def _claim_attribution_payload(row: entities.Core3SkuClaimContributionAttribution) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "context_type": row.context_type,
+        "context_code": row.context_code,
+        "context_name": row.context_name,
+        "size_tier": row.size_tier,
+        "price_band_group": row.price_band_group,
+        "baseline": {
+            "price": _number(row.baseline_price),
+            "weekly_sales_volume": _number(row.baseline_weekly_sales_volume),
+            "weekly_sales_amount": _number(row.baseline_weekly_sales_amount),
+        },
+        "sku_observed": {
+            "price": _number(row.sku_price),
+            "weekly_sales_volume": _number(row.sku_weekly_sales_volume),
+            "weekly_sales_amount": _number(row.sku_weekly_sales_amount),
+        },
+        "sku_gap_vs_baseline": {
+            "price_premium_abs": _number(row.sku_price_premium_abs),
+            "weekly_sales_lift_abs": _number(row.sku_weekly_sales_lift_abs),
+            "weekly_sales_amount_lift_abs": _number(row.sku_weekly_sales_amount_lift_abs),
+        },
+        "positive_claims": row.positive_claims_json or [],
+        "drag_claims": row.drag_claims_json or [],
+        "opportunity_claims": row.opportunity_claims_json or [],
+        "attribution_summary_cn": row.attribution_summary_cn,
+        "confidence": _number(row.confidence),
+    }
+
+
 def _section_evidence_sources(**sections: Any) -> list[dict[str, Any]]:
     module_by_key = {
         "market": "M07",
@@ -1661,6 +2199,86 @@ def _section_evidence_sources(**sections: Any) -> list[dict[str, Any]]:
             row_count = 1
         sources.append({"source_module": module_by_key[key], "row_count": row_count, "evidence_id_count": evidence_count})
     return sources
+
+
+def _m12c_population(analysis_population: str) -> str:
+    if analysis_population == "fact_complete_with_comment":
+        return "claim_value_ready_with_comment"
+    if analysis_population == "all_semantic_profiles":
+        return "claim_value_ready"
+    return analysis_population
+
+
+def _apply_m12c_query_filter(stmt: Any, *, query: str | None, code_columns: Sequence[Any], name_columns: Sequence[Any]) -> Any:
+    terms = _query_terms(query)
+    if not terms:
+        return stmt
+    filters = []
+    for term in terms:
+        like_value = f"%{_escape_like(term.lower())}%"
+        filters.extend(func.lower(column).like(like_value, escape="\\") for column in (*code_columns, *name_columns))
+    return stmt.where(or_(*filters)) if filters else stmt
+
+
+def _sort_m12c_claim_rows(rows: Sequence[entities.Core3SkuClaimValueQuantification]) -> list[entities.Core3SkuClaimValueQuantification]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            M12C_ROLE_PRIORITY.get(row.claim_value_role, 99),
+            -float(_decimal(row.estimated_weekly_sales_amount_lift_abs) or Decimal("0")),
+            -float(_decimal(row.estimated_price_premium_abs) or Decimal("0")),
+            -float(_decimal(row.attribution_confidence) or Decimal("0")),
+            row.claim_code,
+        ),
+    )
+
+
+def _best_claim_row_by_code(rows: Sequence[entities.Core3SkuClaimValueQuantification]) -> dict[str, entities.Core3SkuClaimValueQuantification]:
+    result: dict[str, entities.Core3SkuClaimValueQuantification] = {}
+    for row in _sort_m12c_claim_rows(rows):
+        result.setdefault(row.claim_code, row)
+    return result
+
+
+def _claim_compare_relation(
+    target_row: entities.Core3SkuClaimValueQuantification | None,
+    candidate_row: entities.Core3SkuClaimValueQuantification | None,
+) -> str:
+    target_positive = bool(target_row and target_row.claim_value_role in M12C_POSITIVE_ROLES)
+    candidate_positive = bool(candidate_row and candidate_row.claim_value_role in M12C_POSITIVE_ROLES)
+    if target_positive and candidate_positive:
+        return "shared_positive"
+    if target_positive:
+        return "target_advantage"
+    if candidate_positive:
+        return "candidate_advantage"
+    if target_row and target_row.claim_value_role == "drag_factor":
+        return "target_drag"
+    if candidate_row and candidate_row.claim_value_role == "drag_factor":
+        return "candidate_drag"
+    return "other"
+
+
+def _claim_compare_sort_key(item: dict[str, Any]) -> tuple[int, float, str]:
+    relation_order = {
+        "shared_positive": 0,
+        "target_advantage": 1,
+        "candidate_advantage": 2,
+        "target_drag": 3,
+        "candidate_drag": 4,
+        "other": 5,
+    }
+    target_amount = (((item.get("target") or {}).get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")) or 0
+    candidate_amount = (((item.get("candidate") or {}).get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")) or 0
+    return (relation_order.get(str(item.get("relation")), 99), -max(float(target_amount or 0), float(candidate_amount or 0)), str(item.get("claim_code") or ""))
+
+
+def _count_by(values: Sequence[Any]) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for value in values:
+        key = str(value)
+        result[key] = result.get(key, 0) + 1
+    return result
 
 
 def _query_terms(query: str | None) -> list[str]:

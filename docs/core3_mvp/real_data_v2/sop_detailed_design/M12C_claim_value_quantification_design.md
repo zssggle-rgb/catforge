@@ -979,8 +979,8 @@ M12C 完成后需要更新两个 Skill。
 
 | Skill | 文件 | 职责 |
 | --- | --- | --- |
-| `catforge-insight` | `tools/claude/skills/catforge-insight/SKILL.md`、`tools/openclaw/skills/catforge-insight/SKILL.md` | 提供 M12C 原子查询命令和自然语言示例 |
-| `xiaoao-home-appliance-market-analysis` | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` | 规定小奥如何组织卖点价值分析答案 |
+| `catforge-insight` | `tools/claude/skills/catforge-insight/SKILL.md` | 遇到卖点价值、卖点贡献、值多少钱等问题时转交 `catforge_analyst`，不虚构未实现的 insight 命令 |
+| `xiaoao-home-appliance-market-analysis` | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` | 规定小奥如何调用 M12C 原子能力并组织卖点价值分析答案 |
 
 ### 11.2 Skill 路由规则
 

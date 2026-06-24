@@ -44,6 +44,11 @@ ATOM_COMMAND_ORDER = (
     "comment-support",
     "semantic-dimension-space",
     "opportunity-gaps",
+    "claim-value-space",
+    "sku-claim-value",
+    "claim-contribution",
+    "claim-opportunity-gaps",
+    "claim-value-compare",
 )
 
 SOP_COMMAND_ORDER = (
@@ -86,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 user_task_code=getattr(args, "user_task_code", None),
                 target_group_code=getattr(args, "target_group_code", None),
                 battlefield_code=getattr(args, "battlefield_code", None),
+                role=getattr(args, "role", None),
                 limit=getattr(args, "limit", DEFAULT_CANDIDATE_LIMIT),
                 answer_style=getattr(args, "answer_style", None),
                 with_report=getattr(args, "with_report", None),
@@ -174,7 +180,7 @@ def add_pair_args(parser: argparse.ArgumentParser) -> None:
 
 
 def add_dimension_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--dimension-type", choices=("user_task", "target_group", "battlefield"), help="Semantic dimension type.")
+    parser.add_argument("--dimension-type", choices=("market_pool", "user_task", "target_group", "battlefield"), help="Semantic dimension type.")
     parser.add_argument("--dimension-code", help="Semantic dimension code, such as BF_LARGE_SCREEN_VALUE_UPGRADE.")
     parser.add_argument("--brand-name", help="Optional brand filter for dimension-space commands.")
     parser.add_argument("--size-tier", help="Optional five-tier size filter.")
@@ -184,6 +190,7 @@ def add_dimension_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--user-task-code", help="Optional user task code filter for comment-support.")
     parser.add_argument("--target-group-code", help="Optional target group code filter for comment-support.")
     parser.add_argument("--battlefield-code", help="Optional battlefield code filter for comment-support.")
+    parser.add_argument("--role", help="Optional M12C claim value role filter, such as premium_driver_estimated.")
 
 
 def add_format_arg(parser: argparse.ArgumentParser) -> None:
@@ -442,6 +449,196 @@ def opportunity_gaps(
     )
 
 
+def claim_value_space(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    size_tier: str | None = None,
+    price_band: str | None = None,
+    claim_code: str | None = None,
+    role: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="claim-value-space",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        size_tier=size_tier,
+        price_band=price_band,
+        claim_code=claim_code,
+        role=role,
+        limit=limit,
+    )
+
+
+def sku_claim_value(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    claim_code: str | None = None,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    size_tier: str | None = None,
+    price_band: str | None = None,
+    role: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="sku-claim-value",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        claim_code=claim_code,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        size_tier=size_tier,
+        price_band=price_band,
+        role=role,
+        limit=limit,
+    )
+
+
+def claim_contribution(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    size_tier: str | None = None,
+    price_band: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="claim-contribution",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        size_tier=size_tier,
+        price_band=price_band,
+        limit=limit,
+    )
+
+
+def claim_opportunity_gaps(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="claim-opportunity-gaps",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        limit=limit,
+    )
+
+
+def claim_value_compare(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    candidate_sku_code: str | None = None,
+    dimension_type: str | None = None,
+    dimension_code: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="claim-value-compare",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        candidate_sku_code=candidate_sku_code,
+        dimension_type=dimension_type,
+        dimension_code=dimension_code,
+        limit=limit,
+    )
+
+
 def competitor_set(
     db: Session,
     *,
@@ -690,6 +887,7 @@ def answer_natural_language(
     user_task_code: str | None = None,
     target_group_code: str | None = None,
     battlefield_code: str | None = None,
+    role: str | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
     answer_style: str = "raw",
     with_report: str = "none",
@@ -721,6 +919,7 @@ def answer_natural_language(
         user_task_code=user_task_code,
         target_group_code=target_group_code,
         battlefield_code=battlefield_code,
+        role=role,
         limit=limit,
         answer_style=answer_style,
         with_report=with_report,
@@ -787,6 +986,12 @@ def format_business_text(result: dict[str, Any]) -> str:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:
         return _format_why_sales_diff_text(result)
+    if "sku_claim_value" in payload:
+        return _format_sku_claim_value_text(result)
+    if "claim_contribution" in payload:
+        return _format_claim_contribution_text(result)
+    if "claim_value_space" in payload:
+        return _format_claim_value_space_text(result)
     return ""
 
 
@@ -954,6 +1159,63 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
     limitations = [item for item in limitations if item]
     if limitations:
         lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
+    return "\n".join(lines)
+
+
+def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
+    target = result.get("target") or {}
+    payload = ((result.get("result") or {}).get("sku_claim_value") or {})
+    rows = payload.get("claim_values") or []
+    if not rows:
+        return result.get("message_cn") or "当前 SKU 没有 M12C 卖点价值量化结果。"
+    lines = [f"{_brand_model(target)} 的卖点价值量化结果："]
+    for row in rows[:10]:
+        contribution = row.get("estimated_contribution") or {}
+        lines.append(
+            f"- {row.get('claim_name') or row.get('claim_code')}：{_claim_role_cn(row.get('claim_value_role'))}；"
+            f"估算价格支撑约{_format_money(contribution.get('price_premium_abs')) or '0元'}；"
+            f"周均销量支撑约{_format_volume(contribution.get('weekly_sales_lift_abs')) or '0'}台；"
+            f"上下文：{row.get('context_name') or row.get('context_code')}。"
+        )
+    lines.append("说明：该结果为同尺寸价格带和语义上下文内的可观测差异分摊，不是严格因果。")
+    return "\n".join(lines)
+
+
+def _format_claim_contribution_text(result: dict[str, Any]) -> str:
+    target = result.get("target") or {}
+    payload = ((result.get("result") or {}).get("claim_contribution") or {})
+    rows = payload.get("attributions") or []
+    if not rows:
+        return result.get("message_cn") or "当前 SKU 没有 M12C 卖点贡献归因结果。"
+    lines = [f"{_brand_model(target)} 的卖点贡献归因："]
+    for row in rows[:8]:
+        gap = row.get("sku_gap_vs_baseline") or {}
+        positives = row.get("positive_claims") or []
+        names = "、".join(str(item.get("claim_name") or item.get("claim_code")) for item in positives[:4]) or "未形成高置信正向卖点"
+        lines.append(
+            f"- {row.get('context_name') or row.get('context_code')}：{names}；"
+            f"相对池基准价格差约{_format_money(gap.get('price_premium_abs')) or '0元'}；"
+            f"周均销量差约{_format_volume(gap.get('weekly_sales_lift_abs')) or '0'}台。"
+        )
+    lines.append("说明：归因结果用于解释可观测市场表现，不可直接视为因果增量。")
+    return "\n".join(lines)
+
+
+def _format_claim_value_space_text(result: dict[str, Any]) -> str:
+    payload = ((result.get("result") or {}).get("claim_value_space") or {})
+    rows = payload.get("items") or []
+    if not rows:
+        return result.get("message_cn") or "当前没有匹配的 M12C 卖点价值空间结果。"
+    lines = ["卖点价值空间："]
+    for row in rows[:10]:
+        roles = row.get("role_counts") or {}
+        space = row.get("market_space") or {}
+        lines.append(
+            f"- {row.get('claim_name') or row.get('claim_code')} × {row.get('dimension_name') or row.get('dimension_code')} "
+            f"({row.get('size_tier')}/{row.get('price_band_group')})：覆盖 {row.get('sku_count')} 个 SKU；"
+            f"溢价 {roles.get('premium_driver_estimated', 0)} 个，销量 {roles.get('sales_driver_estimated', 0)} 个；"
+            f"空间周均销量约{_format_volume(space.get('estimated_avg_weekly_sales_volume')) or '0'}台。"
+        )
     return "\n".join(lines)
 
 

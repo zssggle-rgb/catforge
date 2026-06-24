@@ -17,7 +17,7 @@
 ### 2.1 本模块负责
 
 - 定义和实现 `catforge_analyst` CLI。
-- 复用 `catforge_insight` 查询能力和 M00-M11D 结果。
+- 复用 `catforge_insight` 查询能力和 M00-M12C 结果。
 - 实现原子分析能力注册表。
 - 实现高频 SOP 编排能力。
 - 生成小奥 Skill 和 Agent 需要消费的结构化分析包。
@@ -25,7 +25,7 @@
 
 ### 2.2 本模块不负责
 
-- 不生成或修改 M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D 结果。
+- 不生成或修改 M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D/M12C 结果。
 - 不直接读取原始四张表得出业务结论。
 - 不调用 LLM 做确定性计算。
 - 不替代小奥 Agent 生成最终长文回答。
@@ -44,7 +44,7 @@ OpenClaw 用户问题
        -> SopOrchestrators
        -> InsightClient / RepositoryReaders
   -> catforge_insight
-  -> M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D
+  -> M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D/M12C
 ```
 
 工程上新增：
@@ -83,6 +83,11 @@ python -m app.cli.catforge_analyst param-claim-overlap --sku-code TV00029112 --c
 python -m app.cli.catforge_analyst comment-support --sku-code TV00029112 --format json
 python -m app.cli.catforge_analyst semantic-dimension-space --dimension-type battlefield --dimension-code BF_PREMIUM_PICTURE_UPGRADE --format json
 python -m app.cli.catforge_analyst opportunity-gaps --sku-code TV00029112 --format json
+python -m app.cli.catforge_analyst claim-value-space --query MiniLED --dimension-type battlefield --format json
+python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --format json
+python -m app.cli.catforge_analyst claim-contribution --query 65E7Q --product-category tv --format json
+python -m app.cli.catforge_analyst claim-opportunity-gaps --query 65E7Q --candidate-sku-code TV00040001 --format json
+python -m app.cli.catforge_analyst claim-value-compare --query 65E7Q --candidate-sku-code TV00040001 --format json
 ```
 
 SOP 编排：
@@ -95,6 +100,18 @@ python -m app.cli.catforge_analyst battlefield-space --dimension-code BF_PREMIUM
 python -m app.cli.catforge_analyst battlefield-opportunity --query 65E7Q --product-category tv --format json
 python -m app.cli.catforge_analyst sku-business-brief --query 65E7Q --product-category tv --format json
 ```
+
+M12C 相关原子能力定位：
+
+| 原子能力 | 回答问题 | 主要输入 | 主要输出 |
+| --- | --- | --- | --- |
+| `claim-value-space` | 某卖点在某市场池、战场、任务或客群中是否有可观测价值 | 卖点、可选维度、尺寸档、价格带 | 可比池样本、有/无卖点组差异、价格溢价、周均销量优势、周均销额优势 |
+| `sku-claim-value` | 某 SKU 的每个卖点是什么价值角色 | SKU、可选上下文、可选角色过滤 | 溢价卖点、销量卖点、基础门槛、厂家主张、用户验证需求、拖后腿、机会缺口 |
+| `claim-contribution` | 某 SKU 卖得好主要由哪些卖点解释 | SKU、可选上下文 | SKU 相对同池基准的价格/销量/销额超额表现和前三贡献卖点 |
+| `claim-opportunity-gaps` | 本品相对竞品或同池缺哪些有价值卖点 | SKU、可选竞品 | 竞品有价值卖点、本品缺失或弱表达、机会优先级 |
+| `claim-value-compare` | 本品和竞品在核心卖点上的价值差异 | 目标 SKU、竞品 SKU | 本品优势、竞品拦截、共同门槛、不构成差异的卖点 |
+
+M12C 输出必须被解释为“可观测贡献估计”，不是严格因果。自然语言中应使用“对应价格溢价估计”“对应周均销量优势”“可解释销额优势”，不得说成“卖点导致销量增加”。
 
 ## 5. 通用输出 schema
 

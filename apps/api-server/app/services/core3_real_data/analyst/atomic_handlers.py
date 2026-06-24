@@ -448,6 +448,244 @@ class AtomicAnalystHandlers:
             ],
         )
 
+    def claim_value_space(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        dimension_type: str | None = None,
+        dimension_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        claim_code: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        **_: Any,
+    ) -> dict[str, Any]:
+        items = self.repository.claim_value_space(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            claim_code=claim_code,
+            query=query,
+            context_type=dimension_type,
+            context_code=dimension_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            role=role,
+            limit=limit,
+        )
+        limitations = [] if items.get("items") else ["没有找到 M12C 卖点价值空间结果，请先执行 M12C 卖点价值量化。"]
+        return base_result(
+            status=AnalystStatus.OK if items.get("items") else AnalystStatus.NOT_FOUND,
+            command="claim-value-space",
+            context=context,
+            result={"claim_value_space": items},
+            atoms_used=[{"ability_code": "claim-value-space", "status": "ok" if items.get("items") else "not_found"}],
+            evidence=[{"source_module": "M12C", "row_count": items.get("summary_count", 0)}],
+            limitations=limitations,
+            answer_outline=[f"已返回 {items.get('summary_count', 0)} 条卖点价值空间汇总。"] if items.get("items") else [],
+            message_cn=None if items.get("items") else "没有找到卖点价值空间结果。",
+        )
+
+    def sku_claim_value(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        claim_code: str | None = None,
+        dimension_type: str | None = None,
+        dimension_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        **_: Any,
+    ) -> dict[str, Any]:
+        resolved = self._resolve_one(context, command="sku-claim-value", query=query, sku_code=sku_code, model_name=model_name)
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        payload = self.repository.sku_claim_value(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            sku_code=candidate.sku_code,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            claim_code=claim_code,
+            query=query,
+            context_type=dimension_type,
+            context_code=dimension_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            role=role,
+            limit=limit,
+        )
+        missing = not payload.get("claim_values") and not payload.get("attributions")
+        return base_result(
+            status=AnalystStatus.NOT_FOUND if missing else AnalystStatus.OK,
+            command="sku-claim-value",
+            context=context,
+            target=candidate.to_dict(),
+            result={"sku_claim_value": payload},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "sku-claim-value", "status": "not_found" if missing else "ok"},
+            ],
+            evidence=[{"source_module": "M12C", "row_count": len(payload.get("claim_values") or [])}],
+            limitations=["目标 SKU 没有 M12C 卖点价值量化结果，请先执行 M12C。"] if missing else [],
+            answer_outline=[f"已返回 {candidate.sku_code} 的 M12C SKU×卖点价值量化结果。"] if not missing else [],
+            message_cn="目标 SKU 没有 M12C 卖点价值量化结果。" if missing else None,
+        )
+
+    def claim_contribution(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        dimension_type: str | None = None,
+        dimension_code: str | None = None,
+        size_tier: str | None = None,
+        price_band: str | None = None,
+        limit: int = 20,
+        **_: Any,
+    ) -> dict[str, Any]:
+        resolved = self._resolve_one(context, command="claim-contribution", query=query, sku_code=sku_code, model_name=model_name)
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        payload = self.repository.claim_contribution(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            sku_code=candidate.sku_code,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            context_type=dimension_type,
+            context_code=dimension_code,
+            size_tier=size_tier,
+            price_band=price_band,
+            limit=limit,
+        )
+        missing = not payload.get("attributions")
+        return base_result(
+            status=AnalystStatus.NOT_FOUND if missing else AnalystStatus.OK,
+            command="claim-contribution",
+            context=context,
+            target=candidate.to_dict(),
+            result={"claim_contribution": payload},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "claim-contribution", "status": "not_found" if missing else "ok"},
+            ],
+            evidence=[{"source_module": "M12C", "row_count": payload.get("attribution_count", 0)}],
+            limitations=["目标 SKU 没有 M12C 卖点贡献归因结果，请先执行 M12C。"] if missing else [],
+            answer_outline=[f"已返回 {candidate.sku_code} 的卖点贡献归因结果。"] if not missing else [],
+            message_cn="目标 SKU 没有 M12C 卖点贡献归因结果。" if missing else None,
+        )
+
+    def claim_opportunity_gaps(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        candidate_sku_code: str | None = None,
+        dimension_type: str | None = None,
+        dimension_code: str | None = None,
+        limit: int = 20,
+        **_: Any,
+    ) -> dict[str, Any]:
+        resolved = self._resolve_one(context, command="claim-opportunity-gaps", query=query, sku_code=sku_code, model_name=model_name)
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        payload = self.repository.claim_opportunity_gaps(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            sku_code=candidate.sku_code,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            candidate_sku_code=candidate_sku_code,
+            context_type=dimension_type,
+            context_code=dimension_code,
+            limit=limit,
+        )
+        count = len(payload.get("target_opportunity_or_drag_claims") or []) + len(payload.get("candidate_positive_claims_missing_on_target") or [])
+        return base_result(
+            status=AnalystStatus.NOT_FOUND if count == 0 else AnalystStatus.OK,
+            command="claim-opportunity-gaps",
+            context=context,
+            target=candidate.to_dict(),
+            result={"claim_opportunity_gaps": payload},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "claim-opportunity-gaps", "status": "not_found" if count == 0 else "ok"},
+            ],
+            evidence=[{"source_module": "M12C", "row_count": count}],
+            limitations=["没有找到 M12C 卖点机会缺口或拖后腿卖点结果。"] if count == 0 else [],
+            answer_outline=[f"已返回 {candidate.sku_code} 的卖点机会缺口和拖后腿信号。"] if count else [],
+            message_cn="没有找到 M12C 卖点机会缺口结果。" if count == 0 else None,
+        )
+
+    def claim_value_compare(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        candidate_sku_code: str | None = None,
+        dimension_type: str | None = None,
+        dimension_code: str | None = None,
+        limit: int = 20,
+        **_: Any,
+    ) -> dict[str, Any]:
+        pair = self._resolve_pair(
+            context,
+            command="claim-value-compare",
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+            candidate_sku_code=candidate_sku_code,
+        )
+        if pair["status"] != AnalystStatus.OK:
+            return pair["payload"]
+        target = pair["target"]
+        candidate = pair["candidate"]
+        payload = self.repository.claim_value_compare(
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            target_sku_code=target.sku_code,
+            candidate_sku_code=candidate.sku_code,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            context_type=dimension_type,
+            context_code=dimension_code,
+            limit=limit,
+        )
+        missing = not payload.get("paired_claims")
+        return base_result(
+            status=AnalystStatus.NOT_FOUND if missing else AnalystStatus.OK,
+            command="claim-value-compare",
+            context=context,
+            target=target.to_dict(),
+            result={"candidate": candidate.to_dict(), "claim_value_compare": payload},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "claim-value-compare", "status": "not_found" if missing else "ok"},
+            ],
+            evidence=[{"source_module": "M12C", "row_count": len(payload.get("paired_claims") or [])}],
+            limitations=["两款 SKU 没有可对比的 M12C 卖点价值结果。"] if missing else [],
+            answer_outline=[f"已返回 {target.sku_code} 与 {candidate.sku_code} 的卖点价值对比。"] if not missing else [],
+            message_cn="两款 SKU 没有可对比的 M12C 卖点价值结果。" if missing else None,
+        )
+
     def planned_atom(self, context: AnalystContext, *, command: str, **_: Any) -> dict[str, Any]:
         return base_result(
             status=AnalystStatus.NOT_IMPLEMENTED,

@@ -23,6 +23,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
+    CORE3_M12C_RULE_VERSION,
 )
 
 
@@ -51,6 +52,12 @@ def make_session() -> Session:
         entities.Core3SemanticMarketDimensionSummary.__table__,
         entities.Core3SemanticMarketSkuContribution.__table__,
         entities.Core3SemanticMarketAllocation.__table__,
+        entities.Core3ClaimValueContextPool.__table__,
+        entities.Core3ClaimValuePoolMetric.__table__,
+        entities.Core3SkuClaimValueQuantification.__table__,
+        entities.Core3SkuClaimContributionAttribution.__table__,
+        entities.Core3ClaimValueDimensionSummary.__table__,
+        entities.Core3ClaimValueReviewIssue.__table__,
     ]:
         table.create(bind=engine, checkfirst=True)
     session = Session(engine)
@@ -96,6 +103,7 @@ def seed_data(session: Session) -> None:
     seed_business_competitor_profiles(session)
     seed_weekly_market(session)
     seed_semantic_space(session)
+    seed_m12c_claim_value(session)
     session.commit()
 
 
@@ -1349,6 +1357,293 @@ def seed_semantic_space(session: Session) -> None:
     )
 
 
+def seed_m12c_claim_value(session: Session) -> None:
+    population = "claim_value_ready_with_comment"
+    session.add(
+        entities.Core3ClaimValueContextPool(
+            pool_id="pool-miniled",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+            analysis_population=population,
+            window_start_week=1,
+            window_end_week=12,
+            claim_code="tv_claim_miniled",
+            claim_name="MiniLED",
+            context_type="battlefield",
+            context_code="BF_PREMIUM_PICTURE_UPGRADE",
+            context_name="高端画质升级战场",
+            size_tier="large_60_69",
+            price_band_group="mid_high",
+            pool_sku_count=8,
+            with_claim_sku_count=4,
+            without_claim_sku_count=4,
+            unknown_claim_sku_count=0,
+            pool_sku_codes_json=["TV00029112", "TV00040001"],
+            with_claim_sku_codes_json=["TV00029112"],
+            without_claim_sku_codes_json=["TV00040001"],
+            sample_status="sufficient",
+            quality_flags_json=[],
+            pool_hash="hash-pool-miniled",
+            rule_version=CORE3_M12C_RULE_VERSION,
+            input_fingerprint="fp-pool-miniled",
+        )
+    )
+    session.add(
+        entities.Core3ClaimValuePoolMetric(
+            metric_id="metric-pool-miniled",
+            pool_id="pool-miniled",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+            analysis_population=population,
+            claim_code="tv_claim_miniled",
+            claim_name="MiniLED",
+            context_type="battlefield",
+            context_code="BF_PREMIUM_PICTURE_UPGRADE",
+            context_name="高端画质升级战场",
+            size_tier="large_60_69",
+            price_band_group="mid_high",
+            with_price_median=Decimal("5000"),
+            without_price_median=Decimal("4600"),
+            price_premium_abs=Decimal("400"),
+            price_premium_rate=Decimal("0.086957"),
+            with_weekly_sales_median=Decimal("100"),
+            without_weekly_sales_median=Decimal("80"),
+            weekly_sales_lift_abs=Decimal("20"),
+            weekly_sales_lift_rate=Decimal("0.250000"),
+            with_weekly_sales_amount_median=Decimal("500000"),
+            without_weekly_sales_amount_median=Decimal("368000"),
+            weekly_sales_amount_lift_abs=Decimal("132000"),
+            weekly_sales_amount_lift_rate=Decimal("0.358696"),
+            market_share_lift=Decimal("0.120000"),
+            claim_value_effect_score=Decimal("0.7200"),
+            effect_confidence=Decimal("0.8200"),
+            business_summary_cn="MiniLED 在高端画质升级战场可比池中形成正向价值。",
+            quality_flags_json=[],
+            result_hash="hash-metric-pool-miniled",
+            rule_version=CORE3_M12C_RULE_VERSION,
+        )
+    )
+
+    for row_id, sku_code, brand, model, claim_code, claim_name, role, context_code, context_name, price_premium, sales_lift, amount_lift, share, reason in [
+        (
+            "q-target-miniled",
+            "TV00029112",
+            "海信",
+            "65E7Q",
+            "tv_claim_miniled",
+            "MiniLED",
+            "premium_driver_estimated",
+            "BF_PREMIUM_PICTURE_UPGRADE",
+            "高端画质升级战场",
+            Decimal("280"),
+            Decimal("15"),
+            Decimal("75000"),
+            Decimal("0.650000"),
+            "MiniLED 是海信 65E7Q 在高端画质战场的估算溢价卖点。",
+        ),
+        (
+            "q-target-refresh",
+            "TV00029112",
+            "海信",
+            "65E7Q",
+            "tv_claim_high_refresh_rate",
+            "高刷",
+            "sales_driver_estimated",
+            "BF_GAMING_SPORTS_FLUENCY",
+            "游戏体育流畅战场",
+            Decimal("80"),
+            Decimal("22"),
+            Decimal("88000"),
+            Decimal("0.350000"),
+            "高刷是海信 65E7Q 在游戏体育流畅战场的估算销量卖点。",
+        ),
+        (
+            "q-target-speaker",
+            "TV00029112",
+            "海信",
+            "65E7Q",
+            "tv_claim_speaker_sound",
+            "音响体验",
+            "drag_factor",
+            "BF_PREMIUM_PICTURE_UPGRADE",
+            "高端画质升级战场",
+            Decimal("0"),
+            Decimal("0"),
+            Decimal("0"),
+            Decimal("0.000000"),
+            "音响体验在评论或参数支撑上存在拖后腿风险。",
+        ),
+        (
+            "q-candidate-wall",
+            "TV00040001",
+            "创维",
+            "65A7H PRO",
+            "tv_claim_wall_mount_design",
+            "壁画贴墙",
+            "premium_driver_estimated",
+            "BF_PREMIUM_PICTURE_UPGRADE",
+            "高端画质升级战场",
+            Decimal("180"),
+            Decimal("12"),
+            Decimal("52000"),
+            Decimal("0.500000"),
+            "壁画贴墙是创维在高端画质战场中的场景化溢价卖点。",
+        ),
+    ]:
+        session.add(
+            entities.Core3SkuClaimValueQuantification(
+                sku_claim_value_id=row_id,
+                pool_id="pool-miniled",
+                metric_id="metric-pool-miniled",
+                project_id=PROJECT_ID,
+                category_code="TV",
+                batch_id=BATCH_ID,
+                product_category="TV",
+                market_window="full_observed_window",
+                analysis_population=population,
+                sku_code=sku_code,
+                brand_name=brand,
+                model_name=model,
+                claim_code=claim_code,
+                claim_name=claim_name,
+                claim_dimension="picture_experience",
+                claim_value_role=role,
+                context_type="battlefield",
+                context_code=context_code,
+                context_name=context_name,
+                size_tier="large_60_69",
+                price_band_group="mid_high",
+                claim_evidence_strength=Decimal("0.9000"),
+                param_support_strength=Decimal("0.8500"),
+                comment_support_strength=Decimal("0.8000"),
+                semantic_support_strength=Decimal("0.9500"),
+                estimated_price_premium_abs=price_premium,
+                estimated_weekly_sales_lift_abs=sales_lift,
+                estimated_weekly_sales_amount_lift_abs=amount_lift,
+                contribution_share_in_sku=share,
+                attribution_confidence=Decimal("0.8200"),
+                supporting_dimensions_json={"context_type": "battlefield", "context_code": context_code},
+                evidence_ids_json=[f"ev-{row_id}"],
+                reason_cn=reason,
+                quality_flags_json=[],
+                result_hash=f"hash-{row_id}",
+                rule_version=CORE3_M12C_RULE_VERSION,
+            )
+        )
+
+    session.add(
+        entities.Core3SkuClaimContributionAttribution(
+            attribution_id="attr-target-premium",
+            pool_id="pool-miniled",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+            analysis_population=population,
+            sku_code="TV00029112",
+            brand_name="海信",
+            model_name="65E7Q",
+            context_type="battlefield",
+            context_code="BF_PREMIUM_PICTURE_UPGRADE",
+            context_name="高端画质升级战场",
+            size_tier="large_60_69",
+            price_band_group="mid_high",
+            baseline_price=Decimal("4600"),
+            baseline_weekly_sales_volume=Decimal("80"),
+            baseline_weekly_sales_amount=Decimal("368000"),
+            sku_price=Decimal("4999"),
+            sku_weekly_sales_volume=Decimal("100"),
+            sku_weekly_sales_amount=Decimal("499900"),
+            sku_price_premium_abs=Decimal("399"),
+            sku_weekly_sales_lift_abs=Decimal("20"),
+            sku_weekly_sales_amount_lift_abs=Decimal("131900"),
+            positive_claims_json=[{"claim_code": "tv_claim_miniled", "claim_name": "MiniLED", "claim_value_role": "premium_driver_estimated", "estimated_price_premium_abs": 280.0}],
+            drag_claims_json=[{"claim_code": "tv_claim_speaker_sound", "claim_name": "音响体验", "claim_value_role": "drag_factor"}],
+            opportunity_claims_json=[{"claim_code": "tv_claim_wall_mount_design", "claim_name": "壁画贴墙", "claim_value_role": "opportunity_gap"}],
+            attribution_summary_cn="海信 65E7Q 的超额表现主要由 MiniLED 提供可观测解释。",
+            confidence=Decimal("0.8200"),
+            result_hash="hash-attr-target-premium",
+            rule_version=CORE3_M12C_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimContributionAttribution(
+            attribution_id="attr-candidate-premium",
+            pool_id="pool-miniled",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+            analysis_population=population,
+            sku_code="TV00040001",
+            brand_name="创维",
+            model_name="65A7H PRO",
+            context_type="battlefield",
+            context_code="BF_PREMIUM_PICTURE_UPGRADE",
+            context_name="高端画质升级战场",
+            size_tier="large_60_69",
+            price_band_group="mid_high",
+            baseline_price=Decimal("4600"),
+            baseline_weekly_sales_volume=Decimal("80"),
+            baseline_weekly_sales_amount=Decimal("368000"),
+            sku_price=Decimal("4700"),
+            sku_weekly_sales_volume=Decimal("75"),
+            sku_weekly_sales_amount=Decimal("352500"),
+            sku_price_premium_abs=Decimal("100"),
+            sku_weekly_sales_lift_abs=Decimal("-5"),
+            sku_weekly_sales_amount_lift_abs=Decimal("-15500"),
+            positive_claims_json=[{"claim_code": "tv_claim_wall_mount_design", "claim_name": "壁画贴墙", "claim_value_role": "premium_driver_estimated", "estimated_price_premium_abs": 180.0}],
+            drag_claims_json=[],
+            opportunity_claims_json=[],
+            attribution_summary_cn="创维 65A7H PRO 的正向卖点集中在壁画贴墙。",
+            confidence=Decimal("0.8200"),
+            result_hash="hash-attr-candidate-premium",
+            rule_version=CORE3_M12C_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3ClaimValueDimensionSummary(
+            summary_id="dim-miniled-premium",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+            analysis_population=population,
+            claim_code="tv_claim_miniled",
+            claim_name="MiniLED",
+            dimension_type="battlefield",
+            dimension_code="BF_PREMIUM_PICTURE_UPGRADE",
+            dimension_name="高端画质升级战场",
+            size_tier="large_60_69",
+            price_band_group="mid_high",
+            sku_count=2,
+            premium_driver_sku_count=1,
+            sales_driver_sku_count=0,
+            basic_threshold_sku_count=0,
+            brand_claim_only_sku_count=0,
+            drag_factor_sku_count=0,
+            opportunity_gap_sku_count=0,
+            estimated_sales_volume=Decimal("900"),
+            estimated_avg_weekly_sales_volume=Decimal("75"),
+            estimated_sales_amount=Decimal("4800000"),
+            estimated_avg_weekly_sales_amount=Decimal("400000"),
+            top_skus_json=[{"sku_code": "TV00029112", "claim_name": "MiniLED", "estimated_price_premium_abs": 280.0}],
+            business_summary_cn="MiniLED 在高端画质升级战场中形成可观测溢价。",
+            result_hash="hash-dim-miniled-premium",
+            rule_version=CORE3_M12C_RULE_VERSION,
+        )
+    )
+
+
 def test_list_abilities_returns_agent_contract() -> None:
     session = make_session()
     result = catforge_analyst.list_analyst_abilities(
@@ -1365,6 +1660,103 @@ def test_list_abilities_returns_agent_contract() -> None:
     by_code = {item["code"]: item for item in result["result"]["abilities"]}
     assert by_code["competitor-set"]["status"] == "implemented"
     assert by_code["sku-business-brief"]["status"] == "implemented"
+
+
+def test_list_atom_abilities_includes_m12c_claim_value_atoms() -> None:
+    session = make_session()
+    result = catforge_analyst.list_analyst_abilities(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        ability_type="atom",
+    )
+
+    codes = {item["code"] for item in result["result"]["abilities"]}
+    assert {
+        "claim-value-space",
+        "sku-claim-value",
+        "claim-contribution",
+        "claim-opportunity-gaps",
+        "claim-value-compare",
+    } <= codes
+
+
+def test_sku_claim_value_returns_m12c_quantified_roles() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_claim_value(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["sku_claim_value"]
+    assert payload["role_counts"]["premium_driver_estimated"] == 1
+    assert payload["role_counts"]["sales_driver_estimated"] == 1
+    assert payload["role_counts"]["drag_factor"] == 1
+    top_claim = payload["claim_values"][0]
+    assert top_claim["claim_code"] == "tv_claim_miniled"
+    assert top_claim["estimated_contribution"]["price_premium_abs"] == 280.0
+
+
+def test_claim_value_space_returns_dimension_summary() -> None:
+    session = make_session()
+    result = catforge_analyst.claim_value_space(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="MiniLED",
+        dimension_type="battlefield",
+    )
+
+    assert result["status"] == "ok"
+    item = result["result"]["claim_value_space"]["items"][0]
+    assert item["claim_code"] == "tv_claim_miniled"
+    assert item["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert item["role_counts"]["premium_driver_estimated"] == 1
+
+
+def test_claim_opportunity_gaps_uses_candidate_positive_claims() -> None:
+    session = make_session()
+    result = catforge_analyst.claim_opportunity_gaps(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        candidate_sku_code="TV00040001",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["claim_opportunity_gaps"]
+    missing_codes = {item["claim_code"] for item in payload["candidate_positive_claims_missing_on_target"]}
+    assert "tv_claim_wall_mount_design" in missing_codes
+
+
+def test_claim_value_compare_splits_target_and_candidate_advantages() -> None:
+    session = make_session()
+    result = catforge_analyst.claim_value_compare(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        candidate_sku_code="TV00040001",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["claim_value_compare"]
+    target_advantage_codes = {item["claim_code"] for item in payload["target_advantage_claims"]}
+    candidate_advantage_codes = {item["claim_code"] for item in payload["candidate_advantage_claims"]}
+    assert "tv_claim_miniled" in target_advantage_codes
+    assert "tv_claim_wall_mount_design" in candidate_advantage_codes
 
 
 def test_resolve_sku_uses_market_profile_and_size_tier() -> None:
@@ -2159,6 +2551,8 @@ def test_ask_routes_premium_claim_question_to_sop() -> None:
     assert result["status"] == "ok"
     assert result["routed_command"] == "premium-claim-drivers"
     assert result["result"]["premium_claim_drivers"]["premium_driver_claim_codes"] == ["tv_claim_miniled"]
+    m12c_payload = result["result"]["premium_claim_drivers"]["m12c_quantified_claim_values"]
+    assert m12c_payload["role_counts"]["premium_driver_estimated"] == 1
 
 
 def test_ask_routes_comment_support_with_explicit_code_filter() -> None:

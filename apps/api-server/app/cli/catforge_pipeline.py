@@ -46,6 +46,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
+    CORE3_M12C_RULE_VERSION,
     Core3ModuleCode,
     Core3EvidenceStatus,
     Core3EvidenceType,
@@ -72,6 +73,10 @@ from app.services.core3_real_data.semantic_market_graph_service import (
     ANALYSIS_POPULATION_FACT_COMPLETE,
     MARKET_WINDOW_FULL_OBSERVED,
     M11DSemanticMarketRunner,
+)
+from app.services.core3_real_data.m12c_claim_value_quantification_runner import M12CClaimValueQuantificationRunner
+from app.services.core3_real_data.m12c_claim_value_quantification_service import (
+    ANALYSIS_POPULATION_READY_WITH_COMMENT,
 )
 
 
@@ -103,6 +108,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
         "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
         "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
+        "claim_value_quantification_rule_version": CORE3_M12C_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -121,6 +127,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_taxonomy_version": None,
         "value_battlefield_rule_version": None,
         "semantic_market_rule_version": None,
+        "claim_value_quantification_rule_version": None,
     },
 }
 
@@ -237,6 +244,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     sku_scope=args.sku_code or (),
                     dimension_types=args.dimension_type or (),
                     force_rebuild=args.force_rebuild,
+                )
+            elif args.command == "run-claim-value-quantification":
+                result = run_claim_value_quantification(
+                    db,
+                    project_id=args.project_id,
+                    source_category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
+                    analysis_population=args.analysis_population,
+                    market_window=args.market_window,
+                    sku_scope=args.sku_code or (),
                 )
             elif args.command == "ask":
                 result = answer_natural_language(
@@ -362,6 +380,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_semantic_market.add_argument("--force-rebuild", action="store_true", help="Mark current M11D outputs stale and write a fresh result set.")
     add_format_arg(run_semantic_market)
 
+    run_claim_value = subparsers.add_parser("run-claim-value-quantification", help="Generate M12C claim value quantification and claim contribution attribution results.")
+    add_common_args(run_claim_value)
+    add_product_category_arg(run_claim_value, default="tv", allow_auto=False)
+    run_claim_value.add_argument(
+        "--analysis-population",
+        choices=("claim_value_ready_with_comment", "claim_value_ready"),
+        default=ANALYSIS_POPULATION_READY_WITH_COMMENT,
+        help="SKU population for claim value quantification.",
+    )
+    run_claim_value.add_argument("--market-window", choices=("full_observed_window", "recent_12w", "custom_week_range"), default=MARKET_WINDOW_FULL_OBSERVED)
+    run_claim_value.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
+    add_format_arg(run_claim_value)
+
     ask = subparsers.add_parser("ask", help="Route a natural-language execution request.")
     add_common_args(ask)
     add_product_category_arg(ask)
@@ -435,6 +466,20 @@ def answer_natural_language(
         )
         result["question"] = question
         result["routed_command"] = "run-semantic-market-graph"
+        return result
+    if should_run_claim_value_quantification(question):
+        result = run_claim_value_quantification(
+            db,
+            project_id=project_id,
+            source_category_code=source_category_code,
+            batch_id=batch_id,
+            product_category=resolved_product_category,
+            analysis_population=ANALYSIS_POPULATION_READY_WITH_COMMENT,
+            market_window=MARKET_WINDOW_FULL_OBSERVED,
+            sku_scope=extract_sku_scope(question),
+        )
+        result["question"] = question
+        result["routed_command"] = "run-claim-value-quantification"
         return result
     if should_run_user_task(question):
         result = run_user_task(
@@ -545,7 +590,7 @@ def answer_natural_language(
         result["routed_command"] = "run-claim-profile"
         return result
     if not should_run_param_profile(question):
-        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、用户任务画像、目标客群画像、价值战场画像或 M11D 语义市场图谱。请说明要生成或重新生成哪类画像。")
+        raise CatForgePipelineError("当前执行 CLI 只支持生成/重跑 SKU 参数画像、卖点事实画像、评论事实画像、市场画像、用户任务画像、目标客群画像、价值战场画像、M11D 语义市场图谱或 M12C 卖点价值量化。请说明要生成或重新生成哪类画像。")
     result = run_param_profile(
         db,
         project_id=project_id,
@@ -773,6 +818,58 @@ def run_semantic_market_graph(
         "dimension_types": list(dimension_types),
         "rule_version": config["semantic_market_rule_version"],
         "force_rebuild": force_rebuild,
+        "module_status": status_value,
+        "input_count": module_result.input_count,
+        "output_count": module_result.output_count,
+        "changed_input_count": module_result.changed_input_count,
+        "warnings": module_result.warnings,
+        "summary": module_result.summary_json,
+    }
+
+
+def run_claim_value_quantification(
+    db: Session,
+    *,
+    project_id: str,
+    source_category_code: str,
+    batch_id: str,
+    product_category: str,
+    analysis_population: str = ANALYSIS_POPULATION_READY_WITH_COMMENT,
+    market_window: str = MARKET_WINDOW_FULL_OBSERVED,
+    sku_scope: Sequence[str] = (),
+) -> dict[str, Any]:
+    config = product_category_config(product_category)
+    if not config.get("claim_value_quantification_rule_version"):
+        raise CatForgePipelineError(f"{config['label_cn']}卖点价值量化规则尚未发布，不能生成 M12C 结果。")
+    resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
+    module_result = M12CClaimValueQuantificationRunner(db).run_batch(
+        project_id=project_id,
+        category_code=source_category_code,
+        batch_id=resolved_batch_id,
+        product_category=product_category,
+        analysis_population=analysis_population,
+        market_window=market_window,
+        target_sku_codes=sku_scope,
+        rule_version=config["claim_value_quantification_rule_version"],
+    )
+    status_value = module_result.status.value if hasattr(module_result.status, "value") else str(module_result.status)
+    if module_result.status in {Core3RunStatus.SUCCESS, Core3RunStatus.WARNING} or status_value in {"success", "warning"}:
+        db.commit()
+    else:
+        db.rollback()
+    result_status = "ok" if status_value == "success" else "warning" if status_value == "warning" else "error"
+    return {
+        "status": result_status,
+        "project_id": project_id,
+        "source_category_code": source_category_code,
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
+        "batch_id": resolved_batch_id,
+        "sku_code_prefix": config["sku_code_prefix"],
+        "analysis_population": analysis_population,
+        "market_window": market_window,
+        "sku_scope": list(sku_scope),
+        "rule_version": config["claim_value_quantification_rule_version"],
         "module_status": status_value,
         "input_count": module_result.input_count,
         "output_count": module_result.output_count,
@@ -1859,6 +1956,29 @@ def should_run_semantic_market_graph(question: str) -> bool:
     return False
 
 
+def should_run_claim_value_quantification(question: str) -> bool:
+    normalized = normalize_token(question)
+    if "m12c" in normalized:
+        return True
+    if not any(term in question for term in ("卖点价值量化", "卖点贡献归因", "卖点价值", "卖点贡献", "溢价卖点量化")):
+        return False
+    return any(
+        word in normalized
+        for word in (
+            "生成",
+            "重跑",
+            "重新",
+            "更新",
+            "执行",
+            "跑",
+            "计算",
+            "量化",
+            "归因",
+            "准备好可以分析",
+        )
+    )
+
+
 def extract_semantic_dimension_types(question: str) -> tuple[str, ...]:
     result: list[str] = []
     if "用户任务" in question or "任务图谱" in question:
@@ -2098,11 +2218,15 @@ def render_text(result: dict[str, Any]) -> str:
     is_comment_profile = isinstance(summary, dict) and "comment_fact_count" in summary
     is_comment_batch = isinstance(summary, dict) and bool(summary.get("comment_profile_batch"))
     is_market_profile = isinstance(summary, dict) and "market_profile_count" in summary
+    is_claim_value_quantification = isinstance(summary, dict) and "sku_claim_value_count" in summary
     is_target_group_profile = isinstance(summary, dict) and "target_group_count" in summary
     is_value_battlefield_profile = isinstance(summary, dict) and "battlefield_count" in summary
     if is_comment_batch:
         job_name = "SKU 评论事实画像批量并行"
         input_label = "调度 SKU"
+    elif is_claim_value_quantification:
+        job_name = "卖点价值量化与贡献归因"
+        input_label = "输入 SKU"
     elif is_market_profile:
         job_name = "SKU 市场画像"
         input_label = "输入周销量价"
@@ -2153,6 +2277,14 @@ def render_text(result: dict[str, Any]) -> str:
                 f"可比池：{summary.get('comparable_pool_count', 0)}；池成员：{summary.get('pool_member_count', 0)}；"
                 f"需复核：{summary.get('review_required_count', 0)}"
             )
+        elif is_claim_value_quantification:
+            lines.append(
+                "量化结果："
+                f"可比池 {summary.get('claim_pool_count', 0)}；池指标 {summary.get('pool_metric_count', 0)}；"
+                f"SKU×卖点 {summary.get('sku_claim_value_count', 0)}；SKU 归因 {summary.get('sku_attribution_count', 0)}；"
+                f"维度汇总 {summary.get('dimension_summary_count', 0)}；需复核 {summary.get('review_issue_count', 0)}"
+            )
+            lines.append(f"角色分布：{json.dumps(summary.get('role_counts') or {}, ensure_ascii=False, sort_keys=True)}")
         elif is_comment_profile:
             llm_stats = summary.get("llm_stats") or {}
             lines.append(

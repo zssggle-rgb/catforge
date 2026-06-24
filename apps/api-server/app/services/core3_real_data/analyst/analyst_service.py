@@ -27,6 +27,11 @@ ATOM_COMMANDS = {
     "comment-support",
     "semantic-dimension-space",
     "opportunity-gaps",
+    "claim-value-space",
+    "sku-claim-value",
+    "claim-contribution",
+    "claim-opportunity-gaps",
+    "claim-value-compare",
 }
 
 SOP_COMMANDS = {
@@ -117,6 +122,16 @@ class CatForgeAnalystService:
             return self.atomic_handlers.opportunity_gaps(context, **kwargs)
         if command == "semantic-dimension-space":
             return self.atomic_handlers.semantic_dimension_space(context, **kwargs)
+        if command == "claim-value-space":
+            return self.atomic_handlers.claim_value_space(context, **kwargs)
+        if command == "sku-claim-value":
+            return self.atomic_handlers.sku_claim_value(context, **kwargs)
+        if command == "claim-contribution":
+            return self.atomic_handlers.claim_contribution(context, **kwargs)
+        if command == "claim-opportunity-gaps":
+            return self.atomic_handlers.claim_opportunity_gaps(context, **kwargs)
+        if command == "claim-value-compare":
+            return self.atomic_handlers.claim_value_compare(context, **kwargs)
         if command in ATOM_COMMANDS:
             return self.atomic_handlers.planned_atom(context, command=command, **kwargs)
         if command in SOP_COMMANDS:
@@ -166,7 +181,27 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
     matched_rule = "fallback_sku_business_brief"
     confidence = "low"
 
-    if re.search(r"评论.*支撑|支撑.*评论", normalized) and _has_any_code_filter(routing_params):
+    if re.search(r"卖点.*空间|卖点.*图谱|哪些卖点.*市场|卖点价值.*分布", normalized):
+        command = "claim-value-space"
+        matched_rule = "claim_value_space"
+        confidence = "high"
+    elif re.search(r"卖点.*对比|卖点价值.*对比|卖点贡献.*对比", normalized) and routing_params.get("candidate_sku_code"):
+        command = "claim-value-compare"
+        matched_rule = "claim_value_compare"
+        confidence = "high"
+    elif re.search(r"卖点.*缺口|卖点机会|补.*卖点|缺哪些卖点", normalized):
+        command = "claim-opportunity-gaps"
+        matched_rule = "claim_opportunity_gaps"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
+    elif re.search(r"卖点.*贡献|贡献归因|支撑.*定价|支撑.*销量|贵.*卖点", normalized):
+        command = "claim-contribution"
+        matched_rule = "claim_contribution"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
+    elif re.search(r"卖点价值量化|卖点量化|值多少钱|贡献值|卖点.*值钱|卖点价值", normalized):
+        command = "sku-claim-value"
+        matched_rule = "sku_claim_value"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
+    elif re.search(r"评论.*支撑|支撑.*评论", normalized) and _has_any_code_filter(routing_params):
         command = "comment-support"
         matched_rule = "comment_support_code_filter"
         confidence = "high"

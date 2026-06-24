@@ -1,6 +1,6 @@
 # 当前正确流程、CLI、Skill 与智能体系统
 
-最后更新：2026-06-22
+最后更新：2026-06-24
 
 本文是 CatForge 真实数据处理链路和“小奥家电市场分析专家”路由的当前口径。由于项目已经经历多轮补丁、模块重构和 Skill/Agent 调整，后续执行、排错和对外说明都以本文为准；如果本文和旧 Mxx 文档冲突，先按本文执行，再回到当前分支和 205 部署环境验证。
 
@@ -16,6 +16,7 @@
   -> SKU 事实画像层
   -> 评论事实与语义画像层
   -> 语义市场图谱层
+  -> 卖点价值量化层
   -> 专业市场分析层
   -> 外部智能体入口
 ```
@@ -29,6 +30,7 @@
 | SKU 事实画像层 | 描述每个 SKU 的客观事实 | 参数画像、卖点事实画像、市场画像 | `catforge-pipeline` |
 | 评论事实与语义画像层 | 从真实评论和事实资产生成用户语义判断 | 评论事实画像、用户任务、目标客群、价值战场 | `catforge-pipeline` |
 | 语义市场图谱层 | 从任务、客群、战场维度看市场空间和销量分配 | 用户任务图谱、目标客群图谱、价值战场图谱、销量分配 | `catforge-pipeline` / `catforge-insight` |
+| 卖点价值量化层 | 估算卖点在可比池中的价格、销量、销额贡献 | 卖点价值池、卖点量化、SKU 卖点贡献、机会缺口 | `catforge-pipeline` / `catforge-analyst` |
 | 专业市场分析层 | 回答竞品、销量差异、溢价卖点、机会空间等业务问题 | 结构化分析包和业务回答 | `catforge-analyst` / 小奥 |
 | 外部智能体入口 | 让用户用自然语言驱动执行或查询 | Claude Code 执行、OpenClaw 小奥问答 | Claude Code / OpenClaw |
 
@@ -289,11 +291,55 @@ catforge-insight ask "查彩电价值战场图谱" --batch-id latest --format js
 catforge-insight ask "查 100A4F 的销量分配" --batch-id latest --format json
 ```
 
-## 7. 小奥专业市场分析层
+## 7. 卖点价值量化与贡献归因层
+
+卖点价值量化层用于回答“哪些卖点在当前可比市场池中支撑定价、销量或销额表现”。它不是严格因果归因，而是基于可观测样本的解释性估算。
+
+当前产物：
+
+- 卖点可比池：某个标准卖点在同尺寸、同价格带、同战场/任务/客群下的有卖点组和对照组。
+- 池级卖点价值指标：价格溢价、周均销量优势、周均销额优势、样本状态和置信度。
+- SKU 卖点价值角色：估算溢价卖点、估算销量卖点、基础门槛、厂家主张、用户验证需求、拖后腿、机会缺口、样本不足。
+- SKU 卖点贡献归因：一个 SKU 相对同池基准的价格、销量、销额超额表现，如何解释性分摊到若干卖点。
+- 卖点维度汇总：某个卖点在价值战场、用户任务、目标客群、尺寸价格池中的覆盖和表现。
+
+当前口径：
+
+- 默认分析人群使用 `claim_value_ready_with_comment`，即要求有卖点事实、评论事实、市场画像和语义图谱。
+- 对缺评论但有参数和卖点事实的 SKU，可降级到 `claim_value_ready`，但只能说“用户评论验证不足”。
+- 卖点价值必须在可比池内判断，不能跨尺寸档、跨价格层级或跨完全不同战场直接比较。
+- “值多少钱”“贡献多少销量”只能表达为“对应价格溢价估计”“对应周均销量优势估计”，不能表达为严格因果。
+- 服务履约、物流安装、售后不进入产品溢价卖点。
+
+执行：
+
+```bash
+catforge-pipeline run-claim-value-quantification --product-category tv --batch-id latest --analysis-population claim_value_ready_with_comment --market-window full_observed_window --format json
+```
+
+自然语言执行：
+
+```bash
+catforge-pipeline ask "生成彩电卖点价值量化和贡献归因结果" --product-category tv --batch-id latest --format json
+```
+
+查询和业务分析入口：
+
+```bash
+catforge-analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --format json
+catforge-analyst claim-contribution --query 65E7Q --product-category tv --batch-id latest --format json
+catforge-analyst claim-value-space --query MiniLED --dimension-type battlefield --product-category tv --batch-id latest --format json
+catforge-analyst claim-opportunity-gaps --query 65E7Q --candidate-sku-code TV00040001 --product-category tv --batch-id latest --format json
+catforge-analyst claim-value-compare --query 65E7Q --candidate-sku-code TV00040001 --product-category tv --batch-id latest --format json
+```
+
+小奥问“哪些卖点是溢价卖点”“这款卖得好靠哪些卖点”“比竞品贵在哪里”时，应优先使用 M12C 已生成结果；如果 M12C 未生成，只能降级为事实卖点、评论支撑和语义关系的候选判断。
+
+## 8. 小奥专业市场分析层
 
 小奥不是数据处理程序，而是业务分析专家。它消费前面所有事实画像、语义画像和市场图谱，回答业务问题。
 
-### 7.1 小奥能回答的问题
+### 8.1 小奥能回答的问题
 
 - 某个 SKU 的竞品有哪些。
 - 为什么 A 比 B 卖得好。
@@ -305,7 +351,7 @@ catforge-insight ask "查 100A4F 的销量分配" --batch-id latest --format jso
 - 某个 SKU 的目标客户和用户画像是什么。
 - 某个 SKU 在任务、客群、战场里的市场位置是什么。
 
-### 7.2 小奥不能做的事
+### 8.2 小奥不能做的事
 
 - 不能直接从原始表编业务结论。
 - 不能绕过 CLI 或稳定服务直接临时写 SQL 形成结论。
@@ -313,7 +359,7 @@ catforge-insight ask "查 100A4F 的销量分配" --batch-id latest --format jso
 - 不能用通用常识替代当前 205 数据。
 - 不能把累计销量当成销量胜负的主判断依据。
 
-### 7.3 小奥执行入口
+### 8.3 小奥执行入口
 
 OpenClaw 侧：
 
@@ -328,11 +374,11 @@ CLI 侧：
 catforge-analyst ask "海信65E7Q的竞品有哪些" --product-category tv --batch-id latest --format json
 ```
 
-## 8. 新数据进入后的完整执行顺序
+## 9. 新数据进入后的完整执行顺序
 
 当目标是“让小奥能使用最新上传数据回答问题”时，按下面顺序执行。
 
-### 8.1 环境检查
+### 9.1 环境检查
 
 ```bash
 cd /opt/catforge
@@ -343,7 +389,7 @@ curl -fsS http://127.0.0.1:8000/readyz
 command -v catforge-data catforge-pipeline catforge-insight catforge-analyst
 ```
 
-### 8.2 数据准备
+### 9.2 数据准备
 
 ```bash
 catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
@@ -355,7 +401,7 @@ catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26
 catforge-data inspect-data-quality --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --batch-id latest --format json
 ```
 
-### 8.3 事实画像
+### 9.3 事实画像
 
 ```bash
 catforge-pipeline run-param-profile --product-category tv --batch-id latest --force-rebuild --format json
@@ -363,7 +409,7 @@ catforge-pipeline run-claim-profile --product-category tv --batch-id latest --in
 catforge-pipeline run-market-profile --batch-id latest --sku-chunk-size 50 --format json
 ```
 
-### 8.4 评论事实画像
+### 9.4 评论事实画像
 
 先冒烟：
 
@@ -377,21 +423,23 @@ catforge-pipeline run-comment-profile-batch --product-category tv --batch-id lat
 catforge-pipeline run-comment-profile-batch --product-category tv --batch-id latest --llm-mode required --parallelism 8 --max-sentences-per-sku 500 --format json
 ```
 
-### 8.5 语义画像和市场图谱
+### 9.5 语义画像、市场图谱和卖点价值量化
 
 ```bash
 catforge-pipeline run-user-task --product-category tv --batch-id latest --force-rebuild --format json
 catforge-pipeline run-target-group --product-category tv --batch-id latest --force-rebuild --format json
 catforge-pipeline run-value-battlefield --product-category tv --batch-id latest --force-rebuild --format json
 catforge-pipeline run-semantic-market-graph --product-category tv --batch-id latest --force-rebuild --format json
+catforge-pipeline run-claim-value-quantification --product-category tv --batch-id latest --analysis-population claim_value_ready_with_comment --market-window full_observed_window --format json
 ```
 
-### 8.6 最终验收
+### 9.6 最终验收
 
 ```bash
 catforge-insight ask "查彩电语义市场图谱" --batch-id latest --sku-limit 20 --format json
 catforge-insight ask "查彩电价值战场图谱" --batch-id latest --format json
 catforge-analyst ask "海信65E7Q的竞品有哪些" --product-category tv --batch-id latest --format json
+catforge-analyst ask "海信65E7Q哪些卖点是溢价卖点" --product-category tv --batch-id latest --format json
 ```
 
 验收口径：
@@ -402,18 +450,19 @@ catforge-analyst ask "海信65E7Q的竞品有哪些" --product-category tv --bat
 - 评论事实画像完成，失败 SKU 或跳过 SKU 有明确说明。
 - 用户任务、目标客群、价值战场成功。
 - 语义市场图谱和销量分配成功。
+- 卖点价值量化和贡献归因成功。
 - 小奥可以基于 latest batch 回答典型业务问题。
 
-## 9. CLI、Skill、Agent 的职责边界
+## 10. CLI、Skill、Agent 的职责边界
 
 CLI 和 Skill 是执行入口，不是分析流程本身。
 
 | 能力 | 主要用途 | 是否写数据 | 主要使用者 |
 | --- | --- | --- | --- |
 | `catforge-data` | 新数据预处理、清洗、质量检查、证据准备 | 是 | Claude Code |
-| `catforge-pipeline` | 生成或重跑参数、卖点、市场、评论、用户任务、目标客群、价值战场、语义市场图谱 | 是 | Claude Code |
+| `catforge-pipeline` | 生成或重跑参数、卖点、市场、评论、用户任务、目标客群、价值战场、语义市场图谱、卖点价值量化 | 是 | Claude Code |
 | `catforge-insight` | 查询已经生成的事实、画像、taxonomy、覆盖、图谱、销量分配 | 否 | Claude Code / OpenClaw |
-| `catforge-analyst` | 竞品、销量差异、溢价卖点、机会空间等业务分析包 | 通常否 | OpenClaw / 小奥 |
+| `catforge-analyst` | 竞品、销量差异、溢价卖点、卖点贡献、机会空间等业务分析包 | 通常否 | OpenClaw / 小奥 |
 | `catforge-data` Skill | 让 Claude Code 理解“新数据来了先处理一下” | 通过 CLI 写数据 | Claude Code |
 | `catforge-pipeline` Skill | 让 Claude Code 理解“重新生成画像/图谱” | 通过 CLI 写数据 | Claude Code |
 | `catforge-insight` Skill | 让 Claude Code 做只读事实检查 | 否 | Claude Code |
@@ -427,9 +476,9 @@ CLI 和 Skill 是执行入口，不是分析流程本身。
 - OpenClaw 不应替代 Claude Code 去跑大规模清洗和画像重建。
 - Claude Code 不应替代小奥输出面向业务用户的完整市场分析话术，除非用户明确要求它调用 `catforge-analyst` 做验证。
 
-## 10. 自然语言路由规则
+## 11. 自然语言路由规则
 
-### 10.1 新数据、预处理、清洗
+### 11.1 新数据、预处理、清洗
 
 用户说：
 
@@ -447,7 +496,7 @@ catforge-data inspect-data-quality ...
 
 不要路由到 `catforge-pipeline`。
 
-### 10.2 重新生成画像或图谱
+### 11.2 重新生成画像、图谱或卖点价值量化
 
 用户说：
 
@@ -458,6 +507,8 @@ catforge-data inspect-data-quality ...
 - “重新生成彩电目标客群画像。”
 - “重新生成彩电价值战场画像。”
 - “重新生成彩电语义市场图谱和销量分配。”
+- “生成彩电卖点价值量化和贡献归因结果。”
+- “重新计算彩电溢价卖点和卖点贡献。”
 
 路由到：
 
@@ -465,7 +516,7 @@ catforge-data inspect-data-quality ...
 catforge-pipeline ask "<用户原话>" --batch-id latest --product-category tv --force-rebuild --format json
 ```
 
-### 10.3 查询现有事实或覆盖
+### 11.3 查询现有事实或覆盖
 
 用户说：
 
@@ -483,7 +534,7 @@ catforge-pipeline ask "<用户原话>" --batch-id latest --product-category tv -
 catforge-insight ask "<用户原话>" --batch-id latest --product-category tv --format json
 ```
 
-### 10.4 业务分析问题
+### 11.4 业务分析问题
 
 用户说：
 
@@ -501,9 +552,9 @@ catforge-analyst ask "<用户原话>" --batch-id latest --product-category tv --
 
 OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内部模块。
 
-## 11. 输出报告口径
+## 12. 输出报告口径
 
-### 11.1 数据准备报告
+### 12.1 数据准备报告
 
 报告：
 
@@ -515,7 +566,7 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 - 是否有需要人工复核的问题。
 - 是否可以进入事实画像层。
 
-### 11.2 画像重跑报告
+### 12.2 画像重跑报告
 
 报告：
 
@@ -524,7 +575,7 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 - 警告和失败 SKU。
 - 下游是否需要继续重跑。
 
-### 11.3 图谱报告
+### 12.3 图谱报告
 
 报告：
 
@@ -533,7 +584,16 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 - 各维度覆盖 SKU 数和销量分配口径。
 - 没有主任务、主客群、主战场的 SKU 数和原因。
 
-### 11.4 小奥业务回答
+### 12.4 卖点价值量化报告
+
+报告：
+
+- 分析人群、市场窗口和进入量化的 SKU 数。
+- 可比池数量、池级指标数量、SKU 卖点量化数量、贡献归因数量、维度汇总数量。
+- 溢价卖点、销量卖点、基础门槛、厂家主张、拖后腿、机会缺口和样本不足分布。
+- 明确说明这是可观测贡献估计，不是严格因果归因。
+
+### 12.5 小奥业务回答
 
 报告：
 
@@ -542,7 +602,7 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 - 用业务语言解释依据：尺寸价格池、价值战场、用户任务、目标客群、参数卖点重合、评论支持、重叠周销量验证。
 - 不展示原始 JSON、命令、Mxx 模块名、内部 code。
 
-## 12. 不再混用的旧概念
+## 13. 不再混用的旧概念
 
 当前流程不再补丁式沿用旧链路来回答新问题。
 
@@ -556,17 +616,17 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 - 技术日志和业务回答。
 - 累计销量和重叠周均销量验证。
 
-## 13. 当前已知限制
+## 14. 当前已知限制
 
 截至 2026-06-22：
 
-- TV 链路最完整，已覆盖参数、卖点、市场、评论、用户任务、目标客群、价值战场、语义市场图谱和小奥分析。
+- TV 链路最完整，已覆盖参数、卖点、市场、评论、用户任务、目标客群、价值战场、语义市场图谱、卖点价值量化和小奥分析。
 - AC 已有参数标准体系和参数画像能力；卖点、评论、用户任务、目标客群、价值战场 taxonomy 是否可用，需要按当前部署能力确认。
 - 评论事实画像依赖 LLM，执行前必须确认 205 环境中的 LLM 配置可用。
 - 大批量评论画像执行要控制并行度，先冒烟再全量。
 - 如果查询返回多个候选 SKU，必须让用户二次确认；飞书入口可以做候选卡片。
 
-## 14. 当前分支和部署口径
+## 15. 当前分支和部署口径
 
 当前工作分支：
 
@@ -587,7 +647,7 @@ new/m00-safe-import-hotfix
 205 上 Claude Code 负责执行：
 
 ```text
-清洗 -> 事实画像 -> 评论事实画像 -> 用户任务 -> 目标客群 -> 价值战场 -> 语义市场图谱
+清洗 -> 事实画像 -> 评论事实画像 -> 用户任务 -> 目标客群 -> 价值战场 -> 语义市场图谱 -> 卖点价值量化
 ```
 
 205 上 OpenClaw / 小奥负责回答：

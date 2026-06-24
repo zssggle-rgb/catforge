@@ -60,7 +60,7 @@ For local development in the repo, the same commands can be run without Docker f
 
 Use tools in this order:
 
-1. `catforge_analyst`: business analysis, competitor reasoning, sales-difference reasoning, premium-claim reasoning, battlefield space, opportunity analysis, and SKU business brief.
+1. `catforge_analyst`: business analysis, competitor reasoning, sales-difference reasoning, premium-claim reasoning, claim-value quantification, claim-contribution attribution, battlefield space, opportunity analysis, and SKU business brief.
 2. `catforge_insight`: read-only single-fact query, taxonomy query, coverage query, or market graph query when no higher-level business reasoning is needed.
 3. `catforge_pipeline`: profile or semantic-graph execution only when the user explicitly asks to rerun generated profiles, rebuild graph, or update generated analysis layers.
 4. `catforge_data`: raw uploaded data preparation only when the user asks to preprocess new data, clean new data, or prepare a source batch for analysis.
@@ -131,7 +131,11 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 | --- | --- | --- | --- |
 | "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Use XiaoAo answer mode. Selection priority is same purchase pool, role-weighted value battlefield overlap, role-weighted user task overlap, role-weighted target group overlap, substitutable value anchors, replacement pressure, then sales as market validation only. |
 | "A 为什么比 B 卖得好/差", "销量差异原因" | `why-sales-diff` | `sku_code` and `candidate_sku_code` | Explain a pairwise sales difference. If only one SKU is provided, run `competitor-set` first and ask the user to confirm the comparison SKU if needed. |
-| "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. |
+| "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. This SOP now uses quantified claim-value and contribution results when available. |
+| "某个卖点值多少钱", "某卖点贡献多少销量" | `claim-value-space` | claim name/code, optional dimension | Return observable price premium, weekly-sales lift, weekly-amount lift, pool sample status, and confidence. |
+| "某 SKU 卖得好靠哪些卖点" | `claim-contribution` | `sku_code` or `query` | Explain SKU excess price/sales/amount performance by Top claim contributors. |
+| "本品比竞品贵在哪里", "竞品靠哪些卖点拦截" | `claim-value-compare` | target SKU and competitor SKU | Compare target and competitor claim roles, shared thresholds, target advantages, competitor intercepts, and not-decisive claims. |
+| "本品缺哪些有价值的卖点" | `claim-opportunity-gaps` | target SKU, optional competitor SKU | Identify competitor-supported or pool-supported valuable claim gaps. |
 | "某个价值战场有多大", "某战场有哪些 SKU", "战场空间" | `battlefield-space` | `dimension_code` or battlefield name query | Return market space, SKU contribution, brand distribution, and size-price distribution from semantic market graph results. |
 | "能不能进入更多战场", "扩大销量机会", "怎么抢更大市场" | `battlefield-opportunity` | `sku_code` or `query` | Analyze opportunity battlefields, drag-factor battlefields, gaps, and action candidates. |
 | "这个 SKU 的综合情况", "业务画像", "市场位置" | `sku-business-brief` | `sku_code` or `query` | Summarize market position, facts, main semantics, candidates, and opportunities. |
@@ -149,6 +153,26 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst premium-claim-drivers --query 65E7Q --product-category tv --batch-id latest --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst claim-contribution --query 65E7Q --product-category tv --batch-id latest --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst claim-value-space --query MiniLED --dimension-type battlefield --product-category tv --batch-id latest --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst claim-opportunity-gaps --query 65E7Q --candidate-sku-code TV00040001 --product-category tv --batch-id latest --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst claim-value-compare --query 65E7Q --candidate-sku-code TV00040001 --product-category tv --batch-id latest --format json
 ```
 
 ```bash
@@ -178,6 +202,11 @@ Available atomic commands:
 - `comment-support`: check comment support or contradiction for claim, parameter, task, group, or battlefield codes.
 - `semantic-dimension-space`: query one user task, target group, or battlefield space and SKU contributions.
 - `opportunity-gaps`: get one SKU's opportunity battlefields, drag-factor battlefields, and gap signals.
+- `claim-value-space`: query observable market value of one standard claim in a market pool, battlefield, user task, or target group.
+- `sku-claim-value`: query one SKU's quantified claim roles, including premium drivers, sales drivers, basic thresholds, brand-claimed-only points, drag factors, opportunity gaps, and sample-insufficient claims.
+- `claim-contribution`: explain one SKU's excess price, weekly sales, and weekly amount by Top claim contributors.
+- `claim-opportunity-gaps`: compare one SKU with competitors or its comparable pool to identify valuable claim gaps.
+- `claim-value-compare`: compare a target SKU and competitor SKUs on claim-value roles and observable price/sales/amount explanation.
 
 ### Open Question Patterns
 
@@ -238,9 +267,18 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. `premium-claim-drivers`
-2. `comment-support --claim-code ...` when a claim code is known
-3. Use battlefield/task/group context from the result to decide whether it is premium driver, sales driver, basic support, brand claim only, or drag factor.
+1. `sku-claim-value` if the question is SKU centered.
+2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
+3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
+4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.
+5. Use battlefield/task/group context from the result to decide whether it is premium driver, sales driver, basic support, brand claim only, user-validated need, opportunity gap, sample insufficient, or drag factor.
+
+For "本品比竞品贵在哪里" or "竞品靠哪些卖点拦截本品":
+
+1. `claim-value-compare` with explicit target and competitor SKU codes.
+2. If the competitor is not specified, run `competitor-set` first and use the Top competitor only after the user confirms or the question clearly refers to the previous answer.
+3. Separate target advantages, competitor intercepts, shared thresholds, and not-decisive claims.
+4. Do not use a shared claim that both products have at similar strength as price-difference evidence.
 
 For "某战场空间多大、有哪些 SKU":
 
@@ -299,7 +337,7 @@ Every business conclusion must be tied to CLI evidence:
 - For competitor lists, do not invent candidates outside CLI output. Select and order the Top 3 in business language using the established priority: same size/price, value battlefield, user task/target group, parameter/claim overlap, and overlapping-week sales validation.
 - If you include additional candidates beyond Top 3, label them as "补充观察" or "价格分流候选", not as the main conclusion.
 - For sales-difference conclusions, use overlapping active-week average sales/amount. Do not use cumulative sales as the win/loss basis.
-- For premium-claim conclusions, require support from primary/secondary battlefield, user task or target group, plus parameter or comment validation.
+- For premium-claim conclusions, use quantified claim-value results when available. Require support from primary/secondary battlefield, user task or target group, plus parameter or comment validation and comparable-pool market evidence. If quantified results are missing, downgrade the answer to "候选溢价卖点" and state that current data lacks value quantification.
 - For battlefield-space conclusions, use semantic market graph fields such as estimated sales volume, estimated average weekly sales, SKU contributions, allocation coverage, and distribution. Do not mention M11D in the final answer.
 
 ### No Overclaiming
@@ -314,6 +352,7 @@ Use cautious language:
 - Do not treat `sales_volume_total` as the basis for "who sells better".
 - Use `avg_weekly_sales_volume` or `sales-overlap` overlapping-week averages for pairwise comparison.
 - If the result is an allocated semantic market graph number, call it "解释性分配销量" or "估算解释销量", not true causal sales.
+- If the result is a claim-value estimate, call it "可观测价格溢价估计", "可观测周均销量优势", or "可观测周均销额优势", not a causal contribution.
 
 ### Product vs Service Rules
 
@@ -410,4 +449,16 @@ Check a battlefield space:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst ask "高端画质升级战场有哪些SKU？" --product-category tv --batch-id latest --format json
+```
+
+Check claim-value quantification:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --format json
+```
+
+Check claim contribution:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst claim-contribution --query 65E7Q --product-category tv --batch-id latest --format json
 ```

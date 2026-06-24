@@ -1,6 +1,6 @@
 ---
 name: catforge-pipeline
-description: Run CatForge execution jobs for SKU parameter profiles, SKU claim fact profiles, SKU market profiles, SKU comment fact profiles, SKU user tasks, SKU target groups, SKU value battlefields, and semantic market graphs from natural language. This skill is for profile rebuild and rerun work after data preparation, not raw-data cleaning, read-only query, or business analysis.
+description: Run CatForge execution jobs for SKU parameter profiles, SKU claim fact profiles, SKU market profiles, SKU comment fact profiles, SKU user tasks, SKU target groups, SKU value battlefields, semantic market graphs, and claim-value quantification from natural language. This skill is for profile rebuild and rerun work after data preparation, not raw-data cleaning, read-only query, or business analysis.
 ---
 
 # CatForge Pipeline Skill
@@ -32,6 +32,9 @@ Use this skill when the user asks Claude Code to execute profile or semantic-gra
 - "生成彩电语义市场图谱和销量分配"
 - "更新彩电用户任务、目标客群、价值战场的市场空间"
 - "重新生成彩电语义市场图谱"
+- "生成彩电卖点价值量化和贡献归因"
+- "重新计算彩电溢价卖点和卖点贡献"
+- "把卖点价值量化跑完，让小奥能回答哪些卖点值钱"
 
 This is an execution skill. Use it only when the user asks to generate, rerun, rebuild, or update generated profiles or semantic graph outputs.
 
@@ -86,6 +89,7 @@ catforge-pipeline ask "重新生成彩电用户任务画像" --force-rebuild --f
 catforge-pipeline ask "重新生成彩电目标客群画像" --force-rebuild --format json
 catforge-pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
 catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+catforge-pipeline ask "生成彩电卖点价值量化和贡献归因" --format json
 ```
 
 The wrapper runs inside the CatForge API container. If the wrapper is not
@@ -129,6 +133,8 @@ M11C value battlefield profiles currently have a published TV taxonomy only. It 
 
 M11D semantic market graph and sales allocation is a deterministic result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM. Default population is `fact_complete_with_comment`, meaning only SKUs with comment facts, user-task profile, target-group profile, value-battlefield profile, and market profile enter the market graph. It generates user-task, target-group, and value-battlefield market maps plus SKU sales allocation. It outputs both total allocated sales and average weekly allocated sales; cumulative sales are display-only context, not the sole basis for comparison.
 
+M12C claim-value quantification and contribution attribution is a deterministic result layer. It reads current M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D outputs. It does not call an LLM. Default population is `claim_value_ready_with_comment`, meaning only SKUs with claim facts, comment facts, market profiles, semantic profiles, and semantic market graph coverage enter business-facing claim-value analysis. It generates claim comparable pools, pool metrics, SKU claim-value roles, SKU claim-contribution attribution, claim dimension summaries, and review issues. Its numbers are observable contribution estimates, not causal proof.
+
 LLM credentials must come from environment variables. Never write API keys into skill files, committed docs, or command transcripts. On 205 validation, use `--llm-mode required` so failure to call the LLM is visible.
 
 ## Natural Language Entry
@@ -142,6 +148,7 @@ catforge-pipeline ask "重新生成彩电用户任务画像" --force-rebuild --f
 catforge-pipeline ask "重新生成彩电目标客群画像" --force-rebuild --format json
 catforge-pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
 catforge-pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+catforge-pipeline ask "生成彩电卖点价值量化和贡献归因" --format json
 ```
 
 Fallback Docker Compose examples:
@@ -180,6 +187,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline ask "生成彩电卖点价值量化和贡献归因" --format json
 ```
 
 ## Stable Atomic Commands
@@ -312,6 +323,18 @@ Run only one semantic dimension type:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-semantic-market-graph --product-category tv --batch-id latest --dimension-type battlefield --force-rebuild --format json
 ```
 
+Run TV claim-value quantification and contribution attribution:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-claim-value-quantification --product-category tv --batch-id latest --analysis-population claim_value_ready_with_comment --market-window full_observed_window --format json
+```
+
+Run claim-value quantification for specific SKUs:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-claim-value-quantification --product-category tv --batch-id latest --sku-code TV00029112 --sku-code TV00040001 --analysis-population claim_value_ready_with_comment --format json
+```
+
 Use `--input-source auto` by default. It reads M02 selling-point evidence first, then M01 cleaned claims, then raw `selling_points_data` only if needed. Use `--input-source raw` only when the current deployment has new raw selling points but M01/M02 have not been rerun yet.
 
 Use `--batch-id latest` unless the user gives a specific batch id. Use `--force-rebuild` when source data or taxonomy/rules have changed and existing profile business keys should be refreshed.
@@ -321,6 +344,7 @@ For M09C user task profiles, confirm the same batch already has current M03B, M0
 For M10C target group profiles, confirm the same batch already has current M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` for a target-group subset. This stage is deterministic and does not call an LLM.
 For M11C value battlefield profiles, confirm the same batch already has current M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows. Use `--graph-mode inline` to write the graph snapshot, `--graph-mode skip` to write only SKU profiles and score rows, repeated `--sku-code` for scoped reruns, and repeated `--battlefield-code` for a battlefield subset.
 For M11D semantic market graph, confirm the same batch already has current M05C, M09C, M10C, M11C, and M07 outputs. Keep the default `--analysis-population fact_complete_with_comment` for business-facing analysis. Use `--analysis-population all_semantic_profiles` only for diagnostics that intentionally include SKUs without M05C comment facts. Use repeated `--dimension-type user_task|target_group|battlefield` for scoped reruns.
+For M12C claim-value quantification, confirm the same batch already has current M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D outputs. Keep the default `--analysis-population claim_value_ready_with_comment` for business-facing analysis. Use `--analysis-population claim_value_ready` only for diagnostics that intentionally include SKUs without comment facts. Use repeated `--sku-code` for scoped reruns. M12C estimates observable price, weekly-sales, and weekly-amount contribution in comparable pools; it must not be reported as strict causality.
 
 ## Response Rules
 
@@ -336,6 +360,7 @@ After execution, summarize:
 - For target group profiles, summarize SKU profile count, score count, coverage count, primary target-group distribution, relation status distribution, and any warnings about missing fact-layer inputs.
 - For value battlefield profiles, summarize SKU profile count, score count, graph snapshot count, primary battlefield distribution, relation status distribution, and any warnings about missing fact-layer inputs.
 - For semantic market graph, summarize analysis population, market window, included SKU count, allocation count, dimension summary count, contribution count, graph snapshot count, check count, and any no-allocation diagnostics.
+- For claim-value quantification, summarize analysis population, market window, comparable-pool count, pool-metric count, SKU claim-value count, contribution-attribution count, dimension-summary count, review-issue count, and role distribution.
 - Warnings, especially empty input, parameter conflicts, or failed status.
 
 If the CLI returns `error`, report the error and do not claim the job completed. If the job succeeds with warnings, state that outputs were written but review may be needed.

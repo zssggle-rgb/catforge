@@ -304,8 +304,8 @@ M12C 必须更新两类 Skill：
 
 | Skill | 职责 |
 | --- | --- |
-| `catforge-insight` | 查询卖点价值空间、SKU 卖点价值、卖点贡献、机会缺口和横向对比 |
-| `xiaoao-home-appliance-market-analysis` | 面向业务用户组织回答，不暴露 CLI、表名、JSON 和模块编号 |
+| `catforge-insight` | 遇到卖点价值、卖点贡献、值多少钱等问题时转交 `catforge_analyst`，不虚构未实现的 insight 命令 |
+| `xiaoao-home-appliance-market-analysis` | 面向业务用户调用 M12C 分析能力并组织回答，不暴露 CLI、表名、JSON 和模块编号 |
 
 Skill 必须包含：
 

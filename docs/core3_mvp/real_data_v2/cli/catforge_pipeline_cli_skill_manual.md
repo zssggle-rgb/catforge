@@ -1,6 +1,6 @@
 # CatForge Pipeline CLI and Claude Skill Manual
 
-This manual documents the execution CLI for agent-driven data preparation, SKU parameter profile generation, SKU claim fact profile generation, SKU market profile generation, SKU comment fact profile generation, SKU target group profile generation, and SKU value battlefield profile generation.
+This manual documents the execution CLI for agent-driven data preparation, SKU parameter profile generation, SKU claim fact profile generation, SKU market profile generation, SKU comment fact profile generation, SKU user task generation, SKU target group generation, SKU value battlefield generation, semantic market graph generation, and claim-value quantification.
 
 ## Purpose
 
@@ -11,8 +11,11 @@ This manual documents the execution CLI for agent-driven data preparation, SKU p
 3. Generate or rerun SKU claim fact profiles for TV.
 4. Generate or rerun SKU market profiles, market signals, and comparable-pool baselines for TV.
 5. Generate or rerun SKU comment fact profiles for TV with LLM-based comment semantic extraction.
-6. Generate or rerun SKU target group profiles, SKU x target-group scores, and target-group coverage for TV.
-7. Generate or rerun SKU value battlefield profiles, SKU x battlefield scores, and value battlefield graph snapshots for TV.
+6. Generate or rerun SKU user task profiles, SKU x user-task scores, and user-task coverage for TV.
+7. Generate or rerun SKU target group profiles, SKU x target-group scores, and target-group coverage for TV.
+8. Generate or rerun SKU value battlefield profiles, SKU x battlefield scores, and value battlefield graph snapshots for TV.
+9. Generate or rerun semantic market graph and sales allocation for TV.
+10. Generate or rerun claim-value quantification and claim-contribution attribution for TV.
 
 For read-only questions, use `catforge_insight` instead.
 
@@ -65,6 +68,10 @@ M11C value battlefield profiles currently have a published TV taxonomy only. M11
 | TV | `TV` | `m11c_tv_value_battlefield_taxonomy_v0.1` | `m11c_tv_value_battlefield_profile_v0.1` |
 | AC | `AC` | not published | not available |
 
+M11D semantic market graph and sales allocation is deterministic. It reads M05C, M09C, M10C, M11C, and M07 outputs and writes user-task, target-group, and value-battlefield market maps plus SKU sales allocation. Use `fact_complete_with_comment` for business-facing graph outputs.
+
+M12C claim-value quantification and contribution attribution is deterministic. It reads M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D outputs and writes claim comparable pools, pool metrics, SKU claim-value roles, SKU claim-contribution attribution, claim dimension summaries, and review issues. Use `claim_value_ready_with_comment` for business-facing claim-value outputs. M12C values are observable contribution estimates, not causal proof.
+
 LLM configuration is read only from environment variables. Do not write API keys into code, docs, shell history, or committed files.
 
 ```bash
@@ -91,6 +98,8 @@ python -m app.cli.catforge_pipeline ask "重新生成彩电目标客群画像" -
 python -m app.cli.catforge_pipeline ask "重跑 TV00027354 的目标客户分析" --force-rebuild --format json
 python -m app.cli.catforge_pipeline ask "重新生成彩电价值战场画像" --force-rebuild --format json
 python -m app.cli.catforge_pipeline ask "重跑 TV00027354 的价值战场画像" --force-rebuild --format json
+python -m app.cli.catforge_pipeline ask "重新生成彩电语义市场图谱和销量分配" --force-rebuild --format json
+python -m app.cli.catforge_pipeline ask "生成彩电卖点价值量化和贡献归因" --format json
 ```
 
 The router is deterministic. It maps "彩电/电视/TV" to TV and "空调/AC" to AC. Requests that mention "卖点" route to claim fact profile generation; parameter requests route to parameter profile generation.
@@ -98,6 +107,8 @@ Requests that mention "市场画像", "量价画像", "价格区间", or "尺寸
 Requests that mention "评论事实画像", "评论画像", or "用户评价画像" route to M05C-B comment fact profile generation. This generation stage uses LLM extraction; the read-only query stage is handled by `catforge_insight`.
 Requests that mention "目标客群", "目标客户", "目标用户", or "客群画像" route to M10C target group profile generation. This stage is deterministic and does not call an LLM.
 Requests that mention "价值战场", "战场画像", or "战场图谱" route to M11C value battlefield profile generation. This stage is deterministic and does not call an LLM.
+Requests that mention "语义市场图谱", "销量分配", "市场空间" route to M11D semantic market graph generation.
+Requests that mention "卖点价值量化", "卖点贡献归因", "溢价卖点量化", or "哪些卖点值钱" with execution verbs route to M12C claim-value quantification.
 
 ### Atomic command
 
@@ -118,6 +129,9 @@ python -m app.cli.catforge_pipeline run-target-group --product-category tv --bat
 python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --sku-code TV00027354 --graph-mode inline --force-rebuild --format json
 python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --battlefield-code BF_LARGE_SCREEN_VALUE_UPGRADE --force-rebuild --format json
+python -m app.cli.catforge_pipeline run-semantic-market-graph --product-category tv --batch-id latest --force-rebuild --format json
+python -m app.cli.catforge_pipeline run-claim-value-quantification --product-category tv --batch-id latest --analysis-population claim_value_ready_with_comment --market-window full_observed_window --format json
+python -m app.cli.catforge_pipeline run-claim-value-quantification --product-category tv --batch-id latest --sku-code TV00027354 --analysis-population claim_value_ready_with_comment --format json
 ```
 
 `--force-rebuild` replaces same business-key outputs when output hashes changed. Use it when source data, taxonomy, or rules have changed.
@@ -131,6 +145,10 @@ For `run-comment-profile`, use `--llm-mode required` on 205 when validating the 
 For `run-target-group`, make sure M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows are current for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--target-group-code` to limit scoring to specific target-group definitions. Because M10C derives price bands inside the M03B size tier and validates market strength by same-size overlap weekly averages, it should be rerun after market prices, weekly market rows, parameter size tiers, claim facts, or comment facts change.
 
 For `run-value-battlefield`, make sure M03B, M04C, M05C, M07 price outputs, and M01 clean weekly market rows are current for the same batch. Use repeated `--sku-code` for scoped reruns and repeated `--battlefield-code` to limit scoring to specific battlefield definitions. `--graph-mode inline` writes a graph snapshot with coverage statistics; `--graph-mode skip` only writes SKU profiles and score rows. Because M11C derives price bands inside the M03B size tier and validates market strength by same-size overlap weekly averages, it should be rerun after market prices, weekly market rows, parameter size tiers, claim facts, or comment facts change.
+
+For `run-semantic-market-graph`, make sure M05C, M09C, M10C, M11C, and M07 are current for the same batch. Keep `--analysis-population fact_complete_with_comment` for business-facing graph outputs. Use repeated `--dimension-type user_task|target_group|battlefield` for scoped graph reruns.
+
+For `run-claim-value-quantification`, make sure M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D are current for the same batch. Keep `--analysis-population claim_value_ready_with_comment` for business-facing claim-value outputs. Use `claim_value_ready` only for diagnostics that intentionally include SKUs without comment facts. Use repeated `--sku-code` for scoped reruns. Report M12C outputs as observable price, weekly-sales, and weekly-amount contribution estimates, not strict causality.
 
 ## Outputs
 
@@ -147,6 +165,8 @@ Output includes:
 - For comment profiles: SKU comment profile count, comment fact count, coverage count, service-excluded sentence count, review-required count, and LLM mode/call/model status.
 - For target group profiles: SKU profile count, SKU x target-group score count, coverage count, primary target-group counts, relation status counts, and size-price counts.
 - For value battlefield profiles: SKU profile count, SKU x battlefield score count, graph snapshot count, primary battlefield counts, relation status counts, and size-price counts.
+- For semantic market graph: analysis population, included SKU count, allocation count, dimension summary count, contribution count, graph snapshot count, and check count.
+- For claim-value quantification: analysis population, market window, comparable-pool count, pool-metric count, SKU claim-value count, contribution-attribution count, dimension-summary count, review-issue count, and role distribution.
 - Warnings.
 
 ## Claude Code Skill

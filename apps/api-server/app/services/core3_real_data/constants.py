@@ -35,6 +35,7 @@ class Core3ModuleCode(StrEnum):
     M11_5 = "M11.5"
     M11_6 = "M11.6"
     M11_7 = "M11.7"
+    M12C = "M12C"
     M12 = "M12"
     M13 = "M13"
     M14 = "M14"
@@ -408,6 +409,8 @@ CORE3_M11_7_MODULE_VERSION = "m11-7-dimension-sales-reconciliation-0.1.0"
 CORE3_M11_7_RULE_VERSION = "core3_mvp_real_data_v2_m11_7_v1"
 CORE3_M11D_MODULE_VERSION = "m11d-semantic-market-graph-allocation-0.1.0"
 CORE3_M11D_RULE_VERSION = "m11d_semantic_market_allocation_v0.1"
+CORE3_M12C_MODULE_VERSION = "m12c-claim-value-quantification-0.1.0"
+CORE3_M12C_RULE_VERSION = "m12c_claim_value_quantification_v0.1"
 CORE3_M12_MODULE_VERSION = "m12-candidate-recall-0.1.0"
 CORE3_M12_RULE_VERSION = "core3_mvp_real_data_v2_m12_v1"
 CORE3_M13_MODULE_VERSION = "m13-component-scoring-0.1.0"
@@ -1879,6 +1882,7 @@ CORE3_MODULE_ORDER: tuple[Core3ModuleCode, ...] = (
     Core3ModuleCode.M11_5,
     Core3ModuleCode.M11_6,
     Core3ModuleCode.M11_7,
+    Core3ModuleCode.M12C,
     Core3ModuleCode.M12,
     Core3ModuleCode.M13,
     Core3ModuleCode.M14,
@@ -1928,6 +1932,8 @@ CORE3_MODULE_DAG_EDGES: tuple[tuple[Core3ModuleCode, Core3ModuleCode], ...] = (
     (Core3ModuleCode.M07, Core3ModuleCode.M11_7),
     (Core3ModuleCode.M08, Core3ModuleCode.M11_7),
     (Core3ModuleCode.M11_6, Core3ModuleCode.M11_7),
+    (Core3ModuleCode.M11D, Core3ModuleCode.M12C),
+    (Core3ModuleCode.M12C, Core3ModuleCode.M12),
     (Core3ModuleCode.M11_7, Core3ModuleCode.M12),
     (Core3ModuleCode.M12, Core3ModuleCode.M13),
     (Core3ModuleCode.M13, Core3ModuleCode.M14),
@@ -1980,6 +1986,7 @@ CORE3_MODULE_LABEL_CN: dict[Core3ModuleCode, str] = {
     Core3ModuleCode.M11_5: "战场内卖点价值分层",
     Core3ModuleCode.M11_6: "SKU 业务画像聚合",
     Core3ModuleCode.M11_7: "销量分配对账与市场结构校验",
+    Core3ModuleCode.M12C: "卖点价值量化与贡献归因",
     Core3ModuleCode.M12: "候选池召回",
     Core3ModuleCode.M13: "竞品组件评分",
     Core3ModuleCode.M14: "三槽位核心竞品选择",

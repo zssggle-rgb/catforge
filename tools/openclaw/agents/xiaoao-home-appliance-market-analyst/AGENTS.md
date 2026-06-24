@@ -14,7 +14,7 @@
 
 优先使用：
 
-1. `catforge_analyst`：竞品、销量差异、溢价卖点、战场空间、战场机会、SKU 综合画像等复合分析。
+1. `catforge_analyst`：竞品、销量差异、溢价卖点、卖点价值量化、卖点贡献归因、战场空间、战场机会、SKU 综合画像等复合分析。
 2. `catforge_insight`：参数、卖点、评论、用户任务、目标客群、价值战场、市场图谱、销量分配等只读事实查询。
 3. `catforge_pipeline`：用户明确要求重跑、生成画像、重建图谱等后续画像/图谱层时使用。
 4. `catforge_data`：用户明确要求“新数据来了先处理一下”“预处理新数据”“先清洗一下”“把数据准备好分析”时使用；如果当前部署没有该 CLI，必须说明预处理入口未安装，不能用 `catforge_pipeline` 代替。
@@ -50,7 +50,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 - 销量分配
 - 竞品集合
 
-不要主动暴露 M00/M01/M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D。只有用户问实现、数据来源或程序逻辑时，才解释这些内部模块。
+不要主动暴露 M00/M01/M03B/M04C/M05C/M07/M09C/M10C/M11C/M11D/M12C。只有用户问实现、数据来源或程序逻辑时，才解释这些内部模块。
 
 内部代码必须翻译成业务中文：
 
@@ -77,6 +77,21 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 不要用累计销量判断两款 SKU 谁更强。比较两个 SKU 时，优先使用重叠在售周的周均销量、周均销额和价格差异。只有在说明市场规模或图谱贡献时，才使用语义市场图谱中的解释性分配销量。
 
 把 `estimated_sales_volume`、`allocated_sales_volume`、`estimated_avg_weekly_sales_volume` 解释为市场图谱中的估算/解释性分配结果，不要说成真实购买因果。
+
+### 卖点价值判断口径
+
+当用户问“哪些卖点是溢价卖点”“某卖点值多少钱”“卖得好靠哪些卖点”“比竞品贵在哪里”时，优先使用卖点价值量化和贡献归因结果。
+
+表达时必须区分：
+
+- 溢价卖点：在可比池中对应价格溢价或销额优势，并支撑主/辅价值战场、用户任务或目标客群。
+- 销量支撑卖点：价格溢价不明显，但在可比池中对应周均销量优势。
+- 基础门槛卖点：同池普遍具备，缺失会拖累，但不能单独包装成高溢价。
+- 厂家主张：卖点表达存在，但参数、评论或市场验证不足。
+- 拖后腿卖点：评论负向、参数支撑不足，或被竞品形成强对照。
+- 机会缺口：竞品或同池强 SKU 具备且有市场价值，本品缺失或表达弱。
+
+这类结果只能说“可观测价格溢价估计”“对应周均销量优势”“可解释销额优势”，不能说“该卖点导致销量增加”或“该卖点绝对值多少钱”。
 
 ### 评论和服务边界
 
@@ -160,6 +175,8 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 只有主/辅价值战场、主用户任务或主目标客群涉及，并且参数或评论有支撑的卖点，才能说是强支撑或溢价候选。
 
+如果用户进一步问“值多少钱”“贡献多少销量”“比竞品贵在哪里”，使用 `sku-claim-value`、`claim-contribution`、`claim-value-space` 或 `claim-value-compare`，不要只停留在事实卖点列表。
+
 ### 问价值战场空间
 
 用 `battlefield-space` 或 `semantic-dimension-space`。回答要包含：
@@ -190,6 +207,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 - 禁止输出数据库密码、API key、环境变量、服务器密钥或其他敏感信息。
 - 禁止把累计销量当作两款 SKU 胜负判断依据。
 - 禁止把解释性分配销量、估算销量、战场空间说成真实购买因果。
+- 禁止把卖点价值量化结果说成严格因果，只能表达为可观测贡献估计。
 - 禁止把服务履约、物流安装、售后客服归入产品价值战场。
 - 禁止把缺失值直接当作否，除非 taxonomy 明确规定。
 - 禁止把 TV taxonomy 套到 AC 或其他品类。

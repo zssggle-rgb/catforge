@@ -32,6 +32,9 @@ SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
     ),
     "premium-claim-drivers": (
         "sku-fact-brief",
+        "sku-claim-value",
+        "claim-contribution",
+        "claim-opportunity-gaps",
         "comment-support",
         "opportunity-gaps",
         "semantic-dimension-space",
@@ -275,6 +278,9 @@ class SopOrchestrators:
         if not _ok(fact):
             return _sop_error(command="premium-claim-drivers", context=context, atom_results=[fact], message_cn="溢价卖点分析前未能唯一解析目标 SKU。")
         target_sku = fact["target"]["sku_code"]
+        claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=target_sku, limit=limit)
+        contribution = self.atomic_handlers.claim_contribution(context, sku_code=target_sku, limit=limit)
+        claim_gaps = self.atomic_handlers.claim_opportunity_gaps(context, sku_code=target_sku, limit=limit)
         comment = self.atomic_handlers.comment_support(context, sku_code=target_sku)
         gaps = self.atomic_handlers.opportunity_gaps(context, sku_code=target_sku, limit=limit)
         primary_battlefield_code = _primary_battlefield_code(fact)
@@ -283,20 +289,20 @@ class SopOrchestrators:
             if primary_battlefield_code
             else {}
         )
-        atom_results = [fact, comment, gaps, primary_space]
+        atom_results = [fact, claim_value, contribution, claim_gaps, comment, gaps, primary_space]
         return base_result(
             status=AnalystStatus.OK,
             command="premium-claim-drivers",
             context=context,
             target=fact["target"],
             result={
-                "premium_claim_drivers": _premium_claim_driver_payload(fact, comment, gaps, primary_space),
+                "premium_claim_drivers": _premium_claim_driver_payload(fact, comment, gaps, primary_space, claim_value, contribution, claim_gaps),
             },
             sop_steps=_steps("premium-claim-drivers", atom_results),
             atoms_used=_atoms_used(atom_results),
             evidence=_evidence(atom_results),
             limitations=_limitations(atom_results),
-            answer_outline=["已按事实卖点、评论支撑、主/辅战场和拖后腿信号识别溢价卖点候选、基础卖点和风险卖点。"],
+            answer_outline=["已按 M12C 可观测卖点价值量化、事实卖点、评论支撑、主/辅战场和拖后腿信号识别溢价卖点、销量卖点、基础卖点和风险卖点。"],
         )
 
     def battlefield_space(
@@ -575,6 +581,9 @@ def _premium_claim_driver_payload(
     comment: dict[str, Any],
     gaps: dict[str, Any],
     primary_space: dict[str, Any],
+    claim_value: dict[str, Any] | None = None,
+    contribution: dict[str, Any] | None = None,
+    claim_gaps: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     fact_brief = (fact.get("result") or {}).get("fact_brief") or {}
     sections = fact_brief.get("sections") or {}
@@ -588,11 +597,17 @@ def _premium_claim_driver_payload(
     supported_claim_codes = set(available.get("supported_claim_codes") or [])
     contradicted_claim_codes = set(available.get("contradicted_claim_codes") or [])
     unsupported_claim_codes = set(claim_fact.get("unsupported_claim_codes") or [])
+    claim_value_payload = ((claim_value or {}).get("result") or {}).get("sku_claim_value") or {}
+    contribution_payload = ((contribution or {}).get("result") or {}).get("claim_contribution") or {}
+    claim_gap_payload = ((claim_gaps or {}).get("result") or {}).get("claim_opportunity_gaps") or {}
     return {
         "premium_driver_claim_codes": sorted((fact_claim_codes & supported_claim_codes) - contradicted_claim_codes),
         "basic_support_claim_codes": sorted(fact_claim_codes - supported_claim_codes - contradicted_claim_codes),
         "brand_claim_only_codes": sorted(unsupported_claim_codes),
         "drag_factor_claim_codes": sorted(contradicted_claim_codes),
+        "m12c_quantified_claim_values": claim_value_payload,
+        "m12c_claim_contribution": contribution_payload,
+        "m12c_claim_opportunity_gaps": claim_gap_payload,
         "semantic_context": {
             "primary_battlefield_code": battlefield.get("primary_battlefield_code"),
             "secondary_battlefield_codes": battlefield.get("secondary_battlefield_codes") or [],
@@ -605,7 +620,7 @@ def _premium_claim_driver_payload(
         "comment_support": comment_support,
         "opportunity_gaps": (gaps.get("result") or {}).get("opportunity_gaps") or {},
         "primary_battlefield_space": (primary_space.get("result") or {}) if primary_space else {},
-        "method_note_cn": "当前基于 SKU 级事实卖点、评论支撑和主/辅战场上下文识别溢价卖点候选；逐条卖点到战场贡献的细分映射可在后续增强。",
+        "method_note_cn": "优先采用 M12C 在同尺寸价格带与语义上下文中的可观测卖点价值量化；如 M12C 未生成，则保留事实卖点、评论支撑和主/辅战场交叉结果作为候选判断。",
     }
 
 
