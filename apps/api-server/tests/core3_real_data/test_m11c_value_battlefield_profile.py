@@ -17,6 +17,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     Core3RunStatus,
@@ -39,6 +40,10 @@ SKU_MID = "TV00090002"
 SKU_HIGH = "TV00090003"
 SKU_GIANT_VALUE = "TV00090004"
 SKU_GIANT_FLAGSHIP = "TV00090005"
+AC_BATCH_ID = "m00_202606210012_ac"
+AC_LOW = "AC000LOW"
+AC_MID = "AC000MID"
+AC_HIGH = "AC000HIGH"
 
 
 def test_m11c_ac_value_battlefield_taxonomy_is_published_with_hp_price_gates() -> None:
@@ -89,6 +94,38 @@ def test_m11c_canonical_size_tier_supports_ac_hp_segments() -> None:
     assert _canonical_size_tier(floor_profile) == "floor_hp_3"
 
 
+def test_m11c_single_sku_scope_uses_full_ac_batch_for_hp_price_band() -> None:
+    session = make_session()
+    seed_ac_batch(session)
+
+    result = M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        product_category="AC",
+        taxonomy_version=CORE3_M11C_AC_TAXONOMY_VERSION,
+        rule_version=CORE3_M11C_AC_RULE_VERSION,
+        target_sku_codes=[AC_LOW],
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status in {Core3RunStatus.SUCCESS.value, Core3RunStatus.WARNING.value}
+    assert result.summary_json["sku_count"] == 1
+    assert result.summary_json["size_price_counts"] == {"wall_hp_1_5:low": 1}
+
+    profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(
+            entities.Core3SkuValueBattlefieldProfile.batch_id == AC_BATCH_ID,
+            entities.Core3SkuValueBattlefieldProfile.category_code == "AC",
+            entities.Core3SkuValueBattlefieldProfile.sku_code == AC_LOW,
+        )
+    ).scalar_one()
+    assert profile.size_tier == "wall_hp_1_5"
+    assert profile.price_band_in_size_tier == "low"
+    assert profile.price_percentile_in_size_tier == Decimal("0.0000")
+
+
 def make_session() -> Session:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -122,12 +159,13 @@ def ac_param_profile(
     dimension_tier_profile: dict[str, str],
     installation_type: str,
     horsepower_hp: Decimal,
+    batch_id: str = BATCH_ID,
 ) -> entities.Core3SkuParamProfile:
     return entities.Core3SkuParamProfile(
         sku_param_profile_id=f"param-{sku_code}",
         project_id=PROJECT_ID,
         category_code="AC",
-        batch_id=BATCH_ID,
+        batch_id=batch_id,
         sku_code=sku_code,
         model_name=sku_code,
         param_values_json={
@@ -244,6 +282,119 @@ def seed_foundation(session: Session) -> None:
         session, sku_code=SKU_GIANT_VALUE, model_name="100X-Value", brand_name="海信"
     )
     session.commit()
+
+
+def seed_ac_batch(session: Session) -> None:
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=AC_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=[
+                "week_sales_data",
+                "attribute_data",
+                "selling_points_data",
+                "comment_data",
+            ],
+            ruleset_version="ac-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 21, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    seed_ac_sku(session, AC_LOW, price=Decimal("1500"), volume=Decimal("500"))
+    seed_ac_sku(session, AC_MID, price=Decimal("3000"), volume=Decimal("300"))
+    seed_ac_sku(session, AC_HIGH, price=Decimal("6000"), volume=Decimal("100"))
+    session.commit()
+
+
+def seed_ac_sku(
+    session: Session, sku_code: str, *, price: Decimal, volume: Decimal
+) -> None:
+    amount = price * volume
+    session.add(
+        ac_param_profile(
+            sku_code,
+            dimension_tier_profile={
+                "installation": "wall_mounted",
+                "horsepower": "hp_1_5",
+            },
+            installation_type="wall_mounted",
+            horsepower_hp=Decimal("1.5"),
+            batch_id=AC_BATCH_ID,
+        )
+    )
+    session.add(
+        entities.Core3SkuMarketProfile(
+            profile_id=f"market-profile-{sku_code}",
+            sku_market_profile_id=f"market-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            sku_code=sku_code,
+            model_name=sku_code,
+            brand_name="海信" if sku_code == AC_LOW else "竞品",
+            analysis_window="full_observed_window",
+            active_week_count=4,
+            market_row_count=4,
+            platform_count=1,
+            size_segment="wall_hp_1_5",
+            screen_size_class="wall_hp_1_5",
+            sales_volume_total=volume,
+            sales_amount_total=amount,
+            price_wavg=price,
+            price_median=price,
+            volume_percentile_in_size=Decimal("0.500000"),
+            amount_percentile_in_size=Decimal("0.500000"),
+            market_confidence=Decimal("0.9000"),
+            confidence_level="high",
+            sample_status="sufficient",
+            quality_flags=[],
+            evidence_ids=[f"ev-market-{sku_code}"],
+            rule_version=CORE3_M07_RULE_VERSION,
+            input_fingerprint=f"fp-{sku_code}",
+            result_hash=f"sha256:market-{sku_code}",
+        )
+    )
+    weekly_volume = volume / Decimal("4")
+    weekly_amount = amount / Decimal("4")
+    for week in range(1, 5):
+        session.add(
+            entities.Core3CleanMarketWeekly(
+                project_id=PROJECT_ID,
+                category_code="AC",
+                batch_id=AC_BATCH_ID,
+                source_table="week_sales_data",
+                source_pk=f"ac-market-week-{sku_code}-{week}",
+                source_row_id=f"ac-market-week-{sku_code}-{week}",
+                source_operation_type="insert",
+                sku_code=sku_code,
+                model_name=sku_code,
+                brand_name="海信" if sku_code == AC_LOW else "竞品",
+                period_raw=f"26W{week:02d}",
+                period_type="week",
+                period_week_index=week,
+                channel_type="online",
+                platform_type="test_platform",
+                sales_volume=weekly_volume,
+                sales_amount=weekly_amount,
+                avg_price=price,
+                price_check_status="ok",
+                clean_record_key=f"ac-market-week-{sku_code}-{week}",
+                clean_hash=f"sha256:ac-market-week-{sku_code}-{week}",
+                clean_version="test",
+                hash_version="test",
+                record_status="active",
+                quality_status="ok",
+                quality_flags=[],
+                review_required=False,
+                review_status="auto_pass",
+            )
+        )
 
 
 def seed_sku(

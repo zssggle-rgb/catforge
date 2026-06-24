@@ -1011,8 +1011,25 @@ class M10CService:
             target_sku_codes=target_sku_codes,
         )
         sku_codes = [profile.sku_code for profile in param_profiles]
+        context_param_profiles = param_profiles
+        if target_sku_codes:
+            context_param_profiles = reader.list_param_profiles(
+                batch_id,
+                sku_code_prefix=taxonomy.sku_code_prefix,
+                param_rule_version=fact_versions["param_rule_version"],
+            )
+        context_sku_codes = [profile.sku_code for profile in context_param_profiles]
         market_profiles = _by_sku(reader.list_market_profiles(batch_id, sku_codes))
         market_weekly_rows = reader.list_clean_market_weekly(batch_id, sku_codes)
+        context_market_profiles = market_profiles
+        context_market_weekly_rows = market_weekly_rows
+        if target_sku_codes:
+            context_market_profiles = _by_sku(
+                reader.list_market_profiles(batch_id, context_sku_codes)
+            )
+            context_market_weekly_rows = reader.list_clean_market_weekly(
+                batch_id, context_sku_codes
+            )
         claim_profiles = _by_sku(
             reader.list_claim_profiles(
                 batch_id,
@@ -1049,6 +1066,9 @@ class M10CService:
             claim_facts=claim_facts,
             comment_profiles=comment_profiles,
             comment_facts=comment_facts,
+            context_param_profiles=context_param_profiles,
+            context_market_profiles=context_market_profiles,
+            context_market_weekly_rows=context_market_weekly_rows,
         )
         profiles, scores, coverages, summary = M10CProfileBuilder(
             project_id=self.context.project_id,
@@ -1672,17 +1692,34 @@ def _build_sku_inputs(
     claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
     comment_profiles: Mapping[str, entities.Core3SkuCommentFactProfile],
     comment_facts: Mapping[str, Sequence[entities.Core3CommentFactAtom]],
+    context_param_profiles: Sequence[entities.Core3SkuParamProfile] | None = None,
+    context_market_profiles: Mapping[str, entities.Core3SkuMarketProfile] | None = None,
+    context_market_weekly_rows: Sequence[entities.Core3CleanMarketWeekly] | None = None,
 ) -> list[M10CSkuInput]:
     base_inputs = [
         (profile, _canonical_size_tier(profile)) for profile in param_profiles
     ]
-    price_bands = _derive_price_bands(base_inputs, market_profiles)
+    context_base_inputs = [
+        (profile, _canonical_size_tier(profile))
+        for profile in (context_param_profiles or param_profiles)
+    ]
+    effective_market_profiles = context_market_profiles or market_profiles
+    effective_weekly_rows = (
+        context_market_weekly_rows
+        if context_market_weekly_rows is not None
+        else market_weekly_rows
+    )
+    price_bands = _derive_price_bands(context_base_inputs, effective_market_profiles)
     comparable_market_contexts = _derive_comparable_market_contexts(
-        base_inputs, market_weekly_rows
+        context_base_inputs, effective_weekly_rows
     )
     result: list[M10CSkuInput] = []
     for profile, size_tier in base_inputs:
-        market_profile = market_profiles.get(profile.sku_code)
+        market_profile = market_profiles.get(profile.sku_code) or (
+            context_market_profiles.get(profile.sku_code)
+            if context_market_profiles
+            else None
+        )
         claim_profile = claim_profiles.get(profile.sku_code)
         price_band, percentile = price_bands.get(profile.sku_code, ("unknown", None))
         result.append(
