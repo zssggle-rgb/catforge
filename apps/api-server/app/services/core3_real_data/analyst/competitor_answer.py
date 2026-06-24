@@ -953,6 +953,134 @@ def _claim_value_rows_with_index(payload: dict[str, Any]) -> list[dict[str, Any]
     return _dedupe_claim_value_rows(sorted_rows)
 
 
+def _claim_value_display_rows(rows: list[dict[str, Any]], *, limit: int = 5) -> list[dict[str, Any]]:
+    selected = rows[: max(limit, 0)] if limit else rows
+    grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    order: list[tuple[str, ...]] = []
+    for row in selected:
+        signature = _claim_value_bundle_signature(row)
+        if not signature:
+            signature = (str(row.get("claim_code") or row.get("claim_name") or f"claim-{len(order)}"),)
+        if signature not in grouped:
+            grouped[signature] = []
+            order.append(signature)
+        grouped[signature].append(row)
+    display_rows: list[dict[str, Any]] = []
+    for signature in order:
+        bundle = grouped[signature]
+        display_rows.append(_claim_value_bundle_row(bundle) if len(bundle) > 1 else bundle[0])
+    return display_rows
+
+
+def _claim_value_bundle_signature(row: dict[str, Any]) -> tuple[str, ...] | None:
+    pool = row.get("pool_effect") or {}
+    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+    metric_keys = (
+        _claim_value_metric_key(pool.get("pool_claim_price_delta_abs")),
+        _claim_value_metric_key(pool.get("pool_claim_weekly_sales_delta_abs")),
+        _claim_value_metric_key(pool.get("pool_claim_weekly_sales_amount_delta_abs")),
+        _claim_value_metric_key(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")),
+        _claim_value_metric_key(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")),
+    )
+    if not any(metric_keys):
+        return None
+    return (
+        _base_claim_value_label(str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))),
+        str(row.get("context_type") or ""),
+        str(row.get("context_code") or ""),
+        str(row.get("size_tier") or ""),
+        str(row.get("price_band_group") or ""),
+        *metric_keys,
+    )
+
+
+def _claim_value_metric_key(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return str(number.quantize(Decimal("0.0001")))
+
+
+def _claim_value_bundle_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    first = dict(rows[0])
+    names = [_claim_value_name(row) for row in rows]
+    base_label = _base_claim_value_label(str(first.get("business_value_label") or _claim_role_cn(first.get("claim_value_role"))))
+    pool = first.get("pool_effect") or {}
+    sku_excess = {
+        "sku_excess_price_explained_abs": _sum_claim_metric(rows, "sku_excess_explanation", "sku_excess_price_explained_abs", "estimated_contribution", "price_premium_abs"),
+        "sku_excess_weekly_sales_explained_abs": _sum_claim_metric(rows, "sku_excess_explanation", "sku_excess_weekly_sales_explained_abs", "estimated_contribution", "weekly_sales_lift_abs"),
+        "sku_excess_weekly_sales_amount_explained_abs": _sum_claim_metric(rows, "sku_excess_explanation", "sku_excess_weekly_sales_amount_explained_abs", "estimated_contribution", "weekly_sales_amount_lift_abs"),
+        "contribution_share_in_sku": _sum_claim_metric(rows, "sku_excess_explanation", "contribution_share_in_sku", "estimated_contribution", "contribution_share_in_sku"),
+    }
+    first.update(
+        {
+            "claim_name": f"{_join_cn(names)}（组合）",
+            "display_claim_names": names,
+            "bundle_claim_count": len(rows),
+            "bundle_rows": rows,
+            "business_value_label": f"{base_label}组合",
+            "market_contexts": _claim_value_bundle_contexts(rows),
+            "pool_effect": pool,
+            "sku_excess_explanation": sku_excess,
+            "estimated_contribution": {
+                "price_premium_abs": sku_excess["sku_excess_price_explained_abs"],
+                "weekly_sales_lift_abs": sku_excess["sku_excess_weekly_sales_explained_abs"],
+                "weekly_sales_amount_lift_abs": sku_excess["sku_excess_weekly_sales_amount_explained_abs"],
+                "contribution_share_in_sku": sku_excess["contribution_share_in_sku"],
+            },
+            "evidence_strength": _claim_value_bundle_evidence(rows),
+        }
+    )
+    return first
+
+
+def _sum_claim_metric(
+    rows: list[dict[str, Any]],
+    primary_container: str,
+    primary_key: str,
+    fallback_container: str,
+    fallback_key: str,
+) -> Decimal:
+    total = Decimal("0")
+    for row in rows:
+        primary = row.get(primary_container) or {}
+        fallback = row.get(fallback_container) or {}
+        number = _decimal(primary.get(primary_key))
+        if number is None:
+            number = _decimal(fallback.get(fallback_key))
+        if number is not None:
+            total += number
+    return total
+
+
+def _claim_value_bundle_contexts(rows: list[dict[str, Any]]) -> list[str]:
+    contexts: list[str] = []
+    for row in rows:
+        for context in [*_listify(row.get("market_contexts")), _claim_context_text(row)]:
+            text = str(context or "").strip()
+            if text and text not in contexts:
+                contexts.append(text)
+    return contexts
+
+
+def _claim_value_bundle_evidence(rows: list[dict[str, Any]]) -> dict[str, float]:
+    result: dict[str, float] = {}
+    for key in ("claim", "param", "comment", "semantic"):
+        values = [_decimal((row.get("evidence_strength") or {}).get(key)) for row in rows]
+        numbers = [value for value in values if value is not None]
+        if numbers:
+            result[key] = float(min(numbers))
+    return result
+
+
+def _listify(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _base_claim_value_label(label: str) -> str:
+    return label[:-2] if label.endswith("组合") else label
+
+
 def _dedupe_claim_value_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -997,6 +1125,8 @@ def _ratio_score(value: Decimal, denominator: Decimal, weight: Decimal) -> Decim
 
 
 def _claim_value_name(row: dict[str, Any]) -> str:
+    if row.get("bundle_claim_count"):
+        return str(row.get("claim_name") or "卖点组合")
     return str(row.get("claim_name") or _label_code(row.get("claim_code")) or "未命名卖点")
 
 
@@ -1005,6 +1135,9 @@ def _claim_role_cn(value: Any) -> str:
 
 
 def _claim_business_meaning(label: str) -> str:
+    if label.endswith("组合"):
+        base_label = _base_claim_value_label(label)
+        return f"多项卖点在同一可比市场中共同成立，适合作为组合支付理由；{_claim_business_meaning(base_label)}"
     return {
         "强溢价卖点": "可比产品中具备该卖点的一组 SKU 价格更高，能支撑更高定价解释",
         "强销量卖点": "价格不一定更高，但更能解释可比产品中的周均销量或销额优势",
@@ -1024,7 +1157,7 @@ def _claim_rows_by_role(rows: list[dict[str, Any]], *roles: str) -> list[dict[st
 
 def _claim_rows_by_business_label(rows: list[dict[str, Any]], *labels: str) -> list[dict[str, Any]]:
     label_set = set(labels)
-    return [row for row in rows if str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))) in label_set]
+    return [row for row in rows if _base_claim_value_label(str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))) in label_set]
 
 
 def _claim_index_text(rows: list[dict[str, Any]], *, limit: int = 3) -> str:
@@ -1125,6 +1258,11 @@ def _claim_value_footnote() -> str:
 
 def _claim_value_reason_text(row: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+    if row.get("bundle_claim_count"):
+        return (
+            f"{_claim_value_name(row)}共享同一可比市场中的量价差异，适合作为{_base_claim_value_label(label)}的组合解释；"
+            "报告按组合展示，避免把同一组市场差异重复拆给每个单独卖点。"
+        )
     reason = str(row.get("reason_cn") or "").strip()
     if reason and "价格溢价约" not in reason and "估算价格支撑" not in reason:
         return reason.replace("估算溢价卖点", "强溢价卖点").replace("估算销量卖点", "强销量卖点")
@@ -1133,7 +1271,7 @@ def _claim_value_reason_text(row: dict[str, Any]) -> str:
 
 def _claim_pool_price_text(row: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-    if label in {"拖后腿卖点", "用户感知不足卖点"}:
+    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点"}:
         return "不作为价格支撑"
     pool = row.get("pool_effect") or {}
     return _format_money(pool.get("pool_claim_price_delta_abs")) or "未知"
@@ -1151,14 +1289,14 @@ def _claim_pool_amount_text(value: Any) -> str:
 
 def _claim_sku_excess_price_text(row: dict[str, Any], sku_excess: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-    if label in {"拖后腿卖点", "用户感知不足卖点"}:
+    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点"}:
         return ""
     return _format_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "0元"
 
 
 def _claim_sku_excess_sales_text(row: dict[str, Any], sku_excess: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-    if label in {"拖后腿卖点", "用户感知不足卖点"}:
+    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点"}:
         return ""
     formatted = _format_unit_count(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs"))
     return f"{formatted}台/周" if formatted else "0台/周"
@@ -1186,7 +1324,10 @@ def _claim_evidence_status_text(row: dict[str, Any]) -> str:
         level = _evidence_level_cn(evidence.get(key))
         if level:
             parts.append(f"{label}{level}")
-    return "，".join(parts) or "证据待补充"
+    text = "，".join(parts) or "证据待补充"
+    if row.get("bundle_claim_count"):
+        return f"{row.get('bundle_claim_count')}个卖点组合；{text}"
+    return text
 
 
 def _evidence_level_cn(value: Any) -> str:
@@ -1223,7 +1364,7 @@ def _claim_value_business_notes(rows: list[dict[str, Any]]) -> list[str]:
 def _claim_value_action_lines(rows: list[dict[str, Any]]) -> list[str]:
     by_label: dict[str, list[str]] = {}
     for row in rows:
-        label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+        label = _base_claim_value_label(str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))))
         by_label.setdefault(label, []).append(_claim_value_name(row))
     actions: list[str] = []
     premium = by_label.get("强溢价卖点", [])
@@ -1268,24 +1409,25 @@ def _claim_value_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     claim_value_rows = _claim_value_rows_with_index(product.get("claim_value") or {})
     if not claim_value_rows:
         return {"Top5 核心卖点商业价值": "卖点价值量化待生成"}
-    premium_rows = _claim_rows_by_business_label(claim_value_rows, "强溢价卖点")
-    sales_rows = _claim_rows_by_business_label(claim_value_rows, "强销量卖点")
-    bundle_rows = _claim_rows_by_business_label(claim_value_rows, "组合型增值卖点")
-    basic_rows = _claim_rows_by_business_label(claim_value_rows, "基础门槛卖点")
-    weak_rows = _claim_rows_by_business_label(claim_value_rows, "用户感知不足卖点", "拖后腿卖点")
-    intercept_rows = _claim_rows_by_business_label(claim_value_rows, "高价竞品拦截卖点", "价格上探机会卖点", "机会缺口")
+    top_display_rows = _claim_value_display_rows(claim_value_rows, limit=5)
+    premium_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "强溢价卖点"), limit=5)
+    sales_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "强销量卖点"), limit=5)
+    bundle_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "组合型增值卖点"), limit=5)
+    basic_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "基础门槛卖点"), limit=5)
+    weak_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "用户感知不足卖点", "拖后腿卖点"), limit=5)
+    intercept_rows = _claim_value_display_rows(_claim_rows_by_business_label(claim_value_rows, "高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"), limit=5)
     return {
-        "Top5 核心卖点商业价值": _claim_value_top_text(claim_value_rows, limit=5),
+        "Top5 核心卖点商业价值": _claim_value_top_text(top_display_rows, limit=5),
         "价格溢价卖点": _claim_value_label_text(premium_rows),
         "销量驱动卖点": _claim_value_label_text(sales_rows),
         "基础门槛卖点": _claim_value_label_text(basic_rows),
         "组合型增值卖点": _claim_value_label_text(bundle_rows),
         "竞品拦截与补强建议": _claim_value_label_text([*intercept_rows, *weak_rows]),
-        "卖点有效市场": _claim_effective_market_text(claim_value_rows),
-        "可比产品价格差异": _claim_value_pool_price_delta_text(claim_value_rows),
-        "可比产品销量差异": _claim_value_pool_sales_delta_text(claim_value_rows),
-        "本品可解释价差份额": _claim_value_sku_price_explain_text(claim_value_rows),
-        "证据支撑强度": _claim_value_evidence_summary_text(claim_value_rows),
+        "卖点有效市场": _claim_effective_market_text(top_display_rows),
+        "可比产品价格差异": _claim_value_pool_price_delta_text(top_display_rows),
+        "可比产品销量差异": _claim_value_pool_sales_delta_text(top_display_rows),
+        "本品可解释价差份额": _claim_value_sku_price_explain_text(top_display_rows),
+        "证据支撑强度": _claim_value_evidence_summary_text(top_display_rows),
     }
 
 
@@ -1457,7 +1599,7 @@ def _product_claim_value_quantification_lines(
         "| 排名 | 卖点 | 业务类型 | 业务含义 | 卖点有效市场 | 可比产品价格差异 | 可比产品销量差异 | 可比产品销额差异 | 本品可解释价差份额 | 本品可解释销量差份额 | 证据支撑强度 | 业务解释 |",
         "| ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    top_rows = claim_rows[:5]
+    top_rows = _claim_value_display_rows(claim_rows, limit=5)
     for index, row in enumerate(top_rows, start=1):
         pool = row.get("pool_effect") or {}
         sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
@@ -1486,7 +1628,7 @@ def _product_claim_value_quantification_lines(
     attribution_lines = _claim_contribution_profile_lines(attribution_payload)
     lines.extend(["", _claim_value_footnote()])
     lines.extend(["", *_claim_value_business_notes(top_rows)])
-    action_lines = _claim_value_action_lines(claim_rows)
+    action_lines = _claim_value_action_lines(_claim_value_display_rows(claim_rows, limit=10))
     if action_lines:
         lines.extend(["", "竞品拦截与补强建议：", "", *action_lines])
     if attribution_lines:

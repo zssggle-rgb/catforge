@@ -1802,6 +1802,56 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "MiniLED" in text
 
 
+def test_claim_value_report_groups_shared_pool_metrics_as_value_bundle() -> None:
+    shared_pool = {
+        "pool_claim_price_delta_abs": 500,
+        "pool_claim_weekly_sales_delta_abs": 30,
+        "pool_claim_weekly_sales_amount_delta_abs": 150000,
+    }
+    rows = []
+    for claim_code, claim_name in [
+        ("tv_claim_hdmi21_connectivity", "HDMI2.1 连接"),
+        ("tv_claim_eye_care_display", "护眼显示"),
+        ("tv_claim_dolby_audio_video", "杜比/影音认证"),
+    ]:
+        rows.append(
+            {
+                "claim_code": claim_code,
+                "claim_name": claim_name,
+                "claim_value_role": "premium_driver_estimated",
+                "business_value_label": "强溢价卖点",
+                "context_type": "target_group",
+                "context_code": "TG_PREMIUM_AV_ENTHUSIAST",
+                "context_name": "高端影音体验用户",
+                "size_tier": "65",
+                "price_band_group": "high",
+                "pool_effect": shared_pool,
+                "sku_excess_explanation": {
+                    "sku_excess_price_explained_abs": 50,
+                    "sku_excess_weekly_sales_explained_abs": 6,
+                    "sku_excess_weekly_sales_amount_explained_abs": 20000,
+                    "contribution_share_in_sku": 0.12,
+                },
+                "evidence_strength": {"param": 1.0, "comment": 0.9, "semantic": 0.8},
+                "attribution_confidence": 0.8,
+            }
+        )
+
+    markdown = "\n".join(
+        competitor_answer._product_claim_value_quantification_lines(
+            claim_value={"claim_values": rows},
+            claim_contribution={},
+        )
+    )
+
+    data_rows = [line for line in markdown.splitlines() if line.startswith("| ") and not line.startswith("| 排名") and not line.startswith("| ---")]
+    assert len(data_rows) == 1
+    assert "HDMI2.1 连接、护眼显示和杜比/影音认证（组合）" in data_rows[0]
+    assert "强溢价卖点组合" in data_rows[0]
+    assert "500元 | 30台/周 | 150,000元/周 | 150元 | 18台/周" in data_rows[0]
+    assert "共享同一可比市场中的量价差异" in markdown
+
+
 def test_claim_value_space_returns_dimension_summary() -> None:
     session = make_session()
     result = catforge_analyst.claim_value_space(
