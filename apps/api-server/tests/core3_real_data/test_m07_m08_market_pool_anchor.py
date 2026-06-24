@@ -2,16 +2,18 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from app.services.core3_real_data.constants import M07AnalysisWindow, M07SampleStatus, M08ForModule
-from app.services.core3_real_data.market_profile_schemas import M07SkuMarketMetrics
+from app.services.core3_real_data.market_profile_schemas import M07MarketInputRow, M07SkuMarketMetrics
 from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
     _market_size_class,
     _market_pool_key,
     _observed_window_sample_status,
     _quality_flags,
+    _rows_for_window,
     _screen_size_class,
     _select_screen_size_param_value,
     _size_segment,
+    _trend_metrics,
 )
 from app.services.core3_real_data.sku_signal_profile_schemas import M08SkuSignalProfileRecord
 from app.services.core3_real_data.sku_signal_profile_service import _business_signal_index, _view_payload
@@ -44,6 +46,20 @@ def _metric(
         main_channel_type="线上",
         input_fingerprint=f"input-{sku_code}",
         result_hash=f"hash-{sku_code}",
+    )
+
+
+def _market_row(sku_code: str, week: int, volume: str, amount: str) -> M07MarketInputRow:
+    return M07MarketInputRow(
+        clean_market_id=f"clean-{sku_code}-{week}",
+        sku_code=sku_code,
+        period_week_index=week,
+        channel_type="线上",
+        platform_type="平台电商",
+        sales_volume=Decimal(volume),
+        sales_amount=Decimal(amount),
+        avg_price=Decimal(amount) / Decimal(volume) if Decimal(volume) else None,
+        clean_hash=f"hash-{sku_code}-{week}",
     )
 
 
@@ -256,14 +272,58 @@ def test_m07_late_launch_complete_recent_window_is_sufficient() -> None:
     )
     assert (
         _observed_window_sample_status(
-            active_week_count=1,
+            active_week_count=0,
             has_rows=True,
             analysis_window=M07AnalysisWindow.RECENT_4W,
             first_week=21,
             global_latest_week=24,
         )
-        == M07SampleStatus.INSUFFICIENT
+        == M07SampleStatus.SUFFICIENT
     )
+
+
+def test_m07_latest_week_uses_global_week_and_missing_sales_is_zero() -> None:
+    rows = [_market_row("AC-LATE", 23, "12", "35988")]
+
+    assert _rows_for_window(rows, M07AnalysisWindow.LATEST_WEEK, 24) == []
+    assert (
+        _observed_window_sample_status(
+            active_week_count=0,
+            has_rows=True,
+            analysis_window=M07AnalysisWindow.LATEST_WEEK,
+            first_week=24,
+            global_latest_week=24,
+        )
+        == M07SampleStatus.SUFFICIENT
+    )
+
+
+def test_m07_trend_treats_missing_sales_weeks_as_zero() -> None:
+    trend = _trend_metrics([_market_row("AC-LATE", 17, "10", "29990")], global_latest_week=24)
+
+    assert trend["sales_growth_recent_4w"] == Decimal("-1.000000")
+    assert trend["amount_growth_recent_4w"] == Decimal("-1.000000")
+    assert trend["quality_flags"] == []
+
+
+def test_m07_zero_sales_window_is_not_price_or_platform_missing() -> None:
+    flags = _quality_flags(
+        rows=[],
+        all_rows=[_market_row("AC-LATE", 20, "8", "23992")],
+        size_input=SimpleNamespace(size_segment="wall_hp_1_5"),
+        global_week_count=8,
+        latest_week_gap=4,
+        trend={},
+        channel_share={},
+        platform_share={},
+        price_wavg=None,
+        sales_volume_total=Decimal("0"),
+        has_market_history=True,
+        product_category="AC",
+    )
+
+    assert "price_missing" not in flags
+    assert "platform_missing" not in flags
 
 
 def test_m07_online_current_year_scope_is_not_execution_warning() -> None:
@@ -313,7 +373,7 @@ def test_m07_short_window_missing_price_is_quality_note_not_execution_warning() 
     assert service._warnings([full_profile, short_window_profile], []) == []
     assert service._quality_notes([full_profile, short_window_profile], []) == [
         "部分 SKU 在自身可观测期内周样本不完整，相关市场趋势和增长判断低置信使用。",
-        "部分 SKU 在短周期窗口无成交价格，短周期趋势低置信使用，全量观察窗口仍可用于市场基线。",
+        "部分 SKU 在短周期窗口无可计算成交价格；零销量周按 0 销量处理，不作为销量样本缺失。",
     ]
 
 
