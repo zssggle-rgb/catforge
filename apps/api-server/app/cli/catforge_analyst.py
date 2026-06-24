@@ -1315,6 +1315,20 @@ def _price_band_cn(value: Any) -> str:
     return mapping.get(str(value or "").lower(), "")
 
 
+def _claim_role_cn(value: Any) -> str:
+    mapping = {
+        "premium_driver_estimated": "溢价卖点",
+        "sales_driver_estimated": "销量支撑卖点",
+        "basic_threshold": "基础门槛卖点",
+        "user_validated_need": "用户验证需求",
+        "brand_claim_only": "厂家主张卖点",
+        "opportunity_gap": "机会缺口",
+        "drag_factor": "拖后腿卖点",
+        "sample_insufficient": "样本不足待复核",
+    }
+    return mapping.get(str(value or ""), str(value or "未分类"))
+
+
 def _format_money(value: Any) -> str:
     number = _decimal(value)
     if number is None:

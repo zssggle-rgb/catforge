@@ -1723,6 +1723,25 @@ def test_sku_claim_value_uses_query_only_for_sku_resolution() -> None:
     }
 
 
+def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_claim_value(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q",
+        limit=2,
+    )
+
+    text = catforge_analyst.format_business_text(result)
+
+    assert "溢价卖点" in text
+    assert "销量支撑卖点" in text
+    assert "MiniLED" in text
+
+
 def test_claim_value_space_returns_dimension_summary() -> None:
     session = make_session()
     result = catforge_analyst.claim_value_space(
