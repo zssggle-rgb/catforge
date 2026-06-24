@@ -516,7 +516,7 @@ class AtomicAnalystHandlers:
             market_window=context.market_window,
             analysis_population=context.analysis_population,
             claim_code=claim_code,
-            query=query,
+            query=None,
             context_type=dimension_type,
             context_code=dimension_code,
             size_tier=size_tier,

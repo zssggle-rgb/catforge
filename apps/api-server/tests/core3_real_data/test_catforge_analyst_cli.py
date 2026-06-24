@@ -1702,6 +1702,27 @@ def test_sku_claim_value_returns_m12c_quantified_roles() -> None:
     assert top_claim["estimated_contribution"]["price_premium_abs"] == 280.0
 
 
+def test_sku_claim_value_uses_query_only_for_sku_resolution() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_claim_value(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["sku_code"] == "TV00029112"
+    payload = result["result"]["sku_claim_value"]
+    assert payload["role_counts"]["premium_driver_estimated"] == 1
+    assert {item["claim_code"] for item in payload["claim_values"]} >= {
+        "tv_claim_miniled",
+        "tv_claim_high_refresh_rate",
+    }
+
+
 def test_claim_value_space_returns_dimension_summary() -> None:
     session = make_session()
     result = catforge_analyst.claim_value_space(
