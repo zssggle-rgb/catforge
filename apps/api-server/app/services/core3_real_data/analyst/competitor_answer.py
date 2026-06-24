@@ -843,22 +843,6 @@ def _semantic_performance_with_label(rows: list[tuple[str, str, str, str]], code
     return f"{prefix}{_semantic_sku_performance_text(position)}"
 
 
-def _extract_claim_value_payload(value: dict[str, Any] | None) -> dict[str, Any]:
-    payload = value or {}
-    result_payload = (payload.get("result") or {}) if isinstance(payload, dict) else {}
-    if isinstance(result_payload, dict) and isinstance(result_payload.get("sku_claim_value"), dict):
-        return result_payload["sku_claim_value"]
-    return payload if isinstance(payload, dict) and ("claim_values" in payload or "attributions" in payload) else {}
-
-
-def _extract_claim_contribution_payload(value: dict[str, Any] | None) -> dict[str, Any]:
-    payload = value or {}
-    result_payload = (payload.get("result") or {}) if isinstance(payload, dict) else {}
-    if isinstance(result_payload, dict) and isinstance(result_payload.get("claim_contribution"), dict):
-        return result_payload["claim_contribution"]
-    return payload if isinstance(payload, dict) and "attributions" in payload else {}
-
-
 def _extract_claim_value_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(payload, dict) or not payload:
         return {}
