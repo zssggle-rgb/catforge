@@ -206,6 +206,28 @@ PRICE_BAND_NAMES = {
 
 INDEX_CN = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"]
 
+CLAIM_VALUE_ROLE_CN = {
+    "premium_driver_estimated": "溢价卖点",
+    "sales_driver_estimated": "销量支撑卖点",
+    "basic_threshold": "基础门槛卖点",
+    "user_validated_need": "用户验证需求",
+    "brand_claim_only": "厂家主张卖点",
+    "opportunity_gap": "机会缺口",
+    "drag_factor": "拖后腿卖点",
+    "sample_insufficient": "样本不足待复核",
+}
+
+CLAIM_VALUE_ROLE_BASE = {
+    "premium_driver_estimated": Decimal("70"),
+    "sales_driver_estimated": Decimal("60"),
+    "basic_threshold": Decimal("35"),
+    "user_validated_need": Decimal("45"),
+    "brand_claim_only": Decimal("25"),
+    "opportunity_gap": Decimal("30"),
+    "drag_factor": Decimal("15"),
+    "sample_insufficient": Decimal("10"),
+}
+
 
 @dataclass(frozen=True)
 class ReportPublishResult:
@@ -218,6 +240,8 @@ def build_competitor_answer(
     *,
     target: dict[str, Any],
     target_fact_brief: dict[str, Any],
+    target_claim_value: dict[str, Any] | None = None,
+    target_claim_contribution: dict[str, Any] | None = None,
     competitors: list[dict[str, Any]],
     top_n: int = 3,
     max_chat_chars: int = 600,
@@ -234,6 +258,8 @@ def build_competitor_answer(
         title=title,
         target=target,
         target_fact_brief=target_fact_brief,
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
         top_competitors=top_competitors,
         all_competitors=enriched,
     )
@@ -359,6 +385,8 @@ def render_competitor_report(
     title: str,
     target: dict[str, Any],
     target_fact_brief: dict[str, Any],
+    target_claim_value: dict[str, Any] | None = None,
+    target_claim_contribution: dict[str, Any] | None = None,
     top_competitors: list[dict[str, Any]],
     all_competitors: list[dict[str, Any]],
 ) -> str:
@@ -399,9 +427,28 @@ def render_competitor_report(
     for index, item in enumerate(top_competitors[:3], start=1):
         lines.append(f"- [{_display_name(item.get('candidate') or {})} 产品画像](#profile-competitor-{index})")
     lines.extend(["", "## 四、四个产品横向详细对比", ""])
-    lines.extend(_product_comparison_lines(target_name, target, target_sections, top_competitors[:3]))
+    lines.extend(
+        _product_comparison_lines(
+            target_name,
+            target,
+            target_sections,
+            target_claim_value=target_claim_value,
+            target_claim_contribution=target_claim_contribution,
+            top_competitors=top_competitors[:3],
+        )
+    )
     lines.extend(["", '<a id="profile-target"></a>', f"## 五、{target_name} 产品画像", ""])
-    lines.extend(_product_profile_lines("5", target_name, target, target_sections, competitor_item=None))
+    lines.extend(
+        _product_profile_lines(
+            "5",
+            target_name,
+            target,
+            target_sections,
+            competitor_item=None,
+            claim_value=target_claim_value,
+            claim_contribution=target_claim_contribution,
+        )
+    )
     for index, item in enumerate(top_competitors[:3], start=1):
         candidate = item.get("candidate") or {}
         candidate_name = _display_name(candidate)
@@ -414,7 +461,17 @@ def render_competitor_report(
                 "",
             ]
         )
-        lines.extend(_product_profile_lines(str(index + 5), candidate_name, candidate, candidate_sections, competitor_item=item))
+        lines.extend(
+            _product_profile_lines(
+                str(index + 5),
+                candidate_name,
+                candidate,
+                candidate_sections,
+                competitor_item=item,
+                claim_value=item.get("candidate_claim_value") or {},
+                claim_contribution=item.get("candidate_claim_contribution") or {},
+            )
+        )
     return "\n".join(lines)
 
 
@@ -577,9 +634,19 @@ def _product_comparison_lines(
     target_name: str,
     target: dict[str, Any],
     target_sections: dict[str, Any],
+    *,
+    target_claim_value: dict[str, Any] | None,
+    target_claim_contribution: dict[str, Any] | None,
     top_competitors: list[dict[str, Any]],
 ) -> list[str]:
-    products = _comparison_products(target_name, target, target_sections, top_competitors)
+    products = _comparison_products(
+        target_name,
+        target,
+        target_sections,
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
+        top_competitors=top_competitors,
+    )
     lines: list[str] = [
         "本节把本品和前三重点竞品放在同一张业务比较表里：纵轴是比较内容，横轴是四个产品，重点看同一购买池中的市场位置、价值战场、用户任务、目标客群、卖点和参数证据差异。",
         "",
@@ -594,7 +661,13 @@ def _product_comparison_lines(
     lines.extend(["", "### 4.4 目标客群画像", ""])
     lines.extend(_comparison_table_lines(products, ["命中的固定目标客群", "主目标客群", "辅目标客群", "补充证据判断", "主目标客群市场空间", "本品在主客群销量承接", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="group")))
     lines.extend(["", "### 4.5 卖点画像", ""])
-    lines.extend(_comparison_table_lines(products, ["事实卖点", "溢价卖点", "基础支撑卖点", "拖后腿卖点", "需复核表达", "共同价值锚点"], _claim_comparison_values))
+    lines.extend(
+        _comparison_table_lines(
+            products,
+            ["事实卖点", "卖点溢价指数 Top", "溢价卖点", "销量支撑卖点", "可观测价格支撑", "可观测销量支撑", "基础支撑卖点", "拖后腿卖点", "机会缺口", "需复核表达", "共同价值锚点"],
+            _claim_comparison_values,
+        )
+    )
     lines.extend(["", "### 4.6 参数画像", ""])
     lines.extend(
         _comparison_table_lines(
@@ -610,9 +683,21 @@ def _comparison_products(
     target_name: str,
     target: dict[str, Any],
     target_sections: dict[str, Any],
+    *,
+    target_claim_value: dict[str, Any] | None,
+    target_claim_contribution: dict[str, Any] | None,
     top_competitors: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    products = [{"name": target_name, "sku": target, "sections": target_sections, "competitor_item": None}]
+    products = [
+        {
+            "name": target_name,
+            "sku": target,
+            "sections": target_sections,
+            "competitor_item": None,
+            "claim_value": _extract_claim_value_payload(target_claim_value),
+            "claim_contribution": _extract_claim_contribution_payload(target_claim_contribution),
+        }
+    ]
     for item in top_competitors[:3]:
         candidate = item.get("candidate") or {}
         products.append(
@@ -621,6 +706,8 @@ def _comparison_products(
                 "sku": candidate,
                 "sections": _fact_sections(item.get("candidate_fact_brief") or {}),
                 "competitor_item": item,
+                "claim_value": _extract_claim_value_payload(item.get("candidate_claim_value") or {}),
+                "claim_contribution": _extract_claim_contribution_payload(item.get("candidate_claim_contribution") or {}),
             }
         )
     return products
@@ -756,6 +843,130 @@ def _semantic_performance_with_label(rows: list[tuple[str, str, str, str]], code
     return f"{prefix}{_semantic_sku_performance_text(position)}"
 
 
+def _extract_claim_value_payload(value: dict[str, Any] | None) -> dict[str, Any]:
+    payload = value or {}
+    result_payload = (payload.get("result") or {}) if isinstance(payload, dict) else {}
+    if isinstance(result_payload, dict) and isinstance(result_payload.get("sku_claim_value"), dict):
+        return result_payload["sku_claim_value"]
+    return payload if isinstance(payload, dict) and ("claim_values" in payload or "attributions" in payload) else {}
+
+
+def _extract_claim_contribution_payload(value: dict[str, Any] | None) -> dict[str, Any]:
+    payload = value or {}
+    result_payload = (payload.get("result") or {}) if isinstance(payload, dict) else {}
+    if isinstance(result_payload, dict) and isinstance(result_payload.get("claim_contribution"), dict):
+        return result_payload["claim_contribution"]
+    return payload if isinstance(payload, dict) and "attributions" in payload else {}
+
+
+def _extract_claim_value_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(payload, dict) or not payload:
+        return {}
+    result = payload.get("result")
+    if isinstance(result, dict):
+        nested = result.get("sku_claim_value")
+        return nested if isinstance(nested, dict) else {}
+    nested = payload.get("sku_claim_value")
+    if isinstance(nested, dict):
+        return nested
+    if isinstance(payload.get("claim_values"), list) or isinstance(payload.get("role_counts"), dict):
+        return payload
+    return {}
+
+
+def _extract_claim_contribution_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(payload, dict) or not payload:
+        return {}
+    result = payload.get("result")
+    if isinstance(result, dict):
+        nested = result.get("claim_contribution")
+        return nested if isinstance(nested, dict) else {}
+    nested = payload.get("claim_contribution")
+    if isinstance(nested, dict):
+        return nested
+    if isinstance(payload.get("attributions"), list):
+        return payload
+    return {}
+
+
+def _claim_value_rows_with_index(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = [dict(row) for row in payload.get("claim_values") or [] if isinstance(row, dict)]
+    if not rows:
+        return []
+    max_price = max([_positive_decimal(((row.get("estimated_contribution") or {}).get("price_premium_abs"))) for row in rows] or [Decimal("0")])
+    max_sales = max([_positive_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_lift_abs"))) for row in rows] or [Decimal("0")])
+    max_amount = max([_positive_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs"))) for row in rows] or [Decimal("0")])
+    for row in rows:
+        contribution = row.get("estimated_contribution") or {}
+        role = str(row.get("claim_value_role") or "")
+        price_score = _ratio_score(_positive_decimal(contribution.get("price_premium_abs")), max_price, Decimal("15"))
+        sales_score = _ratio_score(_positive_decimal(contribution.get("weekly_sales_lift_abs")), max_sales, Decimal("10"))
+        amount_score = _ratio_score(_positive_decimal(contribution.get("weekly_sales_amount_lift_abs")), max_amount, Decimal("10"))
+        share_score = min(_positive_decimal(contribution.get("contribution_share_in_sku")), Decimal("1")) * Decimal("10")
+        confidence_score = min(_positive_decimal(row.get("attribution_confidence")), Decimal("1")) * Decimal("5")
+        score = CLAIM_VALUE_ROLE_BASE.get(role, Decimal("10")) + price_score + sales_score + amount_score + share_score + confidence_score
+        row["claim_premium_index"] = int(min(Decimal("100"), max(Decimal("0"), score)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return sorted(
+        rows,
+        key=lambda row: (
+            -int(row.get("claim_premium_index") or 0),
+            str(row.get("claim_name") or row.get("claim_code") or ""),
+        ),
+    )
+
+
+def _positive_decimal(value: Any) -> Decimal:
+    number = _decimal(value)
+    if number is None:
+        return Decimal("0")
+    return max(number, Decimal("0"))
+
+
+def _ratio_score(value: Decimal, denominator: Decimal, weight: Decimal) -> Decimal:
+    if denominator <= 0:
+        return Decimal("0")
+    return min(Decimal("1"), value / denominator) * weight
+
+
+def _claim_value_name(row: dict[str, Any]) -> str:
+    return str(row.get("claim_name") or _label_code(row.get("claim_code")) or "未命名卖点")
+
+
+def _claim_role_cn(value: Any) -> str:
+    return CLAIM_VALUE_ROLE_CN.get(str(value or ""), str(value or "未分类"))
+
+
+def _claim_rows_by_role(rows: list[dict[str, Any]], *roles: str) -> list[dict[str, Any]]:
+    role_set = set(roles)
+    return [row for row in rows if str(row.get("claim_value_role") or "") in role_set]
+
+
+def _claim_index_text(rows: list[dict[str, Any]], *, limit: int = 3) -> str:
+    if not rows:
+        return ""
+    return "；".join(f"{_claim_value_name(row)} {row.get('claim_premium_index')}" for row in rows[:limit])
+
+
+def _claim_money_text(rows: list[dict[str, Any]], *, limit: int = 3) -> str:
+    values = []
+    for row in rows[:limit]:
+        price = ((row.get("estimated_contribution") or {}).get("price_premium_abs"))
+        values.append(f"{_claim_value_name(row)}约{_format_money(price) or '0元'}")
+    return "；".join(values)
+
+
+def _claim_sales_text(rows: list[dict[str, Any]], *, limit: int = 3) -> str:
+    values = []
+    for row in rows[:limit]:
+        sales = ((row.get("estimated_contribution") or {}).get("weekly_sales_lift_abs"))
+        values.append(f"{_claim_value_name(row)}约{_format_unit_count(sales) or '0'}台/周")
+    return "；".join(values)
+
+
+def _claim_context_text(row: dict[str, Any]) -> str:
+    return str(row.get("context_name") or row.get("context_code") or "当前可比语境")
+
+
 def _claim_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     sections = product.get("sections") or {}
     claim = sections.get("claim_fact") or {}
@@ -764,15 +975,27 @@ def _claim_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     supported = set(str(code) for code in comment.get("supported_claim_codes") or [])
     contradicted = set(str(code) for code in comment.get("contradicted_claim_codes") or [])
     unsupported = set(str(code) for code in claim.get("unsupported_claim_codes") or [])
-    premium = sorted((fact_claims & supported) - contradicted)
-    basic = sorted(fact_claims - supported - contradicted)
+    fallback_premium = sorted((fact_claims & supported) - contradicted)
+    fallback_basic = sorted(fact_claims - supported - contradicted)
+    claim_value_rows = _claim_value_rows_with_index(product.get("claim_value") or {})
+    premium_rows = _claim_rows_by_role(claim_value_rows, "premium_driver_estimated")
+    sales_rows = _claim_rows_by_role(claim_value_rows, "sales_driver_estimated")
+    basic_rows = _claim_rows_by_role(claim_value_rows, "basic_threshold", "brand_claim_only", "user_validated_need", "sample_insufficient")
+    drag_rows = _claim_rows_by_role(claim_value_rows, "drag_factor")
+    opportunity_rows = _claim_rows_by_role(claim_value_rows, "opportunity_gap")
     competitor_item = product.get("competitor_item") or {}
     shared_anchors = (competitor_item.get("value_anchor") or {}).get("shared_anchors") or []
+    quantified_missing = "卖点价值量化待生成"
     return {
         "事实卖点": _join_cn(_labels_for_codes(sorted(fact_claims))[:10]) or "暂无稳定证据",
-        "溢价卖点": _join_cn(_labels_for_codes(premium)[:10]) or "暂无稳定证据",
-        "基础支撑卖点": _join_cn(_labels_for_codes(basic)[:10]) or "暂无稳定证据",
-        "拖后腿卖点": _join_cn(_labels_for_codes(sorted(contradicted))[:10]) or "暂无稳定证据",
+        "卖点溢价指数 Top": _claim_index_text(claim_value_rows) or quantified_missing,
+        "溢价卖点": _claim_index_text(premium_rows) or (_join_cn(_labels_for_codes(fallback_premium)[:10]) if fallback_premium else "暂无稳定证据"),
+        "销量支撑卖点": _claim_index_text(sales_rows) or quantified_missing,
+        "可观测价格支撑": _claim_money_text(premium_rows or claim_value_rows) or quantified_missing,
+        "可观测销量支撑": _claim_sales_text(sales_rows or premium_rows or claim_value_rows) or quantified_missing,
+        "基础支撑卖点": _claim_index_text(basic_rows) or _join_cn(_labels_for_codes(fallback_basic)[:10]) or "暂无稳定证据",
+        "拖后腿卖点": _claim_index_text(drag_rows) or _join_cn(_labels_for_codes(sorted(contradicted))[:10]) or "暂无稳定证据",
+        "机会缺口": _claim_index_text(opportunity_rows) or "暂无稳定证据",
         "需复核表达": _join_cn(_labels_for_codes(sorted(unsupported))[:10]) or "暂无稳定证据",
         "共同价值锚点": _join_cn(shared_anchors[:8]) if shared_anchors else "本品基准",
     }
@@ -803,6 +1026,8 @@ def _product_profile_lines(
     sections: dict[str, Any],
     *,
     competitor_item: dict[str, Any] | None,
+    claim_value: dict[str, Any] | None,
+    claim_contribution: dict[str, Any] | None,
 ) -> list[str]:
     lines: list[str] = []
     lines.extend([f"### {section_no}.1 市场画像", ""])
@@ -814,7 +1039,7 @@ def _product_profile_lines(
     lines.extend(["", f"### {section_no}.4 目标客群画像", ""])
     lines.extend(_semantic_profile_table_lines(sections.get("target_group") or {}, profile_type="group", sections=sections))
     lines.extend(["", f"### {section_no}.5 卖点画像", ""])
-    lines.extend(_product_claim_profile_lines(sections))
+    lines.extend(_product_claim_profile_lines(sections, claim_value=claim_value, claim_contribution=claim_contribution))
     lines.extend(["", f"### {section_no}.6 参数画像", ""])
     lines.extend(_product_param_profile_lines(sections))
     return lines
@@ -882,7 +1107,45 @@ def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str,
     return lines
 
 
-def _product_claim_profile_lines(sections: dict[str, Any]) -> list[str]:
+def _product_claim_profile_lines(
+    sections: dict[str, Any],
+    *,
+    claim_value: dict[str, Any] | None,
+    claim_contribution: dict[str, Any] | None,
+) -> list[str]:
+    claim_value_payload = _extract_claim_value_payload(claim_value)
+    claim_rows = _claim_value_rows_with_index(claim_value_payload)
+    if claim_rows:
+        lines = [
+            "卖点价值量化说明：以下为同尺寸价格带和语义上下文内的可观测估计，用于比较卖点价值强弱，不代表严格因果。",
+            "",
+            "| 卖点类型 | 卖点 | 卖点溢价指数 | 可观测价格支撑 | 可观测周均销量支撑 | 上下文 | 置信度 | 判断 |",
+            "| --- | --- | ---: | --- | --- | --- | --- | --- |",
+        ]
+        for row in claim_rows[:10]:
+            contribution = row.get("estimated_contribution") or {}
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _claim_role_cn(row.get("claim_value_role")),
+                        _claim_value_name(row),
+                        str(row.get("claim_premium_index") or 0),
+                        _format_money(contribution.get("price_premium_abs")) or "0元",
+                        f"{_format_unit_count(contribution.get('weekly_sales_lift_abs')) or '0'}台/周",
+                        _claim_context_text(row),
+                        _pct_or_unknown(row.get("attribution_confidence")),
+                        str(row.get("reason_cn") or "当前卖点价值来自可比池量价表现、参数、评论和语义支撑的综合估计"),
+                    ]
+                )
+                + " |"
+            )
+        attribution_payload = _extract_claim_contribution_payload(claim_contribution)
+        attribution_lines = _claim_contribution_profile_lines(attribution_payload)
+        if attribution_lines:
+            lines.extend(["", "卖点贡献归因：", "", *attribution_lines])
+        return lines
+
     claim = sections.get("claim_fact") or {}
     comment = sections.get("comment_fact") or {}
     fact_claims = set(str(code) for code in claim.get("fact_claim_codes") or [])
@@ -900,12 +1163,27 @@ def _product_claim_profile_lines(sections: dict[str, Any]) -> list[str]:
         rows.append(("拖后腿卖点", sorted(contradicted), "评论侧存在负向或质疑信号，会削弱对应战场的溢价效率"))
     if unsupported:
         rows.append(("需复核表达", sorted(unsupported), "当前参数或评论支撑不足，不宜直接作为核心溢价依据"))
-    lines = ["| 卖点类型 | 卖点 | 判断 |", "| --- | --- | --- |"]
+    lines = ["卖点价值量化待生成，以下为事实卖点与评论支撑兜底判断。", "", "| 卖点类型 | 卖点 | 判断 |", "| --- | --- | --- |"]
     if not rows:
         lines.append("| 暂无稳定卖点 | 暂无 | 当前卖点事实不足 |")
         return lines
     for claim_type, codes, reason in rows:
         lines.append(f"| {claim_type} | {_join_cn(_labels_for_codes(codes))} | {reason} |")
+    return lines
+
+
+def _claim_contribution_profile_lines(payload: dict[str, Any]) -> list[str]:
+    rows = [row for row in payload.get("attributions") or [] if isinstance(row, dict)]
+    if not rows:
+        return []
+    lines = ["| 语义上下文 | 正向卖点 | 相对池基准价格差 | 相对池基准周均销量差 | 置信度 |", "| --- | --- | --- | --- | --- |"]
+    for row in rows[:5]:
+        positive_claims = row.get("positive_claims") or []
+        names = _join_cn([str(item.get("claim_name") or _label_code(item.get("claim_code"))) for item in positive_claims[:4] if isinstance(item, dict)]) or "未形成高置信正向卖点"
+        gap = row.get("sku_gap_vs_baseline") or {}
+        lines.append(
+            f"| {row.get('context_name') or row.get('context_code') or '当前可比语境'} | {names} | {_format_money(gap.get('price_premium_abs')) or '0元'} | {_format_unit_count(gap.get('weekly_sales_lift_abs')) or '0'}台/周 | {_pct_or_unknown(row.get('confidence'))} |"
+        )
     return lines
 
 

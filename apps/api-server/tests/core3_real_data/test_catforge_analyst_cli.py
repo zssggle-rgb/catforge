@@ -2269,7 +2269,12 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 补充证据判断 |" in markdown
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
-    assert "| 溢价卖点 | MiniLED 显示 | 贴墙安装和MiniLED 显示 | 高刷新率和MiniLED 显示 | MiniLED 显示 |" in markdown
+    assert "| 卖点溢价指数 Top | MiniLED 100；高刷 92；音响体验 19 | 壁画贴墙 100 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 溢价卖点 | MiniLED 100 | 壁画贴墙 100 | 高刷新率和MiniLED 显示 | MiniLED 显示 |" in markdown
+    assert "| 销量支撑卖点 | 高刷 92 | 卖点价值量化待生成 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 可观测价格支撑 | MiniLED约280元 | 壁画贴墙约180元 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 可观测销量支撑 | 高刷约22台/周 | 壁画贴墙约12台/周 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 拖后腿卖点 | 音响体验 19 | 暂无稳定证据 | 暂无稳定证据 | 暂无稳定证据 |" in markdown
     assert "## 五、海信 65E7Q 产品画像" in markdown
     assert "市场画像" in markdown
     assert "价值战场画像" in markdown
@@ -2291,6 +2296,11 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "5200尼特" in markdown
     assert "控光分区：1,920" in markdown
     assert "溢价卖点" in markdown
+    assert "卖点价值量化说明" in markdown
+    assert "| 卖点类型 | 卖点 | 卖点溢价指数 | 可观测价格支撑 | 可观测周均销量支撑 | 上下文 | 置信度 | 判断 |" in markdown
+    assert "| 溢价卖点 | MiniLED | 100 | 280元 | 15台/周 | 高端画质升级战场 | 82% | MiniLED 是海信 65E7Q 在高端画质战场的估算溢价卖点。 |" in markdown
+    assert "卖点贡献归因" in markdown
+    assert "卖点价值量化待生成" in markdown
     for forbidden in (
         "CLI",
         "JSON",

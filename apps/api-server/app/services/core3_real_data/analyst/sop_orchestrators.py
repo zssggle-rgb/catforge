@@ -98,6 +98,8 @@ class SopOrchestrators:
         competitors: list[dict[str, Any]] = []
         pair_atom_results: list[dict[str, Any]] = []
         need_candidate_fact = answer_style == "xiaoao" or with_report != "none"
+        target_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=target_sku, limit=limit) if need_candidate_fact else {}
+        target_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=target_sku, limit=limit) if need_candidate_fact else {}
         for rank, row in enumerate(candidate_rows, start=1):
             candidate_sku = row.get("sku_code")
             if not candidate_sku:
@@ -106,11 +108,29 @@ class SopOrchestrators:
             param_claim = self.atomic_handlers.param_claim_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             sales = self.atomic_handlers.sales_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             candidate_fact = self.atomic_handlers.sku_fact_brief(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
+            candidate_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
+            candidate_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
             pair_atom_results.extend([semantic, param_claim, sales])
             if candidate_fact:
                 pair_atom_results.append(candidate_fact)
-            competitors.append(_competitor_item(rank, row, semantic, param_claim, sales, candidate_fact))
-        atom_results = [target, fact, candidates_result, *pair_atom_results]
+            if candidate_claim_value:
+                pair_atom_results.append(candidate_claim_value)
+            if candidate_claim_contribution:
+                pair_atom_results.append(candidate_claim_contribution)
+            competitors.append(
+                _competitor_item(
+                    rank,
+                    row,
+                    semantic,
+                    param_claim,
+                    sales,
+                    candidate_fact,
+                    candidate_claim_value,
+                    candidate_claim_contribution,
+                )
+            )
+        target_claim_atoms = [atom for atom in (target_claim_value, target_claim_contribution) if atom]
+        atom_results = [target, fact, candidates_result, *target_claim_atoms, *pair_atom_results]
         target_fact_brief = (fact.get("result") or {}).get("fact_brief", {})
         result_payload: dict[str, Any] = {
             "competitor_set": {
@@ -122,6 +142,8 @@ class SopOrchestrators:
                     "sales_overlap_validation",
                 ],
                 "target_fact_brief": target_fact_brief,
+                "target_claim_value": ((target_claim_value or {}).get("result") or {}).get("sku_claim_value", {}),
+                "target_claim_contribution": ((target_claim_contribution or {}).get("result") or {}).get("claim_contribution", {}),
                 "candidate_count": len(competitors),
                 "candidates": competitors,
             }
@@ -130,6 +152,8 @@ class SopOrchestrators:
             result_payload["competitor_answer"] = build_competitor_answer(
                 target=target["target"],
                 target_fact_brief=target_fact_brief,
+                target_claim_value=target_claim_value,
+                target_claim_contribution=target_claim_contribution,
                 competitors=competitors,
                 top_n=top_n,
                 max_chat_chars=max_chat_chars,
@@ -490,6 +514,8 @@ def _competitor_item(
     param_claim: dict[str, Any],
     sales: dict[str, Any],
     candidate_fact: dict[str, Any] | None = None,
+    candidate_claim_value: dict[str, Any] | None = None,
+    candidate_claim_contribution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     semantic_payload = (semantic.get("result") or {}).get("semantic_overlap") or {}
     param_payload = (param_claim.get("result") or {}).get("param_claim_overlap") or {}
@@ -516,6 +542,8 @@ def _competitor_item(
         },
         "sales_overlap": sales_payload,
         "candidate_fact_brief": ((candidate_fact or {}).get("result") or {}).get("fact_brief", {}),
+        "candidate_claim_value": ((candidate_claim_value or {}).get("result") or {}).get("sku_claim_value", {}),
+        "candidate_claim_contribution": ((candidate_claim_contribution or {}).get("result") or {}).get("claim_contribution", {}),
     }
 
 
