@@ -136,6 +136,7 @@ class MarketProfileService:
         profile_write = self.repository.save_profiles(profile_records)
 
         signals = self._build_signals(profile_records, profiles_by_window, rule_version=rule_version)
+        self.repository.expire_stale_signals_for_profiles(profile_records, signals)
         signal_write = self.repository.save_signals(signals)
 
         pools, members = self._build_pools_and_members(

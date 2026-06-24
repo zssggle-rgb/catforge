@@ -1,7 +1,7 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.services.core3_real_data.constants import M07AnalysisWindow, M07SampleStatus, M08ForModule
+from app.services.core3_real_data.constants import M07AnalysisWindow, M07MarketSignalCode, M07SampleStatus, M08ForModule
 from app.services.core3_real_data.market_profile_schemas import M07MarketInputRow, M07SkuMarketMetrics
 from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
@@ -324,6 +324,46 @@ def test_m07_zero_sales_window_is_not_price_or_platform_missing() -> None:
 
     assert "price_missing" not in flags
     assert "platform_missing" not in flags
+
+
+def test_m07_sufficient_zero_sales_profile_does_not_emit_sample_insufficient_signal() -> None:
+    service = MarketProfileService(repository=object())
+    profile = SimpleNamespace(
+        project_id="project",
+        category_code="AC",
+        batch_id="batch",
+        run_id=None,
+        module_run_id=None,
+        sku_market_profile_id="profile-ac-zero",
+        sku_code="AC-ZERO",
+        model_name=None,
+        brand_name=None,
+        analysis_window=M07AnalysisWindow.LATEST_WEEK,
+        price_percentile_in_category=None,
+        price_percentile_in_size=None,
+        volume_percentile_in_category=Decimal("0.1000"),
+        volume_percentile_in_size=Decimal("0.1000"),
+        amount_percentile_in_category=Decimal("0.1000"),
+        amount_percentile_in_size=Decimal("0.1000"),
+        price_change_recent_4w=None,
+        sales_growth_recent_4w=None,
+        same_pool_volume_percentile=None,
+        same_pool_amount_percentile=None,
+        platform_share_json={},
+        main_platform=None,
+        market_pool_key=None,
+        sample_status=M07SampleStatus.SUFFICIENT,
+        price_wavg=None,
+        market_confidence=Decimal("0.8000"),
+        quality_flags=[],
+        evidence_ids=[],
+        input_fingerprint="input-ac-zero",
+        result_hash="hash-ac-zero",
+    )
+
+    signals = service._signals_for_profile(profile, {}, rule_version="m07_market_profile_v1")
+
+    assert all(signal.signal_code != M07MarketSignalCode.SAMPLE_INSUFFICIENT for signal in signals)
 
 
 def test_m07_online_current_year_scope_is_not_execution_warning() -> None:

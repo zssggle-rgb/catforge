@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.models import entities
 from app.services.core3_real_data.constants import Core3CleanRecordStatus, Core3EvidenceStatus, Core3EvidenceType
@@ -295,6 +295,52 @@ class M07MarketSignalRepository(_M07RepositoryMixin):
             unique_fields=("batch_id", "sku_code", "analysis_window", "signal_code", "comparison_scope", "rule_version"),
         )
 
+    def expire_stale_signals_for_profiles(self, profiles: Sequence[Any], records: Sequence[Any]) -> int:
+        scopes: set[tuple[str, str, str, str]] = set()
+        for profile in profiles:
+            scopes.add(
+                (
+                    str(profile.batch_id),
+                    str(profile.sku_code),
+                    _enum_value(profile.analysis_window),
+                    str(profile.rule_version),
+                )
+            )
+        if not scopes:
+            return 0
+
+        keep_by_scope: dict[tuple[str, str, str, str], set[str]] = {}
+        for record in records:
+            scope = (
+                str(record.batch_id),
+                str(record.sku_code),
+                _enum_value(record.analysis_window),
+                str(record.rule_version),
+            )
+            signal_key = str(record.signal_key)
+            keep_by_scope.setdefault(scope, set()).add(signal_key)
+
+        expired_count = 0
+        for batch_id, sku_code, analysis_window, rule_version in sorted(scopes):
+            stmt = (
+                update(entities.Core3MarketSignal)
+                .where(entities.Core3MarketSignal.project_id == self.project_id)
+                .where(entities.Core3MarketSignal.category_code == self.category_code.value)
+                .where(entities.Core3MarketSignal.batch_id == batch_id)
+                .where(entities.Core3MarketSignal.sku_code == sku_code)
+                .where(entities.Core3MarketSignal.analysis_window == analysis_window)
+                .where(entities.Core3MarketSignal.rule_version == rule_version)
+                .where(entities.Core3MarketSignal.is_current.is_(True))
+            )
+            keep_keys = keep_by_scope.get((batch_id, sku_code, analysis_window, rule_version), set())
+            if keep_keys:
+                stmt = stmt.where(entities.Core3MarketSignal.signal_key.notin_(tuple(sorted(keep_keys))))
+            result = self.db.execute(stmt.values(is_current=False))
+            expired_count += int(result.rowcount or 0)
+        if expired_count:
+            self.db.flush()
+        return expired_count
+
     def list_current_signals(
         self,
         batch_id: str,
@@ -390,6 +436,10 @@ class M07MarketRepository(
     M07MarketPoolMemberRepository,
 ):
     pass
+
+
+def _enum_value(value: Any) -> str:
+    return value.value if isinstance(value, Enum) else str(value)
 
 
 def _stable_identifier_field(model_cls: Any) -> str | None:
