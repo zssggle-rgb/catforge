@@ -46,8 +46,12 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     _list_or_empty,
     _market_snapshot,
     _market_validation_score,
+    market_validation_policy_for_product_category,
+    missing_size_price_reason_for_product_category,
     _param_entry_supported,
+    price_band_policy_for_product_category,
     _sentiment_polarity,
+    size_tier_policy_for_product_category,
     _unique,
 )
 from app.services.core3_real_data.param_extraction_repositories import (
@@ -1175,9 +1179,15 @@ class M10CProfileBuilder:
             "taxonomy_codes": [
                 target_group.target_group_code for target_group in self.target_groups
             ],
-            "size_tier_policy": "M03B canonical five-tier size policy.",
-            "price_band_policy": "Derived within M10C size_tier from M07 full_observed_window weighted price percentile.",
-            "market_validation_policy": "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context.",
+            "size_tier_policy": size_tier_policy_for_product_category(
+                self.taxonomy.product_category, "M10C"
+            ),
+            "price_band_policy": price_band_policy_for_product_category(
+                self.taxonomy.product_category, "M10C"
+            ),
+            "market_validation_policy": market_validation_policy_for_product_category(
+                self.taxonomy.product_category
+            ),
         }
         return profiles, scores, coverages, summary
 
@@ -1431,7 +1441,11 @@ class M10CProfileBuilder:
             for evidence_id in item["evidence_ids_json"]
         )
         no_primary_reason = (
-            None if primary else _no_primary_reason(score_payloads, sku_input)
+            None
+            if primary
+            else _no_primary_reason(
+                score_payloads, sku_input, self.taxonomy.product_category
+            )
         )
         summary = {
             "primary": _compact_score(primary) if primary else None,
@@ -2155,13 +2169,17 @@ def _claim_param_summary(score_payloads: Sequence[Mapping[str, Any]]) -> dict[st
 
 
 def _no_primary_reason(
-    score_payloads: Sequence[Mapping[str, Any]], sku_input: M10CSkuInput
+    score_payloads: Sequence[Mapping[str, Any]],
+    sku_input: M10CSkuInput,
+    product_category: str,
 ) -> str:
     if (
         sku_input.size_tier == "unknown"
         or sku_input.price_band_in_size_tier == "unknown"
     ):
-        return "缺少 M03B 五档尺寸或 M10C 尺寸内价格带，无法高置信判断主目标客群。"
+        return missing_size_price_reason_for_product_category(
+            product_category, "M10C", "目标客群"
+        )
     active = [
         item for item in score_payloads if item["relation_status"] != REL_NOT_SUPPORTED
     ]

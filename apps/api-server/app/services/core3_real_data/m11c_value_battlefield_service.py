@@ -994,6 +994,44 @@ def fact_rule_versions_for_product_category(product_category: str) -> dict[str, 
     }
 
 
+def size_tier_policy_for_product_category(
+    product_category: str, module_code: str | None = None
+) -> str:
+    normalized_category = str(product_category or "").upper()
+    if normalized_category == "AC":
+        return (
+            "M03B AC 匹数/柜挂机分档：先识别挂机/柜机和匹数段，再进入尺寸价格门槛判断。"
+        )
+    if str(module_code or "").upper() == "M11C":
+        return "M03B canonical five-tier size policy; 86-97 inch gap remains unknown for M11C until business approves a bucket."
+    return "M03B canonical five-tier size policy."
+
+
+def price_band_policy_for_product_category(
+    product_category: str, module_code: str
+) -> str:
+    normalized_category = str(product_category or "").upper()
+    if normalized_category == "AC":
+        return f"Derived within AC horsepower/installation tier from M07 full_observed_window weighted price percentile for {module_code}."
+    return f"Derived within {module_code} size_tier from M07 full_observed_window weighted price percentile."
+
+
+def market_validation_policy_for_product_category(product_category: str) -> str:
+    normalized_category = str(product_category or "").upper()
+    if normalized_category == "AC":
+        return "Use pairwise overlapping weekly average volume/amount within M03B AC horsepower/installation tier; cumulative sales are retained only as display context."
+    return "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context."
+
+
+def missing_size_price_reason_for_product_category(
+    product_category: str, module_code: str, subject_cn: str
+) -> str:
+    normalized_category = str(product_category or "").upper()
+    if normalized_category == "AC":
+        return f"缺少 M03B 空调匹数/柜挂机分档或 {module_code} 分档内价格带，无法高置信判断主{subject_cn}。"
+    return f"缺少 M03B 五档尺寸或 {module_code} 尺寸内价格带，无法高置信判断主{subject_cn}。"
+
+
 class M11CValueBattlefieldRepository(ParamExtractionRepository):
     def save_profiles(
         self, profiles: Sequence[Any], *, replace_on_hash_conflict: bool = False
@@ -1582,9 +1620,15 @@ class M11CProfileBuilder:
             "taxonomy_codes": [
                 battlefield.battlefield_code for battlefield in self.battlefields
             ],
-            "size_tier_policy": "M03B canonical five-tier size policy; 86-97 inch gap remains unknown for M11C until business approves a bucket.",
-            "price_band_policy": "Derived within M11C size_tier from M07 full_observed_window weighted price percentile.",
-            "market_validation_policy": "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context.",
+            "size_tier_policy": size_tier_policy_for_product_category(
+                self.taxonomy.product_category, "M11C"
+            ),
+            "price_band_policy": price_band_policy_for_product_category(
+                self.taxonomy.product_category, "M11C"
+            ),
+            "market_validation_policy": market_validation_policy_for_product_category(
+                self.taxonomy.product_category
+            ),
         }
         return profiles, scores, graph_snapshot, summary
 
@@ -1827,7 +1871,11 @@ class M11CProfileBuilder:
             for evidence_id in item["evidence_ids_json"]
         )
         no_primary_reason = (
-            None if primary else _no_primary_reason(score_payloads, sku_input)
+            None
+            if primary
+            else _no_primary_reason(
+                score_payloads, sku_input, self.taxonomy.product_category
+            )
         )
         battlefield_summary = {
             "primary": _compact_score(primary) if primary else None,
@@ -2878,13 +2926,17 @@ def _compact_score(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _no_primary_reason(
-    score_payloads: Sequence[Mapping[str, Any]], sku_input: M11CSkuInput
+    score_payloads: Sequence[Mapping[str, Any]],
+    sku_input: M11CSkuInput,
+    product_category: str,
 ) -> str:
     if (
         sku_input.size_tier == "unknown"
         or sku_input.price_band_in_size_tier == "unknown"
     ):
-        return "缺少 M03B 五档尺寸或 M11C 尺寸内价格带，无法高置信判断主价值战场。"
+        return missing_size_price_reason_for_product_category(
+            product_category, "M11C", "价值战场"
+        )
     active = [
         item for item in score_payloads if item["relation_status"] != REL_EXCLUDED
     ]

@@ -46,8 +46,11 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     _list_or_empty,
     _market_snapshot,
     _market_validation_score,
+    market_validation_policy_for_product_category,
     _param_entry_supported,
+    price_band_policy_for_product_category,
     _sentiment_polarity,
+    size_tier_policy_for_product_category,
     _unique,
 )
 from app.services.core3_real_data.param_extraction_repositories import (
@@ -1264,9 +1267,15 @@ class M09CProfileBuilder:
             "taxonomy_codes": [
                 user_task.user_task_code for user_task in self.user_tasks
             ],
-            "size_tier_policy": "M03B canonical five-tier size policy.",
-            "price_band_policy": "Derived within M09C size_tier from M07 full_observed_window weighted price percentile.",
-            "market_validation_policy": "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context.",
+            "size_tier_policy": size_tier_policy_for_product_category(
+                self.taxonomy.product_category, "M09C"
+            ),
+            "price_band_policy": price_band_policy_for_product_category(
+                self.taxonomy.product_category, "M09C"
+            ),
+            "market_validation_policy": market_validation_policy_for_product_category(
+                self.taxonomy.product_category
+            ),
         }
         return profiles, scores, coverages, summary
 
