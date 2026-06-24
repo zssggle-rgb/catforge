@@ -362,6 +362,8 @@ CORE3_M05_RULE_VERSION = "m05_comment_evidence_v1"
 CORE3_M05C_MODULE_VERSION = "m05c-comment-fact-profile-0.1.0"
 CORE3_M05C_TV_TAXONOMY_VERSION = "tv_comment_fact_taxonomy_manual_v0.1"
 CORE3_M05C_TV_RULE_VERSION = "m05c_tv_comment_fact_profile_v0.1"
+CORE3_M05C_AC_TAXONOMY_VERSION = "ac_comment_fact_taxonomy_manual_v0.1"
+CORE3_M05C_AC_RULE_VERSION = "m05c_ac_comment_fact_profile_v0.1"
 CORE3_M06_MODULE_VERSION = "m06-comment-downstream-signal-0.1.0"
 CORE3_M06_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M06_RULE_VERSION = "m06_comment_downstream_signal_v1"
@@ -1536,6 +1538,14 @@ M07_ADJACENT_SIZE_SEGMENTS: dict[str, tuple[str, ...]] = {
     "75": ("65", "85"),
     "85": ("75", "100"),
     "100": ("85",),
+    "wall_hp_1_or_below": ("wall_hp_1_5",),
+    "wall_hp_1_5": ("wall_hp_1_or_below", "wall_hp_2"),
+    "wall_hp_2": ("wall_hp_1_5", "floor_hp_2", "floor_hp_3"),
+    "floor_hp_2": ("wall_hp_2", "floor_hp_3"),
+    "floor_hp_3": ("floor_hp_2", "floor_hp_3_plus", "wall_hp_2"),
+    "floor_hp_3_plus": ("floor_hp_3",),
+    "mobile_hp_1_or_below": ("mobile_hp_1_5",),
+    "mobile_hp_1_5": ("mobile_hp_1_or_below",),
 }
 
 M07_PRICE_BAND_ORDER: tuple[M07PriceBand, ...] = (

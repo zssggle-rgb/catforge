@@ -9,9 +9,14 @@ from app.cli import catforge_pipeline
 from app.cli import catforge_insight
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     Core3SourceBatchStatus,
@@ -23,6 +28,9 @@ PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606210001"
 SKU_CODE = "TV00077777"
 SKU_CODE_2 = "TV00088888"
+AC_PROJECT_ID = "core3_mvp_ac"
+AC_BATCH_ID = "m00_202606240002"
+AC_SKU_CODE = "AC00000001"
 
 
 def make_session(*, database_url: str = "sqlite+pysqlite:///:memory:", use_static_pool: bool = True) -> Session:
@@ -48,6 +56,23 @@ def make_session(*, database_url: str = "sqlite+pysqlite:///:memory:", use_stati
         table.create(bind=engine, checkfirst=True)
     session = Session(engine)
     seed_foundation(session)
+    return session
+
+
+def make_ac_session() -> Session:
+    session = make_session()
+    session.query(entities.Core3CommentFactReviewIssue).delete()
+    session.query(entities.Core3CommentFactCoverage).delete()
+    session.query(entities.Core3SkuCommentFactProfile).delete()
+    session.query(entities.Core3CommentFactAtom).delete()
+    session.query(entities.Core3SkuClaimFact).delete()
+    session.query(entities.Core3SkuClaimFactProfile).delete()
+    session.query(entities.Core3SkuParamProfile).delete()
+    session.query(entities.Core3EvidenceAtom).delete()
+    session.query(entities.Core3SourceBatch).delete()
+    session.query(entities.CategoryProject).delete()
+    session.flush()
+    seed_ac_foundation(session)
     return session
 
 
@@ -168,6 +193,75 @@ def seed_foundation(session: Session) -> None:
     session.commit()
 
 
+def seed_ac_foundation(session: Session) -> None:
+    session.add(entities.CategoryProject(project_id=AC_PROJECT_ID, name="Core3 MVP AC", category_code="AC"))
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=AC_BATCH_ID,
+            project_id=AC_PROJECT_ID,
+            category_code="AC",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["comment_data"],
+            ruleset_version="ac-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 24, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id="param-profile-ac-00001",
+            project_id=AC_PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            sku_code=AC_SKU_CODE,
+            model_name="KFR-35GW",
+            param_values_json={
+                "installation_type": {"normalized_value": "wall_mounted", "value_text": "挂机", "value_presence": "present", "confidence": "0.9000"},
+                "horsepower_hp": {"normalized_value": 1.5, "numeric_value": 1.5, "value_presence": "present", "confidence": "0.9000"},
+                "cooling_capacity_w": {"normalized_value": 3510, "numeric_value": 3510, "value_presence": "present", "confidence": "0.9000"},
+                "energy_grade_normalized": {"normalized_value": "一级", "value_text": "一级", "value_presence": "present", "confidence": "0.9000"},
+                "energy_efficiency_ratio": {"normalized_value": 5.28, "numeric_value": 5.28, "value_presence": "present", "confidence": "0.9000"},
+                "comfort_airflow_flag": {"normalized_value": True, "value_presence": "present", "confidence": "0.9000"},
+                "wifi_control_flag": {"normalized_value": True, "value_presence": "present", "confidence": "0.9000"},
+                "dimension_tier_profile": {"installation": "wall_mounted", "horsepower": "hp_1_5", "energy": "energy_grade_1"},
+            },
+            core_picture_params_json={},
+            core_gaming_params_json={},
+            core_system_params_json={},
+            core_eye_care_params_json={},
+            param_completeness=Decimal("0.900000"),
+            known_param_count=6,
+            unknown_param_count=0,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=[],
+            quality_summary_json={},
+            profile_hash="sha256:test-ac-param-profile",
+            seed_version="ac_param_taxonomy_manual_v0.1",
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
+        )
+    )
+    session.add_all(
+        [
+            ac_claim_fact("ac-claim-cool", "ac_claim_fast_cooling_heating", "速冷速热", "temperature_performance", "fast_cooling_heating", ["cooling_capacity_w", "horsepower_hp"]),
+            ac_claim_fact("ac-claim-energy", "ac_claim_energy_efficiency_apf", "一级能效省电", "energy_efficiency", "apf", ["energy_grade_normalized", "energy_efficiency_ratio"]),
+            ac_claim_fact("ac-claim-quiet", "ac_claim_quiet_sleep", "静音睡眠", "airflow_comfort", "quiet_sleep", []),
+            ac_claim_fact("ac-claim-value", "ac_claim_price_value_subsidy", "价格价值", "price_value", "subsidy", []),
+        ]
+    )
+    comments = [
+        ("ac-comment-1", "制冷很快，开机一会儿就凉快，晚上睡觉声音小很安静"),
+        ("ac-comment-2", "一级能效很省电，国补以后性价比高"),
+        ("ac-comment-3", "安装师傅上门很快，客服态度好"),
+    ]
+    session.add_all(ac_comment_evidence(evidence_id, text_value, index) for index, (evidence_id, text_value) in enumerate(comments, start=1))
+    session.commit()
+
+
 def claim_fact(
     claim_fact_id: str,
     claim_code: str,
@@ -211,6 +305,49 @@ def claim_fact(
     )
 
 
+def ac_claim_fact(
+    claim_fact_id: str,
+    claim_code: str,
+    claim_name: str,
+    claim_dimension: str,
+    claim_subtype: str,
+    supporting_param_codes: list[str],
+) -> entities.Core3SkuClaimFact:
+    return entities.Core3SkuClaimFact(
+        claim_fact_id=claim_fact_id,
+        project_id=AC_PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        product_category="AC",
+        taxonomy_version=CORE3_M04C_AC_TAXONOMY_VERSION,
+        sku_code=AC_SKU_CODE,
+        model_name="KFR-35GW",
+        brand_name="美的",
+        source_claim_key=f"seed:{claim_code}",
+        claim_seq=1,
+        raw_claim_text=claim_name,
+        clean_claim_text=claim_name,
+        claim_code=claim_code,
+        claim_name=claim_name,
+        claim_dimension=claim_dimension,
+        claim_subtype=claim_subtype,
+        claim_kind="product_experience",
+        match_type="seed",
+        match_score=Decimal("1.0000"),
+        param_support_status="supported",
+        supporting_param_codes=supporting_param_codes,
+        supporting_param_snapshot_json={},
+        support_explanation="test seed",
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=[],
+        quality_flags=[],
+        confidence=Decimal("0.9000"),
+        fact_hash=f"sha256:{claim_fact_id}",
+        rule_version=CORE3_M04C_AC_RULE_VERSION,
+    )
+
+
 def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int, *, sku_code: str = SKU_CODE, model_name: str = "75X-Test", brand_name: str = "创维") -> entities.Core3EvidenceAtom:
     return entities.Core3EvidenceAtom(
         evidence_id=evidence_id,
@@ -237,6 +374,43 @@ def comment_evidence(evidence_id: str, text_value: str, sentence_seq: int, *, sk
         clean_value=text_value,
         text_value=text_value,
         comment_id=f"{sku_code}-c-{sentence_seq}",
+        sentence_seq=sentence_seq,
+        quality_status="ok",
+        quality_flags=[],
+        base_confidence=Decimal("0.9000"),
+        confidence_level="high",
+        sample_status="sufficient",
+        evidence_payload_json={},
+        evidence_status="current",
+    )
+
+
+def ac_comment_evidence(evidence_id: str, text_value: str, sentence_seq: int) -> entities.Core3EvidenceAtom:
+    return entities.Core3EvidenceAtom(
+        evidence_id=evidence_id,
+        evidence_key=evidence_id,
+        project_id=AC_PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        sku_code=AC_SKU_CODE,
+        model_name="KFR-35GW",
+        brand_name="美的",
+        evidence_type="comment_sentence",
+        evidence_grain="sentence",
+        evidence_field="评论",
+        source_table="comment_data",
+        source_pk=evidence_id,
+        source_row_id=evidence_id,
+        clean_table="core3_clean_comment_sentence",
+        clean_record_key=evidence_id,
+        clean_hash=f"sha256:{evidence_id}",
+        clean_version="m01-cleaning-quality-0.1.0",
+        raw_field="comment_text",
+        raw_value=text_value,
+        clean_field="comment_sentence",
+        clean_value=text_value,
+        text_value=text_value,
+        comment_id=f"{AC_SKU_CODE}-c-{sentence_seq}",
         sentence_seq=sentence_seq,
         quality_status="ok",
         quality_flags=[],
@@ -305,6 +479,54 @@ def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
 
     review_issue = session.execute(select(entities.Core3CommentFactReviewIssue)).scalar_one()
     assert review_issue.issue_type == "comment_contradicts_existing_param_or_claim"
+
+
+def test_m05c_runner_generates_ac_comment_fact_profile_with_ac_taxonomy():
+    session = make_ac_session()
+
+    result = M05CRunner(session).run_batch(
+        project_id=AC_PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        product_category="AC",
+        taxonomy_version=CORE3_M05C_AC_TAXONOMY_VERSION,
+        rule_version=CORE3_M05C_AC_RULE_VERSION,
+        llm_mode="off",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status in {"success", "warning"}
+    assert result.summary_json["category_boundary_filter"] == "sku_code_prefix_AC"
+    assert result.summary_json["input_comment_sentence_count"] == 3
+    assert result.summary_json["sku_profile_count"] == 1
+    assert result.summary_json["service_excluded_sentence_count"] == 1
+
+    profile = session.execute(select(entities.Core3SkuCommentFactProfile)).scalar_one()
+    assert profile.product_category == "AC"
+    assert profile.taxonomy_version == CORE3_M05C_AC_TAXONOMY_VERSION
+    assert "cooling_capacity_w" in profile.supported_param_codes
+    assert "energy_grade_normalized" in profile.supported_param_codes
+    assert "ac_claim_fast_cooling_heating" in profile.supported_claim_codes
+    assert "ac_claim_energy_efficiency_apf" in profile.supported_claim_codes
+
+    subdimension_codes = set(session.execute(select(entities.Core3CommentFactAtom.subdimension_code)).scalars())
+    assert {"cooling_effect", "quiet_positive", "energy_saving_usage", "subsidy_promotion", "service_delivery_install"} <= subdimension_codes
+
+    taxonomy = catforge_insight.query_comment_taxonomy(product_category="AC", search="静音")
+    queried_profile = catforge_insight.query_sku_comment_profile(
+        session,
+        project_id=AC_PROJECT_ID,
+        category_code="AC",
+        batch_id="latest",
+        query="KFR-35GW",
+        product_category="AC",
+        include_comment_facts=True,
+    )
+    assert taxonomy["taxonomy_version"] == CORE3_M05C_AC_TAXONOMY_VERSION
+    assert any(item["subdimension_code"] == "quiet_positive" for item in taxonomy["subdimensions"])
+    assert queried_profile["status"] == "ok"
+    assert queried_profile["comment_summary"]["service_excluded_sentence_count"] == 1
 
 
 def test_m05c_sku_scoped_runs_skip_coverage_until_batch_rebuild():
@@ -482,7 +704,7 @@ def test_m05c_blocks_unpublished_comment_taxonomy_for_other_category():
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id=BATCH_ID,
-        product_category="AC",
+        product_category="REFRIGERATOR",
         llm_mode="off",
         force_rebuild=True,
     )

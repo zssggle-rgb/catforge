@@ -5,7 +5,9 @@ from app.services.core3_real_data.constants import M07AnalysisWindow, M07SampleS
 from app.services.core3_real_data.market_profile_schemas import M07SkuMarketMetrics
 from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
+    _market_size_class,
     _market_pool_key,
+    _quality_flags,
     _screen_size_class,
     _select_screen_size_param_value,
     _size_segment,
@@ -105,6 +107,105 @@ def test_m07_screen_size_helpers_reject_zero_and_prefer_exact_size() -> None:
 
     assert selected is not None
     assert selected.param_value_id == "exact"
+
+
+def test_m07_ac_market_size_inputs_use_horsepower_and_installation() -> None:
+    profile = SimpleNamespace(
+        sku_code="AC00000001",
+        profile_hash="sha256:ac-param-profile",
+        evidence_ids=["ev-profile"],
+        param_values_json={
+            "installation_type": {
+                "normalized_value": "wall_mounted",
+                "value_text": "挂机",
+                "confidence": Decimal("0.9000"),
+                "evidence_ids": ["ev-install"],
+            },
+            "horsepower_hp": {
+                "normalized_value": 1.5,
+                "numeric_value": Decimal("1.5"),
+                "confidence": Decimal("0.9200"),
+                "evidence_ids": ["ev-hp"],
+            },
+            "cooling_capacity_w": {
+                "normalized_value": 3510,
+                "numeric_value": Decimal("3510"),
+                "confidence": Decimal("0.8800"),
+                "evidence_ids": ["ev-cooling"],
+            },
+        },
+    )
+
+    service = MarketProfileService(repository=SimpleNamespace(list_sku_param_profiles=lambda batch_id: [profile]))
+    size_inputs = service._size_inputs("batch-ac", product_category="AC")
+
+    size_input = size_inputs["AC00000001"]
+    assert size_input.screen_size_inch is None
+    assert size_input.size_segment == "wall_hp_1_5"
+    assert _market_size_class("AC", size_input) == "wall_hp_1_5"
+    assert size_input.confidence == Decimal("0.9200")
+
+    flags = _quality_flags(
+        rows=[],
+        all_rows=[],
+        size_input=size_input,
+        global_week_count=8,
+        latest_week_gap=None,
+        trend={},
+        channel_share={"线上": {}},
+        platform_share={"平台电商": {}},
+        price_wavg=Decimal("2999"),
+        product_category="AC",
+    )
+    assert "size_missing" not in flags
+
+
+def test_m07_ac_percentiles_do_not_require_screen_size_inch() -> None:
+    service = MarketProfileService(repository=object())
+    updated = service._apply_percentiles(
+        [
+            M07SkuMarketMetrics(
+                sku_code="AC-A",
+                analysis_window=M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+                size_segment="wall_hp_1_5",
+                screen_size_class="wall_hp_1_5",
+                market_pool_key="ac:wall_hp_1_5:线上:full_observed_window",
+                active_week_count=8,
+                market_row_count=8,
+                platform_count=1,
+                size_param_confidence=Decimal("0.9200"),
+                price_wavg=Decimal("2999"),
+                sales_volume_total=Decimal("100"),
+                sales_amount_total=Decimal("299900"),
+                main_channel_type="线上",
+                input_fingerprint="input-a",
+                result_hash="hash-a",
+            ),
+            M07SkuMarketMetrics(
+                sku_code="AC-B",
+                analysis_window=M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+                size_segment="floor_hp_3",
+                screen_size_class="floor_hp_3",
+                market_pool_key="ac:floor_hp_3:线上:full_observed_window",
+                active_week_count=8,
+                market_row_count=8,
+                platform_count=1,
+                size_param_confidence=Decimal("0.9000"),
+                price_wavg=Decimal("6999"),
+                sales_volume_total=Decimal("30"),
+                sales_amount_total=Decimal("209970"),
+                main_channel_type="线上",
+                input_fingerprint="input-b",
+                result_hash="hash-b",
+            ),
+        ],
+        product_category="AC",
+    )
+
+    by_sku = {item.sku_code: item for item in updated}
+    assert by_sku["AC-A"].price_per_inch_percentile is None
+    assert "size_missing" not in by_sku["AC-A"].quality_flags
+    assert by_sku["AC-A"].market_confidence > Decimal("0.6000")
 
 
 def test_m07_online_current_year_scope_is_not_execution_warning() -> None:

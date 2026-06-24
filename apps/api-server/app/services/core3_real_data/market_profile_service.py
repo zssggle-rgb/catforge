@@ -75,12 +75,14 @@ class MarketProfileService:
         batch_id: str,
         run_id: str | None = None,
         module_run_id: str | None = None,
+        product_category: str | None = None,
         sku_scope: Sequence[str] = (),
         analysis_windows: Sequence[str | M07AnalysisWindow] = (),
         rule_version: str = CORE3_M07_RULE_VERSION,
         price_band_rule_version: str = CORE3_M07_PRICE_BAND_RULE_VERSION,
         pool_rule_version: str = CORE3_M07_POOL_RULE_VERSION,
     ) -> M07ServiceResult:
+        product_category_value = _normalize_product_category(product_category, self.repository.category_code)
         self.repository.assert_inputs_ready(batch_id)
         sku_codes_in_scope = tuple(sorted({code for code in sku_scope if code}))
         windows = tuple(M07AnalysisWindow(window) for window in (analysis_windows or M07_ANALYSIS_WINDOWS))
@@ -88,7 +90,7 @@ class MarketProfileService:
         clean_skus = self.repository.list_clean_skus(batch_id)
         sku_lookup = {sku.sku_code: sku for sku in clean_skus}
         market_rows = self._market_rows(batch_id)
-        size_inputs = self._size_inputs(batch_id)
+        size_inputs = self._size_inputs(batch_id, product_category=product_category_value)
 
         all_sku_codes = sorted(set(sku_lookup) | {row.sku_code for row in market_rows})
         if sku_codes_in_scope:
@@ -107,12 +109,13 @@ class MarketProfileService:
                     analysis_window=window,
                     global_latest_week=global_latest_week,
                     global_week_count=global_week_count,
+                    product_category=product_category_value,
                     rule_version=rule_version,
                     price_band_rule_version=price_band_rule_version,
                 )
                 for sku_code in all_sku_codes
             ]
-            profiles_by_window[window.value] = self._apply_percentiles(metrics)
+            profiles_by_window[window.value] = self._apply_percentiles(metrics, product_category=product_category_value)
 
         profile_records: list[M07SkuMarketProfileRecord] = []
         for metrics in profiles_by_window.values():
@@ -159,6 +162,7 @@ class MarketProfileService:
         )
         summary = {
             "batch_id": batch_id,
+            "product_category": product_category_value,
             "rule_version": rule_version,
             "price_band_rule_version": price_band_rule_version,
             "pool_rule_version": pool_rule_version,
@@ -256,7 +260,12 @@ class MarketProfileService:
             )
         return rows
 
-    def _size_inputs(self, batch_id: str) -> dict[str, M07SkuSizeInput]:
+    def _size_inputs(self, batch_id: str, *, product_category: str = "TV") -> dict[str, M07SkuSizeInput]:
+        if product_category == "AC":
+            return self._ac_size_inputs(batch_id)
+        return self._tv_size_inputs(batch_id)
+
+    def _tv_size_inputs(self, batch_id: str) -> dict[str, M07SkuSizeInput]:
         extracted: dict[str, M07SkuSizeInput] = {}
         candidates_by_sku: dict[str, list[Any]] = {}
         for value in self.repository.list_extract_param_values(batch_id):
@@ -297,6 +306,44 @@ class MarketProfileService:
             )
         return extracted
 
+    def _ac_size_inputs(self, batch_id: str) -> dict[str, M07SkuSizeInput]:
+        extracted: dict[str, M07SkuSizeInput] = {}
+        for profile in self.repository.list_sku_param_profiles(batch_id):
+            values = profile.param_values_json or {}
+            horsepower_entry = _profile_param_entry(values, "horsepower_hp")
+            installation_entry = _profile_param_entry(values, "installation_type")
+            cooling_entry = _profile_param_entry(values, "cooling_capacity_w")
+            horsepower = _decimal_or_none((horsepower_entry or {}).get("numeric_value"))
+            installation = _normalized_text_value(installation_entry)
+            cooling_capacity = _decimal_or_none((cooling_entry or {}).get("numeric_value"))
+            size_segment = _ac_size_segment(installation, horsepower, cooling_capacity)
+            size_class = _ac_size_class(installation, horsepower)
+            if size_segment == "unknown" and size_class == "unknown":
+                continue
+            evidence_ids = _unique(
+                [
+                    *_list_or_empty((horsepower_entry or {}).get("evidence_ids")),
+                    *_list_or_empty((installation_entry or {}).get("evidence_ids")),
+                    *_list_or_empty((cooling_entry or {}).get("evidence_ids")),
+                    *_list_or_empty(profile.evidence_ids),
+                ]
+            )
+            confidence_values = [
+                _decimal_or_none((horsepower_entry or {}).get("confidence")),
+                _decimal_or_none((installation_entry or {}).get("confidence")),
+                _decimal_or_none((cooling_entry or {}).get("confidence")),
+            ]
+            confidence = max((value for value in confidence_values if value is not None), default=Decimal("0.0000"))
+            extracted[profile.sku_code] = M07SkuSizeInput(
+                sku_code=profile.sku_code,
+                screen_size_inch=None,
+                size_segment=size_segment,
+                confidence=confidence,
+                evidence_ids=evidence_ids,
+                profile_hash=profile.profile_hash,
+            )
+        return extracted
+
     def _calculate_metrics(
         self,
         *,
@@ -307,6 +354,7 @@ class MarketProfileService:
         analysis_window: M07AnalysisWindow,
         global_latest_week: int | None,
         global_week_count: int,
+        product_category: str,
         rule_version: str,
         price_band_rule_version: str,
     ) -> M07SkuMarketMetrics:
@@ -327,12 +375,12 @@ class MarketProfileService:
         price_median = _median_decimal(weekly_prices)
         price_min = min(weekly_prices) if weekly_prices else None
         price_max = max(weekly_prices) if weekly_prices else None
-        price_per_inch = _safe_div(price_wavg, size_input.screen_size_inch) if size_input else None
+        price_per_inch = _safe_div(price_wavg, size_input.screen_size_inch) if product_category == "TV" and size_input else None
         channel_share = _share_json(rows, "channel_type")
         platform_share = _share_json(rows, "platform_type")
         main_channel = _main_share_key(channel_share)
         main_platform = _main_share_key(platform_share)
-        screen_size_class = _screen_size_class(size_input.screen_size_inch if size_input else None)
+        screen_size_class = _market_size_class(product_category, size_input)
         market_pool_key = _market_pool_key(
             _category_value(self.repository.category_code),
             screen_size_class,
@@ -350,6 +398,7 @@ class MarketProfileService:
             channel_share=channel_share,
             platform_share=platform_share,
             price_wavg=price_wavg,
+            product_category=product_category,
         )
         active_week_count = len(
             {
@@ -364,6 +413,7 @@ class MarketProfileService:
             sample_status=sample_status,
             price_wavg=price_wavg,
             size_input=size_input,
+            product_category=product_category,
             quality_flags=quality_flags,
         )
         evidence_ids = _unique([evidence_id for row in rows for evidence_id in row.evidence_ids])
@@ -394,8 +444,10 @@ class MarketProfileService:
                 "price_latest": latest_price,
                 "screen_size_inch": size_input.screen_size_inch if size_input else None,
                 "screen_size_class": screen_size_class,
+                "size_segment": size_input.size_segment if size_input else "unknown",
                 "market_pool_key": market_pool_key,
                 "quality_flags": sorted(set(quality_flags)),
+                "product_category": product_category,
                 "rule_version": rule_version,
             },
             version="m07-profile-result-v1",
@@ -455,7 +507,7 @@ class MarketProfileService:
             result_hash=result_hash,
         )
 
-    def _apply_percentiles(self, metrics: list[M07SkuMarketMetrics]) -> list[M07SkuMarketMetrics]:
+    def _apply_percentiles(self, metrics: list[M07SkuMarketMetrics], *, product_category: str = "TV") -> list[M07SkuMarketMetrics]:
         by_size: dict[str, list[M07SkuMarketMetrics]] = {}
         by_market_pool: dict[str, list[M07SkuMarketMetrics]] = {}
         for item in metrics:
@@ -511,6 +563,7 @@ class MarketProfileService:
                     confidence=item.size_param_confidence,
                     evidence_ids=item.param_evidence_ids,
                 ),
+                product_category=product_category,
                 quality_flags=list(quality_flags),
             )
             updated.append(
@@ -954,7 +1007,7 @@ class MarketProfileService:
         if profiles and not full_observed_profiles:
             warnings.append("M07 未生成全量观察窗口市场画像，后续尺寸价格池和销量基线不能高置信使用。")
         if any("size_missing" in profile.quality_flags for profile in full_observed_profiles):
-            warnings.append("部分 SKU 缺少有效屏幕尺寸，尺寸价格池和战场划分需要低置信使用。")
+            warnings.append(_size_missing_warning(full_observed_profiles))
         if any("price_missing" in profile.quality_flags for profile in full_observed_profiles):
             warnings.append("部分 SKU 缺少有效价格，价格池和溢价判断需要低置信使用。")
         return warnings
@@ -982,6 +1035,13 @@ def _is_full_observed_window(value: M07AnalysisWindow | str | None) -> bool:
     if isinstance(value, M07AnalysisWindow):
         return value == M07AnalysisWindow.FULL_OBSERVED_WINDOW
     return value == M07AnalysisWindow.FULL_OBSERVED_WINDOW.value
+
+
+def _size_missing_warning(profiles: Sequence[Any]) -> str:
+    category_codes = {str(_category_value(getattr(profile, "category_code", ""))).upper() for profile in profiles}
+    if "AC" in category_codes:
+        return "部分 SKU 缺少有效空调匹数或安装方式，规格价格池和战场划分需要低置信使用。"
+    return "部分 SKU 缺少有效屏幕尺寸，尺寸价格池和战场划分需要低置信使用。"
 
 
 def _rows_for_window(
@@ -1102,6 +1162,7 @@ def _quality_flags(
     channel_share: Mapping[str, Any],
     platform_share: Mapping[str, Any],
     price_wavg: Decimal | None,
+    product_category: str = "TV",
 ) -> list[str]:
     flags: list[str] = []
     if global_week_count < 52:
@@ -1112,7 +1173,7 @@ def _quality_flags(
         flags.append("latest_week_gap")
     if price_wavg is None:
         flags.append("price_missing")
-    if size_input is None or size_input.screen_size_inch is None:
+    if _market_size_input_missing(product_category, size_input):
         flags.append("size_missing")
     if not platform_share or "unknown" in platform_share:
         flags.append("platform_missing")
@@ -1132,6 +1193,7 @@ def _market_confidence(
     sample_status: M07SampleStatus | str,
     price_wavg: Decimal | None,
     size_input: M07SkuSizeInput | None,
+    product_category: str = "TV",
     quality_flags: Sequence[str],
 ) -> Decimal:
     score = Decimal("0.30")
@@ -1141,7 +1203,7 @@ def _market_confidence(
         score += Decimal("0.15")
     if price_wavg is not None:
         score += Decimal("0.20")
-    if size_input and size_input.screen_size_inch is not None:
+    if not _market_size_input_missing(product_category, size_input):
         score += Decimal("0.15") * size_input.confidence
     if sample_status == M07SampleStatus.SUFFICIENT:
         score += Decimal("0.10")
@@ -1200,6 +1262,123 @@ def _pool_confidence(sample_status: M07SampleStatus, candidates: list[M07SkuMark
         return Decimal("0.0000")
     avg_confidence = sum((item.market_confidence for item in candidates), D0) / Decimal(len(candidates))
     return _quant4(min(D1, base * Decimal("0.50") + avg_confidence * Decimal("0.50")))
+
+
+def _normalize_product_category(product_category: str | None, category_code: Any) -> str:
+    normalized = str(product_category or _category_value(category_code) or "TV").strip().upper()
+    if normalized in {"AC", "AIR_CONDITIONER", "空调"}:
+        return "AC"
+    return "TV"
+
+
+def _profile_param_entry(values: Any, param_code: str) -> dict[str, Any] | None:
+    if not isinstance(values, Mapping):
+        return None
+    entry = values.get(param_code)
+    return entry if isinstance(entry, dict) else None
+
+
+def _normalized_text_value(entry: Mapping[str, Any] | None) -> str | None:
+    if not entry:
+        return None
+    for key in ("normalized_value", "value_text", "raw_param_value"):
+        value = entry.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def _ac_size_segment(installation: str | None, horsepower: Decimal | None, cooling_capacity: Decimal | None) -> str:
+    install_segment = _ac_installation_segment(installation)
+    hp_segment = _ac_horsepower_segment(horsepower)
+    if hp_segment == "hp_unknown":
+        hp_segment = _ac_cooling_capacity_segment(cooling_capacity)
+    if install_segment == "unknown" and hp_segment == "hp_unknown":
+        return "unknown"
+    return f"{install_segment if install_segment != 'unknown' else 'ac'}_{hp_segment}"
+
+
+def _ac_size_class(installation: str | None, horsepower: Decimal | None) -> str:
+    install_segment = _ac_installation_segment(installation)
+    hp_segment = _ac_horsepower_segment(horsepower)
+    if install_segment == "unknown" and hp_segment == "hp_unknown":
+        return "unknown"
+    if install_segment == "unknown":
+        return f"ac_{hp_segment}"
+    if hp_segment == "hp_unknown":
+        return install_segment
+    return f"{install_segment}_{hp_segment}"
+
+
+def _ac_installation_segment(value: str | None) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return "unknown"
+    if text in {"floor_standing", "floor", "cabinet"} or "柜" in text or "立柜" in text:
+        return "floor"
+    if text in {"wall_mounted", "wall", "hanging"} or "挂" in text or "壁挂" in text:
+        return "wall"
+    if text in {"mobile", "portable"} or "移动" in text:
+        return "mobile"
+    return "unknown"
+
+
+def _ac_horsepower_segment(value: Decimal | None) -> str:
+    if value is None:
+        return "hp_unknown"
+    if value <= Decimal("1"):
+        return "hp_1_or_below"
+    if value <= Decimal("1.5"):
+        return "hp_1_5"
+    if value <= Decimal("2"):
+        return "hp_2"
+    if value <= Decimal("3"):
+        return "hp_3"
+    return "hp_3_plus"
+
+
+def _ac_cooling_capacity_segment(value: Decimal | None) -> str:
+    if value is None:
+        return "hp_unknown"
+    if value < Decimal("3000"):
+        return "hp_1_or_below"
+    if value < Decimal("4000"):
+        return "hp_1_5"
+    if value < Decimal("5500"):
+        return "hp_2"
+    if value < Decimal("7500"):
+        return "hp_3"
+    return "hp_3_plus"
+
+
+def _market_size_input_missing(product_category: str, size_input: M07SkuSizeInput | None) -> bool:
+    if size_input is None:
+        return True
+    if product_category == "AC":
+        return size_input.size_segment == "unknown"
+    return size_input.screen_size_inch is None
+
+
+def _market_size_class(product_category: str, size_input: M07SkuSizeInput | None) -> str:
+    if size_input is None:
+        return "unknown"
+    if product_category == "AC":
+        return _ac_size_class_from_segment(size_input.size_segment)
+    return _screen_size_class(size_input.screen_size_inch)
+
+
+def _ac_size_class_from_segment(size_segment: str) -> str:
+    text = str(size_segment or "unknown")
+    if text == "unknown":
+        return "unknown"
+    parts = text.split("_")
+    if parts[0] in {"wall", "floor", "mobile"}:
+        return text
+    return f"ac_{text}"
+
+
+def _list_or_empty(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, (list, tuple, set)) else []
 
 
 def _size_segment(value: Decimal | None) -> str:

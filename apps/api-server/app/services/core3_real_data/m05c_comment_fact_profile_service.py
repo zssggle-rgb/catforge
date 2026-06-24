@@ -25,8 +25,12 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_MODULE_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
@@ -59,6 +63,9 @@ DIMENSION_TYPE_USE_CASE = "use_case_signal"
 DIMENSION_TYPE_BRAND = "brand_power_signal"
 DIMENSION_TYPE_COMPETITOR = "competitor_comparison_signal"
 DIMENSION_TYPE_SERVICE = "service_fulfillment_excluded"
+DIMENSION_TYPE_PRODUCT_RISK = "product_risk"
+DIMENSION_TYPE_PRICE_VALUE = "price_value"
+DIMENSION_TYPE_QUALITY_REVIEW = "quality_review"
 
 POLARITY_POSITIVE = "positive"
 POLARITY_NEGATIVE = "negative"
@@ -341,11 +348,449 @@ def tv_comment_fact_taxonomy_v0_1() -> M05CCommentTaxonomy:
     )
 
 
+def ac_comment_fact_taxonomy_v0_1() -> M05CCommentTaxonomy:
+    dimensions = (
+        _dimension("temperature_effect_experience", "冷暖效果与温度响应", DIMENSION_TYPE_PRODUCT, "评价制冷、制热、速冷速热、恒温和宽温域体验。"),
+        _dimension("energy_cost_experience", "能效、电费与长期使用成本", DIMENSION_TYPE_PRODUCT, "评价能效等级、APF、省电、电费和长期使用成本。"),
+        _dimension("airflow_comfort_experience", "送风舒适与覆盖", DIMENSION_TYPE_PRODUCT, "评价风量、扫风、覆盖、柔风和防直吹体验。"),
+        _dimension("noise_sleep_experience", "静音与睡眠体验", DIMENSION_TYPE_PRODUCT, "评价运行噪音、夜间卧室和睡眠体验。"),
+        _dimension("health_clean_air_experience", "健康洁净空气", DIMENSION_TYPE_PRODUCT, "评价新风、净化、除菌、自清洁和异味空气体验。"),
+        _dimension("humidity_control_experience", "除湿与湿度控制", DIMENSION_TYPE_PRODUCT, "评价除湿、防潮、干爽和湿度舒适体验。"),
+        _dimension("smart_control_experience", "智控交互体验", DIMENSION_TYPE_PRODUCT, "评价 APP、语音、遥控、WiFi、远程和智能模式体验。"),
+        _dimension("appearance_installation_space", "外观、安装形态与空间适配", DIMENSION_TYPE_PRODUCT, "评价外观、挂机柜机、占地、尺寸、安装位置和面积适配。"),
+        _dimension("quality_reliability_risk", "质量稳定性与产品风险", DIMENSION_TYPE_PRODUCT_RISK, "识别耐用、故障、漏水、异响和核心部件风险。"),
+        _dimension("price_value_perception", "价格、补贴与价值感知", DIMENSION_TYPE_PRICE_VALUE, "评价价格、性价比、优惠、国补和同价位价值感。"),
+        _dimension("audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, "识别老人、儿童、家庭、租房、敏感人群等购买或使用者线索。"),
+        _dimension("use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, "识别卧室、客厅、租房、办公、潮湿和冬夏冷暖场景。"),
+        _dimension("brand_power_signal", "品牌力与复购推荐", DIMENSION_TYPE_BRAND, "识别品牌信任、复购、推荐、长期使用和品牌情绪。"),
+        _dimension("competitor_comparison_signal", "竞品比较与替换来源", DIMENSION_TYPE_COMPETITOR, "识别跨品牌比较、旧机替换、同价位比较和能力对比。"),
+        _dimension("service_fulfillment_excluded", "服务履约隔离维度", DIMENSION_TYPE_SERVICE, "识别物流、安装、客服、售后等服务履约内容，不进入商品事实支撑。"),
+        _dimension("template_campaign_review", "模板/营销文案复核维度", DIMENSION_TYPE_QUALITY_REVIEW, "识别疑似营销稿、模板化长句和平台活动宣传，进入降权或复核。"),
+    )
+    subdimensions = (
+        _sub(
+            "cooling_effect",
+            "制冷效果",
+            "temperature_effect_experience",
+            "冷暖效果与温度响应",
+            DIMENSION_TYPE_PRODUCT,
+            ("制冷", "凉快", "降温", "冷气", "冷得快", "制冷效果", "冷量"),
+            linked_param_codes=("cooling_capacity_w", "horsepower_hp", "heat_cool_mode"),
+            linked_claim_codes=("ac_claim_fast_cooling_heating",),
+        ),
+        _sub(
+            "heating_effect",
+            "制热效果",
+            "temperature_effect_experience",
+            "冷暖效果与温度响应",
+            DIMENSION_TYPE_PRODUCT,
+            ("制热", "暖和", "升温", "热风", "冬天", "制热效果", "暖气"),
+            linked_param_codes=("heating_capacity_w", "heating_function_flag", "heat_cool_mode"),
+            linked_claim_codes=("ac_claim_fast_cooling_heating", "ac_claim_wide_temperature_operation"),
+        ),
+        _sub(
+            "fast_cooling_heating",
+            "速冷速热",
+            "temperature_effect_experience",
+            "冷暖效果与温度响应",
+            DIMENSION_TYPE_PRODUCT,
+            ("速冷", "速热", "很快凉", "很快热", "几分钟", "一会儿", "见效快", "开机就"),
+            linked_param_codes=("cooling_capacity_w", "heating_capacity_w", "horsepower_hp"),
+            linked_claim_codes=("ac_claim_fast_cooling_heating",),
+        ),
+        _sub(
+            "temperature_stability",
+            "温度稳定/控温",
+            "temperature_effect_experience",
+            "冷暖效果与温度响应",
+            DIMENSION_TYPE_PRODUCT,
+            ("恒温", "控温", "温控", "忽冷忽热", "过冷", "过热", "自动模式"),
+            linked_param_codes=("inverter_flag", "smart_sensing_flag"),
+            linked_claim_codes=("ac_claim_precision_temperature_control",),
+        ),
+        _sub(
+            "wide_temperature_operation",
+            "极端环境/宽温域",
+            "temperature_effect_experience",
+            "冷暖效果与温度响应",
+            DIMENSION_TYPE_PRODUCT,
+            ("高温", "低温", "极寒", "极热", "宽温", "外机环境", "严寒", "酷暑"),
+            linked_claim_codes=("ac_claim_wide_temperature_operation",),
+        ),
+        _sub(
+            "energy_grade_apf",
+            "一级能效/APF",
+            "energy_cost_experience",
+            "能效、电费与长期使用成本",
+            DIMENSION_TYPE_PRODUCT,
+            ("一级能效", "新一级", "apf", "能效比", "能效等级"),
+            linked_param_codes=("energy_grade_normalized", "energy_efficiency_ratio", "inverter_flag"),
+            linked_claim_codes=("ac_claim_energy_efficiency_apf",),
+        ),
+        _sub(
+            "energy_saving_usage",
+            "省电体验",
+            "energy_cost_experience",
+            "能效、电费与长期使用成本",
+            DIMENSION_TYPE_PRODUCT,
+            ("省电", "节能", "耗电低", "eco", "省电模式", "变频", "不费电"),
+            linked_param_codes=("energy_grade_normalized", "energy_efficiency_ratio", "inverter_flag"),
+            linked_claim_codes=("ac_claim_energy_efficiency_apf", "ac_claim_ai_energy_saving"),
+        ),
+        _sub(
+            "electricity_cost",
+            "电费成本",
+            "energy_cost_experience",
+            "能效、电费与长期使用成本",
+            DIMENSION_TYPE_PRODUCT,
+            ("电费", "几度电", "一晚", "每月", "长期成本", "用电", "耗电量"),
+            linked_claim_codes=("ac_claim_energy_efficiency_apf", "ac_claim_price_value_subsidy"),
+        ),
+        _sub(
+            "energy_saving_negative",
+            "省电反证",
+            "energy_cost_experience",
+            "能效、电费与长期使用成本",
+            DIMENSION_TYPE_PRODUCT,
+            ("不省电", "耗电", "费电", "电费高", "耗电大"),
+            linked_param_codes=("energy_grade_normalized", "energy_efficiency_ratio"),
+            linked_claim_codes=("ac_claim_energy_efficiency_apf", "ac_claim_ai_energy_saving"),
+        ),
+        _sub(
+            "airflow_volume_coverage",
+            "风量覆盖",
+            "airflow_comfort_experience",
+            "送风舒适与覆盖",
+            DIMENSION_TYPE_PRODUCT,
+            ("风量", "风大", "循环风", "全屋", "覆盖", "客厅", "大空间", "送风远"),
+            linked_param_codes=("airflow_volume_m3h", "installation_type", "horsepower_hp"),
+            linked_claim_codes=("ac_claim_large_airflow_coverage",),
+        ),
+        _sub(
+            "airflow_even_swing",
+            "出风均匀/扫风",
+            "airflow_comfort_experience",
+            "送风舒适与覆盖",
+            DIMENSION_TYPE_PRODUCT,
+            ("出风", "扫风", "上下风", "左右风", "角落", "均匀", "风道"),
+            linked_param_codes=("airflow_volume_m3h", "comfort_airflow_flag"),
+            linked_claim_codes=("ac_claim_large_airflow_coverage",),
+        ),
+        _sub(
+            "soft_wind_no_direct",
+            "柔风不直吹",
+            "airflow_comfort_experience",
+            "送风舒适与覆盖",
+            DIMENSION_TYPE_PRODUCT,
+            ("柔风", "无风感", "不直吹", "防直吹", "风感舒服", "冷风不直吹"),
+            linked_param_codes=("comfort_airflow_flag",),
+            linked_claim_codes=("ac_claim_soft_wind_no_direct",),
+        ),
+        _sub(
+            "airflow_negative",
+            "风感负向",
+            "airflow_comfort_experience",
+            "送风舒适与覆盖",
+            DIMENSION_TYPE_PRODUCT,
+            ("风小", "风太硬", "吹得头疼", "不均匀", "吹不到", "风不大"),
+            linked_param_codes=("airflow_volume_m3h", "comfort_airflow_flag"),
+            linked_claim_codes=("ac_claim_large_airflow_coverage", "ac_claim_soft_wind_no_direct"),
+        ),
+        _sub(
+            "quiet_positive",
+            "静音正向",
+            "noise_sleep_experience",
+            "静音与睡眠体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("静音", "安静", "声音小", "低噪", "不吵", "没噪音"),
+            linked_param_codes=("inverter_flag",),
+            linked_claim_codes=("ac_claim_quiet_sleep",),
+        ),
+        _sub(
+            "sleep_scene",
+            "睡眠场景",
+            "noise_sleep_experience",
+            "静音与睡眠体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("卧室", "夜间", "晚上", "睡觉", "睡眠", "休息", "不影响睡眠"),
+            linked_claim_codes=("ac_claim_quiet_sleep", "ac_claim_soft_wind_no_direct"),
+        ),
+        _sub(
+            "noise_risk",
+            "噪音风险",
+            "noise_sleep_experience",
+            "静音与睡眠体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("噪音", "声音大", "异响", "外机响", "吵", "轰鸣", "震动"),
+            linked_param_codes=("inverter_flag",),
+            linked_claim_codes=("ac_claim_quiet_sleep", "ac_claim_durability_core_material"),
+        ),
+        _sub(
+            "self_cleaning",
+            "自清洁/自洁",
+            "health_clean_air_experience",
+            "健康洁净空气",
+            DIMENSION_TYPE_PRODUCT,
+            ("自清洁", "自洁", "内机自洁", "高温清洁", "56", "清洁省心"),
+            linked_param_codes=("self_cleaning_flag",),
+            linked_claim_codes=("ac_claim_self_cleaning",),
+        ),
+        _sub(
+            "purification_antibacterial",
+            "净化除菌",
+            "health_clean_air_experience",
+            "健康洁净空气",
+            DIMENSION_TYPE_PRODUCT,
+            ("净化", "杀菌", "除菌", "抗菌", "防霉", "pm2.5", "空气杀菌"),
+            linked_param_codes=("purification_flag",),
+            linked_claim_codes=("ac_claim_purification_antibacterial",),
+        ),
+        _sub(
+            "fresh_air_ventilation",
+            "新风换气",
+            "health_clean_air_experience",
+            "健康洁净空气",
+            DIMENSION_TYPE_PRODUCT,
+            ("新风", "换气", "鲜氧", "空气流通", "通风", "空气新鲜"),
+            linked_param_codes=("fresh_air_flag",),
+            linked_claim_codes=("ac_claim_fresh_air",),
+        ),
+        _sub(
+            "odor_mold_risk",
+            "异味/霉味",
+            "health_clean_air_experience",
+            "健康洁净空气",
+            DIMENSION_TYPE_PRODUCT,
+            ("异味", "霉味", "味道", "不清新", "发霉", "臭味"),
+            linked_param_codes=("self_cleaning_flag", "purification_flag"),
+            linked_claim_codes=("ac_claim_self_cleaning", "ac_claim_purification_antibacterial"),
+        ),
+        _sub(
+            "dehumidification",
+            "独立除湿",
+            "humidity_control_experience",
+            "除湿与湿度控制",
+            DIMENSION_TYPE_PRODUCT,
+            ("除湿", "抽湿", "独立除湿", "干爽", "湿度"),
+            linked_claim_codes=("ac_claim_humidity_dehumidification",),
+        ),
+        _sub(
+            "humid_weather",
+            "潮湿环境",
+            "humidity_control_experience",
+            "除湿与湿度控制",
+            DIMENSION_TYPE_PRODUCT,
+            ("潮湿", "梅雨", "回南天", "防潮", "不闷"),
+            linked_claim_codes=("ac_claim_humidity_dehumidification",),
+        ),
+        _sub(
+            "smart_app_remote",
+            "APP/远程",
+            "smart_control_experience",
+            "智控交互体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("app", "手机", "远程", "wifi", "联网", "小程序"),
+            linked_param_codes=("wifi_control_flag",),
+            linked_claim_codes=("ac_claim_smart_app_voice_iot",),
+        ),
+        _sub(
+            "voice_iot",
+            "语音/生态",
+            "smart_control_experience",
+            "智控交互体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("语音", "小爱", "米家", "天猫精灵", "智能家居", "生态"),
+            linked_param_codes=("voice_control_flag", "smart_sensing_flag"),
+            linked_claim_codes=("ac_claim_smart_app_voice_iot",),
+        ),
+        _sub(
+            "remote_panel_easy_use",
+            "遥控/面板易用",
+            "smart_control_experience",
+            "智控交互体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("遥控", "面板", "操作简单", "老人会用", "按键", "控制方便"),
+            linked_claim_codes=("ac_claim_smart_app_voice_iot",),
+        ),
+        _sub(
+            "smart_negative",
+            "交互反证",
+            "smart_control_experience",
+            "智控交互体验",
+            DIMENSION_TYPE_PRODUCT,
+            ("连接失败", "app难用", "遥控不灵", "联网失败", "自动模式不舒服"),
+            linked_param_codes=("wifi_control_flag", "voice_control_flag", "smart_sensing_flag"),
+            linked_claim_codes=("ac_claim_smart_app_voice_iot", "ac_claim_ai_energy_saving"),
+        ),
+        _sub(
+            "appearance_design",
+            "外观颜值",
+            "appearance_installation_space",
+            "外观、安装形态与空间适配",
+            DIMENSION_TYPE_PRODUCT,
+            ("外观", "好看", "颜值", "颜色", "质感", "漂亮", "简洁"),
+            linked_param_codes=("indoor_unit_dimensions_mm", "product_type_combo"),
+            linked_claim_codes=("ac_claim_installation_space_design",),
+        ),
+        _sub(
+            "installation_form",
+            "安装形态",
+            "appearance_installation_space",
+            "外观、安装形态与空间适配",
+            DIMENSION_TYPE_PRODUCT,
+            ("挂机", "柜机", "立柜", "移动空调", "外机", "内机", "挂墙"),
+            linked_param_codes=("installation_type", "product_type_combo"),
+            linked_claim_codes=("ac_claim_installation_space_design",),
+        ),
+        _sub(
+            "space_fit_area",
+            "空间/面积适配",
+            "appearance_installation_space",
+            "外观、安装形态与空间适配",
+            DIMENSION_TYPE_PRODUCT,
+            ("占地", "体积", "尺寸", "平方", "平米", "房间", "够用", "不够用", "面积"),
+            linked_param_codes=("installation_type", "indoor_unit_dimensions_mm", "horsepower_hp"),
+            linked_claim_codes=("ac_claim_installation_space_design", "ac_claim_large_airflow_coverage"),
+        ),
+        _sub(
+            "installation_constraint",
+            "安装约束",
+            "appearance_installation_space",
+            "外观、安装形态与空间适配",
+            DIMENSION_TYPE_PRODUCT,
+            ("铜管", "打孔", "支架", "高空", "孔位", "外机位置", "位置远", "延长管"),
+            linked_param_codes=("installation_type",),
+            linked_claim_codes=("ac_claim_installation_space_design", "ac_claim_warranty_install_service"),
+        ),
+        _sub(
+            "durability_positive",
+            "耐用品质",
+            "quality_reliability_risk",
+            "质量稳定性与产品风险",
+            DIMENSION_TYPE_PRODUCT_RISK,
+            ("耐用", "质量好", "做工", "扎实", "真材实料", "稳定"),
+            linked_claim_codes=("ac_claim_durability_core_material",),
+        ),
+        _sub(
+            "core_component",
+            "核心部件",
+            "quality_reliability_risk",
+            "质量稳定性与产品风险",
+            DIMENSION_TYPE_PRODUCT_RISK,
+            ("压缩机", "铜管", "冷媒", "外机", "内机", "蒸发器", "冷凝器"),
+            linked_param_codes=("refrigerant_type",),
+            linked_claim_codes=("ac_claim_durability_core_material",),
+        ),
+        _sub(
+            "failure_risk",
+            "故障风险",
+            "quality_reliability_risk",
+            "质量稳定性与产品风险",
+            DIMENSION_TYPE_PRODUCT_RISK,
+            ("故障", "坏", "漏水", "漏氟", "不制冷", "不制热", "异响", "报错"),
+            linked_param_codes=("refrigerant_type",),
+            linked_claim_codes=("ac_claim_durability_core_material",),
+        ),
+        _sub(
+            "quality_pending",
+            "质量待观察",
+            "quality_reliability_risk",
+            "质量稳定性与产品风险",
+            DIMENSION_TYPE_PRODUCT_RISK,
+            ("待观察", "刚买", "希望耐用", "用久再看", "质量如何"),
+            linked_claim_codes=("ac_claim_durability_core_material",),
+        ),
+        _sub(
+            "value_positive",
+            "性价比正向",
+            "price_value_perception",
+            "价格、补贴与价值感知",
+            DIMENSION_TYPE_PRICE_VALUE,
+            ("性价比", "划算", "值得", "实惠", "便宜", "物有所值"),
+            linked_claim_codes=("ac_claim_price_value_subsidy",),
+        ),
+        _sub(
+            "price_negative",
+            "价格负向",
+            "price_value_perception",
+            "价格、补贴与价值感知",
+            DIMENSION_TYPE_PRICE_VALUE,
+            ("贵", "降价", "买亏", "差价", "坑", "不值"),
+            linked_claim_codes=("ac_claim_price_value_subsidy",),
+        ),
+        _sub(
+            "subsidy_promotion",
+            "补贴优惠",
+            "price_value_perception",
+            "价格、补贴与价值感知",
+            DIMENSION_TYPE_PRICE_VALUE,
+            ("国补", "以旧换新", "优惠", "券", "活动", "补贴", "百亿补贴"),
+            linked_claim_codes=("ac_claim_price_value_subsidy",),
+        ),
+        _sub(
+            "same_price_value",
+            "同价位判断",
+            "price_value_perception",
+            "价格、补贴与价值感知",
+            DIMENSION_TYPE_PRICE_VALUE,
+            ("同价位", "比价", "配置", "价格对得起", "平台对比"),
+            linked_claim_codes=("ac_claim_price_value_subsidy", "ac_claim_energy_efficiency_apf"),
+        ),
+        _sub("audience_senior_parent", "老人/父母", "audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, ("老人", "父母", "爸妈", "长辈", "老人家")),
+        _sub("audience_child_baby", "孩子/宝宝", "audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, ("孩子", "小孩", "宝宝", "儿童", "母婴", "防直吹")),
+        _sub("audience_family", "家庭/全家", "audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, ("家人", "一家人", "全家", "父母孩子", "家庭")),
+        _sub("audience_rental_young", "租房/年轻用户", "audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, ("租房", "宿舍", "单间", "年轻人", "出租屋")),
+        _sub("audience_sensitive", "特殊敏感人群", "audience_signal", "人群线索", DIMENSION_TYPE_AUDIENCE, ("鼻炎", "怕冷", "怕直吹", "睡眠不好", "过敏")),
+        _sub("use_bedroom_sleep", "卧室睡眠", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("卧室", "睡觉", "夜间", "小房间", "主卧")),
+        _sub("use_living_room_large", "客厅大空间", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("客厅", "大空间", "全屋", "3p", "三匹", "柜机")),
+        _sub("use_rental_dorm", "租房/宿舍", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("租房", "宿舍", "移动空调", "安装简单", "出租屋")),
+        _sub("use_office_shop", "办公/门店", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("办公室", "办公", "店里", "商用", "小店", "门店")),
+        _sub("use_humid_south", "南方潮湿", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("除湿", "防潮", "梅雨", "回南天", "南方")),
+        _sub("use_summer_winter", "冬夏冷暖", "use_case_signal", "用途与使用场景线索", DIMENSION_TYPE_USE_CASE, ("夏天", "冬天", "冷暖", "降温", "制热", "制冷")),
+        _sub("brand_trust", "品牌信任", "brand_power_signal", "品牌力与复购推荐", DIMENSION_TYPE_BRAND, ("大品牌", "老品牌", "老牌", "信赖", "信任", "放心", "靠谱", "质量有保证")),
+        _sub("brand_repurchase", "复购/长期使用", "brand_power_signal", "品牌力与复购推荐", DIMENSION_TYPE_BRAND, ("复购", "再次选择", "又买", "买了多台", "一直用", "回购")),
+        _sub("brand_recommendation", "口碑推荐", "brand_power_signal", "品牌力与复购推荐", DIMENSION_TYPE_BRAND, ("推荐", "朋友推荐", "家人推荐", "口碑", "种草")),
+        _sub("brand_sentiment", "品牌情绪", "brand_power_signal", "品牌力与复购推荐", DIMENSION_TYPE_BRAND, ("喜欢", "不再买", "粉丝", "忠实", "失望")),
+        _sub("competitor_brand_compare", "跨品牌对比", "competitor_comparison_signal", "竞品比较与替换来源", DIMENSION_TYPE_COMPETITOR, ("比格力", "比美的", "比海尔", "比小米", "比奥克斯", "比tcl", "对比", "竞品")),
+        _sub("replacement_source", "旧机替换", "competitor_comparison_signal", "竞品比较与替换来源", DIMENSION_TYPE_COMPETITOR, ("换掉", "替换", "原来", "之前用", "旧空调", "老空调")),
+        _sub("same_price_comparison", "同价位比较", "competitor_comparison_signal", "竞品比较与替换来源", DIMENSION_TYPE_COMPETITOR, ("同价位", "同价格", "平台比价", "配置比较", "差不多价格")),
+        _sub("capability_comparison", "能力对比", "competitor_comparison_signal", "竞品比较与替换来源", DIMENSION_TYPE_COMPETITOR, ("制冷更快", "更省电", "声音更小", "更划算", "效果更好", "不如")),
+        _sub(
+            "service_delivery_install",
+            "配送/安装/客服/售后",
+            "service_fulfillment_excluded",
+            "服务履约隔离维度",
+            DIMENSION_TYPE_SERVICE,
+            ("安装师傅", "安装", "配送", "送货", "物流", "客服", "售后", "上门", "包修", "退换货", "发货"),
+            linked_claim_codes=("ac_claim_warranty_install_service",),
+        ),
+        _sub(
+            "campaign_template_review",
+            "模板/营销文案",
+            "template_campaign_review",
+            "模板/营销文案复核维度",
+            DIMENSION_TYPE_QUALITY_REVIEW,
+            ("官方旗舰", "详情页", "新品上市", "全新升级", "强烈推荐购买", "活动力度", "宣传", "文案"),
+        ),
+    )
+    return M05CCommentTaxonomy(
+        taxonomy_version=CORE3_M05C_AC_TAXONOMY_VERSION,
+        product_category="AC",
+        product_category_label_cn="空调",
+        raw_category_label_cn="空调",
+        sku_code_prefix="AC",
+        dimensions=dimensions,
+        subdimensions=subdimensions,
+    )
+
+
 class M05CCommentTaxonomyLoader:
     def load(self, taxonomy_version: str, *, product_category: str) -> M05CCommentTaxonomy:
         normalized_category = str(product_category or "").upper()
         if normalized_category == "TV" and taxonomy_version == CORE3_M05C_TV_TAXONOMY_VERSION:
             return tv_comment_fact_taxonomy_v0_1()
+        if normalized_category == "AC" and taxonomy_version == CORE3_M05C_AC_TAXONOMY_VERSION:
+            return ac_comment_fact_taxonomy_v0_1()
         raise ValueError(f"{normalized_category or product_category} 评论事实 taxonomy 未发布，不能生成 SKU 评论事实画像。")
 
 
@@ -827,15 +1272,16 @@ class M05CRunner:
                 started_at=datetime.now(timezone.utc),
                 finished_at=datetime.now(timezone.utc),
             )
+        product_category = str(target.metadata.get("product_category") or context.category_code.value)
         return self.run_batch(
             project_id=context.project_id,
             category_code=context.category_code.value,
             batch_id=batch_id,
             run_id=context.run_id,
             module_run_id=target.metadata.get("module_run_id"),
-            product_category=str(target.metadata.get("product_category") or "TV"),
-            taxonomy_version=str(target.metadata.get("taxonomy_version") or CORE3_M05C_TV_TAXONOMY_VERSION),
-            rule_version=str(target.metadata.get("rule_version") or CORE3_M05C_TV_RULE_VERSION),
+            product_category=product_category,
+            taxonomy_version=str(target.metadata.get("taxonomy_version") or _comment_taxonomy_version_for_product_category(product_category)),
+            rule_version=str(target.metadata.get("rule_version") or _comment_rule_version_for_product_category(product_category)),
             target_sku_codes=target.target_ids,
             max_sentences_per_sku=int(target.metadata.get("max_sentences_per_sku") or 500),
             llm_mode=str(target.metadata.get("llm_mode") or LLM_MODE_AUTO),
@@ -1063,8 +1509,16 @@ class M05CService:
             max_sentences_per_sku=max_sentences_per_sku,
         )
         sku_codes = sorted({record.sku_code for record in records})
-        param_profiles = self._read_param_profiles(batch_id, sku_codes=sku_codes)
-        claim_facts = self._read_claim_facts(batch_id, sku_codes=sku_codes)
+        param_profiles = self._read_param_profiles(
+            batch_id,
+            sku_codes=sku_codes,
+            rule_version=_param_rule_version_for_product_category(taxonomy.product_category),
+        )
+        claim_facts = self._read_claim_facts(
+            batch_id,
+            sku_codes=sku_codes,
+            rule_version=_claim_rule_version_for_product_category(taxonomy.product_category),
+        )
         profiles, facts, coverages, review_issues, summary = M05CProfileBuilder(
             project_id=self.context.project_id,
             category_code=self.context.category_code.value,
@@ -1207,7 +1661,13 @@ class M05CService:
             summary=summary,
         )
 
-    def _read_param_profiles(self, batch_id: str, *, sku_codes: Sequence[str]) -> dict[str, entities.Core3SkuParamProfile]:
+    def _read_param_profiles(
+        self,
+        batch_id: str,
+        *,
+        sku_codes: Sequence[str],
+        rule_version: str,
+    ) -> dict[str, entities.Core3SkuParamProfile]:
         if not sku_codes:
             return {}
         stmt = (
@@ -1215,7 +1675,7 @@ class M05CService:
             .where(entities.Core3SkuParamProfile.project_id == self.context.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.context.category_code.value)
             .where(entities.Core3SkuParamProfile.batch_id == batch_id)
-            .where(entities.Core3SkuParamProfile.rule_version == CORE3_M03B_RULE_VERSION)
+            .where(entities.Core3SkuParamProfile.rule_version == rule_version)
             .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
             .order_by(entities.Core3SkuParamProfile.updated_at.desc(), entities.Core3SkuParamProfile.created_at.desc())
         )
@@ -1224,7 +1684,13 @@ class M05CService:
             result.setdefault(profile.sku_code, profile)
         return result
 
-    def _read_claim_facts(self, batch_id: str, *, sku_codes: Sequence[str]) -> dict[str, dict[str, list[entities.Core3SkuClaimFact]]]:
+    def _read_claim_facts(
+        self,
+        batch_id: str,
+        *,
+        sku_codes: Sequence[str],
+        rule_version: str,
+    ) -> dict[str, dict[str, list[entities.Core3SkuClaimFact]]]:
         if not sku_codes:
             return {}
         stmt = (
@@ -1232,7 +1698,7 @@ class M05CService:
             .where(entities.Core3SkuClaimFact.project_id == self.context.project_id)
             .where(entities.Core3SkuClaimFact.category_code == self.context.category_code.value)
             .where(entities.Core3SkuClaimFact.batch_id == batch_id)
-            .where(entities.Core3SkuClaimFact.rule_version == CORE3_M04C_TV_RULE_VERSION)
+            .where(entities.Core3SkuClaimFact.rule_version == rule_version)
             .where(entities.Core3SkuClaimFact.sku_code.in_(tuple(sku_codes)))
             .where(entities.Core3SkuClaimFact.fact_claim_flag.is_(True))
             .where(entities.Core3SkuClaimFact.is_current.is_(True))
@@ -2099,6 +2565,11 @@ def _has_positive(normalized_text: str) -> bool:
             "真实",
             "鲜艳",
             "震撼",
+            "安静",
+            "省电",
+            "凉快",
+            "暖和",
+            "舒服",
         )
     )
 
@@ -2130,7 +2601,6 @@ def _has_negative(normalized_text: str) -> bool:
             "偏色",
             "漏光",
             "暗",
-            "声音小",
             "音质差",
         )
     )
@@ -2321,6 +2791,22 @@ def _warnings(
         warnings.append("m05c_comment_contradiction_review_required")
     warnings.extend(str(item) for item in summary.get("llm_warnings") or [])
     return warnings
+
+
+def _param_rule_version_for_product_category(product_category: str) -> str:
+    return CORE3_M03B_AC_RULE_VERSION if str(product_category or "").upper() == "AC" else CORE3_M03B_RULE_VERSION
+
+
+def _claim_rule_version_for_product_category(product_category: str) -> str:
+    return CORE3_M04C_AC_RULE_VERSION if str(product_category or "").upper() == "AC" else CORE3_M04C_TV_RULE_VERSION
+
+
+def _comment_taxonomy_version_for_product_category(product_category: str) -> str:
+    return CORE3_M05C_AC_TAXONOMY_VERSION if str(product_category or "").upper() == "AC" else CORE3_M05C_TV_TAXONOMY_VERSION
+
+
+def _comment_rule_version_for_product_category(product_category: str) -> str:
+    return CORE3_M05C_AC_RULE_VERSION if str(product_category or "").upper() == "AC" else CORE3_M05C_TV_RULE_VERSION
 
 
 def _write_summary(result: ParamRepositoryWriteResult) -> dict[str, int]:

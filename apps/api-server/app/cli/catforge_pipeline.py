@@ -35,6 +35,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_MODULE_VERSION,
@@ -120,8 +122,8 @@ PRODUCT_CATEGORY_CONFIGS = {
         "rule_version": CORE3_M03B_AC_RULE_VERSION,
         "claim_taxonomy_version": CORE3_M04C_AC_TAXONOMY_VERSION,
         "claim_rule_version": CORE3_M04C_AC_RULE_VERSION,
-        "comment_taxonomy_version": None,
-        "comment_rule_version": None,
+        "comment_taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION,
+        "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
         "user_task_taxonomy_version": None,
         "user_task_rule_version": None,
         "target_group_taxonomy_version": None,
@@ -164,6 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     project_id=args.project_id,
                     source_category_code=args.category_code,
                     batch_id=args.batch_id,
+                    product_category=normalize_product_category_arg(args.product_category),
                     sku_scope=args.sku_code or (),
                     analysis_windows=args.analysis_window or (),
                     sku_chunk_size=args.sku_chunk_size,
@@ -342,6 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_market = subparsers.add_parser("run-market-profile", help="Generate or rerun SKU market profiles and comparable-pool baselines.")
     add_common_args(run_market)
+    add_product_category_arg(run_market, default="tv", allow_auto=False)
     run_market.add_argument("--analysis-window", action="append", choices=("full_observed_window", "latest_week", "recent_4w", "recent_8w", "recent_12w"), help="Analysis window to run. Repeat for multiple windows. Default runs all M07 windows.")
     run_market.add_argument("--sku-code", action="append", help="Optional SKU scope. Repeat to run selected SKUs only.")
     run_market.add_argument("--sku-chunk-size", type=int, default=DEFAULT_M07_SKU_CHUNK_SIZE, help="Number of SKUs per M07 execution chunk. Default keeps 205 memory below the API container limit.")
@@ -565,13 +569,12 @@ def answer_natural_language(
         result["routed_command"] = "run-comment-profile"
         return result
     if should_run_market_profile(question):
-        if resolved_product_category != "TV":
-            raise CatForgePipelineError("M07 市场画像 CLI 当前只支持彩电/TV；其他品类需要先完成对应市场尺寸轴和规则。")
         result = run_market_profile(
             db,
             project_id=project_id,
             source_category_code=source_category_code,
             batch_id=batch_id,
+            product_category=resolved_product_category,
             sku_scope=extract_sku_scope(question),
             analysis_windows=extract_analysis_windows(question),
         )
@@ -1344,16 +1347,20 @@ def run_market_profile(
     project_id: str,
     source_category_code: str,
     batch_id: str,
+    product_category: str = "TV",
     sku_scope: Sequence[str] = (),
     analysis_windows: Sequence[str] = (),
     sku_chunk_size: int = DEFAULT_M07_SKU_CHUNK_SIZE,
 ) -> dict[str, Any]:
     if sku_chunk_size <= 0:
         raise CatForgePipelineError("M07 SKU 分批大小必须大于 0。")
+    config = product_category_config(product_category)
     resolved_batch_id = resolve_source_batch_id(db, project_id, source_category_code, batch_id)
-    effective_sku_scope = tuple(sku_scope) or tuple(list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, "TV"))
+    effective_sku_scope = tuple(sku_scope) or tuple(
+        list_sku_codes_with_prefix(db, project_id, source_category_code, resolved_batch_id, str(config["sku_code_prefix"]))
+    )
     if not effective_sku_scope:
-        raise CatForgePipelineError(f"批次 {resolved_batch_id} 没有可用于 M07 市场画像的 TV 前缀 SKU。")
+        raise CatForgePipelineError(f"批次 {resolved_batch_id} 没有可用于 M07 市场画像的 {config['sku_code_prefix']} 前缀 SKU。")
     analysis_window_values = resolve_m07_analysis_windows(analysis_windows)
     run_id, module_run_id = ensure_m07_cli_run_records(
         db,
@@ -1363,6 +1370,7 @@ def run_market_profile(
         sku_scope=effective_sku_scope,
         analysis_windows=analysis_window_values,
         sku_chunk_size=sku_chunk_size,
+        product_category=product_category,
     )
     db.commit()
     module_result = run_market_profile_windows(
@@ -1372,6 +1380,7 @@ def run_market_profile(
         batch_id=resolved_batch_id,
         run_id=run_id,
         module_run_id=module_run_id,
+        product_category=product_category,
         sku_scope=effective_sku_scope,
         analysis_windows=analysis_window_values,
         sku_chunk_size=sku_chunk_size,
@@ -1388,14 +1397,14 @@ def run_market_profile(
         "status": result_status,
         "project_id": project_id,
         "source_category_code": source_category_code,
-        "product_category": "TV",
-        "product_category_label_cn": "彩电",
+        "product_category": product_category,
+        "product_category_label_cn": config["label_cn"],
         "batch_id": resolved_batch_id,
         "run_id": run_id,
         "module_run_id": module_run_id,
         "sku_scope": list(sku_scope),
         "effective_sku_scope_count": len(effective_sku_scope),
-        "sku_scope_mode": "explicit" if sku_scope else "tv_prefix_default",
+        "sku_scope_mode": "explicit" if sku_scope else f"{str(config['sku_code_prefix']).lower()}_prefix_default",
         "sku_chunk_size": sku_chunk_size,
         "executed_chunk_count": module_result.summary_json.get("executed_chunk_count") if isinstance(module_result.summary_json, dict) else None,
         "analysis_windows": list(analysis_windows) or "all",
@@ -1420,6 +1429,7 @@ def run_market_profile_windows(
     batch_id: str,
     run_id: str,
     module_run_id: str,
+    product_category: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
     sku_chunk_size: int,
@@ -1435,6 +1445,7 @@ def run_market_profile_windows(
                 batch_id=batch_id,
                 run_id=run_id,
                 module_run_id=module_run_id,
+                product_category=product_category,
                 rule_version=CORE3_M07_RULE_VERSION,
                 price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
                 pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
@@ -1453,6 +1464,7 @@ def run_market_profile_windows(
         source_category_code=source_category_code,
         batch_id=batch_id,
         run_id=run_id,
+        product_category=product_category,
         sku_scope=sku_scope,
         analysis_windows=analysis_windows,
         sku_chunk_size=sku_chunk_size,
@@ -1467,6 +1479,7 @@ def aggregate_m07_module_results(
     source_category_code: str,
     batch_id: str,
     run_id: str,
+    product_category: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
     sku_chunk_size: int,
@@ -1505,6 +1518,7 @@ def aggregate_m07_module_results(
         source_category_code=source_category_code,
         batch_id=batch_id,
         run_id=run_id,
+        product_category=product_category,
         sku_scope=sku_scope,
         analysis_windows=analysis_windows,
         sku_chunk_size=sku_chunk_size,
@@ -1533,6 +1547,7 @@ def aggregate_m07_summary(
     source_category_code: str,
     batch_id: str,
     run_id: str,
+    product_category: str,
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
     sku_chunk_size: int,
@@ -1551,6 +1566,7 @@ def aggregate_m07_summary(
     summary: dict[str, Any] = {
         "project_id": project_id,
         "category_code": source_category_code,
+        "product_category": product_category,
         "batch_id": batch_id,
         "run_id": run_id,
         "target_sku_codes": list(sku_scope),
@@ -1640,12 +1656,14 @@ def ensure_m07_cli_run_records(
     sku_scope: Sequence[str],
     analysis_windows: Sequence[str],
     sku_chunk_size: int,
+    product_category: str = "TV",
 ) -> tuple[str, str]:
     run_id = stable_cli_uuid(
         "m07-pipeline-run",
         {
             "project_id": project_id,
             "category_code": source_category_code,
+            "product_category": product_category,
             "batch_id": batch_id,
             "sku_scope": sorted(str(sku_code) for sku_code in sku_scope),
             "analysis_windows": list(analysis_windows) or ["all"],
@@ -1676,6 +1694,7 @@ def ensure_m07_cli_run_records(
     pipeline_run.target_scope_json = {
         "scope_type": "cli_market_profile",
         "module_code": Core3ModuleCode.M07.value,
+        "product_category": product_category,
         "sku_count": len(sku_scope),
         "sku_scope": list(sku_scope),
         "analysis_windows": list(analysis_windows) or ["all"],

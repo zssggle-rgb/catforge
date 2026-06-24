@@ -27,6 +27,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
@@ -45,7 +47,11 @@ from app.services.core3_real_data.m03b_param_profile_service import (
     tv_param_taxonomy_v0_1,
 )
 from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CClaimTaxonomy, ac_claim_taxonomy_v0_1, tv_claim_taxonomy_v0_1
-from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CCommentTaxonomy, tv_comment_fact_taxonomy_v0_1
+from app.services.core3_real_data.m05c_comment_fact_profile_service import (
+    M05CCommentTaxonomy,
+    ac_comment_fact_taxonomy_v0_1,
+    tv_comment_fact_taxonomy_v0_1,
+)
 from app.services.core3_real_data.m09c_user_task_service import M09CUserTaskTaxonomy, tv_user_task_taxonomy_v0_1
 from app.services.core3_real_data.m10c_target_group_service import M10CTargetGroupTaxonomy, tv_target_group_taxonomy_v0_1
 from app.services.core3_real_data.m11c_value_battlefield_service import (
@@ -90,9 +96,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_AC_RULE_VERSION,
         "claim_taxonomy_version": CORE3_M04C_AC_TAXONOMY_VERSION,
         "claim_taxonomy_factory": ac_claim_taxonomy_v0_1,
-        "comment_rule_version": None,
-        "comment_taxonomy_version": None,
-        "comment_taxonomy_factory": None,
+        "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
+        "comment_taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION,
+        "comment_taxonomy_factory": ac_comment_fact_taxonomy_v0_1,
         "user_task_rule_version": None,
         "user_task_taxonomy_version": None,
         "user_task_taxonomy_factory": None,
@@ -214,6 +220,24 @@ COMMENT_DIMENSION_ALIASES = {
     "对比": "competitor_comparison_signal",
     "服务": "service_fulfillment_excluded",
     "履约": "service_fulfillment_excluded",
+    "冷暖": "temperature_effect_experience",
+    "制冷": "temperature_effect_experience",
+    "制热": "temperature_effect_experience",
+    "温度": "temperature_effect_experience",
+    "电费": "energy_cost_experience",
+    "省电": "energy_cost_experience",
+    "风感": "airflow_comfort_experience",
+    "柔风": "airflow_comfort_experience",
+    "静音": "noise_sleep_experience",
+    "睡眠": "noise_sleep_experience",
+    "新风": "health_clean_air_experience",
+    "净化": "health_clean_air_experience",
+    "自清洁": "health_clean_air_experience",
+    "除湿": "humidity_control_experience",
+    "智能控制": "smart_control_experience",
+    "质量风险": "quality_reliability_risk",
+    "模板": "template_campaign_review",
+    "营销文案": "template_campaign_review",
 }
 
 

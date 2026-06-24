@@ -55,6 +55,7 @@ class MarketProfileRunner:
                 target.metadata.get("price_band_rule_version") or CORE3_M07_PRICE_BAND_RULE_VERSION
             ),
             pool_rule_version=str(target.metadata.get("pool_rule_version") or CORE3_M07_POOL_RULE_VERSION),
+            product_category=str(target.metadata.get("product_category") or context.category_code.value),
             sku_scope=target.target_ids,
             analysis_windows=tuple(target.metadata.get("analysis_windows") or ()),
         )
@@ -70,6 +71,7 @@ class MarketProfileRunner:
         rule_version: str = CORE3_M07_RULE_VERSION,
         price_band_rule_version: str = CORE3_M07_PRICE_BAND_RULE_VERSION,
         pool_rule_version: str = CORE3_M07_POOL_RULE_VERSION,
+        product_category: str | None = None,
         sku_scope: Sequence[str] = (),
         analysis_windows: Sequence[str] = (),
     ) -> Core3ModuleRunResultSchema:
@@ -94,6 +96,7 @@ class MarketProfileRunner:
                     batch_id=batch_id,
                     run_id=run_id,
                     module_run_id=module_run_id,
+                    product_category=product_category,
                     sku_scope=sku_scope,
                     analysis_windows=analysis_windows,
                     rule_version=rule_version,
