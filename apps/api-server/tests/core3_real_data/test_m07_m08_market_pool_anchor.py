@@ -7,6 +7,7 @@ from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
     _market_size_class,
     _market_pool_key,
+    _observed_window_sample_status,
     _quality_flags,
     _screen_size_class,
     _select_screen_size_param_value,
@@ -208,6 +209,63 @@ def test_m07_ac_percentiles_do_not_require_screen_size_inch() -> None:
     assert by_sku["AC-A"].market_confidence > Decimal("0.6000")
 
 
+def test_m07_late_launch_complete_latest_week_is_sufficient() -> None:
+    service = MarketProfileService(repository=object())
+    updated = service._apply_percentiles(
+        [
+            M07SkuMarketMetrics(
+                sku_code="AC-LATE",
+                analysis_window=M07AnalysisWindow.LATEST_WEEK,
+                period_start_week_index=24,
+                period_end_week_index=24,
+                global_latest_week_index=24,
+                size_segment="wall_hp_1_5",
+                screen_size_class="wall_hp_1_5",
+                market_pool_key="ac:wall_hp_1_5:线上:latest_week",
+                active_week_count=1,
+                market_row_count=1,
+                platform_count=1,
+                size_param_confidence=Decimal("0.9200"),
+                price_wavg=Decimal("2999"),
+                sales_volume_total=Decimal("10"),
+                sales_amount_total=Decimal("29990"),
+                main_channel_type="线上",
+                input_fingerprint="input-late",
+                result_hash="hash-late",
+            )
+        ],
+        product_category="AC",
+    )
+
+    item = updated[0]
+    assert item.sample_status == M07SampleStatus.SUFFICIENT
+    assert "market_sample_limited" not in item.quality_flags
+    assert item.market_confidence >= Decimal("0.8500")
+
+
+def test_m07_late_launch_complete_recent_window_is_sufficient() -> None:
+    assert (
+        _observed_window_sample_status(
+            active_week_count=3,
+            has_rows=True,
+            analysis_window=M07AnalysisWindow.RECENT_4W,
+            first_week=22,
+            global_latest_week=24,
+        )
+        == M07SampleStatus.SUFFICIENT
+    )
+    assert (
+        _observed_window_sample_status(
+            active_week_count=1,
+            has_rows=True,
+            analysis_window=M07AnalysisWindow.RECENT_4W,
+            first_week=21,
+            global_latest_week=24,
+        )
+        == M07SampleStatus.INSUFFICIENT
+    )
+
+
 def test_m07_online_current_year_scope_is_not_execution_warning() -> None:
     service = MarketProfileService(repository=object())
     profile = SimpleNamespace(
@@ -254,7 +312,7 @@ def test_m07_short_window_missing_price_is_quality_note_not_execution_warning() 
 
     assert service._warnings([full_profile, short_window_profile], []) == []
     assert service._quality_notes([full_profile, short_window_profile], []) == [
-        "部分 SKU 的周样本偏少，相关市场趋势和增长判断低置信使用。",
+        "部分 SKU 在自身可观测期内周样本不完整，相关市场趋势和增长判断低置信使用。",
         "部分 SKU 在短周期窗口无成交价格，短周期趋势低置信使用，全量观察窗口仍可用于市场基线。",
     ]
 

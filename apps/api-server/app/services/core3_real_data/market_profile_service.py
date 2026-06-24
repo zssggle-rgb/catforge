@@ -407,7 +407,13 @@ class MarketProfileService:
                 if row.period_week_index is not None and row.sales_volume is not None
             }
         )
-        sample_status = _initial_sample_status(active_week_count, bool(rows))
+        sample_status = _observed_window_sample_status(
+            active_week_count=active_week_count,
+            has_rows=bool(rows),
+            analysis_window=analysis_window,
+            first_week=first_week,
+            global_latest_week=global_latest_week,
+        )
         confidence = _market_confidence(
             active_week_count=active_week_count,
             sample_status=sample_status,
@@ -534,6 +540,9 @@ class MarketProfileService:
                 category_count=len([row for row in metrics if row.price_wavg is not None]),
                 size_count=len([row for row in size_pool if row.price_wavg is not None]),
                 has_rows=item.market_row_count > 0,
+                analysis_window=item.analysis_window,
+                first_week=item.period_start_week_index,
+                global_latest_week=item.global_latest_week_index,
             )
             quality_flags = set(item.quality_flags)
             if price_band_category == M07PriceBand.UNKNOWN.value or price_band_size == M07PriceBand.UNKNOWN.value:
@@ -1023,7 +1032,7 @@ class MarketProfileService:
     def _quality_notes(self, profiles: list[M07SkuMarketProfileRecord], pools: list[M07ComparablePoolRecord]) -> list[str]:
         notes: list[str] = []
         if any(profile.sample_status != M07SampleStatus.SUFFICIENT for profile in profiles):
-            notes.append("部分 SKU 的周样本偏少，相关市场趋势和增长判断低置信使用。")
+            notes.append("部分 SKU 在自身可观测期内周样本不完整，相关市场趋势和增长判断低置信使用。")
         if any("price_missing" in profile.quality_flags for profile in profiles if not _is_full_observed_window(profile.analysis_window)):
             notes.append("部分 SKU 在短周期窗口无成交价格，短周期趋势低置信使用，全量观察窗口仍可用于市场基线。")
         if any(pool.sample_status == M07SampleStatus.INSUFFICIENT for pool in pools):
@@ -1197,10 +1206,12 @@ def _market_confidence(
     quality_flags: Sequence[str],
 ) -> Decimal:
     score = Decimal("0.30")
-    if active_week_count >= 6:
+    if sample_status == M07SampleStatus.SUFFICIENT:
         score += Decimal("0.25")
-    elif active_week_count >= 3:
+    elif sample_status == M07SampleStatus.LIMITED or active_week_count >= 3:
         score += Decimal("0.15")
+    elif active_week_count > 0:
+        score += Decimal("0.05")
     if price_wavg is not None:
         score += Decimal("0.20")
     if not _market_size_input_missing(product_category, size_input):
@@ -1209,7 +1220,19 @@ def _market_confidence(
         score += Decimal("0.10")
     elif sample_status == M07SampleStatus.LIMITED:
         score += Decimal("0.05")
-    penalty = Decimal("0.04") * Decimal(len({flag for flag in quality_flags if flag not in {"observed_window_less_than_52w", "online_only_channel"}}))
+    non_penalty_flags = {
+        "observed_window_less_than_52w",
+        "online_only_channel",
+        "trend_sample_insufficient",
+        "baseline_window_insufficient",
+        "market_sample_limited",
+        "price_band_sample_insufficient",
+        "size_pool_insufficient",
+        "size_pool_limited",
+        "market_pool_insufficient",
+        "market_pool_limited",
+    }
+    penalty = Decimal("0.04") * Decimal(len({flag for flag in quality_flags if flag not in non_penalty_flags}))
     return _quant4(max(D0, min(D1, score - penalty)))
 
 
@@ -1223,20 +1246,74 @@ def _initial_sample_status(active_week_count: int, has_rows: bool) -> M07SampleS
     return M07SampleStatus.INSUFFICIENT
 
 
+def _observed_window_sample_status(
+    *,
+    active_week_count: int,
+    has_rows: bool,
+    analysis_window: M07AnalysisWindow | str | None,
+    first_week: int | None,
+    global_latest_week: int | None,
+) -> M07SampleStatus:
+    if not has_rows:
+        return M07SampleStatus.UNKNOWN
+    expected_week_count = _expected_observable_week_count(
+        analysis_window=analysis_window,
+        first_week=first_week,
+        global_latest_week=global_latest_week,
+    )
+    if expected_week_count is None:
+        return _initial_sample_status(active_week_count, has_rows)
+    if active_week_count >= expected_week_count:
+        return M07SampleStatus.SUFFICIENT
+    if active_week_count * 2 >= expected_week_count:
+        return M07SampleStatus.LIMITED
+    return M07SampleStatus.INSUFFICIENT
+
+
+def _expected_observable_week_count(
+    *,
+    analysis_window: M07AnalysisWindow | str | None,
+    first_week: int | None,
+    global_latest_week: int | None,
+) -> int | None:
+    window = M07AnalysisWindow(analysis_window) if analysis_window else M07AnalysisWindow.FULL_OBSERVED_WINDOW
+    if window == M07AnalysisWindow.LATEST_WEEK:
+        return 1
+    if first_week is None or global_latest_week is None:
+        return None
+    observed_since_first = max(1, global_latest_week - first_week + 1)
+    window_limit = _analysis_window_week_limit(window)
+    if window_limit is None:
+        return observed_since_first
+    return max(1, min(window_limit, observed_since_first))
+
+
+def _analysis_window_week_limit(window: M07AnalysisWindow) -> int | None:
+    return {
+        M07AnalysisWindow.LATEST_WEEK: 1,
+        M07AnalysisWindow.RECENT_4W: 4,
+        M07AnalysisWindow.RECENT_8W: 8,
+        M07AnalysisWindow.RECENT_12W: 12,
+    }.get(window)
+
+
 def _combined_sample_status(
     *,
     active_week_count: int,
     category_count: int,
     size_count: int,
     has_rows: bool,
+    analysis_window: M07AnalysisWindow | str | None = None,
+    first_week: int | None = None,
+    global_latest_week: int | None = None,
 ) -> M07SampleStatus:
-    if not has_rows:
-        return M07SampleStatus.UNKNOWN
-    if active_week_count >= 6 and category_count >= 6:
-        return M07SampleStatus.SUFFICIENT
-    if active_week_count >= 3 and category_count >= 3 and size_count >= 3:
-        return M07SampleStatus.LIMITED
-    return M07SampleStatus.INSUFFICIENT
+    return _observed_window_sample_status(
+        active_week_count=active_week_count,
+        has_rows=has_rows,
+        analysis_window=analysis_window,
+        first_week=first_week,
+        global_latest_week=global_latest_week,
+    )
 
 
 def _profile_window_value(value: str | M07AnalysisWindow) -> str:
