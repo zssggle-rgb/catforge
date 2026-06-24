@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_analyst
 from app.models import entities
+from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
 from app.services.core3_real_data.analyst import competitor_answer
 from app.services.core3_real_data.constants import (
     CORE3_M03B_RULE_VERSION,
@@ -30,6 +31,62 @@ from app.services.core3_real_data.constants import (
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_analyst_test"
+
+
+def _m12c_test_pool() -> m12c_service.ClaimPool:
+    return m12c_service.ClaimPool(
+        claim_code="tv_claim_wall_mount_design",
+        claim_name="壁画贴墙",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="mid_high",
+        sku_codes=("sku-a", "sku-b", "sku-c"),
+        with_claim_skus=("sku-a", "sku-b"),
+        without_claim_skus=("sku-c",),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+    )
+
+
+def test_m12c_missing_high_price_claim_is_retained_as_intercept_or_price_up() -> None:
+    metric = {
+        "with_price_median": Decimal("6000"),
+        "price_premium_abs": Decimal("500"),
+        "weekly_sales_lift_abs": Decimal("12"),
+        "weekly_sales_amount_lift_abs": Decimal("60000"),
+        "effect_confidence": Decimal("0.8000"),
+    }
+    pool = _m12c_test_pool()
+
+    lower_price_role = m12c_service._claim_role(
+        has_claim=False,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("0"),
+        comment_strength=Decimal("0"),
+        semantic_strength=Decimal("0.6000"),
+        has_negative=False,
+        market_price=Decimal("5200"),
+    )
+    higher_price_role = m12c_service._claim_role(
+        has_claim=False,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("0"),
+        comment_strength=Decimal("0"),
+        semantic_strength=Decimal("0.6000"),
+        has_negative=False,
+        market_price=Decimal("6200"),
+    )
+
+    assert lower_price_role == m12c_service.M12C_ROLE_HIGH_PRICE_INTERCEPT
+    assert higher_price_role == m12c_service.M12C_ROLE_PRICE_UP
+    assert lower_price_role in m12c_service.OPPORTUNITY_ROLES
+    assert higher_price_role in m12c_service.OPPORTUNITY_ROLES
 
 
 def make_session() -> Session:
@@ -1739,7 +1796,9 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     text = catforge_analyst.format_business_text(result)
 
     assert "溢价卖点" in text
-    assert "销量支撑卖点" in text
+    assert "强销量卖点" in text
+    assert "可比池价格差异" in text
+    assert "本品超额价格解释份额" in text
     assert "MiniLED" in text
 
 
@@ -2265,17 +2324,18 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 4.4 目标客群画像" in markdown
     assert "### 4.5 卖点画像" in markdown
     assert "### 4.6 参数画像" in markdown
+    assert "### 4.7 卖点价值量化" in markdown
     assert "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |" in markdown
     assert "| 命中的固定价值战场 |" in markdown
     assert "| 补充证据判断 |" in markdown
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
-    assert "| 卖点溢价指数 Top | MiniLED 100；高刷 92；音响体验 19 | 壁画贴墙 100 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 溢价卖点 | MiniLED 100 | 壁画贴墙 100 | 高刷新率和MiniLED 显示 | MiniLED 显示 |" in markdown
-    assert "| 销量支撑卖点 | 高刷 92 | 卖点价值量化待生成 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 可观测价格支撑 | MiniLED约280元 | 壁画贴墙约180元 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 可观测销量支撑 | 高刷约22台/周 | 壁画贴墙约12台/周 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 拖后腿卖点 | 音响体验 19 | 暂无稳定证据 | 暂无稳定证据 | 暂无稳定证据 |" in markdown
+    assert "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |" in markdown
+    assert "| Top5 卖点价值 | MiniLED（强溢价卖点）；高刷（强销量卖点）；音响体验（拖后腿卖点） | 壁画贴墙（强溢价卖点） | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 强溢价卖点 | MiniLED，池价差400元，池销量差20台/周，本品解释份额280元 | 壁画贴墙，池价差400元，池销量差20台/周，本品解释份额180元 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 强销量卖点 | 高刷，池价差400元，池销量差20台/周，本品解释份额80元 | 暂无稳定证据 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "| 用户感知不足/拖后腿 | 音响体验，池价差不作为价格支撑，池销量差20台/周 | 暂无稳定证据 | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
+    assert "卖点溢价指数 Top" not in markdown
     assert "## 五、海信 65E7Q 产品画像" in markdown
     assert "市场画像" in markdown
     assert "价值战场画像" in markdown
@@ -2283,6 +2343,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "目标客群画像" in markdown
     assert "卖点画像" in markdown
     assert "参数画像" in markdown
+    assert "卖点价值量化" in markdown
     assert "所在池空间" in markdown
     assert "池内销量表现" in markdown
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
@@ -2297,9 +2358,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "5200尼特" in markdown
     assert "控光分区：1,920" in markdown
     assert "溢价卖点" in markdown
-    assert "卖点价值量化说明" in markdown
-    assert "| 卖点类型 | 卖点 | 卖点溢价指数 | 可观测价格支撑 | 可观测周均销量支撑 | 上下文 | 置信度 | 判断 |" in markdown
-    assert "| 溢价卖点 | MiniLED | 100 | 280元 | 15台/周 | 高端画质升级战场 | 82% | MiniLED 是海信 65E7Q 在高端画质战场的估算溢价卖点。 |" in markdown
+    assert "| 排名 | 卖点 | 业务类型 | 业务含义 | 可比池卖点价格差异 | 可比池卖点销量差异 | 本品超额价格解释份额 | 本品超额销量解释份额 | 值钱的市场 | 业务解释 |" in markdown
+    assert "| 1 | MiniLED | 强溢价卖点 | 同尺寸、同价格带、同语义市场中，有该卖点且证据成立的一组 SKU 价格更高。 | 400元 | 20台/周 | 280元 | 15台/周 | 高端画质升级战场 | MiniLED 是海信 65E7Q 在高端画质战场的强溢价卖点。 |" in markdown
+    assert "| 3 | 音响体验 | 拖后腿卖点 | 厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群。 | 不作为价格支撑 | 20台/周 | 不作为正向分摊 | 不作为正向分摊 | 高端画质升级战场 | 音响体验在评论或参数支撑上存在拖后腿风险。 |" in markdown
+    assert "可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异" in markdown
     assert "卖点贡献归因" in markdown
     assert "卖点价值量化待生成" in markdown
     for forbidden in (

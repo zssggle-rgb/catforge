@@ -117,7 +117,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="sku-claim-value",
         ability_type="atom",
-        description_cn="查询单 SKU 的卖点价值量化，包括估算溢价卖点、销量卖点、基础卖点、拖后腿卖点和机会缺口。",
+        description_cn="查询单 SKU 的卖点价值量化，包括强溢价卖点、强销量卖点、组合型增值卖点、基础门槛、拖后腿和机会/拦截卖点。",
         required_inputs=("sku_code|query",),
         optional_inputs=("claim_code", "dimension_type", "dimension_code", "size_tier", "price_band", "role", "limit"),
         source_modules=("M12C",),
@@ -173,7 +173,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="premium-claim-drivers",
         ability_type="sop",
-        description_cn="识别用户选择卖点、销量支撑卖点、溢价卖点、基础卖点、拖后腿卖点，并优先使用 M12C 可观测价值量化结果。",
+        description_cn="识别用户选择卖点、强溢价卖点、强销量卖点、基础门槛、组合型增值、拖后腿和机会/拦截卖点，并优先使用 M12C 量化结果。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C"),
         status="implemented",

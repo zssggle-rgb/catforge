@@ -39,13 +39,18 @@ MARKET_WINDOW_FULL_OBSERVED = "full_observed_window"
 M12C_ROLE_PREMIUM = "premium_driver_estimated"
 M12C_ROLE_SALES = "sales_driver_estimated"
 M12C_ROLE_BASIC = "basic_threshold"
+M12C_ROLE_VALUE_BUNDLE = "value_bundle_claim"
+M12C_ROLE_WEAK_USER = "weak_user_perception_claim"
+M12C_ROLE_HIGH_PRICE_INTERCEPT = "high_price_competitor_intercept"
+M12C_ROLE_PRICE_UP = "price_up_opportunity"
 M12C_ROLE_BRAND = "brand_claim_only"
 M12C_ROLE_USER_NEED = "user_validated_need"
 M12C_ROLE_DRAG = "drag_factor"
 M12C_ROLE_OPPORTUNITY = "opportunity_gap"
 M12C_ROLE_SAMPLE = "sample_insufficient"
 
-POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES}
+POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
+OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C_ROLE_PRICE_UP}
 MIN_POOL_SKU_COUNT = 8
 MIN_GROUP_SKU_COUNT = 3
 
@@ -822,8 +827,9 @@ def _quantification_rows(
                 comment_strength=comment_strength,
                 semantic_strength=semantic_strength,
                 has_negative=comment.has_negative(pool.claim_code),
+                market_price=market.price,
             )
-            if not has_claim and role != M12C_ROLE_OPPORTUNITY:
+            if not has_claim and role not in OPPORTUNITY_ROLES:
                 continue
             weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength)
             payload = {
@@ -868,6 +874,11 @@ def _quantification_rows(
                 "evidence_ids_json": list(claim.evidence_ids if claim else ()),
                 "reason_cn": _quant_reason_cn(pool, role, metric),
                 "quality_flags_json": [*pool.quality_flags, *(["comment_negative"] if comment.has_negative(pool.claim_code) else [])],
+                "_pool_claim_price_delta_abs": _q4(metric["price_premium_abs"]),
+                "_pool_claim_weekly_sales_delta_abs": _q6(metric["weekly_sales_lift_abs"]),
+                "_pool_claim_weekly_sales_amount_delta_abs": _q6(metric["weekly_sales_amount_lift_abs"]),
+                "_business_value_label": _business_value_label(role, metric),
+                "_business_value_meaning_cn": _business_value_meaning_cn(role, metric),
                 "_baseline_price": baseline_price,
                 "_baseline_sales": baseline_sales,
                 "_baseline_amount": baseline_amount,
@@ -920,7 +931,7 @@ def _attribution_rows(
             reverse=True,
         )
         drag = [row for row in quant_rows if row["claim_value_role"] == M12C_ROLE_DRAG]
-        opportunity = [row for row in quant_rows if row["claim_value_role"] == M12C_ROLE_OPPORTUNITY]
+        opportunity = [row for row in quant_rows if row["claim_value_role"] in OPPORTUNITY_ROLES]
         baseline_price = _q4(first.get("_baseline_price", Decimal("0")))
         baseline_sales = _q6(first.get("_baseline_sales", Decimal("0")))
         baseline_amount = _q6(first.get("_baseline_amount", Decimal("0")))
@@ -1010,7 +1021,7 @@ def _dimension_summary_rows(
             "basic_threshold_sku_count": role_counts[M12C_ROLE_BASIC],
             "brand_claim_only_sku_count": role_counts[M12C_ROLE_BRAND],
             "drag_factor_sku_count": role_counts[M12C_ROLE_DRAG],
-            "opportunity_gap_sku_count": role_counts[M12C_ROLE_OPPORTUNITY],
+            "opportunity_gap_sku_count": sum(role_counts[role] for role in OPPORTUNITY_ROLES),
             "estimated_sales_volume": _q4(space.estimated_sales_volume if space else Decimal("0")),
             "estimated_avg_weekly_sales_volume": _q6(space.estimated_avg_weekly_sales_volume if space else Decimal("0")),
             "estimated_sales_amount": _q4(space.estimated_sales_amount if space else Decimal("0")),
@@ -1140,16 +1151,25 @@ def _claim_role(
     comment_strength: Decimal,
     semantic_strength: Decimal,
     has_negative: bool,
+    market_price: Decimal | None = None,
 ) -> str:
     if pool.sample_status == "insufficient":
         return M12C_ROLE_SAMPLE
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
-    price_positive = _q4(metric["price_premium_abs"]) > Decimal("0")
-    sales_positive = _q6(metric["weekly_sales_lift_abs"]) > Decimal("0")
-    amount_positive = _q6(metric["weekly_sales_amount_lift_abs"]) > Decimal("0")
+    price_delta = _q4(metric["price_premium_abs"])
+    sales_delta = _q6(metric["weekly_sales_lift_abs"])
+    amount_delta = _q6(metric["weekly_sales_amount_lift_abs"])
+    price_positive = price_delta > Decimal("0")
+    sales_positive = sales_delta > Decimal("0")
+    amount_positive = amount_delta > Decimal("0")
     if not has_claim:
-        if (price_positive or sales_positive) and metric["effect_confidence"] >= Decimal("0.4000"):
+        if price_positive and metric["effect_confidence"] >= Decimal("0.4000"):
+            with_price_median = metric.get("with_price_median")
+            if market_price is not None and with_price_median is not None and _q4(market_price) < _q4(with_price_median):
+                return M12C_ROLE_HIGH_PRICE_INTERCEPT
+            return M12C_ROLE_PRICE_UP
+        if (sales_positive or amount_positive) and metric["effect_confidence"] >= Decimal("0.4000"):
             return M12C_ROLE_OPPORTUNITY
         return M12C_ROLE_SAMPLE
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
@@ -1157,8 +1177,12 @@ def _claim_role(
         return M12C_ROLE_PREMIUM
     if sales_positive and semantic_strength >= Decimal("0.4500") and max(comment_strength, param_strength) >= Decimal("0.5000"):
         return M12C_ROLE_SALES
+    if not price_positive and (amount_positive or sales_positive) and semantic_strength >= Decimal("0.5000") and max(param_strength, comment_strength) >= Decimal("0.5500"):
+        return M12C_ROLE_VALUE_BUNDLE
     if coverage_rate >= Decimal("0.6500"):
         return M12C_ROLE_BASIC
+    if param_strength >= Decimal("0.6000") and comment_strength < Decimal("0.5000") and semantic_strength >= Decimal("0.4500"):
+        return M12C_ROLE_WEAK_USER
     if comment_strength >= Decimal("0.8000") and param_strength < Decimal("0.5000"):
         return M12C_ROLE_USER_NEED
     return M12C_ROLE_BRAND
@@ -1228,6 +1252,13 @@ def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:
         "claim_code": row.get("claim_code"),
         "claim_name": row.get("claim_name"),
         "claim_value_role": row.get("claim_value_role"),
+        "business_value_label": row.get("_business_value_label") or _business_value_label(str(row.get("claim_value_role") or ""), row),
+        "business_value_meaning_cn": row.get("_business_value_meaning_cn") or _business_value_meaning_cn(str(row.get("claim_value_role") or ""), row),
+        "pool_claim_price_delta_abs": float(_q4(row.get("_pool_claim_price_delta_abs"))),
+        "pool_claim_weekly_sales_delta_abs": float(_q6(row.get("_pool_claim_weekly_sales_delta_abs"))),
+        "pool_claim_weekly_sales_amount_delta_abs": float(_q6(row.get("_pool_claim_weekly_sales_amount_delta_abs"))),
+        "sku_excess_price_explained_abs": float(_q4(row.get("estimated_price_premium_abs"))),
+        "sku_excess_weekly_sales_explained_abs": float(_q6(row.get("estimated_weekly_sales_lift_abs"))),
         "estimated_price_premium_abs": float(_q4(row.get("estimated_price_premium_abs"))),
         "estimated_weekly_sales_lift_abs": float(_q6(row.get("estimated_weekly_sales_lift_abs"))),
         "estimated_weekly_sales_amount_lift_abs": float(_q6(row.get("estimated_weekly_sales_amount_lift_abs"))),
@@ -1237,27 +1268,88 @@ def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _business_value_label(role: str, metric: Mapping[str, Any]) -> str:
+    price_delta = _q4(metric.get("price_premium_abs") or metric.get("_pool_claim_price_delta_abs"))
+    if role == M12C_ROLE_PREMIUM:
+        return "强溢价卖点" if price_delta > 0 else "组合型增值卖点"
+    if role == M12C_ROLE_SALES:
+        return "强销量卖点"
+    if role == M12C_ROLE_BASIC:
+        return "基础门槛卖点"
+    if role == M12C_ROLE_VALUE_BUNDLE:
+        return "组合型增值卖点"
+    if role == M12C_ROLE_WEAK_USER:
+        return "用户感知不足卖点"
+    if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
+        return "高价竞品拦截卖点"
+    if role == M12C_ROLE_PRICE_UP:
+        return "价格上探机会卖点"
+    if role == M12C_ROLE_DRAG:
+        return "拖后腿卖点"
+    if role == M12C_ROLE_OPPORTUNITY:
+        return "机会缺口"
+    if role == M12C_ROLE_BRAND:
+        return "厂家主张卖点"
+    if role == M12C_ROLE_USER_NEED:
+        return "用户验证需求"
+    return "样本不足"
+
+
+def _business_value_meaning_cn(role: str, metric: Mapping[str, Any]) -> str:
+    price_delta = _q4(metric.get("price_premium_abs") or metric.get("_pool_claim_price_delta_abs"))
+    if role == M12C_ROLE_PREMIUM and price_delta > 0:
+        return "同尺寸、同价格带、同语义市场中，有该卖点且证据成立的一组 SKU 价格更高。"
+    if role == M12C_ROLE_SALES:
+        return "价格不一定更高，但更能解释同池周均销量或销额优势。"
+    if role == M12C_ROLE_BASIC:
+        return "同池普遍具备，有了不加价，缺了会掉队。"
+    if role == M12C_ROLE_VALUE_BUNDLE or (role == M12C_ROLE_PREMIUM and price_delta <= 0):
+        return "单点不一定独立溢价，但与一组高价值卖点组合后参与高端价值解释。"
+    if role == M12C_ROLE_WEAK_USER:
+        return "参数或卖点存在，但评论验证弱、负向明显，或弱于高价竞品。"
+    if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
+        return "同池高价竞品具备并能成交，本品缺失、表达弱或评论弱。"
+    if role == M12C_ROLE_PRICE_UP:
+        return "高价 SKU 反复具备且有市场价值，本品补强后可能提升上探空间。"
+    if role == M12C_ROLE_DRAG:
+        return "厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群。"
+    if role == M12C_ROLE_OPPORTUNITY:
+        return "同池强竞品或高价值 SKU 具备，本品缺失或表达弱。"
+    if role == M12C_ROLE_BRAND:
+        return "卖点文本存在，但参数、评论或市场验证不足。"
+    if role == M12C_ROLE_USER_NEED:
+        return "评论中存在需求，但本品卖点或参数支撑不足。"
+    return "可比池、对照组或评论样本不足，不能稳定判断。"
+
+
 def _metric_summary_cn(pool: ClaimPool, metric: Mapping[str, Any]) -> str:
     return (
         f"{pool.claim_name} 在 {pool.context_name} / {pool.size_tier} / {pool.price_band_group} 可比池中，"
         f"有卖点组 {len(pool.with_claim_skus)} 个 SKU，对照组 {len(pool.without_claim_skus)} 个 SKU；"
-        f"对应价格溢价约 {_fmt_money(metric['price_premium_abs'])} 元，"
-        f"周均销量优势约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。"
+        f"可比池卖点价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
+        f"可比池卖点周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。"
     )
 
 
 def _quant_reason_cn(pool: ClaimPool, role: str, metric: Mapping[str, Any]) -> str:
     role_cn = {
-        M12C_ROLE_PREMIUM: "估算溢价卖点",
-        M12C_ROLE_SALES: "估算销量卖点",
+        M12C_ROLE_PREMIUM: "强溢价卖点",
+        M12C_ROLE_SALES: "强销量卖点",
         M12C_ROLE_BASIC: "基础门槛卖点",
+        M12C_ROLE_VALUE_BUNDLE: "组合型增值卖点",
+        M12C_ROLE_WEAK_USER: "用户感知不足卖点",
+        M12C_ROLE_HIGH_PRICE_INTERCEPT: "高价竞品拦截卖点",
+        M12C_ROLE_PRICE_UP: "价格上探机会卖点",
         M12C_ROLE_BRAND: "厂家主张卖点",
         M12C_ROLE_USER_NEED: "用户验证需求",
         M12C_ROLE_DRAG: "拖后腿卖点",
         M12C_ROLE_OPPORTUNITY: "机会缺口",
         M12C_ROLE_SAMPLE: "样本不足",
     }.get(role, role)
-    return f"{pool.claim_name} 被判为{role_cn}；所在可比池价格溢价约 {_fmt_money(metric['price_premium_abs'])} 元，周均销量优势约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。"
+    return (
+        f"{pool.claim_name} 被判为{role_cn}；所在可比池有卖点组相对对照组价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
+        f"周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。该数值是组间可观测差异，不是单一卖点因果贡献。"
+    )
 
 
 def _attribution_summary_cn(market: MarketState, positive: Sequence[Mapping[str, Any]], context_type: str, context_name: str) -> str:

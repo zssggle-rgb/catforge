@@ -15,9 +15,14 @@
 - M11D 语义市场图谱与销量分配。
 - `catforge_analyst` 原子能力和小奥家电市场分析专家。
 
-M12C 的核心原则是：先在可比市场池中估算卖点的可观测市场价值，再把 SKU 相对同池基准的超额表现解释性分摊到若干卖点。
+M12C 的核心原则是：先在可比市场池中估算卖点组的可观测市场差异，再把 SKU 相对同池基准的超额表现解释性分摊到若干卖点。
 
-M12C 不做严格因果推断。它输出的是可观测市场贡献估计，用于业务分析、竞品解释和机会判断。
+M12C 不做严格因果推断。它输出的是可观测市场贡献估计，用于业务分析、竞品解释和机会判断。所有结果必须区分：
+
+1. **池级卖点组差异**：有某卖点且证据成立的一组 SKU，相比同池对照组的价格、周均销量、周均销额差异。
+2. **SKU 超额解释份额**：本品相对同池基准的超额表现，按卖点证据权重进行解释性分摊。
+
+报告和智能体不得把第二类数值写成“单一卖点带来 X 元/X 台”的因果贡献。
 
 ## 2. 总体架构
 
@@ -282,6 +287,18 @@ market_share_lift =
   - without_sales_volume_share / without_claim_sku_count
 ```
 
+字段在数据库中可以继续沿用 `price_premium_abs` 等名称，但对 CLI、Skill、飞书报告必须使用业务别名：
+
+| 内部字段 | 业务展示名 | 解释边界 |
+| --- | --- | --- |
+| `price_premium_abs` | 可比池卖点价格差异 | 有卖点组价格中位数 - 对照组价格中位数 |
+| `price_premium_rate` | 可比池卖点价格差异率 | 组间价格差异率 |
+| `weekly_sales_lift_abs` | 可比池卖点周均销量差异 | 有卖点组周均销量中位数 - 对照组周均销量中位数 |
+| `weekly_sales_amount_lift_abs` | 可比池卖点周均销额差异 | 有卖点组周均销额中位数 - 对照组周均销额中位数 |
+| `market_share_lift` | 可比池份额差异 | 组间份额优势 |
+
+这些指标只能说明组间可观测差异。由于同池 SKU 常常同时具备多个卖点，不能把 `price_premium_abs=280` 解释成“该卖点单独值 280 元”。
+
 ### 5.4 价值强度分
 
 将指标归一到 0-1：
@@ -391,6 +408,17 @@ estimated_weekly_sales_amount_lift_abs =
 
 这三个估算是解释性分摊，不是卖点真实因果贡献。
 
+对外展示必须使用以下业务别名：
+
+| 内部字段 | 业务展示名 | 解释边界 |
+| --- | --- | --- |
+| `estimated_price_premium_abs` | 本品超额价格解释份额 | 本品高于同池基准的价格差中，由该卖点参与解释的部分 |
+| `estimated_weekly_sales_lift_abs` | 本品超额周均销量解释份额 | 本品高于同池基准的销量差中，由该卖点参与解释的部分 |
+| `estimated_weekly_sales_amount_lift_abs` | 本品超额周均销额解释份额 | 本品高于同池基准的销额差中，由该卖点参与解释的部分 |
+| `contribution_share_in_sku` | 本品超额表现解释占比 | 该卖点在本品正向候选卖点中的权重占比 |
+
+如果目标 SKU 本身低于同池基准，则正向超额解释份额为 0，应转入机会、拖后腿或竞品拦截分析。不得为了展示正数而把负向差异取绝对值。
+
 ### 6.4 负向贡献
 
 如果卖点存在以下情况，输出 `drag_factor`：
@@ -410,20 +438,71 @@ drag_reason_cn
 
 首版可以只输出等级和原因，不强行输出负销量。
 
+### 6.5 高价竞品拦截与价格上探机会
+
+当目标 SKU 的某卖点池级价格差异为负或不显著，或目标 SKU 低于同池高价 SKU 时，需要补充“高价竞品拦截/价格上探机会”分析。
+
+候选高价竞品池：
+
+1. 同 `size_tier`。
+2. 同 `price_band_in_size_tier` 或相邻更高价格带。
+3. 主/辅价值战场、用户任务、目标客群与目标 SKU 有有效重合。
+4. `avg_weekly_sales_volume` 不低于同池 P25，或销额/销量处于可观察活跃水平。
+5. 非服务履约卖点驱动。
+
+对每个高价竞品计算：
+
+```text
+competitor_price_delta = competitor_price - target_price
+competitor_sales_valid = competitor_avg_weekly_sales >= pool_weekly_sales_p25
+claim_gap_strength =
+  competitor_claim_support_strength
+  - target_claim_support_strength
+```
+
+输出规则：
+
+| 情况 | 输出标签 | 说明 |
+| --- | --- | --- |
+| 高价竞品有，本品缺失，且该卖点池级价格差异为正 | `high_price_competitor_intercept` | 竞品用该卖点解释更高价格或更高端心智 |
+| 高价竞品有，本品也有，但竞品评论/参数/场景表达显著更强 | `weak_user_perception_claim` | 本品存在卖点，但用户感知或证据不够强 |
+| 多个高价竞品反复出现同一卖点，本品缺失或弱 | `price_up_opportunity` | 可作为本品价格上探或高端表达机会 |
+| 高价竞品只是具备同池普遍卖点 | `basic_threshold` | 不能作为差异化机会 |
+
+### 6.6 组合型增值卖点
+
+如果单个卖点的池级价格差异为负或不显著，但该卖点在高价 SKU 中反复与其他高价值卖点组合出现，需要识别为组合型增值卖点。
+
+组合识别步骤：
+
+1. 在同 `pool_key` 中筛选高价且有成交能力的 SKU，默认价格高于池内 P60，周均销量高于 P25。
+2. 抽取这些 SKU 的正向卖点集合，只保留参数和评论至少一项成立的卖点。
+3. 统计二元或三元卖点组合的出现频次和覆盖 SKU。
+4. 组合内至少一个卖点有正向池级价格差异或正向销额差异。
+5. 若目标 SKU 具备组合的一部分，输出 `value_bundle_claim`；若缺失关键组合卖点，输出 `price_up_opportunity`。
+
+组合型增值卖点的自然语言必须写清楚“与哪些卖点组合后参与高端价值解释”，不能写成单点独立溢价。
+
 ## 7. 卖点价值角色判定
 
 ### 7.1 判定规则
 
 | 角色 | 判定条件 |
 | --- | --- |
-| `premium_driver_estimated` | 池级价格溢价为正，销额提升为正，SKU 该卖点支撑主战场/主任务/主客群，参数和评论至少一项强验证 |
+| `premium_driver_estimated` | 池级价格差异为正，销额提升为正，SKU 该卖点支撑主战场/主任务/主客群，参数和评论至少一项强验证 |
 | `sales_driver_estimated` | 价格溢价不显著，但周均销量或市场份额提升明显，且评论或语义支撑成立 |
 | `basic_threshold` | 同池覆盖率高，具备该卖点不产生明显溢价，但缺失 SKU 表现明显弱 |
+| `value_bundle_claim` | 单点价格差异不强，但在高价 SKU 的卖点组合中反复出现，并与正向卖点共同支撑高端价值 |
+| `weak_user_perception_claim` | 本品具备卖点或参数，但评论支撑弱、负向明显，或弱于同池高价竞品 |
+| `high_price_competitor_intercept` | 同池高价且有成交能力的竞品具备，本品缺失、表达弱或评论弱 |
+| `price_up_opportunity` | 高价 SKU 反复具备且有市场价值，本品补强后可能提升高端解释空间 |
 | `brand_claim_only` | 卖点文本强，参数或评论验证不足，市场效果不稳定 |
 | `user_validated_need` | 评论需求强，但本品卖点或参数支撑不足 |
 | `drag_factor` | 评论负向、参数不支撑或竞品强对照导致本品被削弱 |
 | `opportunity_gap` | 同池强竞品具备且有正向价值，本品缺失或弱 |
 | `sample_insufficient` | with/without 样本、活跃周或评论样本不足 |
+
+`premium_driver_estimated` 必须同时满足“池级价格差异为正”和“证据成立”。如果池级价格差异为负，即使 SKU 超额价格解释份额为正，也不能展示为价格支撑卖点；应转为 `sales_driver_estimated`、`basic_threshold`、`value_bundle_claim`、`weak_user_perception_claim` 或机会/拦截分析。
 
 ### 7.2 业务展示优先级
 
@@ -431,14 +510,18 @@ drag_reason_cn
 
 1. `premium_driver_estimated`
 2. `sales_driver_estimated`
-3. `basic_threshold`
-4. `opportunity_gap`
-5. `drag_factor`
-6. `brand_claim_only`
-7. `user_validated_need`
-8. `sample_insufficient`
+3. `value_bundle_claim`
+4. `basic_threshold`
+5. `high_price_competitor_intercept`
+6. `price_up_opportunity`
+7. `weak_user_perception_claim`
+8. `opportunity_gap`
+9. `drag_factor`
+10. `brand_claim_only`
+11. `user_validated_need`
+12. `sample_insufficient`
 
-自然语言回答中默认只讲前三类和明显机会/拖后腿，不堆全部卖点。
+自然语言短答默认只讲前三个业务结论；飞书报告默认展示 Top5，并保留明显机会/拖后腿。
 
 ## 8. 数据模型
 
@@ -479,8 +562,8 @@ drag_reason_cn
 | `claim_name` | text | 卖点中文 |
 | `with_price_median` | numeric | 有卖点组价格中位数 |
 | `without_price_median` | numeric | 对照组价格中位数 |
-| `price_premium_abs` | numeric | 价格溢价金额 |
-| `price_premium_rate` | numeric | 价格溢价率 |
+| `price_premium_abs` | numeric | 可比池卖点价格差异金额 |
+| `price_premium_rate` | numeric | 可比池卖点价格差异率 |
 | `with_weekly_sales_median` | numeric | 有卖点组周均销量中位数 |
 | `without_weekly_sales_median` | numeric | 对照组周均销量中位数 |
 | `weekly_sales_lift_abs` | numeric | 周均销量优势 |
@@ -492,6 +575,8 @@ drag_reason_cn
 | `business_summary_cn` | text | 中文解释 |
 | `quality_flags_json` | jsonb | 样本、异常和降级标记 |
 | `result_hash` | text | 结果 hash |
+
+对外输出时，`price_premium_abs` 必须显示为“可比池卖点价格差异”，`weekly_sales_lift_abs` 必须显示为“可比池卖点周均销量差异”。字段名可以在 debug 模式出现，业务模式不得直接展示。
 
 ### 8.3 `core3_sku_claim_value_quantification`
 
@@ -509,9 +594,9 @@ drag_reason_cn
 | `param_support_strength` | numeric | 参数支撑强度 |
 | `comment_support_strength` | numeric | 评论支撑强度 |
 | `semantic_support_strength` | numeric | 语义支撑强度 |
-| `estimated_price_premium_abs` | numeric | 可解释价格溢价 |
-| `estimated_weekly_sales_lift_abs` | numeric | 可解释周均销量优势 |
-| `estimated_weekly_sales_amount_lift_abs` | numeric | 可解释周均销额优势 |
+| `estimated_price_premium_abs` | numeric | 本品超额价格解释份额 |
+| `estimated_weekly_sales_lift_abs` | numeric | 本品超额周均销量解释份额 |
+| `estimated_weekly_sales_amount_lift_abs` | numeric | 本品超额周均销额解释份额 |
 | `contribution_share_in_sku` | numeric | SKU 超额表现解释份额 |
 | `attribution_confidence` | numeric | 归因置信度 |
 | `supporting_dimensions_json` | jsonb | 支撑的战场/任务/客群 |
@@ -520,6 +605,21 @@ drag_reason_cn
 | `quality_flags_json` | jsonb | 降级、样本、异常 |
 | `rule_version` | text | 规则版本 |
 | `is_current` | boolean | 当前结果 |
+
+对外输出时，`estimated_price_premium_abs` 必须显示为“本品超额价格解释份额”，`estimated_weekly_sales_lift_abs` 必须显示为“本品超额周均销量解释份额”。业务模式不得显示为“卖点加价金额”。
+
+建议新增或派生以下展示字段：
+
+| 字段 | 类型建议 | 说明 |
+| --- | --- | --- |
+| `business_value_label` | text | 强溢价卖点/强销量卖点/基础门槛/组合型增值/用户感知不足/高价竞品拦截/价格上探机会 |
+| `business_value_meaning_cn` | text | 业务类型含义 |
+| `pool_claim_price_delta_abs` | numeric | 对外展示的可比池卖点价格差异 |
+| `pool_claim_weekly_sales_delta_abs` | numeric | 对外展示的可比池卖点销量差异 |
+| `sku_excess_price_explained_abs` | numeric | 对外展示的本品超额价格解释份额 |
+| `sku_excess_weekly_sales_explained_abs` | numeric | 对外展示的本品超额销量解释份额 |
+| `bundle_claims_json` | jsonb | 组合型增值时依赖的卖点组合 |
+| `intercept_competitor_skus_json` | jsonb | 高价竞品拦截时的代表 SKU |
 
 ### 8.4 `core3_sku_claim_contribution_attribution`
 
@@ -630,8 +730,10 @@ M12C 查询能力统一放在 `catforge_analyst` 下，由 `catforge_analyst ask
 | `--market-window` | 否 | `full_observed_window` | 市场窗口 |
 | `--analysis-population` | 否 | `claim_value_ready_with_comment` | 分析 SKU 集 |
 | `--format` | 否 | `text` | `text` 或 `json` |
-| `--top-n` | 否 | `3` | 业务答案默认展示数量 |
+| `--top-n` | 否 | `5` | 报告默认展示数量；短答可由 Skill 压缩为 3 |
 | `--debug` | 否 | `false` | 是否暴露技术字段 |
+| `--include-business-labels` | 否 | `true` | 是否输出业务类型和业务含义 |
+| `--include-intercept-opportunities` | 否 | `true` | 是否输出高价竞品拦截和价格上探机会 |
 
 统一 JSON 外壳：
 
@@ -714,6 +816,12 @@ catforge_analyst claim-value-space \
     "market_share_lift": 0,
     "effect_confidence": 0
   },
+  "business_effect": {
+    "pool_claim_price_delta_abs": 0,
+    "pool_claim_weekly_sales_delta_abs": 0,
+    "pool_claim_weekly_sales_amount_delta_abs": 0,
+    "display_caution_cn": ""
+  },
   "representative_skus": {"with_claim": [], "without_claim": []}
 }
 ```
@@ -767,6 +875,12 @@ catforge_analyst sku-claim-value \
       "claim_code": "",
       "claim_name": "",
       "claim_value_role": "",
+      "business_value_label": "",
+      "business_value_meaning_cn": "",
+      "pool_claim_price_delta_abs": 0,
+      "pool_claim_weekly_sales_delta_abs": 0,
+      "sku_excess_price_explained_abs": 0,
+      "sku_excess_weekly_sales_explained_abs": 0,
       "estimated_price_premium_abs": 0,
       "estimated_weekly_sales_lift_abs": 0,
       "estimated_weekly_sales_amount_lift_abs": 0,
@@ -791,7 +905,7 @@ catforge_analyst claim-contribution \
   --sku "海信 65E7Q" \
   --context-type battlefield \
   --context "高端画质升级" \
-  --top-n 3 \
+  --top-n 5 \
   --format json
 ```
 
@@ -822,6 +936,9 @@ catforge_analyst claim-contribution \
     "sku_weekly_sales_amount_lift_abs": 0
   },
   "top_contributing_claims": [],
+  "value_bundle_claims": [],
+  "high_price_competitor_intercepts": [],
+  "price_up_opportunities": [],
   "drag_claims": [],
   "opportunity_claims": [],
   "attribution_summary_cn": "",
@@ -832,11 +949,13 @@ catforge_analyst claim-contribution \
 业务短答模板：
 
 ```text
-结论：本品当前超额表现主要由 A、B、C 三类卖点解释。
+结论：本品当前 Top5 卖点价值分为 A、B、C、D、E：其中 A/B 是更强的价格或销量支撑，C 是组合型增值，D 是基础门槛，E 是高价竞品拦截或价格上探机会。
 
-A 是第一溢价卖点，在{可比池}中对应约 X 元价格溢价，并支撑本品的{主战场/主任务/主客群}。
-B 更偏销量卖点，价格溢价不明显，但对应周均销量优势约 Y 台。
-C 是基础门槛，用户默认期待，缺失会拖累成交，但不应单独包装成高溢价。
+A 在{可比池}中，有卖点组相对对照组价格差异约 X 元，并支撑本品的{主战场/主任务/主客群}。
+B 更偏销量卖点，价格差异不显著，但有卖点组对应周均销量差异约 Y 台。
+C 单点不构成独立溢价，但与{卖点组合}共同支撑高端价值解释。
+D 是基础门槛，用户默认期待，缺失会拖累成交，但不应单独包装成高溢价。
+E 来自同池高价竞品，本品缺失、表达弱或评论感知弱，适合作为上探机会。
 
 以上是可观测贡献估计，不代表严格因果。
 ```
@@ -928,6 +1047,11 @@ catforge_analyst claim-value-compare \
       "claim_name": "",
       "target_role": "",
       "competitor_roles": {},
+      "target_business_value_label": "",
+      "competitor_business_value_labels": {},
+      "pool_claim_price_delta_abs": 0,
+      "pool_claim_weekly_sales_delta_abs": 0,
+      "target_sku_excess_price_explained_abs": 0,
       "pair_price_delta_explained_abs": {},
       "pair_weekly_sales_delta_explained_abs": {},
       "explanation_role": "target_advantage|competitor_intercept|shared_threshold|not_decisive",
@@ -1021,15 +1145,15 @@ Skill 必须把用户问题转成以下 SOP。
 
 ```text
 结论：
-本品当前最有价值的卖点是 A、B、C。A 是定价支撑，B 是销量支撑，C 是基础门槛或机会缺口。
+本品当前最有价值的卖点建议看 A、B、C。A 是强溢价卖点，B 是强销量卖点，C 是高价竞品拦截或价格上探机会。
 
 分析：
-A 在{可比池}中对应约 X 元价格溢价/约 Y 台周均销量优势，并支撑{主战场/主任务/主客群}。
-B 价格溢价不明显，但在同池中对应更高周均销量，适合解释成交规模。
-C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会被竞品拦截。
+A 在{可比池}中，有卖点组相对对照组价格差异约 X 元，并支撑{主战场/主任务/主客群}。
+B 价格差异不明显，但有卖点组对应周均销量差异约 Y 台，适合解释成交规模。
+C 来自同池高价竞品或高价卖点组合，本品缺失、表达弱或评论感知弱，适合作为上探机会。
 
 限制：
-以上是可观测贡献估计，不是严格因果。详细分析见飞书报告链接。
+以上是可观测贡献估计；详细分析见飞书报告链接。
 ```
 
 禁止回答：
@@ -1042,28 +1166,55 @@ C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会
 
 ### 11.4 飞书报告集成
 
-现有竞品报告应新增章节：`卖点价值量化与贡献归因`。
+现有竞品报告应新增独立章节：`卖点价值量化`。该章节不能并入“卖点画像”；“卖点画像”只展示事实，“卖点价值量化”展示价值估计和机会判断。
 
 章节结构：
 
-1. **本品卖点价值结论**：前三个溢价/销量卖点。
-2. **本品卖点贡献拆解**：卖点、角色、价格溢价、周均销量优势、销额优势、贡献份额、置信度。
-3. **本品与竞品卖点价值对比**：横轴为本品和前三竞品，纵轴为核心卖点。
-4. **卖点-战场-任务-客群证据表**：说明卖点支撑哪些业务维度。
-5. **机会缺口与拖后腿卖点**：竞品拦截、本品缺失、用户负向。
-6. **样本和口径限制**：可比池、样本数、是否放宽、是否评论不足。
+1. **本品卖点价值结论**：Top5 卖点价值，区分强溢价、强销量、基础门槛、组合型增值、用户感知不足、高价竞品拦截和价格上探机会。
+2. **四款产品卖点价值横向对比**：横轴为本品和前三竞品，纵轴为比较内容，放在具体产品画像之前。
+3. **本品卖点价值拆解**：卖点、业务类型、业务含义、可比池卖点价格差异、可比池卖点销量差异、本品超额解释份额、值钱的市场、业务解释。
+4. **每个竞品卖点价值拆解**：按同样口径展示前三竞品。
+5. **卖点-战场-任务-客群证据表**：说明卖点支撑哪些业务维度。
+6. **高价竞品拦截和价格上探机会**：同池高价 SKU 的有价值卖点、本品缺失或弱的点、代表 SKU。
+7. **组合型增值卖点和用户感知不足**：说明哪些卖点需要与其他卖点组合表达，哪些卖点存在但评论/场景感知弱。
+8. **样本和口径限制**：可比池、样本数、是否放宽、是否评论不足。
+
+四款产品横向对比建议包含以下子表：
+
+1. 市场画像对比。
+2. 价值战场画像对比。
+3. 用户任务画像对比。
+4. 目标客群画像对比。
+5. 卖点画像事实对比。
+6. 参数画像事实对比。
+7. 卖点价值量化对比。
+
+卖点价值量化表头：
+
+| 排名 | 卖点 | 业务类型 | 业务含义 | 可比池卖点价格差异 | 可比池卖点销量差异 | 本品超额价格解释份额 | 本品超额销量解释份额 | 值钱的市场 | 业务解释 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 飞书正文不得展示内部表名、rule version、JSON 字段和代码枚举；必要时用业务中文替代，例如：
 
 | 内部角色 | 飞书展示 |
 | --- | --- |
-| `premium_driver_estimated` | 估算溢价卖点 |
-| `sales_driver_estimated` | 估算销量卖点 |
+| `premium_driver_estimated` | 强溢价卖点 |
+| `sales_driver_estimated` | 强销量卖点 |
 | `basic_threshold` | 基础门槛卖点 |
+| `value_bundle_claim` | 组合型增值卖点 |
+| `weak_user_perception_claim` | 用户感知不足卖点 |
+| `high_price_competitor_intercept` | 高价竞品拦截卖点 |
+| `price_up_opportunity` | 价格上探机会卖点 |
 | `brand_claim_only` | 厂家主张，市场验证不足 |
 | `drag_factor` | 拖后腿卖点 |
 | `opportunity_gap` | 机会缺口 |
 | `sample_insufficient` | 样本不足 |
+
+卖点价值量化表下方必须放置口径备注：
+
+```text
+说明：可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异，不是单一卖点因果贡献。本品超额解释份额是把本品高于同池基准的价格、销量、销额表现按卖点证据权重做解释性分摊，不能理解为“一个卖点单独增加 X 元或 X 台/周”。同池 SKU 往往同时具备多个卖点，数值用于排序、解释和发现机会。
+```
 
 ## 12. 测试设计
 
@@ -1081,6 +1232,10 @@ C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会
 8. 缺失不当成否定。
 9. 同一 SKU 多视角贡献不相加。
 10. 中文回答不暴露内部字段。
+11. 池级价格差异为负时，不输出 `premium_driver_estimated`。
+12. SKU 超额解释份额不被展示为单卖点因果金额。
+13. 组合型增值卖点必须带 `bundle_claims_json` 或业务解释。
+14. 高价竞品拦截必须带代表竞品 SKU 和同池可比原因。
 
 ### 12.2 集成测试
 
@@ -1094,6 +1249,11 @@ C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会
 | 厂家宣传智能但评论负向 | 输出 `drag_factor` 或 `brand_claim_only` |
 | 竞品有护眼且市场表现好，本品缺失 | 输出 `opportunity_gap` |
 | with_claim 样本只有 1 个 | 输出 `sample_insufficient` |
+| 某卖点池级价格差异为负但销量差异为正 | 输出 `sales_driver_estimated`，不得输出 `premium_driver_estimated` |
+| 本品超额价格为正但该卖点池级价格差异为负 | 不展示为价格支撑卖点 |
+| 高价竞品反复具备某卖点组合，本品只具备其中一部分 | 输出 `value_bundle_claim` 或 `price_up_opportunity` |
+| 本品具备卖点但评论支撑弱于高价竞品 | 输出 `weak_user_perception_claim` |
+| 飞书报告生成卖点价值表 | 表头包含业务类型、业务含义、可比池差异、本品超额解释份额和口径备注 |
 
 ### 12.3 验收样例
 
@@ -1106,11 +1266,13 @@ C 是用户默认期待的门槛，不能单独包装成高溢价；若缺失会
 
 需要能回答：
 
-1. 海信 65E7Q 的前三个溢价卖点是什么。
+1. 海信 65E7Q 的 Top5 卖点价值是什么，哪些是溢价、销量、基础门槛、组合增值或机会。
 2. 创维 65A7H PRO 对海信形成压力的卖点是什么。
 3. TCL 65Q9L PRO 是配置对标还是卖点价值替代。
 4. 创维 65A6F ULTRA 的低价分流是否由基础门槛卖点支撑。
 5. 哪些卖点在该 65 寸高价池中只是门槛，不应作为溢价宣传。
+6. 海信 65E7Q 与前三竞品的卖点价值横向对比是否能解释竞品拦截点。
+7. 当报告展示“+X 元/+Y 台/周”时，是否清楚区分可比池差异和本品超额解释份额。
 
 ## 13. 性能和运行要求
 

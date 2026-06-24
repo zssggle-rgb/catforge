@@ -56,17 +56,40 @@ BRAND_QUERY_WORDS = (
     "konka",
 )
 
-M12C_POSITIVE_ROLES = {"premium_driver_estimated", "sales_driver_estimated"}
-M12C_GAP_ROLES = {"opportunity_gap", "drag_factor"}
+M12C_ROLE_PREMIUM = "premium_driver_estimated"
+M12C_ROLE_SALES = "sales_driver_estimated"
+M12C_ROLE_BASIC = "basic_threshold"
+M12C_ROLE_VALUE_BUNDLE = "value_bundle_claim"
+M12C_ROLE_WEAK_USER = "weak_user_perception_claim"
+M12C_ROLE_HIGH_PRICE_INTERCEPT = "high_price_competitor_intercept"
+M12C_ROLE_PRICE_UP = "price_up_opportunity"
+M12C_ROLE_BRAND = "brand_claim_only"
+M12C_ROLE_USER_NEED = "user_validated_need"
+M12C_ROLE_DRAG = "drag_factor"
+M12C_ROLE_OPPORTUNITY = "opportunity_gap"
+M12C_ROLE_SAMPLE = "sample_insufficient"
+
+M12C_POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
+M12C_GAP_ROLES = {
+    M12C_ROLE_OPPORTUNITY,
+    M12C_ROLE_DRAG,
+    M12C_ROLE_WEAK_USER,
+    M12C_ROLE_HIGH_PRICE_INTERCEPT,
+    M12C_ROLE_PRICE_UP,
+}
 M12C_ROLE_PRIORITY = {
-    "premium_driver_estimated": 0,
-    "sales_driver_estimated": 1,
-    "basic_threshold": 2,
-    "user_validated_need": 3,
-    "drag_factor": 4,
-    "opportunity_gap": 5,
-    "brand_claim_only": 6,
-    "sample_insufficient": 7,
+    M12C_ROLE_PREMIUM: 0,
+    M12C_ROLE_SALES: 1,
+    M12C_ROLE_VALUE_BUNDLE: 2,
+    M12C_ROLE_BASIC: 3,
+    M12C_ROLE_HIGH_PRICE_INTERCEPT: 4,
+    M12C_ROLE_PRICE_UP: 5,
+    M12C_ROLE_WEAK_USER: 6,
+    M12C_ROLE_USER_NEED: 7,
+    M12C_ROLE_DRAG: 8,
+    M12C_ROLE_OPPORTUNITY: 9,
+    M12C_ROLE_BRAND: 10,
+    M12C_ROLE_SAMPLE: 11,
 }
 
 
@@ -865,6 +888,7 @@ class AnalystRepository:
             price_band=price_band,
             limit=limit,
         )
+        metric_by_id = self._m12c_metrics_by_id(row.metric_id for row in quant_rows)
         return {
             "sku_code": sku_code,
             "market_window": market_window,
@@ -880,9 +904,9 @@ class AnalystRepository:
                 "limit": limit,
             },
             "role_counts": _count_by([row.claim_value_role for row in quant_rows]),
-            "claim_values": [_sku_claim_value_payload(row) for row in quant_rows],
+            "claim_values": [_sku_claim_value_payload(row, metric_by_id.get(row.metric_id or "")) for row in quant_rows],
             "attributions": [_claim_attribution_payload(row) for row in attr_rows],
-            "method_note_cn": "金额与销量贡献为同尺寸价格带、同语义上下文内的可观测差异分摊，不代表严格因果或可直接加总的真实增量。",
+            "method_note_cn": "可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异；本品超额解释份额是对本品高于同池基准表现的解释性分摊，不代表单一卖点因果增量。",
         }
 
     def claim_contribution(
@@ -979,6 +1003,7 @@ class AnalystRepository:
             ]
         target_gap_rows = _sort_m12c_claim_rows(target_gap_rows)[: max(limit, 0) if limit else None]
         candidate_advantages = _sort_m12c_claim_rows(candidate_advantages)[: max(limit, 0) if limit else None]
+        metric_by_id = self._m12c_metrics_by_id([*(row.metric_id for row in target_gap_rows), *(row.metric_id for row in candidate_advantages)])
         return {
             "sku_code": sku_code,
             "candidate_sku_code": candidate_sku_code,
@@ -989,8 +1014,8 @@ class AnalystRepository:
                 "context_code": context_code,
                 "limit": limit,
             },
-            "target_opportunity_or_drag_claims": [_sku_claim_value_payload(row) for row in target_gap_rows],
-            "candidate_positive_claims_missing_on_target": [_sku_claim_value_payload(row) for row in candidate_advantages],
+            "target_opportunity_or_drag_claims": [_sku_claim_value_payload(row, metric_by_id.get(row.metric_id or "")) for row in target_gap_rows],
+            "candidate_positive_claims_missing_on_target": [_sku_claim_value_payload(row, metric_by_id.get(row.metric_id or "")) for row in candidate_advantages],
             "method_note_cn": "机会缺口优先看本品机会/拖后腿卖点；如提供竞品，则补充竞品已形成正向贡献而本品未形成正向贡献的卖点。",
         }
 
@@ -1035,14 +1060,15 @@ class AnalystRepository:
         target_advantage = []
         candidate_advantage = []
         shared_positive = []
+        metric_by_id = self._m12c_metrics_by_id([*(row.metric_id for row in target_rows), *(row.metric_id for row in candidate_rows)])
         for claim_code in all_codes:
             target_row = target_best.get(claim_code)
             candidate_row = candidate_best.get(claim_code)
             item = {
                 "claim_code": claim_code,
                 "claim_name": (target_row.claim_name if target_row else None) or (candidate_row.claim_name if candidate_row else None),
-                "target": _sku_claim_value_payload(target_row) if target_row else {},
-                "candidate": _sku_claim_value_payload(candidate_row) if candidate_row else {},
+                "target": _sku_claim_value_payload(target_row, metric_by_id.get(target_row.metric_id or "")) if target_row else {},
+                "candidate": _sku_claim_value_payload(candidate_row, metric_by_id.get(candidate_row.metric_id or "")) if candidate_row else {},
                 "relation": _claim_compare_relation(target_row, candidate_row),
             }
             paired.append(item)
@@ -1125,6 +1151,13 @@ class AnalystRepository:
         )
         rows = _sort_m12c_claim_rows(list(self.db.execute(stmt).scalars()))
         return rows[: max(limit, 0)] if limit else rows
+
+    def _m12c_metrics_by_id(self, metric_ids: Sequence[str | None]) -> dict[str, entities.Core3ClaimValuePoolMetric]:
+        ids = sorted({str(metric_id) for metric_id in metric_ids if metric_id})
+        if not ids:
+            return {}
+        stmt = select(entities.Core3ClaimValuePoolMetric).where(entities.Core3ClaimValuePoolMetric.metric_id.in_(ids))
+        return {row.metric_id: row for row in self.db.execute(stmt).scalars()}
 
     def _m12c_attribution_rows(
         self,
@@ -2107,9 +2140,20 @@ def _claim_value_dimension_summary_payload(row: entities.Core3ClaimValueDimensio
     }
 
 
-def _sku_claim_value_payload(row: entities.Core3SkuClaimValueQuantification | None) -> dict[str, Any]:
+def _sku_claim_value_payload(
+    row: entities.Core3SkuClaimValueQuantification | None,
+    metric: entities.Core3ClaimValuePoolMetric | None = None,
+) -> dict[str, Any]:
     if row is None:
         return {}
+    pool_price_delta = _number(metric.price_premium_abs) if metric else None
+    pool_sales_delta = _number(metric.weekly_sales_lift_abs) if metric else None
+    pool_amount_delta = _number(metric.weekly_sales_amount_lift_abs) if metric else None
+    sku_price_share = _number(row.estimated_price_premium_abs)
+    sku_sales_share = _number(row.estimated_weekly_sales_lift_abs)
+    sku_amount_share = _number(row.estimated_weekly_sales_amount_lift_abs)
+    business_label = _m12c_business_value_label(row.claim_value_role, pool_price_delta)
+    business_meaning = _m12c_business_value_meaning_cn(row.claim_value_role, pool_price_delta)
     return {
         "sku_code": row.sku_code,
         "brand_name": row.brand_name,
@@ -2118,11 +2162,27 @@ def _sku_claim_value_payload(row: entities.Core3SkuClaimValueQuantification | No
         "claim_name": row.claim_name,
         "claim_dimension": row.claim_dimension,
         "claim_value_role": row.claim_value_role,
+        "business_value_label": business_label,
+        "business_value_meaning_cn": business_meaning,
         "context_type": row.context_type,
         "context_code": row.context_code,
         "context_name": row.context_name,
         "size_tier": row.size_tier,
         "price_band_group": row.price_band_group,
+        "pool_effect": {
+            "pool_claim_price_delta_abs": pool_price_delta,
+            "pool_claim_weekly_sales_delta_abs": pool_sales_delta,
+            "pool_claim_weekly_sales_amount_delta_abs": pool_amount_delta,
+            "with_claim_sku_count": getattr(metric, "with_claim_sku_count", None) if metric else None,
+            "without_claim_sku_count": getattr(metric, "without_claim_sku_count", None) if metric else None,
+            "effect_confidence": _number(metric.effect_confidence) if metric else None,
+        },
+        "sku_excess_explanation": {
+            "sku_excess_price_explained_abs": sku_price_share,
+            "sku_excess_weekly_sales_explained_abs": sku_sales_share,
+            "sku_excess_weekly_sales_amount_explained_abs": sku_amount_share,
+            "contribution_share_in_sku": _number(row.contribution_share_in_sku),
+        },
         "evidence_strength": {
             "claim": _number(row.claim_evidence_strength),
             "param": _number(row.param_support_strength),
@@ -2130,9 +2190,9 @@ def _sku_claim_value_payload(row: entities.Core3SkuClaimValueQuantification | No
             "semantic": _number(row.semantic_support_strength),
         },
         "estimated_contribution": {
-            "price_premium_abs": _number(row.estimated_price_premium_abs),
-            "weekly_sales_lift_abs": _number(row.estimated_weekly_sales_lift_abs),
-            "weekly_sales_amount_lift_abs": _number(row.estimated_weekly_sales_amount_lift_abs),
+            "price_premium_abs": sku_price_share,
+            "weekly_sales_lift_abs": sku_sales_share,
+            "weekly_sales_amount_lift_abs": sku_amount_share,
             "contribution_share_in_sku": _number(row.contribution_share_in_sku),
         },
         "attribution_confidence": _number(row.attribution_confidence),
@@ -2174,6 +2234,62 @@ def _claim_attribution_payload(row: entities.Core3SkuClaimContributionAttributio
         "attribution_summary_cn": row.attribution_summary_cn,
         "confidence": _number(row.confidence),
     }
+
+
+def _m12c_business_value_label(role: str | None, pool_price_delta: Any = None) -> str:
+    price_delta = _decimal(pool_price_delta) or Decimal("0")
+    role = str(role or "")
+    if role == M12C_ROLE_PREMIUM:
+        return "强溢价卖点" if price_delta > 0 else "组合型增值卖点"
+    if role == M12C_ROLE_SALES:
+        return "强销量卖点"
+    if role == M12C_ROLE_BASIC:
+        return "基础门槛卖点"
+    if role == M12C_ROLE_VALUE_BUNDLE:
+        return "组合型增值卖点"
+    if role == M12C_ROLE_WEAK_USER:
+        return "用户感知不足卖点"
+    if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
+        return "高价竞品拦截卖点"
+    if role == M12C_ROLE_PRICE_UP:
+        return "价格上探机会卖点"
+    if role == M12C_ROLE_DRAG:
+        return "拖后腿卖点"
+    if role == M12C_ROLE_OPPORTUNITY:
+        return "机会缺口"
+    if role == M12C_ROLE_BRAND:
+        return "厂家主张卖点"
+    if role == M12C_ROLE_USER_NEED:
+        return "用户验证需求"
+    return "样本不足"
+
+
+def _m12c_business_value_meaning_cn(role: str | None, pool_price_delta: Any = None) -> str:
+    price_delta = _decimal(pool_price_delta) or Decimal("0")
+    role = str(role or "")
+    if role == M12C_ROLE_PREMIUM and price_delta > 0:
+        return "同尺寸、同价格带、同语义市场中，有该卖点且证据成立的一组 SKU 价格更高。"
+    if role == M12C_ROLE_SALES:
+        return "价格不一定更高，但更能解释同池周均销量或销额优势。"
+    if role == M12C_ROLE_BASIC:
+        return "同池普遍具备，有了不加价，缺了会掉队。"
+    if role == M12C_ROLE_VALUE_BUNDLE or (role == M12C_ROLE_PREMIUM and price_delta <= 0):
+        return "单点不一定独立溢价，但与一组高价值卖点组合后参与高端价值解释。"
+    if role == M12C_ROLE_WEAK_USER:
+        return "参数或卖点存在，但评论验证弱、负向明显，或弱于高价竞品。"
+    if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
+        return "同池高价竞品具备并能成交，本品缺失、表达弱或评论弱。"
+    if role == M12C_ROLE_PRICE_UP:
+        return "高价 SKU 反复具备且有市场价值，本品补强后可能提升上探空间。"
+    if role == M12C_ROLE_DRAG:
+        return "厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群。"
+    if role == M12C_ROLE_OPPORTUNITY:
+        return "同池强竞品或高价值 SKU 具备，本品缺失或表达弱。"
+    if role == M12C_ROLE_BRAND:
+        return "卖点文本存在，但参数、评论或市场验证不足。"
+    if role == M12C_ROLE_USER_NEED:
+        return "评论中存在需求，但本品卖点或参数支撑不足。"
+    return "可比池、对照组或评论样本不足，不能稳定判断。"
 
 
 def _section_evidence_sources(**sections: Any) -> list[dict[str, Any]]:

@@ -1171,13 +1171,17 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     lines = [f"{_brand_model(target)} 的卖点价值量化结果："]
     for row in rows[:10]:
         contribution = row.get("estimated_contribution") or {}
+        pool_effect = row.get("pool_effect") or {}
+        sku_excess = row.get("sku_excess_explanation") or {}
+        label = row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))
         lines.append(
-            f"- {row.get('claim_name') or row.get('claim_code')}：{_claim_role_cn(row.get('claim_value_role'))}；"
-            f"估算价格支撑约{_format_money(contribution.get('price_premium_abs')) or '0元'}；"
-            f"周均销量支撑约{_format_volume(contribution.get('weekly_sales_lift_abs')) or '0'}台；"
+            f"- {row.get('claim_name') or row.get('claim_code')}：{label}；"
+            f"可比池价格差异约{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}；"
+            f"可比池周均销量差异约{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台；"
+            f"本品超额价格解释份额约{_format_money(sku_excess.get('sku_excess_price_explained_abs') or contribution.get('price_premium_abs')) or '0元'}；"
             f"上下文：{row.get('context_name') or row.get('context_code')}。"
         )
-    lines.append("说明：该结果为同尺寸价格带和语义上下文内的可观测差异分摊，不是严格因果。")
+    lines.append("说明：可比池差异是有卖点组与对照组的可观测差异；本品超额解释份额是解释性分摊，不是单一卖点因果增量。")
     return "\n".join(lines)
 
 
@@ -1197,7 +1201,7 @@ def _format_claim_contribution_text(result: dict[str, Any]) -> str:
             f"相对池基准价格差约{_format_money(gap.get('price_premium_abs')) or '0元'}；"
             f"周均销量差约{_format_volume(gap.get('weekly_sales_lift_abs')) or '0'}台。"
         )
-    lines.append("说明：归因结果用于解释可观测市场表现，不可直接视为因果增量。")
+    lines.append("说明：归因结果用于解释本品相对同池基准的可观测超额表现，不可直接视为因果增量。")
     return "\n".join(lines)
 
 
@@ -1317,9 +1321,13 @@ def _price_band_cn(value: Any) -> str:
 
 def _claim_role_cn(value: Any) -> str:
     mapping = {
-        "premium_driver_estimated": "溢价卖点",
-        "sales_driver_estimated": "销量支撑卖点",
+        "premium_driver_estimated": "强溢价卖点",
+        "sales_driver_estimated": "强销量卖点",
         "basic_threshold": "基础门槛卖点",
+        "value_bundle_claim": "组合型增值卖点",
+        "weak_user_perception_claim": "用户感知不足卖点",
+        "high_price_competitor_intercept": "高价竞品拦截卖点",
+        "price_up_opportunity": "价格上探机会卖点",
         "user_validated_need": "用户验证需求",
         "brand_claim_only": "厂家主张卖点",
         "opportunity_gap": "机会缺口",
