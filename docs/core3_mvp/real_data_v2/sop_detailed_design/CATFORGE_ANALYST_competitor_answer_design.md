@@ -24,6 +24,7 @@
        -> ValueAnchorMatcher
        -> ReplacementPressureClassifier
        -> MarketValidationService
+       -> ClaimValueEvidenceAssembler
        -> CompetitorSelectionService
        -> CompetitorAnswerRenderer
        -> CompetitorReportRenderer
@@ -41,6 +42,7 @@
 | OverlapScorer | 计算价值战场、用户任务、目标客群的主辅加权重合。 |
 | ValueAnchorMatcher | 提炼目标 SKU 和候选 SKU 的可替代价值锚点。 |
 | PressureClassifier | 判断竞品角色和替代压力。 |
+| ClaimValueEvidenceAssembler | 读取目标和候选 SKU 的 M12C 卖点价值量化，形成报告可直接展示的卖点溢价指数、价格支撑、销量支撑和拖后腿/机会缺口。 |
 | SelectionService | 汇总分数、排序、分桶、Top 3 选择。 |
 | AnswerRenderer | 生成 600 字以内业务摘要。 |
 | ReportRenderer | 生成飞书 Markdown 报告内容。 |
@@ -322,9 +324,70 @@ risk_overlap = count(common_negative_codes) / max(1, target_positive_code_count)
 - 周均销量用于验证分流能力，累计销量仅可在报告附录展示。
 - 如果候选销量极高但购买池或语义偏离，不得排入直接竞品。
 
-## 9. 综合排序设计
+## 9. 卖点价值证据设计
 
-### 9.1 分数结构
+### 9.1 数据来源
+
+竞品详细报告的卖点画像必须优先读取 M12C：
+
+- `sku-claim-value`：单 SKU 的 SKU×卖点价值角色、估算价格溢价、估算周均销量优势、估算周均销额优势、贡献占比和置信度。
+- `claim-contribution`：单 SKU 在价值战场、用户任务、目标客群等上下文中的卖点贡献归因。
+
+`competitor-set` 在 `answer_style=xiaoao` 或 `with_report != none` 时，除 `sku-fact-brief` 外，还要为目标 SKU 和进入候选池的 SKU 拉取 M12C 结果。M12C 查询失败或无数据不能阻断竞品集合生成，但报告必须展示“卖点价值量化待生成”。
+
+### 9.2 卖点溢价指数
+
+报告展示的“卖点溢价指数”是报告层展示分，不写入 M12C 结果表。计算目标是让业务用户快速看出同一 SKU 内哪个卖点更有价值。
+
+建议口径：
+
+```text
+role_base =
+  premium_driver_estimated: 70
+  sales_driver_estimated: 60
+  basic_threshold: 35
+  user_validated_need: 45
+  brand_claim_only: 25
+  opportunity_gap: 30
+  drag_factor: 15
+  sample_insufficient: 10
+
+claim_premium_index =
+  role_base
+  + normalized(price_premium_abs) * 15
+  + normalized(weekly_sales_lift_abs) * 10
+  + normalized(weekly_sales_amount_lift_abs) * 10
+  + contribution_share_in_sku * 10
+  + attribution_confidence * 5
+```
+
+实现中可采用无全局依赖的单 SKU 内归一化：同一 SKU 当前返回的 M12C 卖点中，价格、销量、销额分别按最大正值归一化到 0-1。最终分数限制在 0-100，并展示为整数。该分数仅用于报告内排序和阅读，不表达严格因果。
+
+### 9.3 报告输出结构
+
+在“四个产品横向详细对比 - 卖点画像”中新增行：
+
+| 行 | 内容 |
+| --- | --- |
+| 卖点溢价指数 Top | 展示 Top 3 卖点及指数，例如 `MiniLED 87；高刷 76`。 |
+| 可观测价格支撑 | 展示 Top 3 卖点对应估算价格支撑。 |
+| 可观测销量支撑 | 展示 Top 3 卖点对应估算周均销量支撑。 |
+| M12C 拖后腿/机会缺口 | 展示拖后腿卖点和机会缺口，区分风险与机会。 |
+
+在每个产品的“卖点画像”中新增 M12C 表：
+
+| 卖点类型 | 卖点 | 卖点溢价指数 | 可观测价格支撑 | 可观测周均销量支撑 | 上下文 | 置信度 | 判断 |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+
+如果没有 M12C：
+
+- 保留原来的事实卖点/评论支撑表作为兜底。
+- 表头或说明写“卖点价值量化待生成，以下为事实卖点与评论支撑兜底判断”。
+- 不显示伪造指数、价格支撑或销量支撑。
+
+## 10. 综合排序设计
+
+### 10.1 分数结构
 
 建议保留内部综合分，但不在聊天回答中展示。
 
@@ -348,7 +411,7 @@ final_sort_key =
   abs(price_gap)
 ```
 
-### 9.2 Top 3 选择
+### 10.2 Top 3 选择
 
 Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 
@@ -360,11 +423,11 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 
 若没有足够候选，不硬凑三款。
 
-## 10. 短摘要生成设计
+## 11. 短摘要生成设计
 
 `CompetitorAnswerRenderer` 从结构化结果生成短摘要。
 
-### 10.1 模板
+### 11.1 模板
 
 ```text
 {target_name} 的重点竞品建议看三款：{name1}、{name2} 和 {name3}。
@@ -374,7 +437,7 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 详细分析报告见飞书链接：{report_url}
 ```
 
-### 10.2 语言约束
+### 11.2 语言约束
 
 渲染器必须做文本校验：
 
@@ -390,27 +453,27 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 {target_name} 的重点竞品建议看三款：{name1}、{name2} 和 {name3}。{name1} 是首选直接竞品，主要压力来自同一购买池内对核心成交理由的替代；{name2} 是强直接竞品，主要压力来自同价段配置和体验预期；{name3} 是{role3}，主要压力来自{pressure3}。详细分析报告见飞书链接：{report_url}
 ```
 
-## 11. 飞书报告生成设计
+## 12. 飞书报告生成设计
 
-### 11.1 报告渲染
+### 12.1 报告渲染
 
 `CompetitorReportRenderer` 生成 Markdown，交给发布器创建飞书文档。
 
-章节：
+当前报告章节：
 
 1. `# {目标 SKU} 重点竞品分析报告`
-2. `## 一、结论摘要`
-3. `## 二、为什么首选竞品是 {第一竞品}`
-4. `## 三、Top 3 竞品卡`
-5. `## 四、购买池与竞争语境`
-6. `## 五、价值战场、用户任务、目标客群重合`
-7. `## 六、关键价值锚点与替代压力`
-8. `## 七、市场验证`
-9. `## 八、未入选候选说明`
-10. `## 九、对目标 SKU 的业务启示`
-11. `## 十、口径说明`
+2. `## 一、分析结论`
+3. `## 二、分析过程`
+4. `## 三、四个产品详情链接`
+5. `## 四、四个产品横向详细对比`
+6. `## 五、{目标 SKU} 产品画像`
+7. `## 六/七/八、前三竞品产品画像`
 
-### 11.2 飞书发布器
+横向详细对比必须包含市场画像、价值战场画像、用户任务画像、目标客群画像、卖点画像和参数画像。卖点画像必须优先展示 M12C 卖点溢价指数、可观测价格支撑、可观测销量支撑和拖后腿/机会缺口；事实卖点与评论支撑只能作为 M12C 缺失时的兜底。
+
+报告不得输出产品经理策略、导购话术、应对策略、实现过程、原始模块名、批次号或命令输出。
+
+### 12.2 飞书发布器
 
 接口：
 
@@ -449,9 +512,9 @@ class ReportPublishResult:
 - `report_status = "failed"`。
 - 聊天摘要末尾写“详细分析报告暂未生成”，不暴露失败命令。
 
-## 12. Skill 设计
+## 13. Skill 设计
 
-### 12.1 固定路由
+### 13.1 固定路由
 
 `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` 的竞品问题路由改为：
 
@@ -467,7 +530,7 @@ docker compose -f docker-compose.cloud.yml exec -T api \
   --with-report feishu-doc
 ```
 
-### 12.2 Skill 消费规则
+### 13.2 Skill 消费规则
 
 伪代码：
 
@@ -490,7 +553,7 @@ Skill 不再做：
 - 追加通用市场常识。
 - 把工具错误粘贴给用户。
 
-### 12.3 追问处理
+### 13.3 追问处理
 
 对于“第一款为什么选它”“分析第一名”等追问：
 
@@ -510,9 +573,9 @@ python -m app.cli.catforge_analyst competitor-explain \
 
 首版也可以由 `competitor-set` 在 JSON 中返回 `top_competitors[0].detail_answer`，供 Skill 直接使用。
 
-## 13. 数据结构设计
+## 14. 数据结构设计
 
-### 13.1 Top competitor item
+### 14.1 Top competitor item
 
 ```json
 {
@@ -551,7 +614,32 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-### 13.2 Report payload
+### 14.2 Claim value payload
+
+```json
+{
+  "claim_value_summary": {
+    "status": "ready",
+    "top_premium_claims": [
+      {
+        "claim_code": "tv_claim_miniled",
+        "claim_name": "MiniLED",
+        "claim_value_role": "premium_driver_estimated",
+        "claim_premium_index": 87,
+        "price_premium_abs": 280.0,
+        "weekly_sales_lift_abs": 15.0,
+        "weekly_sales_amount_lift_abs": 75000.0,
+        "context_name": "高端画质升级战场",
+        "confidence": 0.82
+      }
+    ],
+    "drag_claims": [],
+    "opportunity_claims": []
+  }
+}
+```
+
+### 14.3 Report payload
 
 ```json
 {
@@ -562,9 +650,9 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-## 14. 测试设计
+## 15. 测试设计
 
-### 14.1 单元测试
+### 15.1 单元测试
 
 新增测试文件建议：
 
@@ -588,8 +676,10 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 | text/json 一致 | `--format text` 等于 JSON `short_answer`。 |
 | 飞书失败 | 仍返回短摘要，`report_status=failed`。 |
 | 模糊 SKU | Pro/非 Pro 同时命中时返回 `ambiguous`。 |
+| M12C 报告接入 | 竞品报告卖点画像展示卖点溢价指数、价格支撑、销量支撑和置信度。 |
+| M12C 缺失兜底 | 报告写“卖点价值量化待生成”，不伪造指数。 |
 
-### 14.2 集成测试
+### 15.2 集成测试
 
 使用固定 fixture 或测试数据库样本：
 
@@ -600,16 +690,16 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 
 不要求在单元测试中调用真实飞书。
 
-## 15. 部署与兼容
+## 16. 部署与兼容
 
-### 15.1 兼容策略
+### 16.1 兼容策略
 
 - 默认 `--answer-style raw` 保持现有输出兼容。
 - 小奥 Skill 使用 `--answer-style xiaoao`。
 - `--with-report none` 时不依赖飞书环境。
 - 205 上若未配置飞书 CLI，仍可回答短摘要。
 
-### 15.2 205 部署后验收
+### 16.2 205 部署后验收
 
 验收命令：
 
@@ -632,8 +722,9 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 - 只输出 Top 3 和飞书链接。
 - 不出现内部 code 和命令。
 - 飞书链接可打开；如果当前 batch 找不到该 SKU，必须返回业务化边界提示。
+- 飞书报告的“四个产品横向详细对比 - 卖点画像”和各产品“卖点画像”中出现 M12C 卖点溢价指数；若 latest 批次 M12C 未准备好，报告必须显示“卖点价值量化待生成”。
 
-## 16. 后续扩展
+## 17. 后续扩展
 
 首版聚焦“竞品有哪些”和“为什么第一款是首选竞品”。后续可以扩展：
 
