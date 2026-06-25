@@ -11,17 +11,29 @@ from app.models import entities
 from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
 from app.services.core3_real_data.analyst import competitor_answer
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_AC_TAXONOMY_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_AC_RULE_VERSION,
+    CORE3_M09C_AC_TAXONOMY_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
     CORE3_M09C_TV_TAXONOMY_VERSION,
+    CORE3_M10C_AC_RULE_VERSION,
+    CORE3_M10C_AC_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
+    CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
@@ -31,6 +43,7 @@ from app.services.core3_real_data.constants import (
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_analyst_test"
+AC_BATCH_ID = "m00_ac_analyst_test"
 
 
 def _m12c_test_pool() -> m12c_service.ClaimPool:
@@ -107,6 +120,7 @@ def make_session() -> Session:
         entities.Core3M09cSkuUserTaskProfile.__table__,
         entities.Core3M10cSkuTargetGroupProfile.__table__,
         entities.Core3SkuValueBattlefieldProfile.__table__,
+        entities.Core3SkuValueBattlefieldScore.__table__,
         entities.Core3SemanticMarketDimensionSummary.__table__,
         entities.Core3SemanticMarketSkuContribution.__table__,
         entities.Core3SemanticMarketAllocation.__table__,
@@ -226,6 +240,361 @@ def seed_market_profile(
             rule_version=CORE3_M07_RULE_VERSION,
             input_fingerprint=f"fp-m07-{sku_code}",
             result_hash=f"hash-m07-{sku_code}",
+        )
+    )
+
+
+def seed_ac_analyst_data(session: Session) -> None:
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=AC_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            ruleset_version="ac-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 24, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    seed_ac_market_profile(
+        session,
+        sku_code="AC00038063",
+        model_name="KFR-88LW/N8KS1-1U",
+        brand_name="美的",
+        size_tier="floor_hp_3_plus",
+        price=Decimal("7208"),
+        volume=Decimal("13916"),
+        price_band="unknown",
+    )
+    seed_ac_market_profile(
+        session,
+        sku_code="AC00028640",
+        model_name="KFR-72LW/BDN8Y-YH200",
+        brand_name="海信",
+        size_tier="floor_hp_3",
+        price=Decimal("5899"),
+        volume=Decimal("8600"),
+        price_band="mid_high",
+    )
+    seed_ac_market_profile(
+        session,
+        sku_code="AC00029751",
+        model_name="KFR-72LW/N8MXA1",
+        brand_name="格力",
+        size_tier="floor_hp_3",
+        price=Decimal("6599"),
+        volume=Decimal("7600"),
+        price_band="high",
+    )
+    for sku_code, model_name, brand_name, size_tier in [
+        ("AC00038063", "KFR-88LW/N8KS1-1U", "美的", "floor_hp_3_plus"),
+        ("AC00028640", "KFR-72LW/BDN8Y-YH200", "海信", "floor_hp_3"),
+        ("AC00029751", "KFR-72LW/N8MXA1", "格力", "floor_hp_3"),
+    ]:
+        seed_ac_fact_profiles(session, sku_code=sku_code, model_name=model_name, brand_name=brand_name, size_tier=size_tier)
+    seed_ac_battlefield_score(
+        session,
+        sku_code="AC00038063",
+        model_name="KFR-88LW/N8KS1-1U",
+        brand_name="美的",
+        size_tier="floor_hp_3_plus",
+        sample_peer_codes=["AC00028640", "AC00029751"],
+    )
+    session.commit()
+
+
+def seed_ac_market_profile(
+    session: Session,
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    size_tier: str,
+    price: Decimal,
+    volume: Decimal,
+    price_band: str,
+) -> None:
+    amount = price * volume
+    session.add(
+        entities.Core3SkuMarketProfile(
+            profile_id=f"m07-{sku_code}",
+            sku_market_profile_id=f"m07-profile-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            analysis_window="full_observed_window",
+            period_start_raw="26W01",
+            period_end_raw="26W24",
+            period_start_week_index=1,
+            period_end_week_index=24,
+            active_week_count=24,
+            market_row_count=24,
+            platform_count=1,
+            size_segment=size_tier,
+            screen_size_class=size_tier,
+            market_pool_key=f"ac:{size_tier}:online:full_observed_window",
+            sales_volume_total=volume,
+            sales_amount_total=amount,
+            price_wavg=price,
+            price_median=price,
+            price_latest=float(price),
+            main_channel_type="online",
+            main_platform="test_platform",
+            platform_share_json={"test_platform": {"volume_share": 1.0, "amount_share": 1.0}},
+            price_band_category=price_band,
+            price_band_size=price_band,
+            price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
+            price_percentile_in_size=Decimal("0.900000") if price_band == "high" else Decimal("0.500000"),
+            volume_percentile_in_size=Decimal("0.800000"),
+            amount_percentile_in_size=Decimal("0.850000"),
+            same_pool_sku_count=1 if size_tier == "floor_hp_3_plus" else 3,
+            market_confidence=Decimal("0.9000"),
+            confidence_level="high",
+            sample_status="sufficient",
+            quality_flags=[],
+            evidence_ids=[f"ev-market-{sku_code.lower()}"],
+            market_evidence_ids=[f"ev-market-{sku_code.lower()}"],
+            rule_version=CORE3_M07_RULE_VERSION,
+            input_fingerprint=f"fp-m07-{sku_code}",
+            result_hash=f"hash-m07-{sku_code}",
+        )
+    )
+
+
+def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, brand_name: str, size_tier: str) -> None:
+    session.add(
+        entities.Core3SkuParamProfile(
+            sku_param_profile_id=f"profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            sku_code=sku_code,
+            model_name=model_name,
+            param_values_json={
+                "horsepower_hp": {"normalized_value": 3.0},
+                "installation_type": {"normalized_value": "柜机"},
+                "dimension_tier_profile": {"size": size_tier, "energy": "high_efficiency"},
+                "energy_grade_normalized": {"normalized_value": "一级能效"},
+                "airflow_volume_m3h": {"normalized_value": 1500},
+            },
+            core_picture_params_json={"horsepower_hp": {"normalized_value": 3.0}, "installation_type": {"normalized_value": "柜机"}},
+            core_gaming_params_json={"airflow_volume_m3h": {"normalized_value": 1500}},
+            core_system_params_json={"wifi_control_flag": {"normalized_value": True}},
+            core_eye_care_params_json={"self_cleaning_flag": {"normalized_value": True}},
+            param_completeness=Decimal("0.820000"),
+            known_param_count=42,
+            unknown_param_count=5,
+            conflict_count=0,
+            review_required_count=0,
+            evidence_ids=[f"ev-param-{sku_code.lower()}"],
+            quality_summary_json={"taxonomy_category_code": "AC"},
+            profile_hash=f"hash-param-{sku_code.lower()}",
+            seed_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M03B_AC_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id=f"claim-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M04C_AC_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            raw_claim_count=3,
+            matched_claim_count=3,
+            fact_claim_count=3,
+            unsupported_claim_count=0,
+            claim_texts_json=["大风量", "自清洁", "智能控制"],
+            claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning", "ac_claim_smart_app_voice_iot"],
+            fact_claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning", "ac_claim_smart_app_voice_iot"],
+            unsupported_claim_codes=[],
+            dimension_profile_json={"airflow_comfort": {"fact_claim_count": 1}, "health_clean_air": {"fact_claim_count": 1}},
+            dimension_position_profile_json={"airflow_comfort": ["large_airflow"], "health_clean_air": ["self_cleaning"]},
+            claim_summary_json={"premium_claim_candidates": ["ac_claim_large_airflow_coverage"]},
+            evidence_ids=[f"ev-claim-{sku_code.lower()}"],
+            confidence=Decimal("0.9000"),
+            profile_hash=f"hash-claim-{sku_code.lower()}",
+            rule_version=CORE3_M04C_AC_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id=f"comment-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M05C_AC_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            comment_sentence_count=20,
+            matched_sentence_count=18,
+            fact_atom_count=22,
+            product_fact_sentence_count=18,
+            positive_sentence_count=14,
+            negative_sentence_count=1,
+            neutral_sentence_count=3,
+            service_excluded_sentence_count=1,
+            dimension_summary_json={"airflow_comfort": {"positive": 8}, "health_clean_air": {"positive": 5}},
+            signal_summary_json={"use_case_signal": ["客厅大空间"]},
+            param_comment_support_json={"airflow_volume_m3h": {"positive": 3}},
+            claim_comment_support_json={"ac_claim_large_airflow_coverage": {"positive": 5}, "ac_claim_self_cleaning": {"positive": 4}},
+            supported_param_codes=["airflow_volume_m3h"],
+            contradicted_param_codes=[],
+            supported_claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning"],
+            contradicted_claim_codes=[],
+            evidence_examples_json=[{"text": "客厅制冷快，风量大，自清洁也方便"}],
+            evidence_ids=[f"ev-comment-{sku_code.lower()}"],
+            confidence=Decimal("0.8800"),
+            profile_hash=f"hash-comment-{sku_code.lower()}",
+            rule_version=CORE3_M05C_AC_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3M09cSkuUserTaskProfile(
+            profile_id=f"m09c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M09C_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M09C_AC_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier=size_tier,
+            price_band_in_size_tier="high",
+            primary_user_task_code="TASK_LARGE_SPACE_COVERAGE",
+            primary_relation_status="primary_user_task",
+            secondary_user_task_codes_json=["TASK_HEALTH_CLEAN_AIR"],
+            comment_observed_task_codes_json=["TASK_LARGE_SPACE_COVERAGE"],
+            brand_claimed_task_codes_json=["TASK_HEALTH_CLEAN_AIR"],
+            user_task_summary_json={"primary_reason_cn": "大空间风量和评论支撑。"},
+            confidence=Decimal("0.8700"),
+            evidence_ids_json=[f"ev-task-{sku_code.lower()}"],
+            profile_hash=f"hash-task-{sku_code.lower()}",
+        )
+    )
+    session.add(
+        entities.Core3M10cSkuTargetGroupProfile(
+            profile_id=f"m10c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M10C_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M10C_AC_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier=size_tier,
+            price_band_in_size_tier="high",
+            primary_target_group_code="TG_LIVING_ROOM_LARGE_SPACE",
+            primary_relation_status="primary_target_group",
+            secondary_target_group_codes_json=["TG_CHILD_ELDER_COMFORT"],
+            comment_observed_group_codes_json=["TG_LIVING_ROOM_LARGE_SPACE"],
+            target_group_summary_json={"primary_reason_cn": "客厅大空间用户匹配。"},
+            confidence=Decimal("0.8500"),
+            evidence_ids_json=[f"ev-group-{sku_code.lower()}"],
+            profile_hash=f"hash-group-{sku_code.lower()}",
+        )
+    )
+    session.add(
+        entities.Core3SkuValueBattlefieldProfile(
+            profile_id=f"m11c-profile-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M11C_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M11C_AC_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier=size_tier,
+            price_band_in_size_tier="high",
+            price_percentile_in_size_tier=Decimal("0.973000"),
+            primary_battlefield_code="BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
+            primary_relation_status="primary_battlefield",
+            secondary_battlefield_codes_json=["BF_MID_HIGH_SMART_CONTROL_UPGRADE"],
+            opportunity_battlefield_codes_json=[],
+            drag_factor_battlefield_codes_json=[],
+            battlefield_summary_json={"primary_reason_cn": "大空间、舒适风、健康洁净和智能支撑。"},
+            confidence=Decimal("0.8400"),
+            evidence_ids_json=[f"ev-bf-{sku_code.lower()}"],
+            profile_hash=f"hash-bf-{sku_code.lower()}",
+        )
+    )
+
+
+def seed_ac_battlefield_score(
+    session: Session,
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    size_tier: str,
+    sample_peer_codes: list[str],
+) -> None:
+    session.add(
+        entities.Core3SkuValueBattlefieldScore(
+            score_id=f"m11c-score-{sku_code.lower()}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M11C_AC_TAXONOMY_VERSION,
+            rule_version=CORE3_M11C_AC_RULE_VERSION,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            battlefield_code="BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
+            battlefield_name="3匹及以上柜机高端舒适健康战场",
+            battlefield_definition="3匹及以上柜机、高价位，竞争重点是大空间舒适风、健康洁净、智能和品质信任。",
+            relation_status="primary_battlefield",
+            value_effect="positive",
+            battlefield_score=Decimal("0.9000"),
+            market_gate_status="matched",
+            market_pool_fit_score=Decimal("1.0000"),
+            user_voice_score=Decimal("1.0000"),
+            task_group_fit_score=Decimal("1.0000"),
+            claim_alignment_score=Decimal("0.8000"),
+            param_capability_score=Decimal("1.0000"),
+            market_validation_score=Decimal("0.9000"),
+            sentiment_polarity="positive",
+            size_tier=size_tier,
+            price_band_in_size_tier="high",
+            price_percentile_in_size_tier=Decimal("0.973000"),
+            score_breakdown_json={
+                "market": {
+                    "comparable_market_context": {
+                        "method": "pairwise_peer_overlap_active_week_average",
+                        "size_tier": size_tier,
+                        "comparison_size_tiers": ["floor_hp_3", "floor_hp_3_plus"],
+                        "borrowed_adjacent_context_pool": True,
+                        "qualified_peer_count": 37,
+                        "sample_peer_comparisons": [{"peer_sku_code": code, "overlap_week_count": 12} for code in sample_peer_codes],
+                        "note_cn": "销量/销额验证使用已批准相邻分档 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
+                    }
+                }
+            },
+            status_reason_cn="测试主战场成立。",
+            evidence_ids_json=[f"ev-score-{sku_code.lower()}"],
+            confidence=Decimal("0.9000"),
+            result_hash=f"hash-score-{sku_code.lower()}",
         )
     )
 
@@ -2179,6 +2548,53 @@ def test_same_size_price_candidates_returns_same_pool_candidates() -> None:
     assert "TV00040002" in candidate_codes
     assert search["candidates"][0]["size_tier"] == "large_60_69"
     assert search["candidates"][0]["price_band_in_size_tier"] == "mid_high"
+
+
+def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
+    session = make_session()
+    seed_ac_analyst_data(session)
+
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        batch_id="latest",
+        question="AC00038063的竞品有哪些",
+        limit=5,
+        answer_style="xiaoao",
+        with_report="markdown",
+    )
+
+    assert result["status"] == "ok"
+    assert result["category_code"] == "AC"
+    assert result["product_category"] == "AC"
+    assert result["batch_id"] == AC_BATCH_ID
+    payload = result["result"]["competitor_set"]
+    assert payload["candidate_count"] >= 2
+    candidate_codes = [item["candidate"]["sku_code"] for item in payload["candidates"]]
+    assert candidate_codes[:2] == ["AC00028640", "AC00029751"]
+    fact_brief = payload["target_fact_brief"]
+    sections = fact_brief["sections"]
+    assert sections["claim_fact"]["fact_claim_codes"] == [
+        "ac_claim_large_airflow_coverage",
+        "ac_claim_self_cleaning",
+        "ac_claim_smart_app_voice_iot",
+    ]
+    assert sections["comment_fact"]["supported_claim_codes"] == [
+        "ac_claim_large_airflow_coverage",
+        "ac_claim_self_cleaning",
+    ]
+    assert sections["user_task"]["primary_user_task_code"] == "TASK_LARGE_SPACE_COVERAGE"
+    assert sections["target_group"]["primary_target_group_code"] == "TG_LIVING_ROOM_LARGE_SPACE"
+    assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
+    assert sections["market"]["market_position"]["price_band_in_size_tier"] == "high"
+    assert sections["market"]["market_position"]["price_band_source"] == "M11C"
+    assert "claim_fact" not in fact_brief["missing_sections"]
+    assert "comment_fact" not in fact_brief["missing_sections"]
+    markdown = result["result"]["competitor_answer"]["report_payload"]["markdown"]
+    assert "3匹及以上柜机高端舒适健康" in markdown
+    assert "3匹及以上柜机" in markdown
+    assert "尺寸段未知 × 价格带未知" not in markdown
+    assert "未知 寸" not in markdown
 
 
 def test_semantic_overlap_returns_task_group_battlefield_matches() -> None:

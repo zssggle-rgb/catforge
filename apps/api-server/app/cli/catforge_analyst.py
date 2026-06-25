@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Sequence
 from decimal import Decimal
@@ -944,6 +945,8 @@ def run_analyst_command(
     if command not in {"list-abilities", "ask", *ATOM_COMMANDS, *SOP_COMMANDS}:
         raise CatForgeAnalystError(f"不支持的 analyst 命令：{command}")
 
+    product_category = _infer_product_category(product_category, kwargs)
+    category_code = _infer_category_code(category_code, product_category, kwargs)
     service = CatForgeAnalystService(db, project_id=project_id, category_code=category_code)
     context = service.build_context(
         batch_id=batch_id,
@@ -955,6 +958,32 @@ def run_analyst_command(
     if command == "list-abilities":
         return service.list_abilities(context, ability_type=kwargs.get("ability_type"))
     return service.dispatch(command, context, **_clean_kwargs(kwargs))
+
+
+def _infer_product_category(product_category: str, kwargs: dict[str, Any]) -> str:
+    normalized = (product_category or DEFAULT_PRODUCT_CATEGORY).strip().lower()
+    if normalized in {"ac", "空调"}:
+        return "ac"
+    if normalized in {"tv", "电视", "彩电"} and _context_mentions_ac(kwargs):
+        return "ac"
+    return normalized
+
+
+def _infer_category_code(category_code: str, product_category: str, kwargs: dict[str, Any]) -> str:
+    normalized = (category_code or DEFAULT_CATEGORY_CODE).strip().upper()
+    if normalized == DEFAULT_CATEGORY_CODE and ((product_category or "").strip().upper() == "AC" or _context_mentions_ac(kwargs)):
+        return "AC"
+    return normalized
+
+
+def _context_mentions_ac(kwargs: dict[str, Any]) -> bool:
+    text_parts: list[str] = []
+    for key in ("question", "query", "sku_code", "candidate_sku_code", "model_name"):
+        value = kwargs.get(key)
+        if isinstance(value, str):
+            text_parts.append(value)
+    text = " ".join(text_parts)
+    return bool(re.search(r"(?<![A-Za-z0-9])AC\d{6,}(?![A-Za-z0-9])", text, re.IGNORECASE) or re.search(r"空调", text))
 
 
 def emit_result(result: dict[str, Any], output_format: str) -> None:

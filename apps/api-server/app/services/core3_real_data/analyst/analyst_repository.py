@@ -15,11 +15,16 @@ from app.services.core3_real_data.analyst.competitor_answer import weighted_over
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_AC_RULE_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M10C_AC_RULE_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
@@ -358,6 +363,16 @@ class AnalystRepository:
                 market_window=market_window,
                 size_tier=fact_size_tier,
             )
+        if market_payload and battlefield_profile is not None:
+            market_position = market_payload.setdefault("market_position", {})
+            battlefield_price_band = battlefield_profile.price_band_in_size_tier
+            if battlefield_profile.size_tier and not market_position.get("size_tier"):
+                market_position["size_tier"] = battlefield_profile.size_tier
+                market_position["size_tier_source"] = "M11C"
+            if battlefield_price_band and battlefield_price_band != "unknown" and not _known_value(market_position.get("price_band_in_size_tier")):
+                market_position["price_band_in_size_tier"] = battlefield_price_band
+                market_position["price_band_source"] = "M11C"
+                market_position["price_percentile_in_size"] = _number(battlefield_profile.price_percentile_in_size_tier)
         sections = {
             "market": market_payload,
             "parameter_fact": _param_payload(param_profile),
@@ -509,11 +524,158 @@ class AnalystRepository:
         )
         if limit != 0:
             rows = rows[: max(limit, 0)]
+        match_policy = "m07_same_size_price_band"
+        fallback_context: dict[str, Any] = {}
+        if not rows:
+            rows, fallback_context = self._m11c_comparable_battlefield_market_candidates(
+                batch_id=batch_id,
+                target_market=target_market,
+                target_sku_code=target_sku_code,
+                product_category=product_category,
+                market_window=market_window,
+                limit=limit,
+            )
+            if rows:
+                match_policy = "m11c_comparable_value_battlefield_pool"
         return {
             "target_market": _candidate_market_payload(target_market, target_market=target_market),
-            "match_policy": "m07_same_size_price_band",
+            "match_policy": match_policy,
+            "fallback_context": fallback_context,
             "candidates": [_candidate_market_payload(row, target_market=target_market) for row in rows],
         }
+
+    def _m11c_comparable_battlefield_market_candidates(
+        self,
+        *,
+        batch_id: str,
+        target_market: entities.Core3SkuMarketProfile,
+        target_sku_code: str,
+        product_category: str,
+        market_window: str,
+        limit: int,
+    ) -> tuple[list[entities.Core3SkuMarketProfile], dict[str, Any]]:
+        product_category = product_category.upper()
+        battlefield = self._battlefield_profile(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=target_sku_code,
+        )
+        if battlefield is None or not battlefield.primary_battlefield_code:
+            return [], {}
+        target_score = self._battlefield_score(
+            batch_id=batch_id,
+            product_category=product_category,
+            sku_code=target_sku_code,
+            battlefield_code=battlefield.primary_battlefield_code,
+        )
+        comparable_context = _m11c_comparable_market_context(target_score)
+        comparison_size_tiers = [
+            item
+            for item in (comparable_context.get("comparison_size_tiers") or [])
+            if isinstance(item, str) and item
+        ]
+        sample_peer_codes = _unique_codes(
+            [
+                item.get("peer_sku_code")
+                for item in (comparable_context.get("sample_peer_comparisons") or [])
+                if isinstance(item, dict)
+            ]
+        )
+        battlefield_peer_codes = self._m11c_battlefield_peer_sku_codes(
+            batch_id=batch_id,
+            product_category=product_category,
+            battlefield_code=battlefield.primary_battlefield_code,
+            comparison_size_tiers=tuple(comparison_size_tiers),
+            target_sku_code=target_sku_code,
+            limit=limit,
+        )
+        candidate_codes = _unique_codes(sample_peer_codes, battlefield_peer_codes)
+        if not candidate_codes:
+            return [], {}
+        rows_by_sku = self._market_profiles_by_sku(
+            batch_id=batch_id,
+            sku_codes=candidate_codes,
+            product_category=product_category,
+            market_window=market_window,
+        )
+        rows = [rows_by_sku[sku_code] for sku_code in candidate_codes if sku_code in rows_by_sku]
+        sample_order = {sku_code: index for index, sku_code in enumerate(sample_peer_codes)}
+        rows = sorted(
+            rows,
+            key=lambda row: (
+                sample_order.get(row.sku_code, len(sample_order) + 1),
+                _candidate_pool_sort_key(row, target_market),
+            ),
+        )
+        if limit != 0:
+            rows = rows[: max(limit, 0)]
+        return rows, {
+            "source_module": "M11C",
+            "primary_battlefield_code": battlefield.primary_battlefield_code,
+            "primary_relation_status": battlefield.primary_relation_status,
+            "target_size_tier": battlefield.size_tier,
+            "target_price_band_in_size_tier": battlefield.price_band_in_size_tier,
+            "comparison_size_tiers": comparison_size_tiers,
+            "borrowed_adjacent_context_pool": bool(comparable_context.get("borrowed_adjacent_context_pool")),
+            "qualified_peer_count": comparable_context.get("qualified_peer_count"),
+            "sample_peer_count": len(sample_peer_codes),
+            "market_candidate_count": len(rows),
+            "policy_note_cn": comparable_context.get("note_cn")
+            or "M07 同尺寸池不足时，使用 M11C 主价值战场和已批准相邻分档可比池补充候选。",
+        }
+
+    def _battlefield_score(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_code: str,
+        battlefield_code: str,
+    ) -> entities.Core3SkuValueBattlefieldScore | None:
+        stmt = (
+            select(entities.Core3SkuValueBattlefieldScore)
+            .where(entities.Core3SkuValueBattlefieldScore.project_id == self.project_id)
+            .where(entities.Core3SkuValueBattlefieldScore.category_code == self.category_code)
+            .where(entities.Core3SkuValueBattlefieldScore.batch_id == batch_id)
+            .where(entities.Core3SkuValueBattlefieldScore.product_category == product_category.upper())
+            .where(entities.Core3SkuValueBattlefieldScore.sku_code == sku_code)
+            .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == battlefield_code)
+            .where(entities.Core3SkuValueBattlefieldScore.rule_version == _battlefield_rule_version(product_category))
+            .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
+            .limit(1)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def _m11c_battlefield_peer_sku_codes(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        battlefield_code: str,
+        comparison_size_tiers: tuple[str, ...],
+        target_sku_code: str,
+        limit: int,
+    ) -> list[str]:
+        stmt = (
+            select(entities.Core3SkuValueBattlefieldProfile)
+            .where(entities.Core3SkuValueBattlefieldProfile.project_id == self.project_id)
+            .where(entities.Core3SkuValueBattlefieldProfile.category_code == self.category_code)
+            .where(entities.Core3SkuValueBattlefieldProfile.batch_id == batch_id)
+            .where(entities.Core3SkuValueBattlefieldProfile.product_category == product_category.upper())
+            .where(entities.Core3SkuValueBattlefieldProfile.sku_code != target_sku_code)
+            .where(entities.Core3SkuValueBattlefieldProfile.primary_battlefield_code == battlefield_code)
+            .where(entities.Core3SkuValueBattlefieldProfile.rule_version == _battlefield_rule_version(product_category))
+            .where(entities.Core3SkuValueBattlefieldProfile.is_current.is_(True))
+            .order_by(
+                entities.Core3SkuValueBattlefieldProfile.confidence.desc(),
+                entities.Core3SkuValueBattlefieldProfile.sku_code,
+            )
+        )
+        if comparison_size_tiers:
+            stmt = stmt.where(entities.Core3SkuValueBattlefieldProfile.size_tier.in_(comparison_size_tiers))
+        if limit != 0:
+            stmt = stmt.limit(max(limit * 5, limit, 50))
+        return [row.sku_code for row in self.db.execute(stmt).scalars()]
 
     def semantic_overlap(
         self,
@@ -1454,6 +1616,29 @@ class AnalystRepository:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def _market_profiles_by_sku(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+        product_category: str,
+        market_window: str,
+    ) -> dict[str, entities.Core3SkuMarketProfile]:
+        if not sku_codes:
+            return {}
+        stmt = (
+            select(entities.Core3SkuMarketProfile)
+            .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
+            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(entities.Core3SkuMarketProfile.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category.upper())}%"))
+            .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+        )
+        return {row.sku_code: row for row in self.db.execute(stmt).scalars()}
+
     def _param_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuParamProfile | None:
         rule_version = CORE3_M03B_AC_RULE_VERSION if product_category == "AC" else CORE3_M03B_RULE_VERSION
         stmt = (
@@ -1488,62 +1673,52 @@ class AnalystRepository:
         return {row.sku_code: row for row in self.db.execute(stmt).scalars()}
 
     def _claim_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuClaimFactProfile | None:
-        if product_category != "TV":
-            return None
         stmt = self._current_sku_profile_stmt(
             entities.Core3SkuClaimFactProfile,
             batch_id=batch_id,
-            product_category=product_category,
+            product_category=product_category.upper(),
             sku_code=sku_code,
-            rule_version=CORE3_M04C_TV_RULE_VERSION,
+            rule_version=_claim_rule_version(product_category),
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
     def _comment_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuCommentFactProfile | None:
-        if product_category != "TV":
-            return None
         stmt = self._current_sku_profile_stmt(
             entities.Core3SkuCommentFactProfile,
             batch_id=batch_id,
-            product_category=product_category,
+            product_category=product_category.upper(),
             sku_code=sku_code,
-            rule_version=CORE3_M05C_TV_RULE_VERSION,
+            rule_version=_comment_rule_version(product_category),
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
     def _user_task_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3M09cSkuUserTaskProfile | None:
-        if product_category != "TV":
-            return None
         stmt = self._current_sku_profile_stmt(
             entities.Core3M09cSkuUserTaskProfile,
             batch_id=batch_id,
-            product_category=product_category,
+            product_category=product_category.upper(),
             sku_code=sku_code,
-            rule_version=CORE3_M09C_TV_RULE_VERSION,
+            rule_version=_user_task_rule_version(product_category),
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
     def _target_group_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3M10cSkuTargetGroupProfile | None:
-        if product_category != "TV":
-            return None
         stmt = self._current_sku_profile_stmt(
             entities.Core3M10cSkuTargetGroupProfile,
             batch_id=batch_id,
-            product_category=product_category,
+            product_category=product_category.upper(),
             sku_code=sku_code,
-            rule_version=CORE3_M10C_TV_RULE_VERSION,
+            rule_version=_target_group_rule_version(product_category),
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
     def _battlefield_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuValueBattlefieldProfile | None:
-        if product_category != "TV":
-            return None
         stmt = self._current_sku_profile_stmt(
             entities.Core3SkuValueBattlefieldProfile,
             batch_id=batch_id,
-            product_category=product_category,
+            product_category=product_category.upper(),
             sku_code=sku_code,
-            rule_version=CORE3_M11C_TV_RULE_VERSION,
+            rule_version=_battlefield_rule_version(product_category),
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
@@ -1557,14 +1732,12 @@ class AnalystRepository:
         market_window: str,
         limit: int,
     ) -> list[entities.Core3SemanticMarketAllocation]:
-        if product_category != "TV":
-            return []
         stmt = (
             select(entities.Core3SemanticMarketAllocation)
             .where(entities.Core3SemanticMarketAllocation.project_id == self.project_id)
             .where(entities.Core3SemanticMarketAllocation.category_code == self.category_code)
             .where(entities.Core3SemanticMarketAllocation.batch_id == batch_id)
-            .where(entities.Core3SemanticMarketAllocation.product_category == product_category)
+            .where(entities.Core3SemanticMarketAllocation.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketAllocation.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketAllocation.market_window == market_window)
             .where(entities.Core3SemanticMarketAllocation.sku_code == sku_code)
@@ -1705,6 +1878,35 @@ def unique_skus(candidates: Sequence[ResolvedSku]) -> list[ResolvedSku]:
         seen.add(candidate.sku_code)
         result.append(candidate)
     return result
+
+
+def _claim_rule_version(product_category: str) -> str:
+    return CORE3_M04C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M04C_TV_RULE_VERSION
+
+
+def _comment_rule_version(product_category: str) -> str:
+    return CORE3_M05C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M05C_TV_RULE_VERSION
+
+
+def _user_task_rule_version(product_category: str) -> str:
+    return CORE3_M09C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M09C_TV_RULE_VERSION
+
+
+def _target_group_rule_version(product_category: str) -> str:
+    return CORE3_M10C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M10C_TV_RULE_VERSION
+
+
+def _battlefield_rule_version(product_category: str) -> str:
+    return CORE3_M11C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M11C_TV_RULE_VERSION
+
+
+def _m11c_comparable_market_context(row: entities.Core3SkuValueBattlefieldScore | None) -> dict[str, Any]:
+    if row is None:
+        return {}
+    score_breakdown = row.score_breakdown_json or {}
+    market = score_breakdown.get("market") if isinstance(score_breakdown, dict) else {}
+    context = market.get("comparable_market_context") if isinstance(market, dict) else {}
+    return context if isinstance(context, dict) else {}
 
 
 def _strip_brand_words(value: str) -> str:
@@ -2413,6 +2615,13 @@ def _number(value: object) -> float | None:
     if decimal_value is None:
         return None
     return float(decimal_value)
+
+
+def _known_value(value: object) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    return bool(text and text not in {"-", "unknown", "none", "null", "nan"})
 
 
 def _avg_decimal(values: Sequence[Decimal | None]) -> Decimal | None:

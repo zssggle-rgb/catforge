@@ -73,6 +73,17 @@ BATTLEFIELD_NAMES = {
     "BF_SMART_CONNECTED_EXPERIENCE": "智能互联体验",
     "BF_GIANT_HOME_THEATER_FLAGSHIP": "巨幕家庭影院旗舰",
     "BF_GIANT_SCREEN_VALUE": "巨幕价值下探",
+    "BF_WALL_SMALL_ENTRY_VALUE": "1匹及以下挂机入门价值",
+    "BF_WALL_SMALL_COMFORT_UPGRADE": "1匹及以下挂机舒适升级",
+    "BF_WALL_1_5_MAINSTREAM_VALUE": "1.5匹挂机主流性价比",
+    "BF_WALL_1_5_SLEEP_COMFORT_UPGRADE": "1.5匹挂机睡眠舒适升级",
+    "BF_WALL_2_LARGE_ROOM_BALANCE": "2匹挂机大房间均衡",
+    "BF_FLOOR_2_ENTRY_LIVING_VALUE": "2匹柜机客厅入门",
+    "BF_FLOOR_3_LIVING_VALUE_UPGRADE": "3匹柜机客厅性价比升级",
+    "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH": "3匹及以上柜机高端舒适健康",
+    "BF_MID_HIGH_SMART_CONTROL_UPGRADE": "中高价智能控制升级",
+    "BF_MID_HIGH_HEALTH_CLEAN_AIR_UPGRADE": "中高价健康洁净升级",
+    "BF_HUMID_CLIMATE_DEHUMIDIFY": "潮湿除湿场景",
 }
 
 TASK_NAMES = {
@@ -88,6 +99,18 @@ TASK_NAMES = {
     "TASK_SMART_CASTING_IOT": "投屏互联与智能控制",
     "TASK_HOME_DECOR_SPACE_FIT": "新家装修与空间融合",
     "TASK_VALUE_FOR_MONEY_PURCHASE": "预算内高性价比购买",
+    "TASK_FAST_COOL_HEAT": "快速制冷制热",
+    "TASK_STABLE_TEMPERATURE": "稳定控温",
+    "TASK_SLEEP_QUIET": "睡眠静音",
+    "TASK_ENERGY_SAVING_LONG_USE": "长时使用省电",
+    "TASK_SOFT_WIND_NO_DIRECT": "柔风防直吹",
+    "TASK_LARGE_SPACE_COVERAGE": "大空间覆盖",
+    "TASK_HEALTH_CLEAN_AIR": "健康洁净空气",
+    "TASK_DEHUMIDIFY_HUMID_CLIMATE": "潮湿除湿",
+    "TASK_SMART_REMOTE_CONTROL": "智能远程控制",
+    "TASK_INSTALL_SPACE_FIT": "安装空间适配",
+    "TASK_VALUE_SUBSIDY_PURCHASE": "价格补贴划算购买",
+    "TASK_RELIABLE_LONG_TERM_USE": "长期可靠使用",
 }
 
 GROUP_NAMES = {
@@ -101,6 +124,16 @@ GROUP_NAMES = {
     "TG_SENIOR_PARENT_FRIENDLY": "长辈友好使用用户",
     "TG_BEDROOM_RENTAL_SECOND_SCREEN": "卧室副屏/租房用户",
     "TG_SMART_CONNECTED_USER": "投屏互联智能用户",
+    "TG_RENTER_SMALL_ROOM": "租房小空间用户",
+    "TG_VALUE_REPLACEMENT_BUYER": "换新性价比用户",
+    "TG_BEDROOM_SLEEP_SENSITIVE": "卧室睡眠敏感用户",
+    "TG_FAMILY_LONG_USE_SAVER": "家庭长时使用省电用户",
+    "TG_CHILD_ELDER_COMFORT": "儿童老人舒适敏感家庭",
+    "TG_LIVING_ROOM_LARGE_SPACE": "客厅大空间用户",
+    "TG_SMART_REMOTE_USER": "智能远程控制用户",
+    "TG_HOME_DECOR_SPACE_FIT": "新家装修空间适配用户",
+    "TG_HUMID_SOUTH_USER": "南方潮湿除湿用户",
+    "TG_BRAND_QUALITY_TRUST_BUYER": "品牌品质信任用户",
 }
 
 ROLE_CN = {
@@ -147,6 +180,24 @@ CLAIM_LABELS_CN = {
     "tv_claim_value_price": "性价比",
     "tv_claim_voice_control": "语音控制",
     "tv_claim_wide_color_accuracy": "广色域/色彩还原",
+    "ac_claim_energy_efficiency_apf": "高能效/APF/省电",
+    "ac_claim_ai_energy_saving": "AI 省电算法",
+    "ac_claim_fast_cooling_heating": "速冷速热",
+    "ac_claim_wide_temperature_operation": "宽温域可靠运行",
+    "ac_claim_large_airflow_coverage": "大风量/全域送风",
+    "ac_claim_soft_wind_no_direct": "柔风/防直吹",
+    "ac_claim_quiet_sleep": "静音睡眠",
+    "ac_claim_precision_temperature_control": "精准控温/恒温",
+    "ac_claim_humidity_dehumidification": "除湿/温湿双控",
+    "ac_claim_fresh_air": "新风换气",
+    "ac_claim_purification_antibacterial": "净化/除菌/抗菌",
+    "ac_claim_self_cleaning": "自清洁/自洁",
+    "ac_claim_smart_app_voice_iot": "APP/语音/IoT 智控",
+    "ac_claim_installation_space_design": "外观/空间适配",
+    "ac_claim_durability_core_material": "耐用品质/核心材料",
+    "ac_claim_warranty_install_service": "包修/安装/售后服务",
+    "ac_claim_authority_sales_certification": "行业背书/认证/销量",
+    "ac_claim_price_value_subsidy": "价格/补贴/性价比",
 }
 
 PARAM_LABELS_CN = {
@@ -175,6 +226,23 @@ PARAM_LABELS_CN = {
     "wall_mount_flush_flag": "贴墙安装",
     "wide_color_gamut_pct": "色域覆盖",
     "wifi_capability_flag": "无线连接",
+    "airflow_volume_m3h": "循环风量",
+    "comfort_airflow_flag": "舒适风",
+    "cooling_capacity_w": "制冷量",
+    "energy_efficiency_ratio": "能效比/APF",
+    "energy_grade_normalized": "能效等级",
+    "fresh_air_flag": "新风",
+    "heat_cool_mode": "冷暖类型",
+    "heating_capacity_w": "制热量",
+    "horsepower_hp": "匹数",
+    "installation_hp_segment": "安装匹数段",
+    "installation_type": "安装形态",
+    "inverter_flag": "变频",
+    "purification_flag": "净化除菌",
+    "self_cleaning_flag": "自清洁",
+    "smart_sensing_flag": "智能感应",
+    "voice_control_flag": "语音控制",
+    "wifi_control_flag": "WiFi/APP 控制",
 }
 
 PARAM_GROUP_NAMES = {
@@ -194,6 +262,13 @@ SIZE_TIER_NAMES = {
     "large_60_69": "60-69 寸主流大屏段",
     "xlarge_70_85": "70-85 寸大屏升级段",
     "giant_98_plus": "98 寸及以上巨幕段",
+    "wall_hp_1_or_below": "1匹及以下挂机",
+    "wall_hp_1_5": "1.5匹挂机",
+    "wall_hp_2": "2匹挂机",
+    "wall_hp_3": "3匹挂机",
+    "floor_hp_2": "2匹柜机",
+    "floor_hp_3": "3匹柜机",
+    "floor_hp_3_plus": "3匹及以上柜机",
 }
 
 PRICE_BAND_NAMES = {
@@ -789,7 +864,7 @@ def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
         relative = "本品基准"
         role = f"{price_band}核心 SKU"
     return {
-        "尺寸": f"{_format_number(size) or '未知'} 寸",
+        "尺寸": _size_cell(size, size_tier, sku),
         "尺寸价格池": f"{size_tier} × {price_band}",
         "均价": _format_money(price) or "未知",
         "周均销量": f"{_format_unit_count(weekly_sales) or '未知'} 台",
@@ -798,6 +873,15 @@ def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
         "相对本品": relative,
         "市场角色": role,
     }
+
+
+def _size_cell(size: Any, size_tier: str, sku: dict[str, Any]) -> str:
+    formatted_size = _format_number(size)
+    if formatted_size:
+        return f"{formatted_size} 寸"
+    if _is_ac_context(sku, size_tier):
+        return size_tier if size_tier and size_tier != "尺寸段未知" else "匹数/安装形态未知"
+    return "未知 寸"
 
 
 def _semantic_comparison_values(product: dict[str, Any], *, profile_type: str) -> dict[str, str]:
@@ -1514,7 +1598,7 @@ def _product_market_profile_lines(
     pool = (sections.get("market") or {}).get("market_pool") or {}
     role = _report_role_cn(competitor_item) if competitor_item else f"{price_band}核心 SKU"
     rows = [
-        ("尺寸", f"{_format_number(size) or '未知'} 寸"),
+        ("尺寸", _size_cell(size, size_tier, sku)),
         ("均价", _format_money(price) or "未知"),
         ("周均销量", f"{_format_unit_count(weekly_sales) or '未知'} 台"),
         ("尺寸价格池", f"{size_tier or '尺寸段未知'} × {price_band}"),
@@ -2286,6 +2370,12 @@ def _label_code(code: Any) -> str:
     return text
 
 
+def _is_ac_context(sku: dict[str, Any], size_tier: Any = None) -> bool:
+    sku_code = str((sku or {}).get("sku_code") or "").upper()
+    tier = str(size_tier or (sku or {}).get("size_tier") or "")
+    return sku_code.startswith("AC") or tier.startswith(("wall_hp_", "floor_hp_"))
+
+
 def _evidence_text(examples: list[Any]) -> str:
     if not examples:
         return ""
@@ -2356,7 +2446,7 @@ def _market_fact_lines(
     price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price")
     weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
     lines = [
-        f"- 尺寸价格：{_format_number(size) or '未知'}英寸，{SIZE_TIER_NAMES.get(str(size_tier), '尺寸段未知')}，{PRICE_BAND_NAMES.get(str(price_band), '价格带未知')}，线上均价约{_format_money(price) or '未知'}。",
+        _size_price_fact_line(size=size, size_tier=size_tier, price_band=price_band, price=price, sku=sku),
         f"- 市场表现：周均销量约{_format_unit_count(weekly_sales) or '未知'}台；主渠道为{_market_label(metrics.get('main_channel_type')) or '未知'}，主平台为{_market_label(metrics.get('main_platform')) or '未知'}。",
     ]
     price_percentile = _percentile_phrase(position.get("price_percentile_in_size"))
@@ -2367,6 +2457,14 @@ def _market_fact_lines(
         candidate = competitor_item.get("candidate") or {}
         lines.append(f"- 相对本品：{_price_gap_phrase(candidate.get('price_gap_pct_to_target'))}；{competitor_item['market_validation']['summary_cn']}。")
     return lines
+
+
+def _size_price_fact_line(*, size: Any, size_tier: Any, price_band: Any, price: Any, sku: dict[str, Any]) -> str:
+    size_tier_label = SIZE_TIER_NAMES.get(str(size_tier), "尺寸段未知")
+    price_band_label = PRICE_BAND_NAMES.get(str(price_band), "价格带未知")
+    if _is_ac_context(sku, size_tier):
+        return f"- 匹数价格：{size_tier_label}，{price_band_label}，线上均价约{_format_money(price) or '未知'}。"
+    return f"- 尺寸价格：{_format_number(size) or '未知'}英寸，{size_tier_label}，{price_band_label}，线上均价约{_format_money(price) or '未知'}。"
 
 
 def _parameter_fact_lines(sections: dict[str, Any]) -> list[str]:

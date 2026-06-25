@@ -116,14 +116,6 @@ class AtomicAnalystHandlers:
         price_band: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
-        if context.product_category != "TV":
-            return base_result(
-                status=AnalystStatus.UNSUPPORTED,
-                command="semantic-dimension-space",
-                context=context,
-                limitations=["当前只有 TV 品类已生成 M11D 语义市场图谱。"],
-                message_cn="当前品类尚未支持语义市场空间查询。",
-            )
         items = self.repository.semantic_dimension_space(
             batch_id=context.batch_id,
             product_category=context.product_category,
@@ -198,6 +190,9 @@ class AtomicAnalystHandlers:
             limitations.append("目标 SKU 缺少 M07 市场画像，无法按同尺寸价格池生成候选。")
         if not candidate_search.get("candidates"):
             limitations.append("当前同尺寸、同价格带市场池没有找到其他候选 SKU。")
+        used_m11c_fallback = candidate_search.get("match_policy") == "m11c_comparable_value_battlefield_pool"
+        source_module = "M11C/M07" if used_m11c_fallback else "M07"
+        outline_policy = "M11C 价值战场可比池" if used_m11c_fallback else "同尺寸、同价格带"
         return base_result(
             status=AnalystStatus.OK,
             command="same-size-price-candidates",
@@ -208,9 +203,9 @@ class AtomicAnalystHandlers:
                 {"ability_code": "resolve-sku", "status": "ok"},
                 {"ability_code": "same-size-price-candidates", "status": "ok"},
             ],
-            evidence=[{"source_module": "M07", "row_count": 1 + len(candidate_search.get("candidates") or [])}],
+            evidence=[{"source_module": source_module, "row_count": 1 + len(candidate_search.get("candidates") or [])}],
             limitations=limitations,
-            answer_outline=[f"已按同尺寸、同价格带返回 {len(candidate_search.get('candidates') or [])} 个候选竞品。"],
+            answer_outline=[f"已按{outline_policy}返回 {len(candidate_search.get('candidates') or [])} 个候选竞品。"],
         )
 
     def semantic_overlap(
