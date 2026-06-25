@@ -335,7 +335,7 @@ def build_competitor_answer(
     enriched = sorted(enriched, key=_sort_key, reverse=True)
     _assign_top_roles(enriched)
     buckets = _bucket_competitors(enriched)
-    top_competitors = _select_top_competitors(enriched, top_n=max(top_n, 0))
+    top_competitors = _select_top_competitors(enriched, target=target, top_n=max(top_n, 0))
     title = report_title or f"{_display_name(target)} 重点竞品分析报告"
     markdown = render_competitor_report(
         title=title,
@@ -482,7 +482,7 @@ def render_competitor_report(
         "",
     ]
     if top_competitors:
-        lines.extend(_analysis_conclusion_lines(target_name, target_sections, top_competitors, all_competitors))
+        lines.extend(_analysis_conclusion_lines(target_name, target, target_sections, top_competitors, all_competitors))
     else:
         lines.append(f"{target_name} 当前没有足够证据形成稳定重点竞品。")
     lines.extend(
@@ -494,7 +494,7 @@ def render_competitor_report(
             "",
         ]
     )
-    lines.extend(_scoring_method_lines())
+    lines.extend(_scoring_method_lines(target))
     lines.extend(["", "### 2.1 候选 SKU 综合评分", ""])
     lines.extend(_candidate_score_table_lines(top_competitors, all_competitors))
     lines.extend(["", "### 2.2 购买池评分依据", ""])
@@ -560,10 +560,13 @@ def render_competitor_report(
 
 def _analysis_conclusion_lines(
     target_name: str,
+    target: dict[str, Any],
     target_sections: dict[str, Any],
     top_competitors: list[dict[str, Any]],
     all_competitors: list[dict[str, Any]],
 ) -> list[str]:
+    category_noun = _category_noun(target)
+    price_context = _price_context_noun(target)
     names = [_display_name(item.get("candidate") or {}) for item in top_competitors[:3]]
     roles = [f"{_display_name(item.get('candidate') or {})} 是{_report_role_cn(item)}" for item in top_competitors[:3]]
     lines = [
@@ -585,11 +588,11 @@ def _analysis_conclusion_lines(
         candidate_stronger = _join_cn(first["value_anchor"]["candidate_stronger_anchors"][:4]) or "场景型高端体验"
         lines.extend(
             [
-                f"{first_name} 排第一，核心原因不是单项参数最接近，而是它在 {target_name} 的主要竞争结构里形成了最完整的替代关系。{first['purchase_pool']['reason_cn']}，用户会在同一次升级型电视购买中把它们放进候选清单。",
+                f"{first_name} 排第一，核心原因不是单项参数最接近，而是它在 {target_name} 的主要竞争结构里形成了最完整的替代关系。{first['purchase_pool']['reason_cn']}，用户会在同一次升级型{category_noun}购买中把它们放进候选清单。",
                 "",
                 f"从价值战场看，{target_name} 的竞争重心是{target_battlefields or '当前主战场'}，{first_name} 的竞争重心是{first_battlefields or '当前主战场'}。{first_name} 没有偏离 {target_name} 的核心战场，而是切入目标 SKU 的主竞争范围。",
                 "",
-                f"从用户任务看，{target_name} 主要承接{target_tasks or '当前主要用户任务'}；{first_name} 主要承接{first_tasks or '当前主要用户任务'}。两者不完全相同，但高度交叉，交叉点正好是该尺寸价格段电视最核心的购买场景。",
+                f"从用户任务看，{target_name} 主要承接{target_tasks or '当前主要用户任务'}；{first_name} 主要承接{first_tasks or '当前主要用户任务'}。两者不完全相同，但高度交叉，交叉点正好是{price_context}最核心的购买场景。",
                 "",
                 f"从目标客群看，{target_name} 覆盖{target_groups or '当前核心客群'}，{first_name} 覆盖{first_groups or '当前核心客群'}。共同客群越靠近主客群，竞品成立强度越高。",
                 "",
@@ -627,13 +630,14 @@ def _analysis_conclusion_lines(
     return lines
 
 
-def _scoring_method_lines() -> list[str]:
+def _scoring_method_lines(target: dict[str, Any]) -> list[str]:
+    category_noun = _category_noun(target)
     return [
         "| 评分维度 | 权重 | 判断问题 |",
         "| --- | ---: | --- |",
         "| 购买池 | 20 | 是否同尺寸、同价位或相邻价位，是否会进入同一次购买决策 |",
         "| 价值战场 | 15 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
-        "| 用户任务 | 20 | 用户买电视要完成的使用任务是否高度交叉 |",
+        f"| 用户任务 | 20 | 用户买{category_noun}要完成的使用任务是否高度交叉 |",
         "| 目标客群 | 20 | 是否争夺同一批核心人群和相邻人群 |",
         "| 关键价值锚点 | 15 | 参数、卖点、评论能否形成可替代的成交理由 |",
         "| 替代压力 | 5 | 是否会改变用户对目标 SKU 价值判断 |",
@@ -755,7 +759,7 @@ def _product_comparison_lines(
     lines.extend(
         _comparison_table_lines(
             products,
-            ["尺寸空间", "清晰度规格", "画质技术路线", "亮度控光能力", "动态与游戏能力", "智能系统能力", "外观安装能力", "护眼舒适能力"],
+            _parameter_comparison_dimensions(target),
             _param_comparison_values,
         )
     )
@@ -1535,8 +1539,25 @@ def _claim_param_support_text(claim: dict[str, Any]) -> str:
     return "暂无稳定证据"
 
 
+def _parameter_comparison_dimensions(target: dict[str, Any]) -> list[str]:
+    if _is_ac_context(target):
+        return [
+            "匹数/安装能力",
+            "能效与省电",
+            "制冷制热能力",
+            "送风舒适能力",
+            "健康洁净能力",
+            "智能控制能力",
+            "噪音与睡眠舒适",
+            "安装与服务能力",
+        ]
+    return ["尺寸空间", "清晰度规格", "画质技术路线", "亮度控光能力", "动态与游戏能力", "智能系统能力", "外观安装能力", "护眼舒适能力"]
+
+
 def _param_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     sections = product.get("sections") or {}
+    param = sections.get("parameter_fact") or {}
+    param_values = _param_value_map(param)
     rows = _business_param_profile_rows(sections)
     values: dict[str, str] = {}
     for dimension, judgement, evidence, business_meaning in rows:
@@ -1544,7 +1565,8 @@ def _param_comparison_values(product: dict[str, Any]) -> dict[str, str]:
         values[dimension] = detail or "暂无稳定证据"
     contradicted = _labels_for_codes((sections.get("comment_fact") or {}).get("contradicted_param_codes") or [])
     if contradicted:
-        values["护眼舒适能力"] = _join_evidence([values.get("护眼舒适能力", ""), f"评论质疑：{_join_cn(contradicted[:5])}"])
+        contradiction_dimension = "制冷制热能力" if _is_ac_param_context(param_values, param) else "护眼舒适能力"
+        values[contradiction_dimension] = _join_evidence([values.get(contradiction_dimension, ""), f"评论质疑：{_join_cn(contradicted[:5])}"])
     return values
 
 
@@ -1974,6 +1996,8 @@ def _param_group_business_role(group: str) -> str:
 def _business_param_profile_rows(sections: dict[str, Any]) -> list[tuple[str, str, str, str]]:
     param = sections.get("parameter_fact") or {}
     values = _param_value_map(param)
+    if _is_ac_param_context(values, param):
+        return _ac_business_param_profile_rows(values, param)
     rows: list[tuple[str, str, str, str]] = []
 
     size_value = _first_param(values, "screen_size_inch", "size_inch", "screen_size", "尺寸")
@@ -2091,6 +2115,170 @@ def _business_param_profile_rows(sections: dict[str, Any]) -> list[tuple[str, st
         )
 
     return rows
+
+
+def _is_ac_param_context(values: dict[str, Any], param: dict[str, Any]) -> bool:
+    size_tier = (param.get("dimension_tier_profile") or {}).get("size") if isinstance(param.get("dimension_tier_profile"), dict) else None
+    if str(size_tier or "").startswith(("wall_hp_", "floor_hp_")):
+        return True
+    ac_param_codes = {
+        "horsepower_hp",
+        "installation_hp_segment",
+        "installation_type",
+        "cooling_capacity_w",
+        "heating_capacity_w",
+        "heat_cool_mode",
+        "energy_grade_normalized",
+        "energy_efficiency_ratio",
+        "airflow_volume_m3h",
+        "self_cleaning_flag",
+        "purification_flag",
+        "wifi_control_flag",
+        "voice_control_flag",
+    }
+    normalized_codes = {_param_lookup_key(code) for code in values}
+    return any(_param_lookup_key(code) in normalized_codes for code in ac_param_codes)
+
+
+def _ac_business_param_profile_rows(values: dict[str, Any], param: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    rows: list[tuple[str, str, str, str]] = []
+    size_tier = (param.get("dimension_tier_profile") or {}).get("size") if isinstance(param.get("dimension_tier_profile"), dict) else None
+    tier_text = _label_code(size_tier) if size_tier else ""
+    horsepower = _first_param(values, "horsepower_hp", "installation_hp_segment", "匹数")
+    installation = _first_param(values, "installation_type", "安装形态")
+    if horsepower is not None or installation is not None or tier_text:
+        evidence = []
+        if horsepower is not None:
+            evidence.append(f"匹数：{_format_hp_value(horsepower)}")
+        if installation is not None:
+            evidence.append(f"安装形态：{_format_business_value(installation)}")
+        if tier_text:
+            evidence.append(f"匹数段：{tier_text}")
+        rows.append(
+            (
+                "匹数/安装能力",
+                _join_cn([item for item in (_format_hp_value(horsepower) if horsepower is not None else "", _format_business_value(installation) if installation is not None else "", tier_text) if item]) or "匹数与安装形态已识别",
+                _join_evidence(evidence),
+                "决定产品进入挂机/柜机和匹数购买池，是同预算、同空间竞品比较的基础。",
+            )
+        )
+
+    energy_grade = _first_param(values, "energy_grade_normalized", "energy_grade", "能效等级")
+    efficiency = _first_param(values, "energy_efficiency_ratio", "apf", "APF")
+    inverter = _first_param(values, "inverter_flag", "变频")
+    if energy_grade is not None or efficiency is not None or inverter is not None:
+        evidence = []
+        if energy_grade is not None:
+            evidence.append(f"能效等级：{_format_business_value(energy_grade)}")
+        if efficiency is not None:
+            evidence.append(f"APF/能效比：{_format_business_value(efficiency)}")
+        if inverter is not None:
+            evidence.append(f"变频：{'支持' if _truthy_param(inverter) else '未见明确支持'}")
+        rows.append(
+            (
+                "能效与省电",
+                "省电能力有参数支撑",
+                _join_evidence(evidence),
+                "支撑长时使用省电和家庭用电成本解释，是空调高频购买理由。",
+            )
+        )
+
+    cooling = _first_param(values, "cooling_capacity_w", "制冷量")
+    heating = _first_param(values, "heating_capacity_w", "制热量")
+    mode = _first_param(values, "heat_cool_mode", "冷暖类型")
+    if cooling is not None or heating is not None or mode is not None:
+        evidence = []
+        if cooling is not None:
+            evidence.append(f"制冷量：{_format_business_value(cooling)}W")
+        if heating is not None:
+            evidence.append(f"制热量：{_format_business_value(heating)}W")
+        if mode is not None:
+            evidence.append(f"冷暖类型：{_format_business_value(mode)}")
+        rows.append(
+            (
+                "制冷制热能力",
+                "冷热能力有参数支撑",
+                _join_evidence(evidence),
+                "影响大空间覆盖、快速制冷制热和冬夏两用的成交判断。",
+            )
+        )
+
+    airflow = _first_param(values, "airflow_volume_m3h", "循环风量", "风量")
+    comfort = _first_param(values, "comfort_airflow_flag", "soft_wind_flag", "舒适风")
+    if airflow is not None or comfort is not None:
+        evidence = []
+        if airflow is not None:
+            evidence.append(f"循环风量：{_format_business_value(airflow)}m3/h")
+        if comfort is not None:
+            evidence.append(f"舒适风：{'支持' if _truthy_param(comfort) else '未见明确支持'}")
+        rows.append(
+            (
+                "送风舒适能力",
+                "送风覆盖和舒适性有参数支撑",
+                _join_evidence(evidence),
+                "支撑客厅大空间、柔风防直吹和体感舒适，是柜机竞争的关键体验证据。",
+            )
+        )
+
+    fresh_air = _first_param(values, "fresh_air_flag", "新风")
+    purification = _first_param(values, "purification_flag", "净化除菌")
+    self_cleaning = _first_param(values, "self_cleaning_flag", "自清洁")
+    if fresh_air is not None or purification is not None or self_cleaning is not None:
+        evidence = []
+        if fresh_air is not None:
+            evidence.append(f"新风：{'支持' if _truthy_param(fresh_air) else '未见明确支持'}")
+        if purification is not None:
+            evidence.append(f"净化除菌：{'支持' if _truthy_param(purification) else '未见明确支持'}")
+        if self_cleaning is not None:
+            evidence.append(f"自清洁：{'支持' if _truthy_param(self_cleaning) else '未见明确支持'}")
+        rows.append(
+            (
+                "健康洁净能力",
+                "健康洁净能力有参数支撑",
+                _join_evidence(evidence),
+                "支撑健康空气、自清洁和母婴老人敏感家庭的安心理由。",
+            )
+        )
+
+    wifi = _first_param(values, "wifi_control_flag", "wifi_capability_flag", "WiFi/APP 控制")
+    voice = _first_param(values, "voice_control_flag", "语音控制")
+    sensing = _first_param(values, "smart_sensing_flag", "智能感应")
+    if wifi is not None or voice is not None or sensing is not None:
+        evidence = []
+        if wifi is not None:
+            evidence.append(f"WiFi/APP：{'支持' if _truthy_param(wifi) else '未见明确支持'}")
+        if voice is not None:
+            evidence.append(f"语音控制：{'支持' if _truthy_param(voice) else '未见明确支持'}")
+        if sensing is not None:
+            evidence.append(f"智能感应：{'支持' if _truthy_param(sensing) else '未见明确支持'}")
+        rows.append(
+            (
+                "智能控制能力",
+                "远程和智能控制有参数支撑",
+                _join_evidence(evidence),
+                "影响远程开关、语音操控和家庭智能化体验，是中高价空调的差异化证据。",
+            )
+        )
+
+    noise = _first_param(values, "indoor_noise_db", "noise_db", "静音")
+    if noise is not None:
+        rows.append(
+            (
+                "噪音与睡眠舒适",
+                "静音体验有参数支撑",
+                f"噪音：{_format_business_value(noise)}dB",
+                "支撑睡眠静音和卧室舒适场景，需结合评论验证实际体感。",
+            )
+        )
+
+    return rows
+
+
+def _format_hp_value(value: Any) -> str:
+    number = _decimal(value)
+    if number is not None:
+        return f"{_format_number(number)}匹"
+    return _format_business_value(value)
 
 
 def _param_value_map(param: dict[str, Any]) -> dict[str, Any]:
@@ -2374,6 +2562,23 @@ def _is_ac_context(sku: dict[str, Any], size_tier: Any = None) -> bool:
     sku_code = str((sku or {}).get("sku_code") or "").upper()
     tier = str(size_tier or (sku or {}).get("size_tier") or "")
     return sku_code.startswith("AC") or tier.startswith(("wall_hp_", "floor_hp_"))
+
+
+def _category_noun(sku: dict[str, Any]) -> str:
+    if _is_ac_context(sku):
+        return "空调"
+    category = str((sku or {}).get("category_code") or (sku or {}).get("product_category") or "").upper()
+    if category == "TV" or str((sku or {}).get("sku_code") or "").upper().startswith("TV"):
+        return "电视"
+    return "产品"
+
+
+def _price_context_noun(sku: dict[str, Any]) -> str:
+    if _is_ac_context(sku):
+        return "该匹数价格段空调"
+    if _category_noun(sku) == "电视":
+        return "该尺寸价格段电视"
+    return "该规格价格段产品"
 
 
 def _evidence_text(examples: list[Any]) -> str:
@@ -2722,7 +2927,7 @@ def _enrich_competitor(target: dict[str, Any], target_fact_brief: dict[str, Any]
         + replacement["score"] * SCORE_WEIGHTS["replacement_pressure"]
         + market_score * SCORE_WEIGHTS["market_validation"]
     )
-    role = _base_role(purchase_pool, replacement, candidate)
+    role = _base_role(target, purchase_pool, replacement, candidate)
     matched_dimensions = {
         "battlefield": _dimension_labels(semantic.get("value_battlefield") or {}, BATTLEFIELD_NAMES),
         "user_task": _dimension_labels(semantic.get("user_task") or {}, TASK_NAMES),
@@ -2892,8 +3097,13 @@ def _market_validation(sales: dict[str, Any], candidate: dict[str, Any]) -> dict
     }
 
 
-def _base_role(purchase_pool: dict[str, Any], replacement: dict[str, Any], candidate: dict[str, Any]) -> str:
+def _base_role(target: dict[str, Any], purchase_pool: dict[str, Any], replacement: dict[str, Any], candidate: dict[str, Any]) -> str:
     gap = _decimal(candidate.get("price_gap_pct_to_target")) or Decimal("0")
+    if _is_ac_context(target) and purchase_pool["score"] < Decimal("0.55"):
+        if abs(gap) <= Decimal("0.08") and replacement["score"] >= Decimal("0.45"):
+            return "price_adjacent"
+        if abs(gap) <= Decimal("0.15") and replacement["score"] >= Decimal("0.50"):
+            return "scenario_alternative"
     if gap <= Decimal("-0.15"):
         return "downtrade_diversion"
     if gap >= Decimal("0.15"):
@@ -2939,7 +3149,7 @@ def _bucket_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _select_top_competitors(enriched: list[dict[str, Any]], *, top_n: int) -> list[dict[str, Any]]:
+def _select_top_competitors(enriched: list[dict[str, Any]], *, target: dict[str, Any], top_n: int) -> list[dict[str, Any]]:
     if top_n <= 0:
         return []
     selected: list[dict[str, Any]] = []
@@ -2947,7 +3157,10 @@ def _select_top_competitors(enriched: list[dict[str, Any]], *, top_n: int) -> li
     for item in direct[:2]:
         if item not in selected:
             selected.append(item)
-    strategic_roles = ["downtrade_diversion", "uptrade_alternative", "price_adjacent", "scenario_alternative"]
+    if _is_ac_context(target):
+        strategic_roles = ["price_adjacent", "scenario_alternative", "downtrade_diversion", "uptrade_alternative"]
+    else:
+        strategic_roles = ["downtrade_diversion", "uptrade_alternative", "price_adjacent", "scenario_alternative"]
     for role in strategic_roles:
         if len(selected) >= top_n:
             break

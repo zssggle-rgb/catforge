@@ -2591,8 +2591,16 @@ def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
     assert "claim_fact" not in fact_brief["missing_sections"]
     assert "comment_fact" not in fact_brief["missing_sections"]
     markdown = result["result"]["competitor_answer"]["report_payload"]["markdown"]
+    top_competitors = result["result"]["competitor_answer"]["top_competitors"]
+    assert top_competitors[0]["candidate"]["sku_code"] == "AC00029751"
+    assert top_competitors[0]["role"] == "primary_direct"
     assert "3匹及以上柜机高端舒适健康" in markdown
     assert "3匹及以上柜机" in markdown
+    assert "用户买空调" in markdown
+    assert "该匹数价格段空调" in markdown
+    assert "匹数/安装能力" in markdown
+    assert "清晰度规格" not in markdown
+    assert "该尺寸价格段电视" not in markdown
     assert "尺寸段未知 × 价格带未知" not in markdown
     assert "未知 寸" not in markdown
 
