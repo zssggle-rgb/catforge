@@ -2168,10 +2168,11 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "强销量卖点" in text
     assert "可比产品价格差异" in text
     assert "本品可解释价差份额" in text
+    assert "战场合计只汇总同一分类、同一卖点在价值战场中的量化结果" in text
     assert "MiniLED" in text
 
 
-def test_claim_value_report_groups_shared_pool_metrics_as_value_bundle() -> None:
+def test_claim_value_report_keeps_specific_claims_with_battlefield_totals() -> None:
     shared_pool = {
         "pool_claim_price_delta_abs": 500,
         "pool_claim_weekly_sales_delta_abs": 30,
@@ -2189,9 +2190,9 @@ def test_claim_value_report_groups_shared_pool_metrics_as_value_bundle() -> None
                 "claim_name": claim_name,
                 "claim_value_role": "premium_driver_estimated",
                 "business_value_label": "强溢价卖点",
-                "context_type": "target_group",
-                "context_code": "TG_PREMIUM_AV_ENTHUSIAST",
-                "context_name": "高端影音体验用户",
+                "context_type": "battlefield",
+                "context_code": "BF_PREMIUM_PICTURE_UPGRADE",
+                "context_name": "高端画质升级战场",
                 "size_tier": "65",
                 "price_band_group": "high",
                 "pool_effect": shared_pool,
@@ -2213,12 +2214,58 @@ def test_claim_value_report_groups_shared_pool_metrics_as_value_bundle() -> None
         )
     )
 
-    data_rows = [line for line in markdown.splitlines() if line.startswith("| ") and not line.startswith("| 排名") and not line.startswith("| ---")]
-    assert len(data_rows) == 1
-    assert "HDMI2.1 连接、护眼显示和杜比/影音认证（组合）" in data_rows[0]
-    assert "强溢价卖点组合" in data_rows[0]
-    assert "500元 | 30台/周 | 150,000元/周 | 150元 | 18台/周" in data_rows[0]
-    assert "共享同一可比市场中的量价差异" in markdown
+    assert "#### 强溢价卖点" in markdown
+    assert "HDMI2.1 连接、护眼显示和杜比/影音认证（组合）" not in markdown
+    assert "强溢价卖点组合" not in markdown
+    assert "| HDMI2.1 连接 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    assert "| 护眼显示 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    assert "| 杜比/影音认证 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    assert "价值战场明细" in markdown
+
+
+def test_claim_value_report_sums_same_claim_within_same_category_battlefields() -> None:
+    rows = []
+    for context_code, context_name, price, sales, amount in [
+        ("BF_PREMIUM_PICTURE_UPGRADE", "高端画质升级战场", 60, 5, 30000),
+        ("BF_GAMING_SPORTS_FLUENCY", "游戏体育流畅战场", 70, 6, 36000),
+    ]:
+        rows.append(
+            {
+                "claim_code": "tv_claim_chip_performance",
+                "claim_name": "芯片/处理器性能",
+                "claim_value_role": "premium_driver_estimated",
+                "business_value_label": "强溢价卖点",
+                "context_type": "battlefield",
+                "context_code": context_code,
+                "context_name": context_name,
+                "size_tier": "65",
+                "price_band_group": "high",
+                "pool_effect": {
+                    "pool_claim_price_delta_abs": 420,
+                    "pool_claim_weekly_sales_delta_abs": 34,
+                    "pool_claim_weekly_sales_amount_delta_abs": 270000,
+                },
+                "sku_excess_explanation": {
+                    "sku_excess_price_explained_abs": price,
+                    "sku_excess_weekly_sales_explained_abs": sales,
+                    "sku_excess_weekly_sales_amount_explained_abs": amount,
+                    "contribution_share_in_sku": 0.12,
+                },
+                "evidence_strength": {"param": 1.0, "comment": 1.0, "semantic": 0.9},
+                "attribution_confidence": 0.8,
+            }
+        )
+
+    markdown = "\n".join(
+        competitor_answer._product_claim_value_quantification_lines(
+            claim_value={"claim_values": rows},
+            claim_contribution={},
+        )
+    )
+
+    assert "| 芯片/处理器性能 | 130元 | 11台/周 | 66,000元/周 | 高端画质升级战场和游戏体育流畅战场 |" in markdown
+    assert "| 芯片/处理器性能 | 高端画质升级战场 | 420元 | 34台/周 | 60元 | 5台/周 |" in markdown
+    assert "| 芯片/处理器性能 | 游戏体育流畅战场 | 420元 | 34台/周 | 70元 | 6台/周 |" in markdown
 
 
 def test_claim_value_space_returns_dimension_summary() -> None:
@@ -2805,10 +2852,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
     assert "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |" in markdown
-    assert "| Top5 核心卖点商业价值 | MiniLED（强溢价卖点）；高刷（强销量卖点）；音响体验（拖后腿卖点） | 壁画贴墙（强溢价卖点） | 卖点价值量化待生成 | 卖点价值量化待生成 |" in markdown
-    assert "| 价格溢价卖点 | MiniLED，可比价格差400元，可比销量差20台/周，可解释价差份额280元 | 壁画贴墙，可比价格差400元，可比销量差20台/周，可解释价差份额180元 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
-    assert "| 销量驱动卖点 | 高刷，可比价格差400元，可比销量差20台/周，可解释价差份额80元 | 未形成稳定量化证据 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
-    assert "| 竞品拦截与补强建议 | 音响体验，可比价格差不作为价格支撑，可比销量差20台/周 | 未形成稳定量化证据 | 未形成稳定量化证据 | 未形成稳定量化证据 |" in markdown
+    assert "| 本品分类与卖点 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
+    assert "| 强溢价卖点：MiniLED | 战场价差合计280元；战场销量合计15台/周；战场销额合计75,000元/周；覆盖高端画质升级战场 | 未进入强溢价卖点 | 未进入强溢价卖点 | 未进入强溢价卖点 |" in markdown
+    assert "| 强销量卖点：高刷 | 战场价差合计80元；战场销量合计22台/周；战场销额合计88,000元/周；覆盖游戏体育流畅战场 | 未进入强销量卖点 | 未进入强销量卖点 | 未进入强销量卖点 |" in markdown
+    assert "横向比较口径：本表以本品的业务分类和具体卖点为基准" in markdown
     assert "| 组合型增值卖点 |" not in markdown
     assert "| 基础门槛卖点 |" not in markdown
     assert "卖点溢价指数 Top" not in markdown
@@ -2834,10 +2881,14 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "5200尼特" in markdown
     assert "控光分区：1,920" in markdown
     assert "溢价卖点" in markdown
-    assert "| 排名 | 卖点 | 业务类型 | 业务含义 | 卖点有效市场 | 可比产品价格差异 | 可比产品销量差异 | 可比产品销额差异 | 本品可解释价差份额 | 本品可解释销量差份额 | 证据支撑强度 | 业务解释 |" in markdown
-    assert "| 1 | MiniLED | 强溢价卖点 | 可比产品中具备该卖点的一组 SKU 价格更高，能支撑更高定价解释 | 60-69 寸主流大屏段 × 中高价带；高端画质升级战场 | 400元 | 20台/周 | 132,000元/周 | 280元 | 15台/周 | 参数强，评论强，市场场景强 |" in markdown
-    assert "| 3 | 音响体验 | 拖后腿卖点 | 厂家主张、参数或评论之间不一致，削弱关键战场、任务或客群 | 60-69 寸主流大屏段 × 中高价带；高端画质升级战场 | 不作为价格支撑 | 20台/周 | 132,000元/周 | 不作为正向分摊 | 不作为正向分摊 | 参数强，评论强，市场场景强 |" in markdown
-    assert "可比产品价格差异/销量差异是有卖点组与对照组的可观测差异" in markdown
+    assert "#### 强溢价卖点" in markdown
+    assert "| MiniLED | 280元 | 15台/周 | 75,000元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
+    assert "#### 强销量卖点" in markdown
+    assert "| 高刷 | 80元 | 22台/周 | 88,000元/周 | 游戏体育流畅战场 | 参数强，评论强，市场场景强 |" in markdown
+    assert "#### 用户感知不足/拖后腿" in markdown
+    assert "| 音响体验 | 0元 | 0台/周 | 0元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
+    assert "| MiniLED | 高端画质升级战场 | 400元 | 20台/周 | 280元 | 15台/周 |" in markdown
+    assert "战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在各价值战场中的量化结果" in markdown
     assert "业务类型说明：" in markdown
     assert "卖点解释：" in markdown
     assert "竞品拦截与补强建议：" in markdown

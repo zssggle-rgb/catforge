@@ -1194,26 +1194,102 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
 def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     target = result.get("target") or {}
     payload = ((result.get("result") or {}).get("sku_claim_value") or {})
-    rows = _dedupe_claim_value_cli_rows(payload.get("claim_values") or [])
+    rows = [row for row in payload.get("claim_values") or [] if isinstance(row, dict)]
     if not rows:
         return result.get("message_cn") or "当前 SKU 没有 M12C 卖点价值量化结果。"
     lines = [f"{_brand_model(target)} 的卖点价值量化结果："]
-    for row in rows[:10]:
-        contribution = row.get("estimated_contribution") or {}
-        pool_effect = row.get("pool_effect") or {}
-        sku_excess = row.get("sku_excess_explanation") or {}
-        label = row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))
-        market_contexts = row.get("market_contexts") or []
-        context_text = "、".join(str(item) for item in market_contexts[:3] if item) or row.get("context_name") or row.get("context_code")
-        lines.append(
-            f"- {row.get('claim_name') or row.get('claim_code')}：{label}；"
-            f"可比产品价格差异约{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}；"
-            f"可比产品周均销量差异约{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台；"
-            f"本品可解释价差份额约{_format_money(sku_excess.get('sku_excess_price_explained_abs') or contribution.get('price_premium_abs')) or '0元'}；"
-            f"市场场景：{context_text or '当前可比市场'}。"
-        )
-    lines.append("说明：可比产品差异是有卖点组与对照组的可观测差异；本品可解释价差份额是解释性分摊，不是单一卖点因果增量。")
+    groups = _claim_value_cli_groups(rows)
+    by_category: dict[str, list[dict[str, Any]]] = {}
+    for group in groups:
+        by_category.setdefault(str(group.get("category") or ""), []).append(group)
+    for category in _claim_value_cli_category_order():
+        category_groups = by_category.get(category, [])
+        if not category_groups:
+            continue
+        lines.append(f"{category}：")
+        for group in category_groups[:5]:
+            sales_total = _format_volume(group["sales_total"])
+            lines.append(
+                f"- {group['claim_name']}：战场可解释价差合计{_format_money(group['price_total']) or '暂不量化'}；"
+                f"战场可解释销量合计{f'{sales_total}台/周' if sales_total else '暂不量化'}；"
+                f"覆盖价值战场：{'、'.join(group['battlefields'][:4]) if group['battlefields'] else '价值战场暂未形成稳定量化'}。"
+            )
+            for row in group["battlefield_rows"][:3]:
+                pool_effect = row.get("pool_effect") or {}
+                sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+                lines.append(
+                    f"  - {row.get('context_name') or row.get('context_code') or '当前价值战场'}："
+                    f"可比产品价格差异{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}，"
+                    f"销量差异{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台/周；"
+                    f"本品可解释价差份额{_format_money(sku_excess.get('sku_excess_price_explained_abs') or sku_excess.get('price_premium_abs')) or '不作为正向分摊'}，"
+                    f"可解释销量份额{_format_volume(sku_excess.get('sku_excess_weekly_sales_explained_abs') or sku_excess.get('weekly_sales_lift_abs')) or '不作为正向分摊'}台/周。"
+                )
+    lines.append("说明：战场合计只汇总同一分类、同一卖点在价值战场中的量化结果；目标客群、用户任务和整体市场池只作为解释证据，不参与求和。")
     return "\n".join(lines)
+
+
+def _claim_value_cli_category_order() -> list[str]:
+    return [
+        "强溢价卖点",
+        "强销量卖点",
+        "组合型增值卖点",
+        "基础门槛卖点",
+        "核心事实优势/暂不量化",
+        "机会缺口",
+        "用户感知不足/拖后腿",
+        "厂家主张，市场验证不足",
+    ]
+
+
+def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        category = _claim_value_cli_category(row)
+        claim_key = str(row.get("claim_code") or row.get("claim_name") or "")
+        if not claim_key:
+            claim_key = f"claim-{len(grouped)}"
+        key = (category, claim_key)
+        if key not in grouped:
+            grouped[key] = {
+                "category": category,
+                "claim_name": str(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
+                "battlefield_rows": [],
+                "price_total": Decimal("0"),
+                "sales_total": Decimal("0"),
+                "battlefields": [],
+            }
+        group = grouped[key]
+        if str(row.get("context_type") or "") != "battlefield":
+            continue
+        group["battlefield_rows"].append(row)
+        sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+        group["price_total"] += _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or Decimal("0")
+        group["sales_total"] += _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0")
+        battlefield = str(row.get("context_name") or row.get("context_code") or "").strip()
+        if battlefield and battlefield not in group["battlefields"]:
+            group["battlefields"].append(battlefield)
+    order = {category: index for index, category in enumerate(_claim_value_cli_category_order())}
+    return sorted(grouped.values(), key=lambda item: (order.get(str(item.get("category") or ""), 99), str(item.get("claim_name") or "")))
+
+
+def _claim_value_cli_category(row: dict[str, Any]) -> str:
+    label = _claim_role_cn(row.get("claim_value_role"))
+    if label == "样本不足待复核" and _claim_value_cli_has_strong_fact_evidence(row):
+        return "核心事实优势/暂不量化"
+    if label in {"高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"}:
+        return "机会缺口"
+    if label in {"用户感知不足卖点", "拖后腿卖点"}:
+        return "用户感知不足/拖后腿"
+    if label == "厂家主张卖点":
+        return "厂家主张，市场验证不足"
+    return label
+
+
+def _claim_value_cli_has_strong_fact_evidence(row: dict[str, Any]) -> bool:
+    evidence = row.get("evidence_strength") or {}
+    values = [_decimal(evidence.get(key)) for key in ("claim", "param", "comment")]
+    values = [value for value in values if value is not None]
+    return bool(values) and sum(1 for value in values if value >= Decimal("0.75")) >= 2
 
 
 def _dedupe_claim_value_cli_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
