@@ -14,6 +14,9 @@ from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHa
 from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 
 
+CLAIM_VALUE_REPORT_LIMIT = 200
+
+
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
     "competitor-set": (
         "resolve-sku",
@@ -98,8 +101,9 @@ class SopOrchestrators:
         competitors: list[dict[str, Any]] = []
         pair_atom_results: list[dict[str, Any]] = []
         need_candidate_fact = answer_style == "xiaoao" or with_report != "none"
-        target_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=target_sku, limit=limit) if need_candidate_fact else {}
-        target_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=target_sku, limit=limit) if need_candidate_fact else {}
+        claim_value_limit = max(limit, CLAIM_VALUE_REPORT_LIMIT)
+        target_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=target_sku, limit=claim_value_limit) if need_candidate_fact else {}
+        target_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=target_sku, limit=claim_value_limit) if need_candidate_fact else {}
         for rank, row in enumerate(candidate_rows, start=1):
             candidate_sku = row.get("sku_code")
             if not candidate_sku:
@@ -108,8 +112,8 @@ class SopOrchestrators:
             param_claim = self.atomic_handlers.param_claim_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             sales = self.atomic_handlers.sales_overlap(context, sku_code=target_sku, candidate_sku_code=candidate_sku)
             candidate_fact = self.atomic_handlers.sku_fact_brief(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
-            candidate_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
-            candidate_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=candidate_sku, limit=limit) if need_candidate_fact else {}
+            candidate_claim_value = self.atomic_handlers.sku_claim_value(context, sku_code=candidate_sku, limit=claim_value_limit) if need_candidate_fact else {}
+            candidate_claim_contribution = self.atomic_handlers.claim_contribution(context, sku_code=candidate_sku, limit=claim_value_limit) if need_candidate_fact else {}
             pair_atom_results.extend([semantic, param_claim, sales])
             if candidate_fact:
                 pair_atom_results.append(candidate_fact)

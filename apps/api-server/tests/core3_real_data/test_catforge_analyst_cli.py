@@ -10,6 +10,8 @@ from app.cli import catforge_analyst
 from app.models import entities
 from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
 from app.services.core3_real_data.analyst import competitor_answer
+from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext
+from app.services.core3_real_data.analyst.sop_orchestrators import CLAIM_VALUE_REPORT_LIMIT, SopOrchestrators
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
@@ -2168,7 +2170,7 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "强销量卖点" in text
     assert "可比产品价格差异" in text
     assert "本品可解释价差份额" in text
-    assert "战场合计只汇总同一分类、同一卖点在价值战场中的量化结果" in text
+    assert "战场合计只汇总同一分类、同一卖点在价值战场中的去重量化结果" in text
     assert "MiniLED" in text
 
 
@@ -2268,6 +2270,51 @@ def test_claim_value_report_sums_same_claim_within_same_category_battlefields() 
     assert "| 芯片/处理器性能 | 游戏体育流畅战场 | 420元 | 34台/周 | 70元 | 6台/周 |" in markdown
 
 
+def test_claim_value_report_dedupes_identical_battlefield_quantification() -> None:
+    rows = []
+    for context_code, context_name in [
+        ("BF_PREMIUM_PICTURE_UPGRADE", "高端画质升级战场"),
+        ("BF_GAMING_SPORTS_FLUENCY", "游戏体育流畅战场"),
+    ]:
+        rows.append(
+            {
+                "claim_code": "tv_claim_chip_performance",
+                "claim_name": "芯片/处理器性能",
+                "claim_value_role": "premium_driver_estimated",
+                "business_value_label": "强溢价卖点",
+                "context_type": "battlefield",
+                "context_code": context_code,
+                "context_name": context_name,
+                "size_tier": "65",
+                "price_band_group": "high",
+                "pool_effect": {
+                    "pool_claim_price_delta_abs": 420,
+                    "pool_claim_weekly_sales_delta_abs": 34,
+                    "pool_claim_weekly_sales_amount_delta_abs": 270000,
+                },
+                "sku_excess_explanation": {
+                    "sku_excess_price_explained_abs": 60,
+                    "sku_excess_weekly_sales_explained_abs": 5,
+                    "sku_excess_weekly_sales_amount_explained_abs": 30000,
+                    "contribution_share_in_sku": 0.12,
+                },
+                "evidence_strength": {"param": 1.0, "comment": 1.0, "semantic": 0.9},
+                "attribution_confidence": 0.8,
+            }
+        )
+
+    markdown = "\n".join(
+        competitor_answer._product_claim_value_quantification_lines(
+            claim_value={"claim_values": rows},
+            claim_contribution={},
+        )
+    )
+
+    assert "| 芯片/处理器性能 | 60元 | 5台/周 | 30,000元/周 | 高端画质升级战场和游戏体育流畅战场 |" in markdown
+    assert "| 芯片/处理器性能 | 高端画质升级战场和游戏体育流畅战场 | 420元 | 34台/周 | 60元 | 5台/周 |" in markdown
+    assert "| 芯片/处理器性能 | 120元 | 10台/周 |" not in markdown
+
+
 def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified_fact() -> None:
     rows = [
         {
@@ -2303,8 +2350,9 @@ def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified
     )
 
     assert "#### 强溢价卖点" not in markdown
-    assert "#### 核心事实优势/暂不量化" in markdown
+    assert "#### 本品优势卖点（待量化）" in markdown
     assert "| HDR/高亮画质 | 暂不量化 | 暂不量化 | 暂不量化 | 价值战场暂未形成稳定量化 |" in markdown
+    assert "核心事实优势/暂不量化" not in markdown
 
 
 def test_claim_value_space_returns_dimension_summary() -> None:
@@ -2844,6 +2892,112 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
     assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
 
 
+def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
+    class FakeAtomicHandlers:
+        def __init__(self) -> None:
+            self.claim_value_limits: list[int] = []
+            self.claim_contribution_limits: list[int] = []
+
+        def resolve_sku(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "resolve-sku",
+                "target": {
+                    "sku_code": "TV00029112",
+                    "brand_name": "海信",
+                    "model_name": "65E7Q",
+                    "product_category": "tv",
+                },
+            }
+
+        def sku_fact_brief(self, context: AnalystContext, *, sku_code: str, limit: int = 20, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "sku-fact-brief",
+                "result": {
+                    "fact_brief": {
+                        "identity": {"sku_code": sku_code},
+                        "sections": {},
+                        "missing_sections": [],
+                    }
+                },
+            }
+
+        def same_size_price_candidates(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "same-size-price-candidates",
+                "result": {
+                    "candidate_search": {
+                        "candidates": [
+                            {
+                                "sku_code": "TV00030001",
+                                "brand_name": "创维",
+                                "model_name": "65A7H PRO",
+                                "screen_size_inch": 65,
+                                "price_wavg": 5600,
+                                "avg_weekly_sales_volume": 210,
+                            }
+                        ]
+                    }
+                },
+            }
+
+        def semantic_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "semantic-overlap",
+                "result": {"semantic_overlap": {"semantic_overlap_score": 0.8, "overlap": {}}},
+            }
+
+        def param_claim_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "param-claim-overlap",
+                "result": {"param_claim_overlap": {"param_claim_overlap_score": 0.7}},
+            }
+
+        def sales_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "command": "sales-overlap",
+                "result": {
+                    "sales_overlap": {
+                        "comparison": {
+                            "target_vs_candidate_avg_weekly_volume_ratio": 1.1,
+                            "target_vs_candidate_avg_weekly_volume_gap": 20,
+                        }
+                    }
+                },
+            }
+
+        def sku_claim_value(self, context: AnalystContext, *, limit: int = 20, **kwargs: object) -> dict[str, object]:
+            self.claim_value_limits.append(limit)
+            return {
+                "status": "ok",
+                "command": "sku-claim-value",
+                "result": {"sku_claim_value": {"claim_values": []}},
+            }
+
+        def claim_contribution(self, context: AnalystContext, *, limit: int = 20, **kwargs: object) -> dict[str, object]:
+            self.claim_contribution_limits.append(limit)
+            return {
+                "status": "ok",
+                "command": "claim-contribution",
+                "result": {"claim_contribution": {"attributions": []}},
+            }
+
+    fake = FakeAtomicHandlers()
+    orchestrator = SopOrchestrators(fake)  # type: ignore[arg-type]
+    context = AnalystContext(project_id=PROJECT_ID, category_code="TV", batch_id=BATCH_ID, product_category="tv")
+
+    result = orchestrator.competitor_set(context, sku_code="TV00029112", limit=20, answer_style="xiaoao")
+
+    assert result["status"] == "ok"
+    assert fake.claim_value_limits == [CLAIM_VALUE_REPORT_LIMIT, CLAIM_VALUE_REPORT_LIMIT]
+    assert fake.claim_contribution_limits == [CLAIM_VALUE_REPORT_LIMIT, CLAIM_VALUE_REPORT_LIMIT]
+
+
 def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     session = make_session()
     result = catforge_analyst.competitor_set(
@@ -2924,10 +3078,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| MiniLED | 280元 | 15台/周 | 75,000元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
     assert "#### 强销量卖点" in markdown
     assert "| 高刷 | 80元 | 22台/周 | 88,000元/周 | 游戏体育流畅战场 | 参数强，评论强，市场场景强 |" in markdown
-    assert "#### 用户感知不足/拖后腿" in markdown
+    assert "#### 用户感知风险/拖后腿" in markdown
     assert "| 音响体验 | 0元 | 0台/周 | 0元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
     assert "| MiniLED | 高端画质升级战场 | 400元 | 20台/周 | 280元 | 15台/周 |" in markdown
-    assert "战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在各价值战场中的量化结果" in markdown
+    assert "战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在价值战场中的去重量化结果" in markdown
     assert "业务类型说明：" in markdown
     assert "卖点解释：" in markdown
     assert "竞品拦截与补强建议：" in markdown
@@ -2950,6 +3104,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         '"unit"',
         "其他关系状态",
         "图谱空间待生成",
+        "核心事实优势/暂不量化",
         "暂无该分类市场空间数据",
         "本品未进入该分类销量承接分配",
         "未分配销量，仅作机会或风险证据",

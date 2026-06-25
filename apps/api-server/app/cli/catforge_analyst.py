@@ -1214,17 +1214,18 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
                 f"战场可解释销量合计{f'{sales_total}台/周' if sales_total else '暂不量化'}；"
                 f"覆盖价值战场：{'、'.join(group['battlefields'][:4]) if group['battlefields'] else '价值战场暂未形成稳定量化'}。"
             )
-            for row in group["battlefield_rows"][:3]:
+            for item in group.get("quant_groups", [])[:3]:
+                row = item["representative"]
                 pool_effect = row.get("pool_effect") or {}
                 sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
                 lines.append(
-                    f"  - {row.get('context_name') or row.get('context_code') or '当前价值战场'}："
+                    f"  - {'、'.join(item.get('battlefields') or []) or row.get('context_name') or row.get('context_code') or '当前价值战场'}："
                     f"可比产品价格差异{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}，"
                     f"销量差异{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台/周；"
                     f"本品可解释价差份额{_format_money(sku_excess.get('sku_excess_price_explained_abs') or sku_excess.get('price_premium_abs')) or '不作为正向分摊'}，"
                     f"可解释销量份额{_format_volume(sku_excess.get('sku_excess_weekly_sales_explained_abs') or sku_excess.get('weekly_sales_lift_abs')) or '不作为正向分摊'}台/周。"
                 )
-    lines.append("说明：战场合计只汇总同一分类、同一卖点在价值战场中的量化结果；目标客群、用户任务和整体市场池只作为解释证据，不参与求和。")
+    lines.append("说明：战场合计只汇总同一分类、同一卖点在价值战场中的去重量化结果；多个战场共用同一组可比池差异和本品解释份额时，合并展示、只计一次；目标客群、用户任务和整体市场池只作为解释证据，不参与求和。")
     return "\n".join(lines)
 
 
@@ -1234,10 +1235,10 @@ def _claim_value_cli_category_order() -> list[str]:
         "强销量卖点",
         "组合型增值卖点",
         "基础门槛卖点",
-        "核心事实优势/暂不量化",
-        "机会缺口",
-        "用户感知不足/拖后腿",
-        "厂家主张，市场验证不足",
+        "本品优势卖点（待量化）",
+        "竞品优势/本品短板",
+        "用户感知风险/拖后腿",
+        "厂家主张待市场验证",
     ]
 
 
@@ -1262,9 +1263,6 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if str(row.get("context_type") or "") != "battlefield":
             continue
         group["battlefield_rows"].append(row)
-        sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
-        group["price_total"] += _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or Decimal("0")
-        group["sales_total"] += _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0")
         battlefield = str(row.get("context_name") or row.get("context_code") or "").strip()
         if battlefield and battlefield not in group["battlefields"]:
             group["battlefields"].append(battlefield)
@@ -1272,7 +1270,7 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for original_key, group in grouped.items():
         category = str(group.get("category") or "")
         if category in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and not group["battlefield_rows"]:
-            category = "核心事实优势/暂不量化"
+            category = "本品优势卖点（待量化）"
             group["category"] = category
         key = (category, original_key[1])
         if key not in merged:
@@ -1280,11 +1278,19 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         existing = merged[key]
         existing["battlefield_rows"].extend(group["battlefield_rows"])
-        existing["price_total"] += group["price_total"]
-        existing["sales_total"] += group["sales_total"]
         for battlefield in group["battlefields"]:
             if battlefield not in existing["battlefields"]:
                 existing["battlefields"].append(battlefield)
+    for group in merged.values():
+        quant_groups = _claim_value_cli_quant_groups(group["battlefield_rows"])
+        group["quant_groups"] = quant_groups
+        group["price_total"] = Decimal("0")
+        group["sales_total"] = Decimal("0")
+        for item in quant_groups:
+            row = item.get("representative") or {}
+            sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+            group["price_total"] += _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or Decimal("0")
+            group["sales_total"] += _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0")
     order = {category: index for index, category in enumerate(_claim_value_cli_category_order())}
     return sorted(merged.values(), key=lambda item: (order.get(str(item.get("category") or ""), 99), str(item.get("claim_name") or "")))
 
@@ -1292,14 +1298,68 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _claim_value_cli_category(row: dict[str, Any]) -> str:
     label = _claim_role_cn(row.get("claim_value_role"))
     if label == "样本不足待复核" and _claim_value_cli_has_strong_fact_evidence(row):
-        return "核心事实优势/暂不量化"
+        return "本品优势卖点（待量化）"
     if label in {"高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"}:
-        return "机会缺口"
+        return "竞品优势/本品短板"
     if label in {"用户感知不足卖点", "拖后腿卖点"}:
-        return "用户感知不足/拖后腿"
+        return "用户感知风险/拖后腿"
     if label == "厂家主张卖点":
-        return "厂家主张，市场验证不足"
+        return "厂家主张待市场验证"
     return label
+
+
+def _claim_value_cli_quant_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, ...], dict[str, Any]] = {}
+    order: list[tuple[str, ...]] = []
+    for row in rows:
+        signature = _claim_value_cli_quant_signature(row)
+        if signature is None:
+            signature = (
+                str(row.get("claim_code") or row.get("claim_name") or "claim"),
+                str(row.get("context_code") or row.get("context_name") or len(order)),
+            )
+        if signature not in grouped:
+            grouped[signature] = {"rows": [], "battlefields": []}
+            order.append(signature)
+        item = grouped[signature]
+        item["rows"].append(row)
+        battlefield = str(row.get("context_name") or row.get("context_code") or "").strip()
+        if battlefield and battlefield not in item["battlefields"]:
+            item["battlefields"].append(battlefield)
+    result: list[dict[str, Any]] = []
+    for signature in order:
+        item = grouped[signature]
+        item["representative"] = item["rows"][0] if item["rows"] else {}
+        result.append(item)
+    return result
+
+
+def _claim_value_cli_quant_signature(row: dict[str, Any]) -> tuple[str, ...] | None:
+    pool = row.get("pool_effect") or {}
+    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+    metric_keys = (
+        _claim_value_cli_metric_key(pool.get("pool_claim_price_delta_abs")),
+        _claim_value_cli_metric_key(pool.get("pool_claim_weekly_sales_delta_abs")),
+        _claim_value_cli_metric_key(pool.get("pool_claim_weekly_sales_amount_delta_abs")),
+        _claim_value_cli_metric_key(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")),
+        _claim_value_cli_metric_key(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")),
+        _claim_value_cli_metric_key(sku_excess.get("sku_excess_weekly_sales_amount_explained_abs") or sku_excess.get("weekly_sales_amount_lift_abs")),
+    )
+    if not any(metric_keys):
+        return None
+    return (
+        _claim_role_cn(row.get("claim_value_role")),
+        str(row.get("size_tier") or ""),
+        str(row.get("price_band_group") or ""),
+        *metric_keys,
+    )
+
+
+def _claim_value_cli_metric_key(value: Any) -> str:
+    number = _decimal(value)
+    if number is None:
+        return ""
+    return str(number.quantize(Decimal("0.0001")))
 
 
 def _claim_value_cli_has_strong_fact_evidence(row: dict[str, Any]) -> bool:
