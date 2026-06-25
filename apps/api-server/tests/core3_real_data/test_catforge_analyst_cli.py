@@ -2351,7 +2351,7 @@ def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified
 
     assert "#### 强溢价卖点" not in markdown
     assert "#### 本品优势卖点（待量化）" in markdown
-    assert "| HDR/高亮画质 | 暂不量化 | 暂不量化 | 暂不量化 | 价值战场暂未形成稳定量化 |" in markdown
+    assert "| HDR/高亮画质 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 价值战场暂未形成稳定量化 |" in markdown
     assert "核心事实优势/暂不量化" not in markdown
 
 
@@ -3079,7 +3079,9 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "#### 强销量卖点" in markdown
     assert "| 高刷 | 80元 | 22台/周 | 88,000元/周 | 游戏体育流畅战场 | 参数强，评论强，市场场景强 |" in markdown
     assert "#### 用户感知风险/拖后腿" in markdown
-    assert "| 音响体验 | 0元 | 0台/周 | 0元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
+    assert "用户感知风险/拖后腿：音响体验" in markdown
+    assert "该卖点存在用户感知不足、负向反馈或证据支撑不足，可能削弱相关场景的成交解释" in markdown
+    assert "| 音响体验 | 0元 | 0台/周 | 0元/周 |" not in markdown
     assert "| MiniLED | 高端画质升级战场 | 400元 | 20台/周 | 280元 | 15台/周 |" in markdown
     assert "战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在价值战场中的去重量化结果" in markdown
     assert "业务类型说明：" in markdown

@@ -1209,9 +1209,10 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
         lines.append(f"{category}：")
         for group in category_groups[:5]:
             sales_total = _format_volume(group["sales_total"])
+            quantified = bool(group.get("battlefields")) and category not in _claim_value_cli_text_only_categories()
             lines.append(
-                f"- {group['claim_name']}：战场可解释价差合计{_format_money(group['price_total']) or '暂不量化'}；"
-                f"战场可解释销量合计{f'{sales_total}台/周' if sales_total else '暂不量化'}；"
+                f"- {group['claim_name']}：战场可解释价差合计{(_format_money(group['price_total']) or '暂不量化') if quantified else '不作为正向量化'}；"
+                f"战场可解释销量合计{(f'{sales_total}台/周' if sales_total else '暂不量化') if quantified else '不作为正向量化'}；"
                 f"覆盖价值战场：{'、'.join(group['battlefields'][:4]) if group['battlefields'] else '价值战场暂未形成稳定量化'}。"
             )
             for item in group.get("quant_groups", [])[:3]:
@@ -1242,6 +1243,15 @@ def _claim_value_cli_category_order() -> list[str]:
     ]
 
 
+def _claim_value_cli_text_only_categories() -> set[str]:
+    return {
+        "本品优势卖点（待量化）",
+        "竞品优势/本品短板",
+        "用户感知风险/拖后腿",
+        "厂家主张待市场验证",
+    }
+
+
 def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
@@ -1267,9 +1277,17 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if battlefield and battlefield not in group["battlefields"]:
             group["battlefields"].append(battlefield)
     merged: dict[tuple[str, str], dict[str, Any]] = {}
+    claim_keys_with_quantified_battlefields = {
+        original_key[1]
+        for original_key, group in grouped.items()
+        if group.get("battlefield_rows")
+        and str(group.get("category") or "") in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}
+    }
     for original_key, group in grouped.items():
         category = str(group.get("category") or "")
         if category in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and not group["battlefield_rows"]:
+            if original_key[1] in claim_keys_with_quantified_battlefields:
+                continue
             category = "本品优势卖点（待量化）"
             group["category"] = category
         key = (category, original_key[1])

@@ -323,6 +323,12 @@ CLAIM_VALUE_CATEGORY_ORDER = [
 ]
 
 CLAIM_VALUE_CATEGORY_RANK = {label: index for index, label in enumerate(CLAIM_VALUE_CATEGORY_ORDER)}
+CLAIM_VALUE_TEXT_ONLY_CATEGORIES = {
+    "本品优势卖点（待量化）",
+    "竞品优势/本品短板",
+    "用户感知风险/拖后腿",
+    "厂家主张待市场验证",
+}
 
 
 @dataclass(frozen=True)
@@ -1085,6 +1091,7 @@ def _claim_value_category_groups(rows: list[dict[str, Any]]) -> list[dict[str, A
             grouped[key] = {
                 "category": category,
                 "claim_code": row.get("claim_code"),
+                "claim_key": claim_key,
                 "claim_name": _claim_value_name(row),
                 "rows": [],
                 "battlefield_rows": [],
@@ -1099,9 +1106,17 @@ def _claim_value_category_groups(rows: list[dict[str, Any]]) -> list[dict[str, A
         else:
             group["evidence_rows"].append(row)
     result: list[dict[str, Any]] = []
+    claim_keys_with_quantified_battlefields = {
+        str(group.get("claim_key") or "")
+        for group in grouped.values()
+        if group.get("battlefield_rows")
+        and str(group.get("category") or "") in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}
+    }
     for group in grouped.values():
         battlefield_rows = group["battlefield_rows"]
         if _claim_value_group_needs_nonquantified_category(group):
+            if str(group.get("claim_key") or "") in claim_keys_with_quantified_battlefields:
+                continue
             group["category"] = "本品优势卖点（待量化）"
         quant_groups = _claim_value_quant_groups(battlefield_rows)
         quant_rows = [item["representative"] for item in quant_groups if item.get("representative")]
@@ -1212,6 +1227,15 @@ def _claim_value_group_summary_cell(group: dict[str, Any]) -> str:
     price = _format_money(group.get("total_price_explained"))
     sales = _format_unit_count(group.get("total_sales_explained"))
     amount = _format_money(group.get("total_amount_explained"))
+    if category == "本品优势卖点（待量化）":
+        contexts = _join_cn((group.get("evidence_contexts") or [])[:4])
+        return f"本品事实证据成立，当前价值战场对照样本不足，暂不做金额量化{f'；证据场景：{contexts}' if contexts else ''}"
+    if category == "竞品优势/本品短板":
+        return _claim_value_group_reason(group) or "竞品或同池强 SKU 表达更强，本品缺失或表达偏弱，当前不作为本品正向量化"
+    if category == "用户感知风险/拖后腿":
+        return _claim_value_group_reason(group) or "当前证据不足或存在负向信号，不进入正向价销量解释"
+    if category == "厂家主张待市场验证":
+        return _claim_value_group_reason(group) or "厂家表达存在，但评论或市场验证不足，不作为溢价或销量结论"
     if battlefields:
         parts = [
             f"战场价差合计{price or '0元'}",
@@ -1220,13 +1244,6 @@ def _claim_value_group_summary_cell(group: dict[str, Any]) -> str:
             f"覆盖{_join_cn(battlefields[:4])}",
         ]
         return "；".join(parts)
-    if category == "本品优势卖点（待量化）":
-        contexts = _join_cn((group.get("evidence_contexts") or [])[:4])
-        return f"本品事实证据成立，当前价值战场对照样本不足，暂不做金额量化{f'；证据场景：{contexts}' if contexts else ''}"
-    if category == "竞品优势/本品短板":
-        return _claim_value_group_reason(group) or "竞品或同池强 SKU 表达更强，本品缺失或表达偏弱，当前不做金额量化"
-    if category == "用户感知风险/拖后腿":
-        return _claim_value_group_reason(group) or "当前证据不足或存在负向信号，不进入正向价销量解释"
     return _claim_value_group_reason(group) or "当前价值战场量化不足，需结合事实和评论继续观察"
 
 
@@ -1235,6 +1252,12 @@ def _claim_value_group_reason(group: dict[str, Any]) -> str:
     if category == "本品优势卖点（待量化）":
         contexts = _join_cn((group.get("evidence_contexts") or [])[:4])
         return f"该卖点有参数、卖点事实和评论支撑，可作为本品优势表达；当前价值战场对照样本不足，暂不写金额量化{f'；证据场景：{contexts}' if contexts else ''}。"
+    if category == "竞品优势/本品短板":
+        return "同池竞品或高成交 SKU 在该卖点上表达更强，本品缺失或表达偏弱；该项用于识别补强方向，不作为本品正向价销量分摊。"
+    if category == "用户感知风险/拖后腿":
+        return "该卖点存在用户感知不足、负向反馈或证据支撑不足，可能削弱相关场景的成交解释。"
+    if category == "厂家主张待市场验证":
+        return "厂家表达存在，但当前评论和市场验证不足，暂不作为溢价或销量支撑。"
     row = group.get("representative") or {}
     return _claim_value_reason_text(row) if row else ""
 
@@ -1250,14 +1273,15 @@ def _claim_value_category_section_lines(category: str, groups: list[dict[str, An
     for group in groups:
         representative = group.get("representative") or {}
         battlefield_names = group.get("battlefield_names") or []
+        quantified = bool(battlefield_names) and str(group.get("category") or "") not in CLAIM_VALUE_TEXT_ONLY_CATEGORIES
         lines.append(
             "| "
             + " | ".join(
                 [
                     _claim_value_group_name(group),
-                    _format_money(group.get("total_price_explained")) if battlefield_names else "暂不量化",
-                    f"{_format_unit_count(group.get('total_sales_explained')) or '暂不量化'}台/周" if battlefield_names else "暂不量化",
-                    f"{_format_money(group.get('total_amount_explained')) or '暂不量化'}/周" if battlefield_names else "暂不量化",
+                    _format_money(group.get("total_price_explained")) if quantified else "不作为正向量化",
+                    f"{_format_unit_count(group.get('total_sales_explained')) or '暂不量化'}台/周" if quantified else "不作为正向量化",
+                    f"{_format_money(group.get('total_amount_explained')) or '暂不量化'}/周" if quantified else "不作为正向量化",
                     _join_cn(battlefield_names[:5]) or "价值战场暂未形成稳定量化",
                     _claim_evidence_status_text(representative) if representative else "证据待补充",
                     _claim_value_group_reason(group) or _claim_value_group_summary_cell(group),
@@ -1705,7 +1729,13 @@ def _claim_value_reason_text(row: dict[str, Any]) -> str:
         )
     reason = str(row.get("reason_cn") or "").strip()
     if reason and "价格溢价约" not in reason and "估算价格支撑" not in reason:
-        return reason.replace("估算溢价卖点", "强溢价卖点").replace("估算销量卖点", "强销量卖点")
+        return (
+            reason.replace("估算溢价卖点", "强溢价卖点")
+            .replace("估算销量卖点", "强销量卖点")
+            .replace("机会缺口", "竞品优势/本品短板")
+            .replace("用户感知不足卖点", "用户感知风险")
+            .replace("厂家主张卖点", "厂家主张待市场验证")
+        )
     return f"{label}，依据来自可比产品量价差异、参数/卖点证据、评论验证，以及价值战场、用户任务和目标客群匹配；数值用于排序和解释，不作单点因果归因。"
 
 
@@ -1729,14 +1759,14 @@ def _claim_pool_amount_text(value: Any) -> str:
 
 def _claim_sku_excess_price_text(row: dict[str, Any], sku_excess: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点"}:
+    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点", "机会缺口", "高价竞品拦截卖点", "价格上探机会卖点", "厂家主张卖点"}:
         return ""
     return _format_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "0元"
 
 
 def _claim_sku_excess_sales_text(row: dict[str, Any], sku_excess: dict[str, Any]) -> str:
     label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
-    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点"}:
+    if _base_claim_value_label(label) in {"拖后腿卖点", "用户感知不足卖点", "机会缺口", "高价竞品拦截卖点", "价格上探机会卖点", "厂家主张卖点"}:
         return ""
     formatted = _format_unit_count(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs"))
     return f"{formatted}台/周" if formatted else "0台/周"
