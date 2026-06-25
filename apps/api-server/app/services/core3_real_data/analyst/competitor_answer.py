@@ -1721,7 +1721,7 @@ def _claim_value_footnote() -> str:
 
 
 def _claim_value_reason_text(row: dict[str, Any]) -> str:
-    label = str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role")))
+    label = _claim_value_display_category(row)
     if row.get("bundle_claim_count"):
         return (
             f"{_claim_value_name(row)}共享同一可比市场中的量价差异，适合作为{_base_claim_value_label(label)}的组合解释；"
