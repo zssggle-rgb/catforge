@@ -17,7 +17,7 @@ Do not require the user to know module codes. Treat M00/M01/M02/M05 as internal 
 ## Execution Rules
 
 - Preliminary processing defaults to analysis-ready data preparation: create an incremental source batch, run cleaning, then prepare traceable evidence for later fact analysis.
-- Run one product category at a time. `--category-code TV` processes raw TV categories only; AC data must be prepared in a separate AC run before AC-specific downstream work.
+- `--category-code` is the source-batch category code, not the downstream business product category. On the current 205 all-source batch, TV and AC rows are stored under source `category_code=TV`; downstream TV/AC isolation is handled later by SKU prefix and `--product-category`. If a future upload is registered as source `category_code=AC`, run the same data-preparation command with `--category-code AC`.
 - To rerun cleaning for an existing source batch, explicitly use `--register-source-batch none --batch-id <explicit_batch_id>`.
 - Never use `--register-source-batch none --batch-id latest` for newly uploaded data. That skips M00 source registration and can silently rerun an old batch.
 - Preliminary processing must not run comment semantic or business-profile stages such as M05 and later modules.
@@ -33,6 +33,12 @@ On 205, Claude Code should prefer the installed wrapper command when available:
 
 ```bash
 catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code TV --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
+```
+
+For a future source batch explicitly registered as AC:
+
+```bash
+catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26 --category-code AC --sku-batch-size 50 --evidence-sku-batch-size 1 --format json
 ```
 
 The wrapper runs inside the CatForge API container. If the wrapper is not

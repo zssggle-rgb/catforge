@@ -106,34 +106,34 @@ The current 205 raw-data batch stores TV and AC evidence under source `category_
 - TV: `sku_code_prefix=TV`, `taxonomy_version=tv_param_taxonomy_manual_v0.1`, `rule_version=m03b_tv_param_profile_v0.1`
 - AC: `sku_code_prefix=AC`, `taxonomy_version=ac_param_taxonomy_manual_v0.1`, `rule_version=m03b_ac_param_profile_v0.1`
 
-M04C claim fact profiles currently have a published TV taxonomy only:
+M04C claim fact profiles currently support TV and AC:
 
 - TV claim profile: `taxonomy_version=tv_claim_taxonomy_manual_v0.1`, `rule_version=m04c_tv_claim_fact_profile_v0.1`
-- AC claim profile: not available until an AC standard-claim taxonomy is published.
+- AC claim profile: `taxonomy_version=ac_claim_taxonomy_manual_v0.1`, `rule_version=m04c_ac_claim_fact_profile_v0.1`
 
-M05C-B comment fact profiles currently have a published TV taxonomy only. In business conversation this stage may be called `m05b`; in this codebase it is implemented as M05C-B. It uses an LLM to classify M02 comment sentences into comment facts. M05C-C is read-only query and does not call an LLM.
+M05C-B comment fact profiles currently support TV and AC. In business conversation this stage may be called `m05b`; in this codebase it is implemented as M05C-B. It uses an LLM to classify M02 comment sentences into comment facts. M05C-C is read-only query and does not call an LLM.
 
 - TV comment profile: `taxonomy_version=tv_comment_fact_taxonomy_manual_v0.1`, `rule_version=m05c_tv_comment_fact_profile_v0.1`
-- AC comment profile: not available until an AC comment taxonomy is published.
+- AC comment profile: `taxonomy_version=ac_comment_fact_taxonomy_manual_v0.1`, `rule_version=m05c_ac_comment_fact_profile_v0.1`
 
-M09C user task profiles currently have a published TV taxonomy only. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. M07 prices derive the size-tier price band; market validation uses same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for task judgment. It uses comments as the strongest evidence for user purpose; claims are manufacturer intent; parameters are capability support. Negative comments still count as task demand, but become `drag_factor_task`.
+M09C user task profiles currently support TV and AC. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. M07 prices derive the size-tier price band; market validation uses same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for task judgment. It uses comments as the strongest evidence for user purpose; claims are manufacturer intent; parameters are capability support. Negative comments still count as task demand, but become `drag_factor_task`.
 
 - TV user task profile: `taxonomy_version=m09c_tv_user_task_taxonomy_v0.1`, `rule_version=m09c_tv_user_task_profile_v0.1`
-- AC user task profile: not available until AC user-task taxonomy is published.
+- AC user task profile: `taxonomy_version=m09c_ac_user_task_taxonomy_v0.1`, `rule_version=m09c_ac_user_task_profile_v0.1`
 
-M10C target group profiles currently have a published TV taxonomy only. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment.
+M10C target group profiles currently support TV and AC. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses category-specific size-tier policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment.
 
 - TV target group profile: `taxonomy_version=m10c_tv_target_group_taxonomy_v0.1`, `rule_version=m10c_tv_target_group_profile_v0.1`
-- AC target group profile: not available until AC target-group taxonomy is published.
+- AC target group profile: `taxonomy_version=m10c_ac_target_group_taxonomy_v0.1`, `rule_version=m10c_ac_target_group_profile_v0.1`
 
-M11C value battlefield profiles currently have a published TV taxonomy only. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses the M03B five-tier size policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for battlefield judgment.
+M11C value battlefield profiles currently support TV and AC. It is deterministic and does not call an LLM. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses category-specific size-tier policy and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. AC sparse approved size tiers can borrow adjacent peer pools for price and comparable-market context. Cumulative sales are display-only and must not be used for battlefield judgment.
 
 - TV value battlefield profile: `taxonomy_version=m11c_tv_value_battlefield_taxonomy_v0.2`, `rule_version=m11c_tv_value_battlefield_profile_v0.2`
-- AC value battlefield profile: not available until AC task/group/battlefield taxonomies are published.
+- AC value battlefield profile: `taxonomy_version=m11c_ac_value_battlefield_taxonomy_v0.1`, `rule_version=m11c_ac_value_battlefield_profile_v0.1`
 
-M11D semantic market graph and sales allocation is a deterministic result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM. Default population is `fact_complete_with_comment`, meaning only SKUs with comment facts, user-task profile, target-group profile, value-battlefield profile, and market profile enter the market graph. It generates user-task, target-group, and value-battlefield market maps plus SKU sales allocation. It outputs both total allocated sales and average weekly allocated sales; cumulative sales are display-only context, not the sole basis for comparison.
+M11D semantic market graph and sales allocation is currently configured for TV in the CLI. It is a deterministic result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM. Default population is `fact_complete_with_comment`, meaning only SKUs with comment facts, user-task profile, target-group profile, value-battlefield profile, and market profile enter the market graph. It generates user-task, target-group, and value-battlefield market maps plus SKU sales allocation. It outputs both total allocated sales and average weekly allocated sales; cumulative sales are display-only context, not the sole basis for comparison.
 
-M12C claim-value quantification and contribution attribution is a deterministic result layer. It reads current M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D outputs. It does not call an LLM. Default population is `claim_value_ready_with_comment`, meaning only SKUs with claim facts, comment facts, market profiles, semantic profiles, and semantic market graph coverage enter business-facing claim-value analysis. It generates claim comparable pools, pool metrics, SKU claim-value roles, SKU claim-contribution attribution, claim dimension summaries, and review issues. Its numbers are observable contribution estimates, not causal proof.
+M12C claim-value quantification and contribution attribution is currently configured for TV in the CLI. It is a deterministic result layer. It reads current M03B, M04C, M05C, M07, M09C, M10C, M11C, and M11D outputs. It does not call an LLM. Default population is `claim_value_ready_with_comment`, meaning only SKUs with claim facts, comment facts, market profiles, semantic profiles, and semantic market graph coverage enter business-facing claim-value analysis. It generates claim comparable pools, pool metrics, SKU claim-value roles, SKU claim-contribution attribution, claim dimension summaries, and review issues. Its numbers are observable contribution estimates, not causal proof.
 
 LLM credentials must come from environment variables. Never write API keys into skill files, committed docs, or command transcripts. On 205 validation, use `--llm-mode required` so failure to call the LLM is visible.
 
@@ -213,10 +213,22 @@ Run TV SKU claim fact profiles:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-claim-profile --product-category tv --batch-id latest --input-source auto --force-rebuild --format json
 ```
 
+Run AC SKU claim fact profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-claim-profile --product-category ac --batch-id latest --input-source auto --force-rebuild --format json
+```
+
 Run TV market profiles:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-market-profile --batch-id latest --format json
+```
+
+Run AC market profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-market-profile --product-category ac --batch-id latest --format json
 ```
 
 Run TV market profiles with an explicit SKU chunk size:
@@ -237,10 +249,20 @@ Run TV SKU comment fact profiles with LLM:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile --product-category tv --batch-id latest --llm-mode required --force-rebuild --format json
 ```
 
-Continue or accelerate TV SKU comment fact profiles with bounded SKU parallelism:
+Run AC SKU comment fact profiles with LLM:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile --product-category ac --batch-id latest --llm-mode required --force-rebuild --format json
+```
+
+Continue or accelerate TV/AC SKU comment fact profiles with bounded SKU parallelism:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile-batch --product-category tv --batch-id latest --llm-mode required --parallelism 2 --limit 10 --max-sentences-per-sku 500 --format json
+```
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-comment-profile-batch --product-category ac --batch-id latest --llm-mode required --parallelism 2 --limit 10 --max-sentences-per-sku 500 --format json
 ```
 
 After the 205 smoke run is stable, remove `--limit` and keep `--parallelism 2` or raise to `3-4` only after observing CPU, memory, and LLM timeout behavior. This batch command skips existing M05C SKU profiles by default, runs each pending SKU with coverage skipped, and rebuilds M05C coverage once at the end.
@@ -255,6 +277,12 @@ Run TV user task profiles:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-user-task --product-category tv --batch-id latest --force-rebuild --format json
+```
+
+Run AC user task profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-user-task --product-category ac --batch-id latest --force-rebuild --format json
 ```
 
 Run one TV SKU user task profile:
@@ -275,6 +303,12 @@ Run TV target group profiles:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-target-group --product-category tv --batch-id latest --force-rebuild --format json
 ```
 
+Run AC target group profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-target-group --product-category ac --batch-id latest --force-rebuild --format json
+```
+
 Run one TV SKU target group profile:
 
 ```bash
@@ -291,6 +325,12 @@ Run TV value battlefield profiles:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-value-battlefield --product-category tv --batch-id latest --force-rebuild --format json
+```
+
+Run AC value battlefield profiles:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_pipeline run-value-battlefield --product-category ac --batch-id latest --force-rebuild --format json
 ```
 
 Run one TV SKU value battlefield profile:

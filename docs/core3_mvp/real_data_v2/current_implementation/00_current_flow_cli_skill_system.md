@@ -112,7 +112,7 @@ catforge-data prepare-new-data --project-id d8d2245b-358b-4a64-95cc-9d7f2341bd26
 当前口径：
 
 - TV 使用已确认的彩电标准参数体系。
-- AC 已有空调标准参数体系，但后续卖点、评论、任务、客群、战场 taxonomy 是否完整要按当前实现确认。
+- AC 已有空调标准参数、标准卖点、标准评论、用户任务、目标客群、价值战场 taxonomy，并已接入当前 CLI 的 `--product-category ac` 路径。
 - 标准参数体系不应压制原始字段信息；原始字段能表达的事实要尽量映射进标准参数。
 - 参数画像不仅记录参数值，也记录参数所属维度、档位、在同尺寸或同价位池里的位置。
 
@@ -509,11 +509,23 @@ catforge-data inspect-data-quality ...
 - “重新生成彩电语义市场图谱和销量分配。”
 - “生成彩电卖点价值量化和贡献归因结果。”
 - “重新计算彩电溢价卖点和卖点贡献。”
+- “重新生成空调参数画像。”
+- “重新生成空调卖点事实画像。”
+- “重新生成空调评论事实画像。”
+- “重新生成空调用户任务画像。”
+- “重新生成空调目标客群画像。”
+- “重新生成空调价值战场画像。”
 
 路由到：
 
 ```bash
 catforge-pipeline ask "<用户原话>" --batch-id latest --product-category tv --force-rebuild --format json
+```
+
+空调画像生成使用：
+
+```bash
+catforge-pipeline ask "<用户原话>" --batch-id latest --product-category ac --force-rebuild --format json
 ```
 
 ### 11.3 查询现有事实或覆盖
@@ -527,11 +539,22 @@ catforge-pipeline ask "<用户原话>" --batch-id latest --product-category tv -
 - “查某个 SKU 的价值战场。”
 - “查某个价值战场有哪些 SKU。”
 - “查某个 SKU 的销量分配。”
+- “查空调标准卖点。”
+- “查空调评论事实维度。”
+- “查空调用户任务预设。”
+- “查空调目标客群预设。”
+- “查空调价值战场预设。”
 
 路由到：
 
 ```bash
 catforge-insight ask "<用户原话>" --batch-id latest --product-category tv --format json
+```
+
+空调事实查询使用：
+
+```bash
+catforge-insight ask "<用户原话>" --batch-id latest --product-category ac --format json
 ```
 
 ### 11.4 业务分析问题
@@ -621,7 +644,7 @@ OpenClaw 小奥对外回答时必须翻译成业务语言，不暴露 CLI 和内
 截至 2026-06-22：
 
 - TV 链路最完整，已覆盖参数、卖点、市场、评论、用户任务、目标客群、价值战场、语义市场图谱、卖点价值量化和小奥分析。
-- AC 已有参数标准体系和参数画像能力；卖点、评论、用户任务、目标客群、价值战场 taxonomy 是否可用，需要按当前部署能力确认。
+- AC 当前已覆盖参数、卖点、市场、评论、用户任务、目标客群、价值战场画像及对应 taxonomy 查询；语义市场图谱、卖点价值量化和小奥竞品分析仍需按后续 AC 支持情况确认。
 - 评论事实画像依赖 LLM，执行前必须确认 205 环境中的 LLM 配置可用。
 - 大批量评论画像执行要控制并行度，先冒烟再全量。
 - 如果查询返回多个候选 SKU，必须让用户二次确认；飞书入口可以做候选卡片。

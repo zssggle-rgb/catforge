@@ -57,13 +57,13 @@ If you do use this skill to answer a factual question, do not over-interpret the
 
 M05C-B, sometimes called `m05b` in business discussion, is the LLM-based comment profile generation stage. This skill is M05C-C read-only query and never calls an LLM.
 
-M09C is the deterministic TV user task profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. M07 prices derive the size-tier price band; market validation uses same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for task judgment. It uses comments as the strongest evidence for user purpose; claims are manufacturer intent; parameters are capability support. Negative comments still count as task demand, but are reported as `drag_factor_task`. This skill only queries M09C outputs and never writes data.
+M09C is the deterministic TV/AC user task profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. M07 prices derive the size-tier price band; market validation uses same-size peer overlap weeks and average weekly volume/amount. Cumulative sales are display-only and must not be used for task judgment. It uses comments as the strongest evidence for user purpose; claims are manufacturer intent; parameters are capability support. Negative comments still count as task demand, but are reported as `drag_factor_task`. This skill only queries M09C outputs and never writes data.
 
-M10C is the deterministic TV target group profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses M03B's five size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment. This skill only queries M10C outputs and never writes data.
+M10C is the deterministic TV/AC target group profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses category-specific size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for target-group judgment. This skill only queries M10C outputs and never writes data.
 
-M11C is the deterministic TV value battlefield profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses M03B's five size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. Market validation uses same-size peer overlap weeks and average weekly volume/amount; cumulative sales are display-only and must not be used for battlefield judgment. This skill only queries M11C outputs and never writes data. TV value battlefield taxonomy `m11c_tv_value_battlefield_taxonomy_v0.2` has 13 battlefields and adds `BF_GIANT_SCREEN_VALUE_DOWNTRADE` to separate low/mid/mid_high 98+ inch giant-screen value-downtrade SKUs from `BF_GIANT_HOME_THEATER_FLAGSHIP`.
+M11C is the deterministic TV/AC value battlefield profile stage. It reads M03B parameter profiles, M04C claim fact profiles, M05C comment fact profiles, M07 weighted prices, and M01 clean weekly market rows. It uses category-specific size tiers and derives `low/mid_low/mid/mid_high/high` price bands inside each size tier. AC sparse approved size tiers can borrow adjacent peer pools for price and comparable-market context. Cumulative sales are display-only and must not be used for battlefield judgment. This skill only queries M11C outputs and never writes data. TV value battlefield taxonomy `m11c_tv_value_battlefield_taxonomy_v0.2` has 13 battlefields and adds `BF_GIANT_SCREEN_VALUE_DOWNTRADE` to separate low/mid/mid_high 98+ inch giant-screen value-downtrade SKUs from `BF_GIANT_HOME_THEATER_FLAGSHIP`; AC value battlefield taxonomy is `m11c_ac_value_battlefield_taxonomy_v0.1`.
 
-M11D is the deterministic semantic market graph and sales-allocation result layer. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM and does not rejudge a SKU's user task, target group, or battlefield. Default population is `fact_complete_with_comment`, so business-facing market maps only include SKUs with comment facts and complete semantic profiles. It outputs user-task, target-group, and battlefield maps, SKU contribution rows, and SKU-level sales allocation. Use M11D when the question asks market size, SKU contribution within a dimension, or how one SKU's sales are split across multiple tasks/groups/battlefields. It reports total allocated sales and average weekly allocated sales; cumulative sales are context only.
+M11D is the deterministic semantic market graph and sales-allocation result layer. It is currently configured for TV in the CLI. It reads current M05C, M09C, M10C, M11C, and M07 outputs. It does not call an LLM and does not rejudge a SKU's user task, target group, or battlefield. Default population is `fact_complete_with_comment`, so business-facing market maps only include SKUs with comment facts and complete semantic profiles. It outputs user-task, target-group, and battlefield maps, SKU contribution rows, and SKU-level sales allocation. Use M11D when the question asks market size, SKU contribution within a dimension, or how one SKU's sales are split across multiple tasks/groups/battlefields. It reports total allocated sales and average weekly allocated sales; cumulative sales are context only.
 
 M12C claim-value quantification is generated by `catforge-pipeline` but queried through `catforge_analyst`, not `catforge_insight`, because the result is already a business interpretation of observable price, weekly-sales, and weekly-amount contribution. When the user asks "哪些卖点是溢价卖点", "某个卖点值多少钱", "卖点贡献", "比竞品贵在哪里", or "哪些卖点拖后腿", hand off to XiaoAo / `catforge_analyst` instead of answering inside this read-only fact skill.
 
@@ -287,6 +287,12 @@ Query TV standard claims:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-taxonomy --product-category tv --format json
 ```
 
+Query AC standard claims:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight claim-taxonomy --product-category ac --format json
+```
+
 Filter standard claims:
 
 ```bash
@@ -329,6 +335,12 @@ Query TV comment fact taxonomy:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-taxonomy --product-category tv --format json
 ```
 
+Query AC comment fact taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight comment-taxonomy --product-category ac --format json
+```
+
 Query comment dimension or signal coverage:
 
 ```bash
@@ -351,6 +363,12 @@ Query TV user task taxonomy:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight user-task-taxonomy --product-category tv --format json
 ```
 
+Query AC user task taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight user-task-taxonomy --product-category ac --format json
+```
+
 Query user task SKU coverage:
 
 ```bash
@@ -369,6 +387,12 @@ Query TV target group taxonomy:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight target-group-taxonomy --product-category tv --format json
 ```
 
+Query AC target group taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight target-group-taxonomy --product-category ac --format json
+```
+
 Query target group SKU coverage:
 
 ```bash
@@ -385,6 +409,12 @@ Query TV value battlefield taxonomy:
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category tv --format json
+```
+
+Query AC value battlefield taxonomy:
+
+```bash
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_insight value-battlefield-taxonomy --product-category ac --format json
 ```
 
 Query value battlefield SKU coverage:
