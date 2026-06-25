@@ -77,6 +77,10 @@ CANONICAL_SIZE_TIERS = TV_CANONICAL_SIZE_TIERS
 ALL_CANONICAL_SIZE_TIERS = TV_CANONICAL_SIZE_TIERS + AC_CANONICAL_SIZE_TIERS
 SIZE_TIER_ORDER = {tier: index for index, tier in enumerate(ALL_CANONICAL_SIZE_TIERS)}
 COMPARABLE_MARKET_POLICY_VERSION = "m11c_comparable_weekly_overlap_v1"
+MIN_PRICE_CONTEXT_POOL_SIZE = 2
+AC_APPROVED_ADJACENT_CONTEXT_POOLS: dict[str, tuple[str, ...]] = {
+    "floor_hp_3_plus": ("floor_hp_3", "floor_hp_3_plus"),
+}
 
 REL_PRIMARY = "primary_battlefield"
 REL_SECONDARY = "secondary_battlefield"
@@ -1012,14 +1016,14 @@ def price_band_policy_for_product_category(
 ) -> str:
     normalized_category = str(product_category or "").upper()
     if normalized_category == "AC":
-        return f"Derived within AC horsepower/installation tier from M07 full_observed_window weighted price percentile for {module_code}."
+        return f"Derived within AC horsepower/installation tier from M07 full_observed_window weighted price percentile for {module_code}; approved sparse tiers borrow adjacent comparable pools."
     return f"Derived within {module_code} size_tier from M07 full_observed_window weighted price percentile."
 
 
 def market_validation_policy_for_product_category(product_category: str) -> str:
     normalized_category = str(product_category or "").upper()
     if normalized_category == "AC":
-        return "Use pairwise overlapping weekly average volume/amount within M03B AC horsepower/installation tier; cumulative sales are retained only as display context."
+        return "Use pairwise overlapping weekly average volume/amount within M03B AC horsepower/installation tier; approved sparse tiers borrow adjacent comparable pools; cumulative sales are retained only as display context."
     return "Use pairwise overlapping weekly average volume/amount within M03B size_tier; cumulative sales are retained only as display context."
 
 
@@ -2305,17 +2309,39 @@ def _derive_price_bands(
         if size_tier in ALL_CANONICAL_SIZE_TIERS and price is not None:
             grouped[size_tier].append((profile.sku_code, price))
     result: dict[str, tuple[str, Decimal | None]] = {}
-    for values in grouped.values():
-        values_sorted = sorted(values, key=lambda item: (item[1], item[0]))
+    for size_tier, values in grouped.items():
+        target_sku_codes = {sku_code for sku_code, _ in values}
+        pool_tiers = _price_context_pool_tiers(size_tier, grouped)
+        pooled_values = [
+            item for pool_tier in pool_tiers for item in grouped.get(pool_tier, ())
+        ]
+        values_sorted = sorted(pooled_values, key=lambda item: (item[1], item[0]))
         n = len(values_sorted)
         if n < 2:
-            for sku_code, _ in values_sorted:
+            for sku_code, _ in values:
                 result[sku_code] = ("unknown", None)
             continue
         for index, (sku_code, _) in enumerate(values_sorted):
+            if sku_code not in target_sku_codes:
+                continue
             percentile = Decimal(index) / Decimal(n - 1)
             result[sku_code] = (_price_band(percentile), _quantize4(percentile))
     return result
+
+
+def _price_context_pool_tiers(
+    size_tier: str, grouped_values: Mapping[str, Sequence[tuple[str, Decimal]]]
+) -> tuple[str, ...]:
+    if len(grouped_values.get(size_tier, ())) >= MIN_PRICE_CONTEXT_POOL_SIZE:
+        return (size_tier,)
+    fallback_pool = AC_APPROVED_ADJACENT_CONTEXT_POOLS.get(size_tier)
+    if not fallback_pool:
+        return (size_tier,)
+    populated_pool = tuple(tier for tier in fallback_pool if grouped_values.get(tier))
+    pooled_count = sum(len(grouped_values.get(tier, ())) for tier in populated_pool)
+    if pooled_count >= MIN_PRICE_CONTEXT_POOL_SIZE:
+        return populated_pool
+    return (size_tier,)
 
 
 def _derive_comparable_market_contexts(
@@ -2353,6 +2379,12 @@ def _derive_comparable_market_contexts(
 
     result: dict[str, dict[str, Any]] = {}
     for size_tier, sku_codes in skus_by_tier.items():
+        pool_tiers = _comparable_context_pool_tiers(size_tier, skus_by_tier)
+        peer_pool_sku_codes = [
+            sku_code
+            for pool_tier in pool_tiers
+            for sku_code in skus_by_tier.get(pool_tier, ())
+        ]
         for sku_code in sku_codes:
             target_weeks = set(weekly_by_sku.get(sku_code, {}))
             if not target_weeks:
@@ -2370,7 +2402,7 @@ def _derive_comparable_market_contexts(
             overlap_week_counts: list[int] = []
             sample_peers: list[dict[str, Any]] = []
 
-            for peer_code in sku_codes:
+            for peer_code in peer_pool_sku_codes:
                 if peer_code == sku_code:
                     continue
                 peer_weeks = set(weekly_by_sku.get(peer_code, {}))
@@ -2421,7 +2453,9 @@ def _derive_comparable_market_contexts(
                 "policy_version": COMPARABLE_MARKET_POLICY_VERSION,
                 "method": "pairwise_peer_overlap_active_week_average",
                 "size_tier": size_tier,
-                "size_tier_peer_count": max(0, len(sku_codes) - 1),
+                "comparison_size_tiers": list(pool_tiers),
+                "borrowed_adjacent_context_pool": pool_tiers != (size_tier,),
+                "size_tier_peer_count": max(0, len(peer_pool_sku_codes) - 1),
                 "qualified_peer_count": len(pairwise_volume_positions),
                 "target_observed_week_count": len(target_weeks),
                 "target_week_start": min(target_weeks),
@@ -2454,9 +2488,28 @@ def _derive_comparable_market_contexts(
                 if overlap_week_counts
                 else 0,
                 "sample_peer_comparisons": sample_peers,
-                "note_cn": "销量/销额验证使用同尺寸 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
+                "note_cn": (
+                    "销量/销额验证使用已批准相邻分档 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。"
+                    if pool_tiers != (size_tier,)
+                    else "销量/销额验证使用同尺寸 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。"
+                ),
             }
     return result
+
+
+def _comparable_context_pool_tiers(
+    size_tier: str, skus_by_tier: Mapping[str, Sequence[str]]
+) -> tuple[str, ...]:
+    if len(skus_by_tier.get(size_tier, ())) >= MIN_PRICE_CONTEXT_POOL_SIZE:
+        return (size_tier,)
+    fallback_pool = AC_APPROVED_ADJACENT_CONTEXT_POOLS.get(size_tier)
+    if not fallback_pool:
+        return (size_tier,)
+    populated_pool = tuple(tier for tier in fallback_pool if skus_by_tier.get(tier))
+    pooled_count = sum(len(skus_by_tier.get(tier, ())) for tier in populated_pool)
+    if pooled_count >= MIN_PRICE_CONTEXT_POOL_SIZE:
+        return populated_pool
+    return (size_tier,)
 
 
 def _avg_decimal_raw(values: Sequence[Decimal]) -> Decimal:

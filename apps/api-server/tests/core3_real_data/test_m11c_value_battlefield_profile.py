@@ -28,6 +28,7 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     M11CRunner,
     _canonical_size_tier,
     _derive_comparable_market_contexts,
+    _derive_price_bands,
     _market_validation_score,
     ac_value_battlefield_taxonomy_v0_1,
 )
@@ -124,6 +125,48 @@ def test_m11c_single_sku_scope_uses_full_ac_batch_for_hp_price_band() -> None:
     assert profile.size_tier == "wall_hp_1_5"
     assert profile.price_band_in_size_tier == "low"
     assert profile.price_percentile_in_size_tier == Decimal("0.0000")
+
+
+def test_ac_floor_hp_3_plus_borrows_floor_hp_3_price_context() -> None:
+    base_inputs = [
+        (entities.Core3SkuParamProfile(sku_code="AC3A"), "floor_hp_3"),
+        (entities.Core3SkuParamProfile(sku_code="AC3B"), "floor_hp_3"),
+        (entities.Core3SkuParamProfile(sku_code="ACPLUS"), "floor_hp_3_plus"),
+    ]
+    market_profiles = {
+        "AC3A": entities.Core3SkuMarketProfile(
+            sku_code="AC3A", price_wavg=Decimal("5200")
+        ),
+        "AC3B": entities.Core3SkuMarketProfile(
+            sku_code="AC3B", price_wavg=Decimal("6500")
+        ),
+        "ACPLUS": entities.Core3SkuMarketProfile(
+            sku_code="ACPLUS", price_wavg=Decimal("7200")
+        ),
+    }
+    weekly_rows = [
+        *_weekly_rows(
+            "AC3A", start=1, end=4, weekly_volume=Decimal("20"), price=Decimal("5200")
+        ),
+        *_weekly_rows(
+            "AC3B", start=1, end=4, weekly_volume=Decimal("30"), price=Decimal("6500")
+        ),
+        *_weekly_rows(
+            "ACPLUS", start=1, end=4, weekly_volume=Decimal("40"), price=Decimal("7200")
+        ),
+    ]
+
+    price_bands = _derive_price_bands(base_inputs, market_profiles)
+    contexts = _derive_comparable_market_contexts(base_inputs, weekly_rows)
+
+    assert price_bands["ACPLUS"] == ("high", Decimal("1.0000"))
+    assert contexts["ACPLUS"]["size_tier"] == "floor_hp_3_plus"
+    assert contexts["ACPLUS"]["comparison_size_tiers"] == [
+        "floor_hp_3",
+        "floor_hp_3_plus",
+    ]
+    assert contexts["ACPLUS"]["borrowed_adjacent_context_pool"] is True
+    assert contexts["ACPLUS"]["qualified_peer_count"] == 2
 
 
 def make_session() -> Session:
