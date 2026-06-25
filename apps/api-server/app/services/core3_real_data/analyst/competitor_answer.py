@@ -1229,6 +1229,10 @@ def _claim_value_group_summary_cell(group: dict[str, Any]) -> str:
 
 
 def _claim_value_group_reason(group: dict[str, Any]) -> str:
+    category = str(group.get("category") or "")
+    if category == "核心事实优势/暂不量化":
+        contexts = _join_cn((group.get("evidence_contexts") or [])[:4])
+        return f"该卖点有参数、卖点事实和评论支撑，但当前价值战场对照样本不足，暂不做金额量化{f'；证据场景：{contexts}' if contexts else ''}。"
     row = group.get("representative") or {}
     return _claim_value_reason_text(row) if row else ""
 
