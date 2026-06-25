@@ -1268,8 +1268,25 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         battlefield = str(row.get("context_name") or row.get("context_code") or "").strip()
         if battlefield and battlefield not in group["battlefields"]:
             group["battlefields"].append(battlefield)
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    for original_key, group in grouped.items():
+        category = str(group.get("category") or "")
+        if category in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and not group["battlefield_rows"]:
+            category = "核心事实优势/暂不量化"
+            group["category"] = category
+        key = (category, original_key[1])
+        if key not in merged:
+            merged[key] = group
+            continue
+        existing = merged[key]
+        existing["battlefield_rows"].extend(group["battlefield_rows"])
+        existing["price_total"] += group["price_total"]
+        existing["sales_total"] += group["sales_total"]
+        for battlefield in group["battlefields"]:
+            if battlefield not in existing["battlefields"]:
+                existing["battlefields"].append(battlefield)
     order = {category: index for index, category in enumerate(_claim_value_cli_category_order())}
-    return sorted(grouped.values(), key=lambda item: (order.get(str(item.get("category") or ""), 99), str(item.get("claim_name") or "")))
+    return sorted(merged.values(), key=lambda item: (order.get(str(item.get("category") or ""), 99), str(item.get("claim_name") or "")))
 
 
 def _claim_value_cli_category(row: dict[str, Any]) -> str:

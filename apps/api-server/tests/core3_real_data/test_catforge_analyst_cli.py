@@ -2268,6 +2268,45 @@ def test_claim_value_report_sums_same_claim_within_same_category_battlefields() 
     assert "| 芯片/处理器性能 | 游戏体育流畅战场 | 420元 | 34台/周 | 70元 | 6台/周 |" in markdown
 
 
+def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified_fact() -> None:
+    rows = [
+        {
+            "claim_code": "tv_claim_hdr_brightness",
+            "claim_name": "HDR/高亮画质",
+            "claim_value_role": "premium_driver_estimated",
+            "business_value_label": "强溢价卖点",
+            "context_type": "target_group",
+            "context_code": "TG_PREMIUM_AV_ENTHUSIAST",
+            "context_name": "高端影音体验用户",
+            "size_tier": "65",
+            "price_band_group": "high",
+            "pool_effect": {
+                "pool_claim_price_delta_abs": 360,
+                "pool_claim_weekly_sales_delta_abs": 20,
+                "pool_claim_weekly_sales_amount_delta_abs": 120000,
+            },
+            "sku_excess_explanation": {
+                "sku_excess_price_explained_abs": 40,
+                "sku_excess_weekly_sales_explained_abs": 5,
+                "sku_excess_weekly_sales_amount_explained_abs": 20000,
+            },
+            "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 0.9, "semantic": 0.8},
+            "attribution_confidence": 0.8,
+        }
+    ]
+
+    markdown = "\n".join(
+        competitor_answer._product_claim_value_quantification_lines(
+            claim_value={"claim_values": rows},
+            claim_contribution={},
+        )
+    )
+
+    assert "#### 强溢价卖点" not in markdown
+    assert "#### 核心事实优势/暂不量化" in markdown
+    assert "| HDR/高亮画质 | 暂不量化 | 暂不量化 | 暂不量化 | 价值战场暂未形成稳定量化 |" in markdown
+
+
 def test_claim_value_space_returns_dimension_summary() -> None:
     session = make_session()
     result = catforge_analyst.claim_value_space(

@@ -1102,6 +1102,8 @@ def _claim_value_category_groups(rows: list[dict[str, Any]]) -> list[dict[str, A
     for group in grouped.values():
         battlefield_rows = group["battlefield_rows"]
         quant_rows = battlefield_rows
+        if _claim_value_group_needs_nonquantified_category(group):
+            group["category"] = "核心事实优势/暂不量化"
         group["total_price_explained"] = _sum_sku_excess_metric(quant_rows, "sku_excess_price_explained_abs", "price_premium_abs")
         group["total_sales_explained"] = _sum_sku_excess_metric(quant_rows, "sku_excess_weekly_sales_explained_abs", "weekly_sales_lift_abs")
         group["total_amount_explained"] = _sum_sku_excess_metric(quant_rows, "sku_excess_weekly_sales_amount_explained_abs", "weekly_sales_amount_lift_abs")
@@ -1117,6 +1119,15 @@ def _claim_value_category_groups(rows: list[dict[str, Any]]) -> list[dict[str, A
             str(group.get("claim_name") or ""),
         ),
     )
+
+
+def _claim_value_group_needs_nonquantified_category(group: dict[str, Any]) -> bool:
+    if group.get("battlefield_rows"):
+        return False
+    category = str(group.get("category") or "")
+    if category not in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}:
+        return False
+    return any(_claim_value_has_strong_fact_evidence(row) for row in group.get("rows") or [])
 
 
 def _claim_value_groups_by_category(groups: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -1238,7 +1249,7 @@ def _claim_value_category_section_lines(category: str, groups: list[dict[str, An
             + " | ".join(
                 [
                     _claim_value_group_name(group),
-                    _format_money(group.get("total_price_explained")) or "暂不量化",
+                    _format_money(group.get("total_price_explained")) if battlefield_names else "暂不量化",
                     f"{_format_unit_count(group.get('total_sales_explained')) or '暂不量化'}台/周" if battlefield_names else "暂不量化",
                     f"{_format_money(group.get('total_amount_explained')) or '暂不量化'}/周" if battlefield_names else "暂不量化",
                     _join_cn(battlefield_names[:5]) or "价值战场暂未形成稳定量化",
@@ -1256,6 +1267,17 @@ def _claim_value_category_section_lines(category: str, groups: list[dict[str, An
 
 def _claim_value_group_name(group: dict[str, Any]) -> str:
     return str(group.get("claim_name") or group.get("claim_code") or "未命名卖点")
+
+
+def _claim_value_representative_rows_for_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for group in groups:
+        representative = dict(group.get("representative") or {})
+        if not representative:
+            continue
+        representative["business_value_label"] = str(group.get("category") or representative.get("business_value_label") or "")
+        rows.append(representative)
+    return rows
 
 
 def _claim_value_battlefield_detail_lines(groups: list[dict[str, Any]]) -> list[str]:
@@ -1972,8 +1994,9 @@ def _product_claim_value_quantification_lines(
     attribution_payload = _extract_claim_contribution_payload(claim_contribution)
     attribution_lines = _claim_contribution_profile_lines(attribution_payload)
     lines.extend(["", _claim_value_footnote()])
-    lines.extend(["", *_claim_value_business_notes([group.get("representative") or {} for group in rendered_groups])])
-    action_lines = _claim_value_action_lines([group.get("representative") or {} for group in rendered_groups[:10]])
+    representative_rows = _claim_value_representative_rows_for_groups(rendered_groups)
+    lines.extend(["", *_claim_value_business_notes(representative_rows)])
+    action_lines = _claim_value_action_lines(representative_rows[:10])
     if action_lines:
         lines.extend(["", "竞品拦截与补强建议：", "", *action_lines])
     if attribution_lines:
