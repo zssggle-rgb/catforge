@@ -2251,6 +2251,7 @@ def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
             "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 1.0, "semantic": 0.8},
             "quality_flags": ["small_comparable_pool"],
             "attribution_confidence": 0.63,
+            "reason_cn": "HDMI2.1 连接 被判为样本不足；所在可比池有卖点组相对对照组价格差异约 427 元，周均销量差异约 34.3 台。",
         }
     ]
 
@@ -2266,6 +2267,8 @@ def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
     assert "| HDMI2.1 连接 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 游戏体育流畅战场 |" in markdown
     assert "价值战场明细" not in markdown
     assert "66元" not in markdown
+    assert "427 元" not in markdown
+    assert "34.3 台" not in markdown
 
 
 def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:

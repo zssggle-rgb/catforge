@@ -1729,6 +1729,16 @@ def _claim_value_footnote() -> str:
 
 def _claim_value_reason_text(row: dict[str, Any]) -> str:
     label = _claim_value_display_category(row)
+    if label == "本品优势卖点（待量化）":
+        return "本品有参数、卖点事实和评论支撑，可作为优势表达；当前可比池对照样本不足或样本偏弱，暂不写金额、销量或销额量化。"
+    if label == "竞品优势/本品短板":
+        return "同池竞品或高成交 SKU 在该卖点上表达更强，本品缺失或表达偏弱；该项用于识别补强方向，不作为本品正向价销量分摊。"
+    if label == "用户感知风险/拖后腿":
+        return "该卖点存在用户感知不足、负向反馈或证据支撑不足，可能削弱相关场景的成交解释。"
+    if label == "厂家主张待市场验证":
+        return "厂家表达存在，但当前评论和市场验证不足，暂不作为溢价或销量支撑。"
+    if label in {"样本不足", "样本不足待复核"}:
+        return "当前可比池对照样本不足或样本偏弱，只保留观察，不输出强溢价、强销量或门槛结论。"
     if row.get("bundle_claim_count"):
         return (
             f"{_claim_value_name(row)}共享同一可比市场中的量价差异，适合作为{_base_claim_value_label(label)}的组合解释；"
