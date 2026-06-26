@@ -1610,8 +1610,15 @@ class M11CProfileBuilder:
         size_price_counts: Counter[str] = Counter()
 
         for sku_input in sku_inputs:
+            comment_matches = _comment_matches_for_sku(
+                sku_input.comment_facts, self.battlefields
+            )
             sku_scores = [
-                self._score_battlefield(sku_input, battlefield)
+                self._score_battlefield(
+                    sku_input,
+                    battlefield,
+                    comment_matches.get(battlefield.battlefield_code),
+                )
                 for battlefield in self.battlefields
             ]
             sku_scores = self._assign_primary_secondary(sku_scores)
@@ -1657,10 +1664,17 @@ class M11CProfileBuilder:
         return profiles, scores, graph_snapshot, summary
 
     def _score_battlefield(
-        self, sku_input: M11CSkuInput, battlefield: M11CBattlefieldDefinition
+        self,
+        sku_input: M11CSkuInput,
+        battlefield: M11CBattlefieldDefinition,
+        comment_match: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         market_gate_status = _market_gate_status(sku_input, battlefield)
-        comment_match = _comment_match(sku_input.comment_facts, battlefield)
+        comment_match = dict(
+            comment_match
+            if comment_match is not None
+            else _comment_match(sku_input.comment_facts, battlefield)
+        )
         claim_match = _claim_match(
             sku_input.claim_facts, sku_input.claim_profile, battlefield
         )
@@ -1669,7 +1683,19 @@ class M11CProfileBuilder:
         )
         user_voice_score = comment_match["score"]
         task_group_fit_score = _task_group_fit_score(
-            comment_match, user_voice_score, market_gate_status
+            comment_match,
+            user_voice_score,
+            market_gate_status,
+            battlefield,
+            claim_match,
+            param_match,
+        )
+        comment_match["task_group_inference_reason"] = _task_group_inference_reason(
+            comment_match,
+            market_gate_status,
+            battlefield,
+            claim_match,
+            param_match,
         )
         claim_alignment_score = claim_match["score"]
         param_capability_score = param_match["score"]
@@ -1685,12 +1711,19 @@ class M11CProfileBuilder:
             sku_input.market_profile, sku_input.comparable_market_context
         )
         battlefield_score = _clamp_decimal(
-            user_voice_score * Decimal("0.30")
-            + task_group_fit_score * Decimal("0.20")
+            user_voice_score * Decimal("0.35")
+            + task_group_fit_score * Decimal("0.15")
             + claim_alignment_score * Decimal("0.15")
             + param_capability_score * Decimal("0.15")
             + market_pool_fit_score * Decimal("0.15")
             + market_validation_score * Decimal("0.05")
+        )
+        primary_reason = _primary_reason_breakdown(
+            comment_match=comment_match,
+            task_group_fit_score=task_group_fit_score,
+            claim_alignment_score=claim_alignment_score,
+            param_capability_score=param_capability_score,
+            market_validation_score=market_validation_score,
         )
         relation_status = _initial_relation_status(
             market_gate_status=market_gate_status,
@@ -1771,6 +1804,7 @@ class M11CProfileBuilder:
                     "user_voice": comment_match,
                     "claim_alignment": claim_match,
                     "param_capability": param_match,
+                    "primary_reason": primary_reason,
                     "market": _market_snapshot(
                         sku_input.market_profile, sku_input.comparable_market_context
                     ),
@@ -1826,19 +1860,30 @@ class M11CProfileBuilder:
             reverse=True,
         )
         if eligible:
-            eligible[0]["relation_status"] = REL_PRIMARY
-            eligible[0]["value_effect"] = _value_effect(
+            winner = eligible[0]
+            if len(eligible) > 1:
+                top_score = eligible[0]["battlefield_score"]
+                near_tie = [
+                    item
+                    for item in eligible
+                    if top_score - item["battlefield_score"] <= Decimal("0.0300")
+                ]
+                if len(near_tie) > 1:
+                    near_tie.sort(key=_primary_reason_sort_key, reverse=True)
+                    winner = near_tie[0]
+            winner["relation_status"] = REL_PRIMARY
+            winner["value_effect"] = _value_effect(
                 relation_status=REL_PRIMARY,
-                market_gate_status=eligible[0]["market_gate_status"],
-                user_voice_score=eligible[0]["user_voice_score"],
-                claim_score=eligible[0]["claim_alignment_score"],
-                param_score=eligible[0]["param_capability_score"],
+                market_gate_status=winner["market_gate_status"],
+                user_voice_score=winner["user_voice_score"],
+                claim_score=winner["claim_alignment_score"],
+                param_score=winner["param_capability_score"],
             )
-            eligible[0]["status_reason_cn"] = eligible[0]["status_reason_cn"].replace(
+            winner["status_reason_cn"] = winner["status_reason_cn"].replace(
                 "可作为候选战场", "作为主价值战场"
             )
-            eligible[0]["result_hash"] = _score_result_hash(
-                eligible[0], self.taxonomy.taxonomy_version, self.rule_version
+            winner["result_hash"] = _score_result_hash(
+                winner, self.taxonomy.taxonomy_version, self.rule_version
             )
 
         secondary = [
@@ -2558,9 +2603,135 @@ def _market_gate_status(
     return "mismatch"
 
 
+DIRECT_VALUE_REASON_SUBDIMENSION_CODES = {
+    "use_living_room_cinema",
+    "use_bedroom",
+    "use_gaming_sports",
+    "use_casting_online",
+    "use_living_room_large",
+    "use_bedroom_sleep",
+    "use_rental_dorm",
+    "use_humid_south",
+    "appearance_size_fit",
+    "value_price",
+    "competitor_compare",
+    "replacement_source",
+    "picture_clarity_resolution",
+    "picture_brightness_hdr",
+    "picture_color_accuracy",
+    "picture_local_dimming_black",
+    "gaming_high_refresh_motion",
+    "system_smooth_ads",
+    "audio_quality",
+    "picture_eye_care_reflection",
+}
+
+DIRECT_VALUE_REASON_KEYWORDS = (
+    "买",
+    "选",
+    "选择",
+    "适合",
+    "用来",
+    "用着",
+    "看电影",
+    "看剧",
+    "看球",
+    "游戏",
+    "ps5",
+    "xbox",
+    "客厅",
+    "卧室",
+    "换",
+    "升级",
+    "同价位",
+    "性价比",
+    "划算",
+    "值",
+    "值得",
+    "高清",
+    "画质",
+    "色彩",
+    "亮度",
+    "流畅",
+    "不卡",
+    "护眼",
+    "舒服",
+    "音效",
+    "沉浸",
+    "影院",
+)
+
+EXPLICIT_TASK_GROUP_SUBDIMENSION_CODES = {
+    "use_living_room_cinema",
+    "use_bedroom",
+    "use_gaming_sports",
+    "use_casting_online",
+    "audience_senior",
+    "audience_child_family",
+    "audience_rental_room",
+    "use_bedroom_sleep",
+    "use_living_room_large",
+    "use_rental_dorm",
+    "use_humid_south",
+    "audience_senior_parent",
+    "audience_family",
+    "audience_child_baby",
+    "audience_rental_young",
+    "audience_sensitive",
+}
+
+EXPERIENCE_TASK_GROUP_INFERENCE_RULES: dict[str, set[str]] = {
+    "BF_PREMIUM_PICTURE_UPGRADE": {
+        "picture_clarity_resolution",
+        "picture_brightness_hdr",
+        "picture_color_accuracy",
+        "picture_local_dimming_black",
+        "audio_quality",
+    },
+    "BF_LARGE_SCREEN_FAMILY_CINEMA": {
+        "picture_clarity_resolution",
+        "picture_brightness_hdr",
+        "audio_quality",
+        "appearance_size_fit",
+    },
+    "BF_MAINSTREAM_LIVING_BALANCE": {
+        "picture_clarity_resolution",
+        "picture_eye_care_reflection",
+        "system_smooth_ads",
+        "audio_quality",
+    },
+}
+
+
+def _comment_matches_for_sku(
+    comment_facts: Sequence[entities.Core3CommentFactAtom],
+    battlefields: Sequence[M11CBattlefieldDefinition],
+) -> dict[str, dict[str, Any]]:
+    raw_matches = {
+        battlefield.battlefield_code: _comment_match(
+            comment_facts, battlefield, max_fact_count=1, finalize_score=False
+        )
+        for battlefield in battlefields
+    }
+    max_fact_count = max(
+        (int(match["fact_count"]) for match in raw_matches.values()), default=0
+    )
+    return {
+        battlefield.battlefield_code: _finalize_comment_match(
+            raw_matches[battlefield.battlefield_code],
+            battlefield,
+            max_fact_count=max_fact_count,
+        )
+        for battlefield in battlefields
+    }
+
+
 def _comment_match(
     comment_facts: Sequence[entities.Core3CommentFactAtom],
     battlefield: M11CBattlefieldDefinition,
+    *,
+    max_fact_count: int | None = None,
+    finalize_score: bool = True,
 ) -> dict[str, Any]:
     wanted = set(battlefield.comment_subdimension_codes)
     rows = [
@@ -2577,17 +2748,13 @@ def _comment_match(
     negative_count = int(polarity_counts.get("negative", 0))
     mixed_count = int(polarity_counts.get("mixed", 0))
     neutral_count = int(polarity_counts.get("neutral", 0))
-    raw_score = (
-        Decimal(positive_count) * Decimal("1.00")
-        + Decimal(mixed_count) * Decimal("0.75")
-        + Decimal(neutral_count) * Decimal("0.45")
-        + Decimal(negative_count) * Decimal("0.55")
-    ) / Decimal("3")
-    if negative_count and negative_count >= positive_count:
-        raw_score = max(raw_score, Decimal("0.4500"))
-    score = _clamp_decimal(raw_score)
-    return {
-        "score": score,
+    direct_value_reason_count = sum(
+        1
+        for row in rows
+        if _is_direct_value_reason_comment(row.subdimension_code, row.clean_comment_text)
+    )
+    payload = {
+        "score": Decimal("0.0000"),
         "fact_count": len(rows),
         "positive_count": positive_count,
         "negative_count": negative_count,
@@ -2598,12 +2765,101 @@ def _comment_match(
             positive_count, negative_count, mixed_count, neutral_count
         ),
         "sample_comments": [row.clean_comment_text for row in rows[:5]],
+        "direct_value_reason_count": direct_value_reason_count,
         "evidence_ids": _unique(
             evidence_id
             for row in rows
             for evidence_id in _list_or_empty(row.evidence_ids)
         ),
     }
+    if not finalize_score:
+        return payload
+    return _finalize_comment_match(
+        payload,
+        battlefield,
+        max_fact_count=max_fact_count if max_fact_count is not None else len(rows),
+    )
+
+
+def _finalize_comment_match(
+    payload: Mapping[str, Any],
+    battlefield: M11CBattlefieldDefinition,
+    *,
+    max_fact_count: int | None,
+) -> dict[str, Any]:
+    result = dict(payload)
+    fact_count = int(result.get("fact_count") or 0)
+    positive_count = int(result.get("positive_count") or 0)
+    negative_count = int(result.get("negative_count") or 0)
+    mixed_count = int(result.get("mixed_count") or 0)
+    neutral_count = int(result.get("neutral_count") or 0)
+    direct_value_reason_count = int(result.get("direct_value_reason_count") or 0)
+    matched_subdimensions = set(result.get("matched_subdimension_codes") or [])
+    max_count = max(1, int(max_fact_count or fact_count or 1))
+
+    presence_score = Decimal("1.0000") if fact_count else Decimal("0.0000")
+    relative_intensity_score = _clamp_decimal(
+        Decimal(fact_count) / Decimal(max_count)
+    )
+    configured_subdimension_count = max(1, len(battlefield.comment_subdimension_codes))
+    subdimension_coverage_score = _clamp_decimal(
+        Decimal(len(matched_subdimensions)) / Decimal(configured_subdimension_count)
+    )
+    direct_value_reason_score = (
+        _clamp_decimal(Decimal(direct_value_reason_count) / Decimal(fact_count))
+        if fact_count
+        else Decimal("0.0000")
+    )
+    sentiment_score = _sentiment_score(
+        positive_count, negative_count, mixed_count, neutral_count
+    )
+    score = _clamp_decimal(
+        presence_score * Decimal("0.35")
+        + relative_intensity_score * Decimal("0.25")
+        + subdimension_coverage_score * Decimal("0.15")
+        + direct_value_reason_score * Decimal("0.15")
+        + sentiment_score * Decimal("0.10")
+    )
+    result.update(
+        {
+            "score": score,
+            "presence_score": presence_score,
+            "relative_comment_intensity_score": relative_intensity_score,
+            "subdimension_coverage_score": subdimension_coverage_score,
+            "direct_value_reason_score": direct_value_reason_score,
+            "sentiment_score": sentiment_score,
+            "comment_fact_count": fact_count,
+            "positive_comment_count": positive_count,
+            "negative_comment_count": negative_count,
+        }
+    )
+    return result
+
+
+def _is_direct_value_reason_comment(
+    subdimension_code: str | None, text: str | None
+) -> bool:
+    if subdimension_code in DIRECT_VALUE_REASON_SUBDIMENSION_CODES:
+        return True
+    normalized = str(text or "").lower()
+    return any(keyword in normalized for keyword in DIRECT_VALUE_REASON_KEYWORDS)
+
+
+def _sentiment_score(
+    positive_count: int, negative_count: int, mixed_count: int, neutral_count: int
+) -> Decimal:
+    total = positive_count + negative_count + mixed_count + neutral_count
+    if total <= 0:
+        return Decimal("0.0000")
+    if negative_count and negative_count >= positive_count:
+        return Decimal("0.2500")
+    weighted = (
+        Decimal(positive_count) * Decimal("1.0000")
+        + Decimal(mixed_count) * Decimal("0.6500")
+        + Decimal(neutral_count) * Decimal("0.5000")
+        + Decimal(negative_count) * Decimal("0.2000")
+    ) / Decimal(total)
+    return _clamp_decimal(weighted)
 
 
 def _comment_text_matches(
@@ -2619,27 +2875,29 @@ def _comment_text_matches(
 
 
 def _task_group_fit_score(
-    comment_match: Mapping[str, Any], user_voice_score: Decimal, market_gate_status: str
+    comment_match: Mapping[str, Any],
+    user_voice_score: Decimal,
+    market_gate_status: str,
+    battlefield: M11CBattlefieldDefinition,
+    claim_match: Mapping[str, Any],
+    param_match: Mapping[str, Any],
 ) -> Decimal:
     matched_subdimensions = set(comment_match.get("matched_subdimension_codes") or [])
-    if matched_subdimensions & {
-        "use_living_room_cinema",
-        "use_bedroom",
-        "use_gaming_sports",
-        "use_casting_online",
-        "audience_senior",
-        "audience_child_family",
-        "audience_rental_room",
-        "use_bedroom_sleep",
-        "use_living_room_large",
-        "use_rental_dorm",
-        "use_humid_south",
-        "audience_senior_parent",
-        "audience_family",
-        "audience_child_baby",
-        "audience_rental_young",
-        "audience_sensitive",
-    }:
+    if matched_subdimensions & EXPLICIT_TASK_GROUP_SUBDIMENSION_CODES:
+        return Decimal("0.8000")
+    inferable_subdimensions = EXPERIENCE_TASK_GROUP_INFERENCE_RULES.get(
+        battlefield.battlefield_code, set()
+    )
+    if (
+        market_gate_status in {"matched", "adjacent"}
+        and matched_subdimensions & inferable_subdimensions
+        and (
+            _decimal(claim_match.get("score")) or Decimal("0.0000")
+        ) >= Decimal("0.5500")
+        and (
+            _decimal(param_match.get("score")) or Decimal("0.0000")
+        ) >= Decimal("0.5500")
+    ):
         return Decimal("0.8000")
     if user_voice_score >= Decimal("0.5500"):
         return Decimal("0.6000")
@@ -2648,6 +2906,84 @@ def _task_group_fit_score(
     if market_gate_status == "matched":
         return Decimal("0.2500")
     return Decimal("0.0000")
+
+
+def _task_group_inference_reason(
+    comment_match: Mapping[str, Any],
+    market_gate_status: str,
+    battlefield: M11CBattlefieldDefinition,
+    claim_match: Mapping[str, Any],
+    param_match: Mapping[str, Any],
+) -> str:
+    matched_subdimensions = set(comment_match.get("matched_subdimension_codes") or [])
+    if matched_subdimensions & EXPLICIT_TASK_GROUP_SUBDIMENSION_CODES:
+        return "评论直接出现用途、人群或购买场景，任务客群强命中。"
+    inferable_subdimensions = EXPERIENCE_TASK_GROUP_INFERENCE_RULES.get(
+        battlefield.battlefield_code, set()
+    )
+    claim_score = _decimal(claim_match.get("score")) or Decimal("0.0000")
+    param_score = _decimal(param_match.get("score")) or Decimal("0.0000")
+    if (
+        market_gate_status in {"matched", "adjacent"}
+        and matched_subdimensions & inferable_subdimensions
+        and claim_score >= Decimal("0.5500")
+        and param_score >= Decimal("0.5500")
+    ):
+        return "产品体验评论集中，且尺寸价格、卖点和参数支撑成立，反推核心任务客群。"
+    if (comment_match.get("score") or Decimal("0.0000")) >= Decimal("0.5500"):
+        return "评论强但以泛体验为主，任务客群弱推断。"
+    if market_gate_status == "matched" and (
+        comment_match.get("score") or Decimal("0.0000")
+    ) > Decimal("0.0000"):
+        return "评论有线索且市场门槛匹配，任务客群低强度推断。"
+    if market_gate_status == "matched":
+        return "市场门槛匹配，但评论任务客群证据弱。"
+    return "尺寸价格门槛不匹配或缺少有效任务客群证据。"
+
+
+def _primary_reason_breakdown(
+    *,
+    comment_match: Mapping[str, Any],
+    task_group_fit_score: Decimal,
+    claim_alignment_score: Decimal,
+    param_capability_score: Decimal,
+    market_validation_score: Decimal,
+) -> dict[str, Any]:
+    relative_comment_intensity_score = _decimal(
+        comment_match.get("relative_comment_intensity_score")
+    ) or Decimal("0.0000")
+    direct_value_reason_score = _decimal(
+        comment_match.get("direct_value_reason_score")
+    ) or Decimal("0.0000")
+    score = _clamp_decimal(
+        relative_comment_intensity_score * Decimal("0.30")
+        + direct_value_reason_score * Decimal("0.20")
+        + task_group_fit_score * Decimal("0.15")
+        + claim_alignment_score * Decimal("0.15")
+        + param_capability_score * Decimal("0.15")
+        + market_validation_score * Decimal("0.05")
+    )
+    return {
+        "score": score,
+        "relative_comment_intensity_score": relative_comment_intensity_score,
+        "direct_value_reason_score": direct_value_reason_score,
+        "task_group_fit_score": task_group_fit_score,
+        "claim_alignment_score": claim_alignment_score,
+        "param_capability_score": param_capability_score,
+        "market_validation_score": market_validation_score,
+    }
+
+
+def _primary_reason_sort_key(payload: Mapping[str, Any]) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    primary_reason = (payload.get("score_breakdown_json") or {}).get(
+        "primary_reason"
+    ) or {}
+    return (
+        _decimal(primary_reason.get("score")) or Decimal("0.0000"),
+        _decimal(payload.get("user_voice_score")) or Decimal("0.0000"),
+        _decimal(payload.get("param_capability_score")) or Decimal("0.0000"),
+        _decimal(payload.get("claim_alignment_score")) or Decimal("0.0000"),
+    )
 
 
 def _claim_match(

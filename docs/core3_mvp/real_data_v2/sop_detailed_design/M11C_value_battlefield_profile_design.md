@@ -60,11 +60,12 @@ flowchart TD
 5. 读取 M04C 卖点事实，区分 `fact_claim`、`claimed_only`、`unsupported_claim`、`service_separate`。
 6. 读取 M05C 评论事实，提取用户用途、人群、体验、价值感、品牌力、竞品、正负向和反证关系。
 7. 首版按价值战场 taxonomy 内的任务/客群 code 和证据规则，间接判断任务与客群匹配；M09C/M10C 落地后再作为可选增强输入。
-8. 对每个 SKU × 战场执行市场门槛、评论、任务/客群规则、卖点、参数和市场验证评分。
-9. 根据得分、门槛、用户声音和支撑状态判定 `relation_status` 与 `value_effect`。
-10. 聚合每个 SKU 的主/辅/机会/拖后腿战场。
-11. 重建批次级价值战场图谱和覆盖统计。
-12. 写入复核问题。
+8. 对每个 SKU × 战场先计算评论匹配明细，并在 SKU 内做相对强度归一，避免多个战场评论分同时满分。
+9. 对每个 SKU × 战场执行市场门槛、评论强度、任务/客群规则、卖点、参数和市场验证评分。
+10. 根据得分、门槛、用户声音和支撑状态判定候选 `relation_status` 与 `value_effect`。
+11. 聚合每个 SKU 的主/辅/机会/拖后腿战场；当主/辅候选分差很小时执行主支付理由兜底判定。
+12. 重建批次级价值战场图谱和覆盖统计。
+13. 写入复核问题。
 
 ## 3. 价值战场 taxonomy
 
@@ -139,10 +140,12 @@ M11C 在 `size_tier` 内按 SKU 加权均价计算价格分位：
 
 ### 4.2 分项得分
 
+M11C TV 评分规则版本调整为 `m11c_tv_value_battlefield_profile_v0.3`。`v0.3` 的核心变化是：评论分不再只按“是否强支持”给满分，而是体现同一 SKU 内不同战场的用户声音强弱；任务客群分允许由高可信产品体验评论反推。
+
 ```text
 battlefield_score =
-  user_voice_score * 0.30
-  + task_group_fit_score * 0.20
+  user_voice_score * 0.35
+  + task_group_fit_score * 0.15
   + claim_alignment_score * 0.15
   + param_capability_score * 0.15
   + market_pool_fit_score * 0.15
@@ -151,11 +154,101 @@ battlefield_score =
 
 说明：
 
-- `user_voice_score` 最高权重，因为用户任务和客群是主观需求，评论优先。
+- `user_voice_score` 最高权重，因为用户任务和客群是主观需求，评论优先；该分数必须体现评论数量和集中度差异。
 - `market_pool_fit_score` 仍是硬门槛；权重不是唯一约束。
 - `claim_alignment_score` 使用 M04C 参数支撑后的卖点。无参数支撑的卖点不得高分。
 - `param_capability_score` 证明产品有没有能力，但不能单独决定用户战场。
 - `market_validation_score` 用同尺寸重叠在售周的周均销量/销额、价格效率增强，不直接生成战场；累计销量和累计销额仅展示，不参与主/辅/机会/拖后腿战场判断。
+
+#### 4.2.1 用户声音分
+
+`user_voice_score` 的输入来自 M05C 评论事实，不直接读取原始评论。实现时需要先完成同一 SKU 所有战场的评论匹配，再进行 SKU 内归一。
+
+```text
+user_voice_score =
+  presence_score * 0.35
+  + relative_intensity_score * 0.25
+  + subdimension_coverage_score * 0.15
+  + direct_value_reason_score * 0.15
+  + sentiment_score * 0.10
+```
+
+字段含义：
+
+| 字段 | 计算口径 |
+| --- | --- |
+| `presence_score` | 有非服务类产品事实评论匹配时为 1，否则为 0 |
+| `relative_intensity_score` | 当前战场匹配评论数 / 该 SKU 所有候选战场最大匹配评论数，最高 1 |
+| `subdimension_coverage_score` | 当前战场命中的评论子维度数 / 该战场配置子维度数，最高 1 |
+| `direct_value_reason_score` | 评论包含用途、比较、同价位、值得、换新、沉浸、游戏、护眼等购买/使用理由时提高 |
+| `sentiment_score` | 正向为主接近 1，正负混合降分，负向集中进入拖后腿 |
+
+示例：海信 65E7Q 中，高端画质升级战场匹配约 32 条评论，游戏体育流畅战场匹配约 8 条评论。两者都可以是正向强支持，但不得同为 `user_voice_score=1.0`。高端画质因评论集中度和画质子维度覆盖更强，应获得更高用户声音分。
+
+#### 4.2.2 任务客群适配分
+
+`task_group_fit_score` 不只看显式用途词。它由三类证据共同决定：
+
+1. **直接用途/人群评论**：如游戏、看球、投屏、孩子、老人、卧室、换新，直接命中战场任务/客群。
+2. **产品体验反推任务/客群**：如高清、色彩真实、亮度高、控光好、音效好，在尺寸价格门槛和参数/卖点支撑成立时，可反推高端画质体验、影院沉浸观影、高端影音体验用户。
+3. **后续 M09C/M10C 增强输入**：当 SKU 用户任务画像和目标客群画像已生成时，作为增强证据接入，但不得覆盖评论优先原则。
+
+评分建议：
+
+| 分值 | 规则 |
+| --- | --- |
+| `0.80` | 直接用途/人群评论命中，或产品体验评论 + 参数/卖点强支撑足以反推核心任务/客群 |
+| `0.60` | 评论强但主要是泛体验，任务/客群需要弱推断 |
+| `0.45` | 评论有线索但不集中，且市场门槛 matched |
+| `0.25` | 市场门槛 matched，但评论弱 |
+| `0.00` | 市场门槛不匹配或无有效证据 |
+
+高端画质类映射规则：
+
+| 评论子维度 | 可反推任务 | 可反推客群 | 附加条件 |
+| --- | --- | --- | --- |
+| `picture_clarity_resolution` | 高端画质体验、影院沉浸观影 | 高端影音体验用户 | 中大尺寸中高价以上，且画质卖点/参数成立 |
+| `picture_color_accuracy` | 高端画质体验 | 高端影音体验用户 | 色域/量子点/MiniLED/OLED/QD 等至少一类成立 |
+| `picture_brightness_hdr` | 高端画质体验、影院沉浸观影 | 高端影音体验用户 | 亮度/HDR/控光参数或卖点成立 |
+| `audio_quality` | 影院沉浸观影 | 高端影音体验用户 | 音频/杜比/影院卖点成立 |
+
+这条规则用于避免高端画质评论只被算作“产品体验”，而没有进入任务客群分。
+
+#### 4.2.3 主战场近分兜底
+
+候选战场满足以下条件时进入主战场兜底：
+
+```text
+top_score - second_score <= 0.03
+and top.market_gate_status == "matched"
+and second.market_gate_status == "matched"
+and both relation candidates are primary/secondary capable
+```
+
+兜底排序不再只看 `battlefield_score`，而看 `primary_reason_score`：
+
+```text
+primary_reason_score =
+  relative_comment_intensity_score * 0.30
+  + direct_value_reason_score * 0.20
+  + task_group_fit_score * 0.15
+  + claim_alignment_score * 0.15
+  + param_capability_score * 0.15
+  + market_validation_score * 0.05
+```
+
+业务解释：
+
+- 评论更集中、且更接近支付理由的战场优先。
+- 参数和卖点更完整解释该 SKU 高价位置的战场优先。
+- 辅助能力型战场不得因为任务词命中多一点，就压过主要支付理由战场。
+
+验收样例：海信 65E7Q 在 65 寸高价池中，高端画质评论、卖点和参数更集中，游戏体育流畅同样成立但更像强辅能力。按 `v0.3` 规则应输出：
+
+```text
+primary_battlefield_code = BF_PREMIUM_PICTURE_UPGRADE
+secondary_battlefield_codes includes BF_GAMING_SPORTS_FLUENCY
+```
 
 ### 4.3 状态判定
 
@@ -479,6 +572,9 @@ CLI 实现后更新两个 skill。
 8. 服务隔离测试：安装/物流/售后不得进入产品价值战场。
 9. 图谱测试：每个战场能查询覆盖 SKU，并区分主/辅/机会/拖后腿。
 10. CLI 测试：全量、单 SKU、单战场、图谱重建、自然语言 ask 都有确定性结果。
+11. 评论强度测试：同一 SKU 中两个战场均有正向评论时，32 条评论的战场用户声音分必须高于 8 条评论的战场，不能同时满分。
+12. 任务客群反推测试：高价中大尺寸 SKU 的“高清、画质清晰、色彩真实、亮度高”等评论，在画质参数/卖点成立时，必须增强高端画质体验任务和高端影音客群。
+13. 近分兜底测试：海信 65E7Q 类样例中，高端画质升级和游戏体育流畅综合分差小于 `0.03` 时，应以高端画质升级为主战场、游戏体育流畅为辅战场。
 
 ## 11. 增量与性能
 

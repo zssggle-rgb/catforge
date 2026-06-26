@@ -41,6 +41,7 @@ SKU_MID = "TV00090002"
 SKU_HIGH = "TV00090003"
 SKU_GIANT_VALUE = "TV00090004"
 SKU_GIANT_FLAGSHIP = "TV00090005"
+SKU_HISENSE_65E7Q = "TV00029112"
 AC_BATCH_ID = "m00_202606210012_ac"
 AC_LOW = "AC000LOW"
 AC_MID = "AC000MID"
@@ -451,7 +452,16 @@ def seed_sku(
     volume: Decimal,
 ) -> None:
     amount = price * volume
-    size_tier = "giant_98_plus" if size >= 98 else "xlarge_70_85"
+    if size >= 98:
+        size_tier = "giant_98_plus"
+    elif size >= 70:
+        size_tier = "xlarge_70_85"
+    elif size >= 60:
+        size_tier = "large_60_69"
+    elif size >= 46:
+        size_tier = "medium_46_59"
+    else:
+        size_tier = "small_32_45"
     session.add(
         entities.Core3SkuParamProfile(
             sku_param_profile_id=f"param-{sku_code}",
@@ -797,6 +807,223 @@ def comment_fact(
     )
 
 
+def seed_hisense_65e7q_battlefield_case(session: Session) -> None:
+    seed_sku(
+        session,
+        SKU_HISENSE_65E7Q,
+        "65E7Q",
+        "海信",
+        size=65,
+        price=Decimal("5949"),
+        volume=Decimal("6023"),
+    )
+    seed_sku(
+        session,
+        "TV00029113",
+        "65Q9L PRO",
+        "TCL",
+        size=65,
+        price=Decimal("5522"),
+        volume=Decimal("4268"),
+    )
+    seed_sku(
+        session,
+        "TV00029114",
+        "65A7H PRO",
+        "创维",
+        size=65,
+        price=Decimal("5637"),
+        volume=Decimal("5199"),
+    )
+    seed_hisense_65e7q_params(session)
+    seed_hisense_65e7q_claims(session)
+    seed_hisense_65e7q_comments(session)
+
+
+def seed_hisense_65e7q_params(session: Session) -> None:
+    profile = session.execute(
+        select(entities.Core3SkuParamProfile).where(
+            entities.Core3SkuParamProfile.sku_code == SKU_HISENSE_65E7Q
+        )
+    ).scalar_one()
+    values = dict(profile.param_values_json or {})
+    values.update(
+        {
+            "display_tech_class": {
+                "normalized_value": "MiniLED",
+                "value_presence": "present",
+            },
+            "mini_led_flag": {"normalized_value": True, "value_presence": "present"},
+            "mini_led_type": {
+                "normalized_value": "high_end",
+                "value_presence": "present",
+            },
+            "quantum_dot_flag": {
+                "normalized_value": False,
+                "value_presence": "present",
+            },
+            "local_dimming_zone_count": {
+                "normalized_value": 1920,
+                "numeric_value": 1920,
+                "value_presence": "present",
+            },
+            "color_gamut_ratio": {
+                "normalized_value": 95,
+                "numeric_value": 95,
+                "value_presence": "present",
+            },
+            "processor_chip_model": {
+                "normalized_value": "MT9655",
+                "value_presence": "present",
+            },
+            "declared_refresh_rate_hz": {
+                "normalized_value": 300,
+                "numeric_value": 300,
+                "value_presence": "present",
+            },
+            "hdmi_version_mix": {
+                "normalized_value": "HDMI2.1",
+                "value_presence": "present",
+            },
+            "hdmi_2_1_port_count": {
+                "normalized_value": 2,
+                "numeric_value": 2,
+                "value_presence": "present",
+            },
+        }
+    )
+    profile.param_values_json = values
+    profile.known_param_count = len(values)
+
+
+def seed_hisense_65e7q_claims(session: Session) -> None:
+    claim_codes = [
+        "tv_claim_miniled_display",
+        "tv_claim_hdr_high_brightness",
+        "tv_claim_wide_color_accuracy",
+        "tv_claim_local_dimming",
+        "tv_claim_picture_engine_ai",
+        "tv_claim_high_refresh_rate",
+        "tv_claim_gaming_low_latency",
+        "tv_claim_hdmi21_connectivity",
+    ]
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id=f"claim-profile-{SKU_HISENSE_65E7Q}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code=SKU_HISENSE_65E7Q,
+            model_name="65E7Q",
+            brand_name="海信",
+            raw_claim_count=len(claim_codes),
+            matched_claim_count=len(claim_codes),
+            fact_claim_count=len(claim_codes),
+            unsupported_claim_count=0,
+            param_unknown_claim_count=0,
+            service_separate_claim_count=0,
+            claim_texts_json=[],
+            claim_codes=claim_codes,
+            fact_claim_codes=claim_codes,
+            unsupported_claim_codes=[],
+            service_claim_codes=[],
+            dimension_profile_json={},
+            dimension_position_profile_json={},
+            claim_summary_json={},
+            evidence_ids=["ev-claim-profile-65e7q"],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash="sha256:claim-profile-65e7q",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
+    for claim_code in claim_codes:
+        session.add(
+            claim_fact(
+                SKU_HISENSE_65E7Q,
+                "65E7Q",
+                "海信",
+                claim_code,
+                claim_code.replace("tv_claim_", ""),
+            )
+        )
+
+
+def seed_hisense_65e7q_comments(session: Session) -> None:
+    picture_comments = [
+        ("picture_clarity_resolution", "画质清晰，细节非常好"),
+        ("picture_clarity_resolution", "好高清，换掉老电视后提升明显"),
+        ("picture_clarity_resolution", "屏幕清晰，看电影很舒服"),
+        ("picture_clarity_resolution", "65寸画面细腻，客厅观影效果好"),
+        ("picture_brightness_hdr", "亮度很高，白天客厅看也清楚"),
+        ("picture_brightness_hdr", "同价位亮度高，HDR效果明显"),
+        ("picture_brightness_hdr", "高亮画面有层次，暗场也稳"),
+        ("picture_color_accuracy", "色彩真实，人物肤色自然"),
+        ("picture_color_accuracy", "色彩鲜艳但不偏，画质满意"),
+        ("picture_color_accuracy", "色彩和清晰度都符合高端预期"),
+        ("picture_local_dimming_black", "控光不错，黑位表现比旧电视好"),
+        ("use_living_room_cinema", "客厅看大片有影院感"),
+    ]
+    gaming_comments = [
+        ("gaming_high_refresh_motion", "画面切换流畅"),
+        ("gaming_high_refresh_motion", "高刷画面不卡顿"),
+        ("use_gaming_sports", "游戏性能不错，适合接主机"),
+        ("system_smooth_ads", "系统流畅不卡顿"),
+    ]
+    comments = picture_comments + gaming_comments
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id=f"comment-profile-{SKU_HISENSE_65E7Q}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+            sku_code=SKU_HISENSE_65E7Q,
+            model_name="65E7Q",
+            brand_name="海信",
+            comment_sentence_count=len(comments),
+            matched_sentence_count=len(comments),
+            fact_atom_count=len(comments),
+            product_fact_sentence_count=len(comments),
+            positive_sentence_count=len(comments),
+            negative_sentence_count=0,
+            dimension_summary_json={},
+            signal_summary_json={},
+            param_comment_support_json={},
+            claim_comment_support_json={},
+            polarity_summary_json={},
+            evidence_examples_json=[],
+            supported_param_codes=[],
+            contradicted_param_codes=[],
+            unmentioned_param_codes=[],
+            supported_claim_codes=[],
+            contradicted_claim_codes=[],
+            unmentioned_claim_codes=[],
+            evidence_ids=["ev-comment-profile-65e7q"],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash="sha256:comment-profile-65e7q",
+            rule_version=CORE3_M05C_TV_RULE_VERSION,
+        )
+    )
+    for index, (subdimension_code, text) in enumerate(comments, start=1):
+        session.add(
+            comment_fact(
+                SKU_HISENSE_65E7Q,
+                "65E7Q",
+                "海信",
+                index,
+                subdimension_code,
+                text,
+                "product_experience",
+                "产品体验",
+            )
+        )
+
+
 def test_m11c_runner_generates_value_battlefield_profile_and_graph():
     session = make_session()
 
@@ -840,6 +1067,51 @@ def test_m11c_runner_generates_value_battlefield_profile_and_graph():
     assert graph.battlefield_count == 13
     assert "BF_LARGE_SCREEN_VALUE_UPGRADE" in graph.coverage_summary_json
     assert "BF_GIANT_SCREEN_VALUE_DOWNTRADE" in graph.coverage_summary_json
+
+
+def test_m11c_prefers_premium_picture_when_comment_evidence_is_stronger_than_gaming():
+    session = make_session()
+    seed_hisense_65e7q_battlefield_case(session)
+
+    result = M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        target_sku_codes=[SKU_HISENSE_65E7Q],
+        force_rebuild=True,
+    )
+    session.commit()
+
+    assert result.status == Core3RunStatus.SUCCESS
+    profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(
+            entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_HISENSE_65E7Q
+        )
+    ).scalar_one()
+    assert profile.size_tier == "large_60_69"
+    assert profile.price_band_in_size_tier == "high"
+    assert profile.primary_battlefield_code == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert "BF_GAMING_SPORTS_FLUENCY" in profile.secondary_battlefield_codes_json
+
+    scores = {
+        row.battlefield_code: row
+        for row in session.execute(
+            select(entities.Core3SkuValueBattlefieldScore).where(
+                entities.Core3SkuValueBattlefieldScore.sku_code == SKU_HISENSE_65E7Q
+            )
+        ).scalars()
+    }
+    picture = scores["BF_PREMIUM_PICTURE_UPGRADE"]
+    gaming = scores["BF_GAMING_SPORTS_FLUENCY"]
+    assert picture.relation_status == "primary_battlefield"
+    assert gaming.relation_status == "secondary_battlefield"
+    assert picture.user_voice_score > gaming.user_voice_score
+    assert picture.task_group_fit_score == Decimal("0.8000")
+    assert (
+        picture.score_breakdown_json["user_voice"]["relative_comment_intensity_score"]
+        > gaming.score_breakdown_json["user_voice"]["relative_comment_intensity_score"]
+    )
 
 
 def test_m11c_splits_giant_value_downtrade_from_flagship():
