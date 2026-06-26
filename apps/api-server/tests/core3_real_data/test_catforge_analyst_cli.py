@@ -2225,6 +2225,86 @@ def test_claim_value_report_keeps_specific_claims_with_battlefield_totals() -> N
     assert "价值战场明细" in markdown
 
 
+def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
+    rows = [
+        {
+            "claim_code": "tv_claim_hdmi21_connectivity",
+            "claim_name": "HDMI2.1 连接",
+            "claim_value_role": "premium_driver_estimated",
+            "business_value_label": "强溢价卖点",
+            "context_type": "battlefield",
+            "context_code": "BF_GAMING_SPORTS_FLUENCY",
+            "context_name": "游戏体育流畅战场",
+            "size_tier": "large_60_69",
+            "price_band_group": "high",
+            "pool_effect": {
+                "pool_claim_price_delta_abs": 427,
+                "pool_claim_weekly_sales_delta_abs": 34,
+                "pool_claim_weekly_sales_amount_delta_abs": 270000,
+            },
+            "sku_excess_explanation": {
+                "sku_excess_price_explained_abs": 66,
+                "sku_excess_weekly_sales_explained_abs": 5,
+                "sku_excess_weekly_sales_amount_explained_abs": 41892,
+                "contribution_share_in_sku": 0.15,
+            },
+            "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 1.0, "semantic": 0.8},
+            "quality_flags": ["small_comparable_pool"],
+            "attribution_confidence": 0.63,
+        }
+    ]
+
+    markdown = "\n".join(
+        competitor_answer._product_claim_value_quantification_lines(
+            claim_value={"claim_values": rows},
+            claim_contribution={},
+        )
+    )
+
+    assert "#### 强溢价卖点" not in markdown
+    assert "#### 本品优势卖点（待量化）" in markdown
+    assert "| HDMI2.1 连接 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 游戏体育流畅战场 |" in markdown
+    assert "价值战场明细" not in markdown
+    assert "66元" not in markdown
+
+
+def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_hdmi21_connectivity",
+        claim_name="HDMI2.1 连接",
+        context_type="battlefield",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+        context_name="游戏体育流畅战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("TV00029112", "TV00027801", "TV00028829", "TV00029936"),
+        with_claim_skus=("TV00029112",),
+        without_claim_skus=("TV00027801", "TV00028829", "TV00029936"),
+        unknown_skus=(),
+        sample_status="weak",
+        quality_flags=("small_comparable_pool",),
+        relaxation_path=(),
+    )
+
+    role = m12c_service._claim_role(
+        has_claim=True,
+        metric={
+            "price_premium_abs": Decimal("427.4241"),
+            "weekly_sales_lift_abs": Decimal("34.333333"),
+            "weekly_sales_amount_lift_abs": Decimal("271923.846250"),
+            "effect_confidence": Decimal("0.6324"),
+        },
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("1.0000"),
+        semantic_strength=Decimal("1.0000"),
+        has_negative=False,
+        market_price=Decimal("5949.0000"),
+    )
+
+    assert role == m12c_service.M12C_ROLE_SAMPLE
+
+
 def test_claim_value_report_sums_same_claim_within_same_category_battlefields() -> None:
     rows = []
     for context_code, context_name, price, sales, amount in [

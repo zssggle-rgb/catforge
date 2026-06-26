@@ -194,7 +194,7 @@ pool_key =
 | `min_active_week_count_median` | 4 | 低于则市场表现置信度降低 |
 | `min_comment_supported_sku_count` | 2 | 低于则不能判用户验证普遍成立 |
 
-样本不足时可以保留观察结果，但 `sample_status=insufficient`，`claim_value_role` 不能输出 `premium_driver_estimated`。
+样本不足或弱样本时可以保留观察结果，但 `sample_status=insufficient/weak` 的记录，`claim_value_role` 不能输出 `premium_driver_estimated`、`sales_driver_estimated`、`value_bundle_claim` 或 `basic_threshold` 等正向价值角色。若参数、卖点事实和评论均强支撑，只能展示为“本品优势卖点（待量化）”；若事实证据也不足，则展示为“样本不足待复核”。
 
 ### 4.4 有卖点组和对照组
 
@@ -786,7 +786,7 @@ sku_code + display_business_category + claim_code
 | 强销量卖点 | `sales_driver_estimated` | 只统计该卖点在价值战场中的正向销量/销额解释份额，价格为负时不得作为溢价表达 |
 | 组合型增值卖点 | `value_bundle_claim` | 组合只是计算背景，报告仍展示具体卖点及其分摊结果 |
 | 基础门槛卖点 | `basic_threshold` | 展示为门槛能力，不强行解释为溢价 |
-| 本品优势卖点（待量化） | `sample_insufficient` 且参数、评论、卖点事实强 | 例如 HDR/高亮画质。事实成立但对照样本不足，用业务语言说明为本品优势表达，不展示为“样本不足” |
+| 本品优势卖点（待量化） | `sample_insufficient`，或 `sample_status=weak/insufficient` 且参数、评论、卖点事实强 | 例如 HDR/高亮画质。事实成立但对照样本不足或弱样本，不进入强溢价/强销量/基础门槛量化，用业务语言说明为本品优势表达 |
 | 竞品优势/本品短板 | `opportunity_gap` / `high_price_competitor_intercept` / `price_up_opportunity` | 说明竞品或高价 SKU 有、本品缺弱；无法稳定量化时用文字说明 |
 | 用户感知风险/拖后腿 | `weak_user_perception_claim` / `drag_factor` | 不进入正向分摊，只说明风险和需要复核的证据 |
 | 厂家主张待市场验证 | `brand_claim_only` | 只说明厂家表达，不作为价格或销量结论 |
@@ -801,7 +801,7 @@ sku_code + display_business_category + claim_code
 6. 目标客群、用户任务、整体市场池记录不得参与总量化求和；它们只进入“解释证据”。
 7. 每个卖点必须展示价值战场明细，说明价值战场下的可比池价格差异、销量差异、本品可解释价差份额和本品可解释销量份额；多个价值战场共用同一组量化结果时合并展示、只计一次。
 8. 如果某卖点没有价值战场记录，但属于本品优势卖点、竞品优势/本品短板或用户感知风险，可用文字说明，不生成总量化数字。
-9. 输出必须补充可比池样本数：总 SKU 数、有卖点组 SKU 数、对照组 SKU 数、样本状态、放宽路径。样本不足时只允许写“事实成立但暂不量化”或“观察到”，不得写“形成溢价”。
+9. 输出必须补充可比池样本数：总 SKU 数、有卖点组 SKU 数、对照组 SKU 数、样本状态、放宽路径。`sample_status=weak/insufficient` 时只允许写“事实成立但暂不量化”或“观察到”，不得写“形成溢价”“形成销量支撑”或“基础门槛卖点”。
 10. `--debug=true` 才允许返回原始行、内部字段、枚举 code、表名和规则版本。
 
 业务模式 `report_payload` 必须输出以下结构：

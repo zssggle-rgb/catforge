@@ -1155,6 +1155,8 @@ def _claim_role(
 ) -> str:
     if pool.sample_status == "insufficient":
         return M12C_ROLE_SAMPLE
+    if pool.sample_status == "weak":
+        return M12C_ROLE_SAMPLE
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
     price_delta = _q4(metric["price_premium_abs"])
@@ -1292,7 +1294,7 @@ def _business_value_label(role: str, metric: Mapping[str, Any]) -> str:
         return "厂家主张卖点"
     if role == M12C_ROLE_USER_NEED:
         return "用户验证需求"
-    return "样本不足"
+    return "样本不足待复核"
 
 
 def _business_value_meaning_cn(role: str, metric: Mapping[str, Any]) -> str:

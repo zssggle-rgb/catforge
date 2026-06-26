@@ -1215,17 +1215,18 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
                 f"战场可解释销量合计{(f'{sales_total}台/周' if sales_total else '暂不量化') if quantified else '不作为正向量化'}；"
                 f"覆盖价值战场：{'、'.join(group['battlefields'][:4]) if group['battlefields'] else '价值战场暂未形成稳定量化'}。"
             )
-            for item in group.get("quant_groups", [])[:3]:
-                row = item["representative"]
-                pool_effect = row.get("pool_effect") or {}
-                sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
-                lines.append(
-                    f"  - {'、'.join(item.get('battlefields') or []) or row.get('context_name') or row.get('context_code') or '当前价值战场'}："
-                    f"可比产品价格差异{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}，"
-                    f"销量差异{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台/周；"
-                    f"本品可解释价差份额{_format_money(sku_excess.get('sku_excess_price_explained_abs') or sku_excess.get('price_premium_abs')) or '不作为正向分摊'}，"
-                    f"可解释销量份额{_format_volume(sku_excess.get('sku_excess_weekly_sales_explained_abs') or sku_excess.get('weekly_sales_lift_abs')) or '不作为正向分摊'}台/周。"
-                )
+            if quantified:
+                for item in group.get("quant_groups", [])[:3]:
+                    row = item["representative"]
+                    pool_effect = row.get("pool_effect") or {}
+                    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+                    lines.append(
+                        f"  - {'、'.join(item.get('battlefields') or []) or row.get('context_name') or row.get('context_code') or '当前价值战场'}："
+                        f"可比产品价格差异{_format_money(pool_effect.get('pool_claim_price_delta_abs')) or '未知'}，"
+                        f"销量差异{_format_volume(pool_effect.get('pool_claim_weekly_sales_delta_abs')) or '未知'}台/周；"
+                        f"本品可解释价差份额{_format_money(sku_excess.get('sku_excess_price_explained_abs') or sku_excess.get('price_premium_abs')) or '不作为正向分摊'}，"
+                        f"可解释销量份额{_format_volume(sku_excess.get('sku_excess_weekly_sales_explained_abs') or sku_excess.get('weekly_sales_lift_abs')) or '不作为正向分摊'}台/周。"
+                    )
     lines.append("说明：战场合计只汇总同一分类、同一卖点在价值战场中的去重量化结果；多个战场共用同一组可比池差异和本品解释份额时，合并展示、只计一次；目标客群、用户任务和整体市场池只作为解释证据，不参与求和。")
     return "\n".join(lines)
 
@@ -1315,6 +1316,8 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _claim_value_cli_category(row: dict[str, Any]) -> str:
     label = _claim_role_cn(row.get("claim_value_role"))
+    if label in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and _claim_value_cli_has_weak_sample_flag(row):
+        return "本品优势卖点（待量化）" if _claim_value_cli_has_strong_fact_evidence(row) else "样本不足待复核"
     if label == "样本不足待复核" and _claim_value_cli_has_strong_fact_evidence(row):
         return "本品优势卖点（待量化）"
     if label in {"高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"}:
@@ -1324,6 +1327,11 @@ def _claim_value_cli_category(row: dict[str, Any]) -> str:
     if label == "厂家主张卖点":
         return "厂家主张待市场验证"
     return label
+
+
+def _claim_value_cli_has_weak_sample_flag(row: dict[str, Any]) -> bool:
+    flags = {str(item) for item in (row.get("quality_flags") or row.get("quality_flags_json") or [])}
+    return bool(flags & {"small_comparable_pool", "insufficient_comparison_group", "sample_weak", "sample_insufficient"})
 
 
 def _claim_value_cli_quant_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

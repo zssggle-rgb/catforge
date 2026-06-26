@@ -1165,7 +1165,9 @@ def _claim_value_group_map(groups: list[dict[str, Any]]) -> dict[tuple[str, str]
 
 def _claim_value_display_category(row: dict[str, Any]) -> str:
     label = _base_claim_value_label(str(row.get("business_value_label") or _claim_role_cn(row.get("claim_value_role"))))
-    if label == "样本不足待复核" and _claim_value_has_strong_fact_evidence(row):
+    if label in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and _claim_value_has_weak_sample_flag(row):
+        return "本品优势卖点（待量化）" if _claim_value_has_strong_fact_evidence(row) else "样本不足待复核"
+    if label in {"样本不足", "样本不足待复核"} and _claim_value_has_strong_fact_evidence(row):
         return "本品优势卖点（待量化）"
     if label in {"高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"}:
         return "竞品优势/本品短板"
@@ -1174,6 +1176,11 @@ def _claim_value_display_category(row: dict[str, Any]) -> str:
     if label == "厂家主张卖点":
         return "厂家主张待市场验证"
     return label
+
+
+def _claim_value_has_weak_sample_flag(row: dict[str, Any]) -> bool:
+    flags = {str(item) for item in (row.get("quality_flags") or row.get("quality_flags_json") or [])}
+    return bool(flags & {"small_comparable_pool", "insufficient_comparison_group", "sample_weak", "sample_insufficient"})
 
 
 def _claim_value_has_strong_fact_evidence(row: dict[str, Any]) -> bool:
@@ -1289,7 +1296,7 @@ def _claim_value_category_section_lines(category: str, groups: list[dict[str, An
             )
             + " |"
         )
-    detail_lines = _claim_value_battlefield_detail_lines(groups)
+    detail_lines = [] if category in CLAIM_VALUE_TEXT_ONLY_CATEGORIES else _claim_value_battlefield_detail_lines(groups)
     if detail_lines:
         lines.extend(["", "价值战场明细：", "", *detail_lines])
     return lines
