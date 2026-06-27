@@ -500,13 +500,12 @@ class M12CClaimValueQuantificationService:
         )
 
         scope = set(target_sku_codes or ())
-        eligible_skus = set(markets_all) & set(claims_all) & set(semantics_all)
+        comparable_skus = set(markets_all) & set(claims_all) & set(semantics_all)
         if analysis_population == ANALYSIS_POPULATION_READY_WITH_COMMENT:
-            eligible_skus &= set(comments_all)
-        if scope:
-            eligible_skus &= scope
-        eligible_skus = {sku for sku in eligible_skus if claims_all.get(sku)}
-        if not eligible_skus:
+            comparable_skus &= set(comments_all)
+        comparable_skus = {sku for sku in comparable_skus if claims_all.get(sku)}
+        output_skus = comparable_skus & scope if scope else set(comparable_skus)
+        if not comparable_skus or not output_skus:
             return M12CServiceResult(
                 status=Core3RunStatus.WARNING,
                 input_count=0,
@@ -518,13 +517,15 @@ class M12CClaimValueQuantificationService:
                     "market_window": market_window,
                     "analysis_population": analysis_population,
                     "eligible_sku_count": 0,
+                    "comparable_sku_count": len(comparable_skus),
+                    "target_sku_codes": sorted(scope),
                 },
             )
 
-        markets = {sku: markets_all[sku] for sku in sorted(eligible_skus)}
-        claims = {sku: claims_all[sku] for sku in sorted(eligible_skus)}
-        comments = {sku: comments_all.get(sku, _empty_comment(sku)) for sku in sorted(eligible_skus)}
-        semantics = {sku: semantics_all[sku] for sku in sorted(eligible_skus)}
+        markets = {sku: markets_all[sku] for sku in sorted(comparable_skus)}
+        claims = {sku: claims_all[sku] for sku in sorted(comparable_skus)}
+        comments = {sku: comments_all.get(sku, _empty_comment(sku)) for sku in sorted(comparable_skus)}
+        semantics = {sku: semantics_all[sku] for sku in sorted(comparable_skus)}
         pools = _build_pools(markets=markets, claims=claims, semantics=semantics, dimension_names=dimension_names)
         pool_rows, metric_rows, metric_by_pool = _pool_and_metric_rows(
             pools=pools,
@@ -535,6 +536,7 @@ class M12CClaimValueQuantificationService:
             product_category=normalized_category,
             market_window=market_window,
             analysis_population=analysis_population,
+            output_sku_codes=output_skus,
             run_id=run_id,
             module_run_id=module_run_id,
             rule_version=rule_version,
@@ -623,7 +625,8 @@ class M12CClaimValueQuantificationService:
                 "market_window": market_window,
                 "analysis_population": analysis_population,
                 "rule_version": rule_version,
-                "eligible_sku_count": len(eligible_skus),
+                "eligible_sku_count": len(output_skus),
+                "comparable_sku_count": len(comparable_skus),
                 "claim_pool_count": len(pool_rows),
                 "pool_metric_count": len(metric_rows),
                 "sku_claim_value_count": len(quant_rows),
@@ -725,6 +728,7 @@ def _pool_and_metric_rows(
     product_category: str,
     market_window: str,
     analysis_population: str,
+    output_sku_codes: set[str],
     run_id: str | None,
     module_run_id: str | None,
     rule_version: str,
@@ -829,6 +833,8 @@ def _quantification_rows(
         baseline_sales = _metric_baseline(metric, "without_weekly_sales_median", "with_weekly_sales_median")
         baseline_amount = _metric_baseline(metric, "without_weekly_sales_amount_median", "with_weekly_sales_amount_median")
         for sku in pool.sku_codes:
+            if sku not in output_sku_codes:
+                continue
             market = markets[sku]
             claim = claims.get(sku, {}).get(pool.claim_code)
             has_claim = bool(claim and claim.is_supported)
