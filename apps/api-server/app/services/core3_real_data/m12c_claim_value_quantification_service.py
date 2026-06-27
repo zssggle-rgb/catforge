@@ -613,7 +613,7 @@ class M12CClaimValueQuantificationService:
             warnings.append(f"M12C 生成 {len(review_rows)} 条样本或可比池复核问题。")
         return M12CServiceResult(
             status=Core3RunStatus.WARNING if review_rows else Core3RunStatus.SUCCESS,
-            input_count=len(eligible_skus),
+            input_count=len(output_skus),
             output_count=len(pool_rows) + len(metric_rows) + len(quant_rows) + len(attribution_rows) + len(summary_rows) + len(review_rows),
             warnings=warnings,
             created_output_count=created,
