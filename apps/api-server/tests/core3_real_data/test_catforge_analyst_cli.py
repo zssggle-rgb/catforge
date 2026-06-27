@@ -104,6 +104,45 @@ def test_m12c_missing_high_price_claim_is_retained_as_intercept_or_price_up() ->
     assert higher_price_role in m12c_service.OPPORTUNITY_ROLES
 
 
+def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
+    metric = {
+        "price_premium_abs": Decimal("500"),
+        "weekly_sales_lift_abs": Decimal("12"),
+        "weekly_sales_amount_lift_abs": Decimal("60000"),
+    }
+    pool = _m12c_test_pool()
+    market_position = m12c_service._market_position_signal(
+        market_price=Decimal("6200"),
+        market_sales=Decimal("110"),
+        baseline_price=Decimal("5800"),
+        baseline_sales=Decimal("90"),
+    )
+
+    scorecard = m12c_service._claim_value_scorecard(
+        pool=pool,
+        role=m12c_service.M12C_ROLE_PREMIUM,
+        metric=metric,
+        has_claim=True,
+        param_strength=Decimal("0.9000"),
+        comment_strength=Decimal("0.8500"),
+        semantic_strength=Decimal("0.9500"),
+        has_negative=False,
+        market_position=market_position,
+    )
+    claim_type = m12c_service._business_claim_type(m12c_service.M12C_ROLE_PREMIUM, metric, scorecard)
+
+    assert scorecard["score_method_cn"] == "卖点价值分 = 战场相关度20% + 参数强度25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
+    assert {item["code"] for item in scorecard["dimensions"]} == {
+        "battlefield_relevance",
+        "parameter_strength",
+        "comment_perception",
+        "competitor_difference",
+        "market_validation",
+    }
+    assert scorecard["total_score"] > 70
+    assert claim_type == m12c_service.M12C_CLAIM_TYPE_PREMIUM
+
+
 def make_session() -> Session:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -2167,10 +2206,10 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     text = catforge_analyst.format_business_text(result)
 
     assert "溢价卖点" in text
-    assert "强销量卖点" in text
-    assert "可比产品价格差异" in text
-    assert "本品可解释价差份额" in text
-    assert "战场合计只汇总同一分类、同一卖点在价值战场中的去重量化结果" in text
+    assert "份额转化卖点" in text
+    assert "用户卖点支付价值约280元" in text
+    assert "卖点价值分" in text
+    assert "先在单个价值战场内判断卖点支付价值" in text
     assert "MiniLED" in text
 
 

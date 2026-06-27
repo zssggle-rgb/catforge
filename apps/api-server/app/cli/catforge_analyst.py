@@ -1194,6 +1194,9 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
 def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     target = result.get("target") or {}
     payload = ((result.get("result") or {}).get("sku_claim_value") or {})
+    summary_rows = [row for row in payload.get("sku_level_claim_values") or [] if isinstance(row, dict)]
+    if summary_rows:
+        return _format_sku_level_claim_value_text(target, summary_rows)
     rows = [row for row in payload.get("claim_values") or [] if isinstance(row, dict)]
     if not rows:
         return result.get("message_cn") or "当前 SKU 没有 M12C 卖点价值量化结果。"
@@ -1231,25 +1234,76 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[str, Any]]) -> str:
+    lines = [f"{_brand_model(target)} 的用户卖点支付价值分析："]
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        category = str(row.get("business_claim_type_cn") or "未分类卖点")
+        grouped.setdefault(category, []).append(row)
+    for category in _claim_value_cli_category_order():
+        items = grouped.get(category, [])
+        if not items:
+            continue
+        lines.append(f"{category}：")
+        for item in items[:5]:
+            claim_name = str(item.get("claim_name") or item.get("claim_code") or "未命名卖点")
+            price = _decimal(item.get("sku_level_user_payment_value_abs")) or Decimal("0")
+            sales = _decimal(item.get("sku_level_weekly_sales_lift_abs")) or Decimal("0")
+            score = _format_number(item.get("claim_value_score"))
+            contexts = "、".join(str(value) for value in (item.get("main_contexts") or [])[:4]) or "相关价值战场"
+            evidence = str(item.get("evidence_summary_cn") or "").strip()
+            lines.append(
+                f"- {claim_name}：{_sku_level_claim_value_sentence(category, price, sales)}；"
+                f"卖点价值分{score or '暂无稳定分'}；主要成立场景：{contexts}。"
+                f"{evidence}"
+            )
+    lines.append("说明：以上为 SKU 层汇总结果，计算时先在单个价值战场内判断卖点支付价值，再按战场相关度汇总；用户任务、目标客群和整体市场池作为解释证据，不直接重复累加。")
+    return "\n".join(lines)
+
+
+def _sku_level_claim_value_sentence(category: str, price: Decimal, sales: Decimal) -> str:
+    price_text = _format_money(price) or "暂不量化"
+    sales_text = f"{_format_volume(sales)}台/周" if _format_volume(sales) else "暂不量化"
+    if category == "高溢价卖点":
+        return f"用户卖点支付价值约{price_text}，销量解释约{sales_text}"
+    if category == "份额转化卖点":
+        return f"价格溢价不一定显著，销量解释约{sales_text}"
+    if category == "客户获得价值卖点":
+        return f"更主要体现为用户觉得更值，当前可解释价差约{price_text}，销量解释约{sales_text}"
+    if category == "门槛卖点":
+        return "属于购买入围门槛，有了不一定加价，缺失会削弱入围"
+    if category == "待激活卖点":
+        return "已有产品事实或厂家表达，但用户感知和市场验证还不足"
+    if category == "厂家主张卖点":
+        return "当前主要是厂家表达，尚未形成稳定用户支付价值"
+    if category == "竞品拦截卖点":
+        return "竞品已经形成有效表达或市场验证，本品存在被拦截风险"
+    if category == "价格压力卖点":
+        return "卖点、参数或评论没有支撑当前价格，可能削弱成交理由"
+    return "样本或对照组不足，暂作为观察线索"
+
+
 def _claim_value_cli_category_order() -> list[str]:
     return [
-        "强溢价卖点",
-        "强销量卖点",
-        "组合型增值卖点",
-        "基础门槛卖点",
-        "本品优势卖点（待量化）",
-        "竞品优势/本品短板",
-        "用户感知风险/拖后腿",
-        "厂家主张待市场验证",
+        "高溢价卖点",
+        "份额转化卖点",
+        "客户获得价值卖点",
+        "门槛卖点",
+        "待激活卖点",
+        "厂家主张卖点",
+        "竞品拦截卖点",
+        "价格压力卖点",
+        "样本不足待复核",
     ]
 
 
 def _claim_value_cli_text_only_categories() -> set[str]:
     return {
-        "本品优势卖点（待量化）",
-        "竞品优势/本品短板",
-        "用户感知风险/拖后腿",
-        "厂家主张待市场验证",
+        "待激活卖点",
+        "厂家主张卖点",
+        "竞品拦截卖点",
+        "价格压力卖点",
+        "样本不足待复核",
     }
 
 
@@ -1282,14 +1336,14 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         original_key[1]
         for original_key, group in grouped.items()
         if group.get("battlefield_rows")
-        and str(group.get("category") or "") in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}
+        and str(group.get("category") or "") in {"高溢价卖点", "份额转化卖点", "客户获得价值卖点", "门槛卖点"}
     }
     for original_key, group in grouped.items():
         category = str(group.get("category") or "")
-        if category in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and not group["battlefield_rows"]:
+        if category in {"高溢价卖点", "份额转化卖点", "客户获得价值卖点", "门槛卖点"} and not group["battlefield_rows"]:
             if original_key[1] in claim_keys_with_quantified_battlefields:
                 continue
-            category = "本品优势卖点（待量化）"
+            category = "待激活卖点"
             group["category"] = category
         key = (category, original_key[1])
         if key not in merged:
@@ -1315,17 +1369,11 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _claim_value_cli_category(row: dict[str, Any]) -> str:
-    label = _claim_role_cn(row.get("claim_value_role"))
-    if label in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"} and _claim_value_cli_has_weak_sample_flag(row):
-        return "本品优势卖点（待量化）" if _claim_value_cli_has_strong_fact_evidence(row) else "样本不足待复核"
+    label = str(row.get("business_claim_type_cn") or _claim_role_cn(row.get("claim_value_role")))
+    if label in {"高溢价卖点", "份额转化卖点", "客户获得价值卖点", "门槛卖点"} and _claim_value_cli_has_weak_sample_flag(row):
+        return "待激活卖点" if _claim_value_cli_has_strong_fact_evidence(row) else "样本不足待复核"
     if label == "样本不足待复核" and _claim_value_cli_has_strong_fact_evidence(row):
-        return "本品优势卖点（待量化）"
-    if label in {"高价竞品拦截卖点", "价格上探机会卖点", "机会缺口"}:
-        return "竞品优势/本品短板"
-    if label in {"用户感知不足卖点", "拖后腿卖点"}:
-        return "用户感知风险/拖后腿"
-    if label == "厂家主张卖点":
-        return "厂家主张待市场验证"
+        return "待激活卖点"
     return label
 
 
@@ -1374,7 +1422,7 @@ def _claim_value_cli_quant_signature(row: dict[str, Any]) -> tuple[str, ...] | N
     if not any(metric_keys):
         return None
     return (
-        _claim_role_cn(row.get("claim_value_role")),
+        str(row.get("business_claim_type_cn") or _claim_role_cn(row.get("claim_value_role"))),
         str(row.get("size_tier") or ""),
         str(row.get("price_band_group") or ""),
         *metric_keys,
@@ -1551,17 +1599,17 @@ def _price_band_cn(value: Any) -> str:
 
 def _claim_role_cn(value: Any) -> str:
     mapping = {
-        "premium_driver_estimated": "强溢价卖点",
-        "sales_driver_estimated": "强销量卖点",
-        "basic_threshold": "基础门槛卖点",
-        "value_bundle_claim": "组合型增值卖点",
-        "weak_user_perception_claim": "用户感知不足卖点",
-        "high_price_competitor_intercept": "高价竞品拦截卖点",
-        "price_up_opportunity": "价格上探机会卖点",
-        "user_validated_need": "用户验证需求",
+        "premium_driver_estimated": "高溢价卖点",
+        "sales_driver_estimated": "份额转化卖点",
+        "basic_threshold": "门槛卖点",
+        "value_bundle_claim": "客户获得价值卖点",
+        "weak_user_perception_claim": "待激活卖点",
+        "high_price_competitor_intercept": "竞品拦截卖点",
+        "price_up_opportunity": "竞品拦截卖点",
+        "user_validated_need": "待激活卖点",
         "brand_claim_only": "厂家主张卖点",
-        "opportunity_gap": "机会缺口",
-        "drag_factor": "拖后腿卖点",
+        "opportunity_gap": "竞品拦截卖点",
+        "drag_factor": "价格压力卖点",
         "sample_insufficient": "样本不足待复核",
     }
     return mapping.get(str(value or ""), str(value or "未分类"))

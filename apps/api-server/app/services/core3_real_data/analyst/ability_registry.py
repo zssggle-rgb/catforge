@@ -117,7 +117,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="sku-claim-value",
         ability_type="atom",
-        description_cn="查询单 SKU 的卖点价值量化，包括强溢价卖点、强销量卖点、组合型增值卖点、基础门槛、拖后腿和机会/拦截卖点。",
+        description_cn="查询单 SKU 的用户卖点支付价值，包括高溢价、份额转化、客户获得价值、门槛、待激活、厂家主张、竞品拦截和价格压力卖点。",
         required_inputs=("sku_code|query",),
         optional_inputs=("claim_code", "dimension_type", "dimension_code", "size_tier", "price_band", "role", "limit"),
         source_modules=("M12C",),
@@ -135,7 +135,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="claim-opportunity-gaps",
         ability_type="atom",
-        description_cn="查询单 SKU 的卖点机会缺口和拖后腿卖点；提供竞品时补充竞品已形成正向贡献而本品未形成的卖点。",
+        description_cn="查询单 SKU 的卖点机会缺口、价格压力和竞品拦截卖点；提供竞品时补充竞品已形成正向贡献而本品未形成的卖点。",
         required_inputs=("sku_code|query",),
         optional_inputs=("candidate_sku_code", "dimension_type", "dimension_code", "limit"),
         source_modules=("M12C",),
@@ -144,7 +144,7 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="claim-value-compare",
         ability_type="atom",
-        description_cn="对比两个 SKU 的卖点价值角色、正向卖点、优势卖点和拖后腿卖点。",
+        description_cn="对比两个 SKU 的用户卖点支付价值、优势卖点、竞品拦截卖点和价格压力卖点。",
         required_inputs=("sku_code", "candidate_sku_code"),
         optional_inputs=("dimension_type", "dimension_code", "limit"),
         source_modules=("M12C",),
@@ -173,7 +173,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="premium-claim-drivers",
         ability_type="sop",
-        description_cn="识别用户选择卖点、强溢价卖点、强销量卖点、基础门槛、组合型增值、拖后腿和机会/拦截卖点，并优先使用 M12C 量化结果。",
+        description_cn="识别用户选择卖点、高溢价卖点、份额转化卖点、客户获得价值卖点、门槛卖点、待激活卖点、竞品拦截卖点和价格压力卖点，并优先使用 M12C 量化结果。",
         required_inputs=("sku_code|query",),
         source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C"),
         status="implemented",

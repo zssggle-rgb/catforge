@@ -54,6 +54,24 @@ OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C
 MIN_POOL_SKU_COUNT = 8
 MIN_GROUP_SKU_COUNT = 3
 
+M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
+M12C_CLAIM_TYPE_SHARE = "share_conversion_claim"
+M12C_CLAIM_TYPE_CUSTOMER_VALUE = "customer_value_claim"
+M12C_CLAIM_TYPE_THRESHOLD = "threshold_claim"
+M12C_CLAIM_TYPE_PENDING = "pending_activation_claim"
+M12C_CLAIM_TYPE_BRAND = "brand_claim"
+M12C_CLAIM_TYPE_INTERCEPT = "competitor_intercept_claim"
+M12C_CLAIM_TYPE_PRICE_PRESSURE = "price_pressure_claim"
+M12C_CLAIM_TYPE_SAMPLE = "sample_insufficient_claim"
+
+M12C_SCORE_WEIGHTS = {
+    "battlefield_relevance": Decimal("0.20"),
+    "parameter_strength": Decimal("0.25"),
+    "comment_perception": Decimal("0.25"),
+    "competitor_difference": Decimal("0.15"),
+    "market_validation": Decimal("0.15"),
+}
+
 
 @dataclass(frozen=True)
 class M12CWriteResult:
@@ -832,6 +850,25 @@ def _quantification_rows(
             if not has_claim and role not in OPPORTUNITY_ROLES:
                 continue
             weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength)
+            market_position = _market_position_signal(
+                market_price=market.price,
+                market_sales=market.avg_weekly_sales_volume,
+                baseline_price=baseline_price,
+                baseline_sales=baseline_sales,
+            )
+            scorecard = _claim_value_scorecard(
+                pool=pool,
+                role=role,
+                metric=metric,
+                has_claim=has_claim,
+                param_strength=param_strength,
+                comment_strength=comment_strength,
+                semantic_strength=semantic_strength,
+                has_negative=comment.has_negative(pool.claim_code),
+                market_position=market_position,
+            )
+            business_claim_type = _business_claim_type(role, metric, scorecard)
+            business_claim_type_cn = _business_claim_type_label(business_claim_type)
             payload = {
                 "sku_claim_value_id": _record_id("m12c_sku_claim", batch_id, sku, pool.claim_code, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group, rule_version),
                 "pool_id": pool_id,
@@ -870,6 +907,14 @@ def _quantification_rows(
                     "context_code": pool.context_code,
                     "context_name": pool.context_name,
                     "semantic_support_strength": float(semantic_strength),
+                    "business_claim_type": business_claim_type,
+                    "business_claim_type_cn": business_claim_type_cn,
+                    "business_claim_type_definition_cn": _business_claim_type_meaning_cn(business_claim_type),
+                    "claim_value_score": scorecard["total_score"],
+                    "scorecard": scorecard,
+                    "market_position_type": market_position["type"],
+                    "market_position_cn": market_position["summary_cn"],
+                    "sku_level_aggregation_basis_cn": "先在单个价值战场内判断卖点支付价值，再按战场相关度汇总到 SKU 层。",
                 },
                 "evidence_ids_json": list(claim.evidence_ids if claim else ()),
                 "reason_cn": _quant_reason_cn(pool, role, metric),
@@ -1190,6 +1235,300 @@ def _claim_role(
     return M12C_ROLE_BRAND
 
 
+def _claim_value_scorecard(
+    *,
+    pool: ClaimPool,
+    role: str,
+    metric: Mapping[str, Any],
+    has_claim: bool,
+    param_strength: Decimal,
+    comment_strength: Decimal,
+    semantic_strength: Decimal,
+    has_negative: bool,
+    market_position: Mapping[str, Any],
+) -> dict[str, Any]:
+    coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    price_delta = _q4(metric["price_premium_abs"])
+    sales_delta = _q6(metric["weekly_sales_lift_abs"])
+    amount_delta = _q6(metric["weekly_sales_amount_lift_abs"])
+    dimensions = [
+        _score_dimension(
+            code="battlefield_relevance",
+            name_cn="战场相关度",
+            raw_score=_context_relevance_score(pool.context_type, semantic_strength),
+            reason_cn=_context_relevance_reason(pool, semantic_strength),
+            evidence_refs=[_evidence_ref(pool.context_type, pool.context_code)],
+        ),
+        _score_dimension(
+            code="parameter_strength",
+            name_cn="参数强度",
+            raw_score=_strength_score(param_strength),
+            reason_cn=_parameter_strength_reason(has_claim, param_strength),
+            evidence_refs=[{"source_module": "M04C", "evidence_type": "claim_param_support"}],
+        ),
+        _score_dimension(
+            code="comment_perception",
+            name_cn="用户评论感知",
+            raw_score=_comment_score(comment_strength, has_negative),
+            reason_cn=_comment_reason(comment_strength, has_negative),
+            evidence_refs=[{"source_module": "M05C", "evidence_type": "claim_comment_support"}],
+        ),
+        _score_dimension(
+            code="competitor_difference",
+            name_cn="竞品差异",
+            raw_score=_competitor_difference_score(has_claim, coverage_rate, price_delta, sales_delta, amount_delta),
+            reason_cn=_competitor_difference_reason(has_claim, coverage_rate, pool),
+            evidence_refs=[{"source_module": "M12C", "evidence_type": "with_claim_vs_without_claim_pool"}],
+        ),
+        _score_dimension(
+            code="market_validation",
+            name_cn="市场验证",
+            raw_score=_market_validation_score(pool, price_delta, sales_delta, amount_delta, market_position),
+            reason_cn=_market_validation_reason(pool, price_delta, sales_delta, amount_delta, market_position),
+            evidence_refs=[{"source_module": "M07", "evidence_type": "price_sales_market_profile"}],
+        ),
+    ]
+    downgrade_reasons = _scorecard_downgrade_reasons(
+        pool=pool,
+        role=role,
+        has_claim=has_claim,
+        has_negative=has_negative,
+        coverage_rate=coverage_rate,
+        param_strength=param_strength,
+        comment_strength=comment_strength,
+    )
+    total_score = _q4(sum(_q4(Decimal(str(item["raw_score"])) * Decimal(str(item["weight"]))) for item in dimensions))
+    return {
+        "total_score": float(total_score),
+        "score_unit": "0-100",
+        "score_method_cn": "卖点价值分 = 战场相关度20% + 参数强度25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。",
+        "dimensions": dimensions,
+        "downgrade_reasons": downgrade_reasons,
+        "sample_status": pool.sample_status,
+        "pool_sku_count": len(pool.sku_codes),
+        "with_claim_sku_count": len(pool.with_claim_skus),
+        "without_claim_sku_count": len(pool.without_claim_skus),
+        "claim_coverage_rate": float(_q4(coverage_rate)),
+        "market_position_type": market_position["type"],
+    }
+
+
+def _score_dimension(*, code: str, name_cn: str, raw_score: Decimal, reason_cn: str, evidence_refs: list[dict[str, Any]]) -> dict[str, Any]:
+    weight = M12C_SCORE_WEIGHTS[code]
+    raw = _q4(_clamp(raw_score, Decimal("0"), Decimal("100")))
+    return {
+        "code": code,
+        "name_cn": name_cn,
+        "weight": float(weight),
+        "raw_score": float(raw),
+        "weighted_score": float(_q4(raw * weight)),
+        "reason_cn": reason_cn,
+        "evidence_refs": evidence_refs,
+    }
+
+
+def _context_relevance_score(context_type: str, semantic_strength: Decimal) -> Decimal:
+    raw = _strength_score(semantic_strength)
+    if context_type == "battlefield":
+        return max(raw, Decimal("55"))
+    if context_type in {"user_task", "target_group"}:
+        return min(raw, Decimal("85"))
+    return min(raw, Decimal("60"))
+
+
+def _context_relevance_reason(pool: ClaimPool, semantic_strength: Decimal) -> str:
+    if pool.context_type == "battlefield":
+        return f"该卖点在 {pool.context_name} 内评估，战场相关度按 SKU 在该战场的主辅/机会关系折算为 {float(_strength_score(semantic_strength)):.0f} 分。"
+    if pool.context_type == "user_task":
+        return f"该卖点在用户任务 {pool.context_name} 内评估，作为战场解释的辅助证据。"
+    if pool.context_type == "target_group":
+        return f"该卖点在目标客群 {pool.context_name} 内评估，作为战场解释的辅助证据。"
+    return "整体市场池只用于兜底观察，不作为强支付价值的核心场景。"
+
+
+def _parameter_strength_reason(has_claim: bool, param_strength: Decimal) -> str:
+    if not has_claim:
+        return "本品没有形成该标准卖点，参数证据不成立。"
+    if param_strength >= Decimal("0.8000"):
+        return "卖点有明确参数或事实卖点支撑。"
+    if param_strength >= Decimal("0.5000"):
+        return "卖点存在部分参数支撑，需结合评论和市场表现判断。"
+    return "卖点文本存在，但参数支撑偏弱。"
+
+
+def _comment_reason(comment_strength: Decimal, has_negative: bool) -> str:
+    if has_negative:
+        return "评论存在负向或矛盾反馈，用户支付价值降级。"
+    if comment_strength >= Decimal("0.8000"):
+        return "评论中能观察到对该卖点的正向感知。"
+    if comment_strength >= Decimal("0.5000"):
+        return "评论感知中等，能作为辅助证据但不能单独证明溢价。"
+    return "评论验证不足，更多属于厂家表达或参数能力。"
+
+
+def _competitor_difference_score(has_claim: bool, coverage_rate: Decimal, price_delta: Decimal, sales_delta: Decimal, amount_delta: Decimal) -> Decimal:
+    if not has_claim:
+        if price_delta > 0 or sales_delta > 0 or amount_delta > 0:
+            return Decimal("78")
+        return Decimal("35")
+    if coverage_rate >= Decimal("0.7500"):
+        return Decimal("35")
+    if coverage_rate >= Decimal("0.5500"):
+        return Decimal("55")
+    if coverage_rate >= Decimal("0.3000"):
+        return Decimal("72")
+    return Decimal("85")
+
+
+def _competitor_difference_reason(has_claim: bool, coverage_rate: Decimal, pool: ClaimPool) -> str:
+    coverage_text = f"{float(_q4(coverage_rate * Decimal('100'))):.0f}%"
+    if not has_claim:
+        return f"本品缺失该卖点；可比池中有 {len(pool.with_claim_skus)} 个 SKU 具备该卖点，形成潜在拦截。"
+    if coverage_rate >= Decimal("0.7500"):
+        return f"可比池中约 {coverage_text} 的 SKU 都具备该卖点，更接近入围门槛。"
+    return f"可比池中约 {coverage_text} 的 SKU 具备该卖点，具备一定差异化观察价值。"
+
+
+def _market_validation_score(
+    pool: ClaimPool,
+    price_delta: Decimal,
+    sales_delta: Decimal,
+    amount_delta: Decimal,
+    market_position: Mapping[str, Any],
+) -> Decimal:
+    if pool.sample_status == "insufficient":
+        return Decimal("25")
+    if pool.sample_status == "weak":
+        return Decimal("45")
+    if price_delta > 0 and (sales_delta > 0 or amount_delta > 0):
+        return Decimal("90")
+    if sales_delta > 0 or amount_delta > 0:
+        return Decimal("76")
+    if price_delta > 0 and market_position["type"] == "price_pressure":
+        return Decimal("45")
+    if price_delta > 0:
+        return Decimal("60")
+    return Decimal("35")
+
+
+def _market_validation_reason(pool: ClaimPool, price_delta: Decimal, sales_delta: Decimal, amount_delta: Decimal, market_position: Mapping[str, Any]) -> str:
+    if pool.sample_status != "sufficient":
+        return "可比池样本不足，保留观察但不能强判卖点支付价值。"
+    return (
+        f"可比池有卖点组相对对照组价格差异约 {_fmt_money(price_delta)} 元，"
+        f"周均销量差异约 {_fmt_num(sales_delta)} 台；本品市场位置为{market_position['summary_cn']}。"
+    )
+
+
+def _scorecard_downgrade_reasons(
+    *,
+    pool: ClaimPool,
+    role: str,
+    has_claim: bool,
+    has_negative: bool,
+    coverage_rate: Decimal,
+    param_strength: Decimal,
+    comment_strength: Decimal,
+) -> list[str]:
+    reasons: list[str] = []
+    if pool.sample_status != "sufficient":
+        reasons.append("可比池样本不足，不能稳定量化。")
+    if not has_claim:
+        reasons.append("本品缺失该卖点，只能作为竞品拦截或机会判断。")
+    if has_negative or role == M12C_ROLE_DRAG:
+        reasons.append("评论或参数存在负向/矛盾反馈，支付价值降级。")
+    if coverage_rate >= Decimal("0.7500") and has_claim:
+        reasons.append("可比池普遍具备，更接近基础门槛。")
+    if param_strength < Decimal("0.5000") and has_claim:
+        reasons.append("参数支撑不足。")
+    if comment_strength < Decimal("0.5000") and has_claim:
+        reasons.append("评论感知不足。")
+    return reasons
+
+
+def _market_position_signal(*, market_price: Decimal, market_sales: Decimal, baseline_price: Decimal, baseline_sales: Decimal) -> dict[str, Any]:
+    price_gap = _q4(market_price - baseline_price)
+    sales_gap = _q6(market_sales - baseline_sales)
+    price_neutral_threshold = max(abs(baseline_price) * Decimal("0.03"), Decimal("50"))
+    if price_gap > price_neutral_threshold and sales_gap >= 0:
+        return {"type": "premium_accepted", "summary_cn": "价格较高且销量不弱，存在溢价承接"}
+    if abs(price_gap) <= price_neutral_threshold and sales_gap > 0:
+        return {"type": "share_conversion", "summary_cn": "价格持平但销量更强，偏份额转化"}
+    if price_gap < -price_neutral_threshold and sales_gap > 0:
+        return {"type": "customer_value_gain", "summary_cn": "价格更低且销量更强，偏客户获得价值"}
+    if price_gap > price_neutral_threshold and sales_gap < 0:
+        return {"type": "price_pressure", "summary_cn": "价格较高但销量偏弱，存在价格压力"}
+    return {"type": "payment_unverified", "summary_cn": "价格和销量暂未验证支付价值"}
+
+
+def _business_claim_type(role: str, metric: Mapping[str, Any], scorecard: Mapping[str, Any]) -> str:
+    price_delta = _q4(metric.get("price_premium_abs") or metric.get("_pool_claim_price_delta_abs"))
+    total_score = Decimal(str(scorecard.get("total_score") or 0))
+    if role == M12C_ROLE_SAMPLE:
+        return M12C_CLAIM_TYPE_SAMPLE
+    if role == M12C_ROLE_BASIC:
+        return M12C_CLAIM_TYPE_THRESHOLD
+    if role == M12C_ROLE_DRAG:
+        return M12C_CLAIM_TYPE_PRICE_PRESSURE
+    if role in OPPORTUNITY_ROLES:
+        return M12C_CLAIM_TYPE_INTERCEPT
+    if role in {M12C_ROLE_WEAK_USER, M12C_ROLE_USER_NEED}:
+        return M12C_CLAIM_TYPE_PENDING
+    if role == M12C_ROLE_BRAND:
+        return M12C_CLAIM_TYPE_BRAND
+    if role == M12C_ROLE_PREMIUM and price_delta > 0 and total_score >= Decimal("65"):
+        return M12C_CLAIM_TYPE_PREMIUM
+    if role == M12C_ROLE_SALES:
+        return M12C_CLAIM_TYPE_SHARE
+    if role == M12C_ROLE_VALUE_BUNDLE or role == M12C_ROLE_PREMIUM:
+        return M12C_CLAIM_TYPE_CUSTOMER_VALUE
+    return M12C_CLAIM_TYPE_BRAND
+
+
+def _business_claim_type_label(claim_type: str) -> str:
+    return {
+        M12C_CLAIM_TYPE_PREMIUM: "高溢价卖点",
+        M12C_CLAIM_TYPE_SHARE: "份额转化卖点",
+        M12C_CLAIM_TYPE_CUSTOMER_VALUE: "客户获得价值卖点",
+        M12C_CLAIM_TYPE_THRESHOLD: "门槛卖点",
+        M12C_CLAIM_TYPE_PENDING: "待激活卖点",
+        M12C_CLAIM_TYPE_BRAND: "厂家主张卖点",
+        M12C_CLAIM_TYPE_INTERCEPT: "竞品拦截卖点",
+        M12C_CLAIM_TYPE_PRICE_PRESSURE: "价格压力卖点",
+        M12C_CLAIM_TYPE_SAMPLE: "样本不足待复核",
+    }.get(claim_type, "未分类卖点")
+
+
+def _business_claim_type_meaning_cn(claim_type: str) -> str:
+    return {
+        M12C_CLAIM_TYPE_PREMIUM: "用户愿意为该卖点支付更高价格，并且参数、评论和市场验证共同成立。",
+        M12C_CLAIM_TYPE_SHARE: "该卖点不一定抬高价格，但能解释同价或相近价格下的销量/份额优势。",
+        M12C_CLAIM_TYPE_CUSTOMER_VALUE: "该卖点让用户觉得产品更值，主要体现为价格压力更小或销量承接更强。",
+        M12C_CLAIM_TYPE_THRESHOLD: "该卖点是进入购买清单的基础要求，有了不加价，缺了会掉队。",
+        M12C_CLAIM_TYPE_PENDING: "本品有参数或厂家表达，但用户评论或市场验证还不足，需要继续激活。",
+        M12C_CLAIM_TYPE_BRAND: "当前主要是厂家主张，尚未形成稳定用户支付价值。",
+        M12C_CLAIM_TYPE_INTERCEPT: "竞品具备并形成市场验证，本品缺失或表达弱，会影响购买转化。",
+        M12C_CLAIM_TYPE_PRICE_PRESSURE: "卖点表达、参数或用户反馈没有支撑当前价格，可能削弱成交理由。",
+        M12C_CLAIM_TYPE_SAMPLE: "样本或对照组不足，只能作为观察线索。",
+    }.get(claim_type, "当前分类尚未定义。")
+
+
+def _strength_score(value: Decimal) -> Decimal:
+    return _q4(_clamp(value, Decimal("0"), Decimal("1")) * Decimal("100"))
+
+
+def _comment_score(comment_strength: Decimal, has_negative: bool) -> Decimal:
+    raw = _strength_score(comment_strength)
+    if has_negative:
+        return min(raw, Decimal("35"))
+    return raw
+
+
+def _evidence_ref(context_type: str, context_code: str) -> dict[str, Any]:
+    module = {"battlefield": "M11C", "user_task": "M09C", "target_group": "M10C"}.get(context_type, "M07")
+    return {"source_module": module, "context_type": context_type, "context_code": context_code}
+
+
 def _sample_status(pool_count: int, with_count: int, without_count: int) -> tuple[str, list[str]]:
     flags: list[str] = []
     if pool_count < MIN_GROUP_SKU_COUNT or with_count == 0 or without_count == 0:
@@ -1247,6 +1586,10 @@ def _metric_baseline(metric: Mapping[str, Any], without_key: str, with_key: str)
 
 
 def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:
+    supporting = row.get("supporting_dimensions_json") if isinstance(row.get("supporting_dimensions_json"), dict) else {}
+    business_claim_type = str(supporting.get("business_claim_type") or "")
+    business_claim_type_cn = str(supporting.get("business_claim_type_cn") or "")
+    scorecard = supporting.get("scorecard") if isinstance(supporting.get("scorecard"), dict) else {}
     return {
         "sku_code": row.get("sku_code"),
         "brand_name": row.get("brand_name"),
@@ -1254,6 +1597,10 @@ def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:
         "claim_code": row.get("claim_code"),
         "claim_name": row.get("claim_name"),
         "claim_value_role": row.get("claim_value_role"),
+        "business_claim_type": business_claim_type,
+        "business_claim_type_cn": business_claim_type_cn,
+        "business_claim_type_definition_cn": supporting.get("business_claim_type_definition_cn"),
+        "claim_value_score": supporting.get("claim_value_score") or scorecard.get("total_score"),
         "business_value_label": row.get("_business_value_label") or _business_value_label(str(row.get("claim_value_role") or ""), row),
         "business_value_meaning_cn": row.get("_business_value_meaning_cn") or _business_value_meaning_cn(str(row.get("claim_value_role") or ""), row),
         "pool_claim_price_delta_abs": float(_q4(row.get("_pool_claim_price_delta_abs"))),
@@ -1266,6 +1613,11 @@ def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:
         "estimated_weekly_sales_amount_lift_abs": float(_q6(row.get("estimated_weekly_sales_amount_lift_abs"))),
         "contribution_share_in_sku": float(_q6(row.get("contribution_share_in_sku"))),
         "attribution_confidence": float(_q4(row.get("attribution_confidence"))),
+        "scorecard": scorecard,
+        "market_position": {
+            "type": supporting.get("market_position_type"),
+            "summary_cn": supporting.get("market_position_cn"),
+        },
         "reason_cn": row.get("reason_cn", ""),
     }
 

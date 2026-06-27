@@ -330,7 +330,7 @@ class SopOrchestrators:
             atoms_used=_atoms_used(atom_results),
             evidence=_evidence(atom_results),
             limitations=_limitations(atom_results),
-            answer_outline=["已按 M12C 卖点价值量化、事实卖点、评论支撑、主/辅战场和拖后腿信号识别强溢价卖点、强销量卖点、基础门槛、组合型增值和风险卖点。"],
+            answer_outline=["已按 M12C 用户卖点支付价值、事实卖点、评论支撑、主/辅战场和价格压力信号识别高溢价、份额转化、客户获得价值、门槛、待激活、竞品拦截和价格压力卖点。"],
         )
 
     def battlefield_space(

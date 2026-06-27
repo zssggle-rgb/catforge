@@ -1,1414 +1,783 @@
-# M12C 卖点价值量化与商业价值分析详细设计
+# M12C 用户卖点支付价值分析详细设计
 
-## 1. 文档定位
+## 1. 设计目标
 
-本文是 M12C 的工程详细设计，承接：
+M12C 要实现一个独立、可追溯、可解释的用户卖点支付价值分析能力。它以 M04C 的卖点事实为基础，把 SKU 的卖点放到真实价值战场、用户评论和可比市场池中，判断用户是否真的愿意为这些卖点付费，或因为这些卖点更愿意选择该产品。
 
-- 需求文档：`docs/core3_mvp/real_data_v2/sop_requirements/M12C_claim_value_quantification_requirements.md`
-- M03B SKU 参数事实画像。
-- M04C SKU 卖点事实画像。
-- M05C SKU 评论事实画像。
-- M07 SKU 市场画像。
-- M09C 用户任务画像。
-- M10C 目标客群画像。
-- M11C 价值战场画像。
-- M11D 语义市场图谱与销量分配。
-- `catforge_analyst` 原子能力和小奥家电市场分析专家。
+设计目标：
 
-M12C 的核心原则是：先在可比市场池中估算卖点组的可观测市场差异，再把 SKU 相对可比产品基准的表现差异解释性分摊到若干卖点。
+1. 以 SKU 的既有标准卖点为分析对象，逐个判断用户支付价值。
+2. 先在单个价值战场内计算，再按战场权重汇总为 SKU 结果。
+3. 像竞品分析一样提供业务人员能看懂的评分、权重、可比池和证据链。
+4. 不把基础门槛卖点误判为高溢价卖点。
+5. 不把可解释金额写成单一卖点的因果收益。
+6. 支持 CLI、Skill、Markdown 和飞书报告。
 
-M12C 不做严格因果推断。它输出的是可观测市场贡献估计，用于业务分析、竞品解释和机会判断。所有结果必须区分：
+## 2. 模块边界
 
-1. **池级卖点组差异**：有某卖点且证据成立的一组 SKU，相比同池对照组的价格、周均销量、周均销额差异。
-2. **本品相对可比产品基准的差异解释份额**：本品相对可比产品基准的价格、销量和销额差异，按卖点证据权重进行解释性分摊。
+| 模块 | 边界 |
+| --- | --- |
+| M04C 卖点画像 | 判断产品有什么卖点、卖点是否有参数或评论事实支撑 |
+| M11C 价值战场 | 判断 SKU 落在哪些价值战场、关系状态是什么 |
+| M11D 市场图谱 | 提供价值战场、用户任务、目标客群的空间和销量分配 |
+| M12C 用户卖点支付价值 | 判断这些卖点在用户选择和支付上是否有价值，价值在哪个战场成立 |
 
-报告和智能体不得把第二类数值写成“单一卖点带来 X 元/X 台”的因果贡献。
+M12C 可以读取 M04C 的卖点分类，但不能复用 M04C 的结论直接判断“溢价”。M04C 是事实层，M12C 是市场价值解释层。
 
-## 2. 总体架构
+## 3. 数据流
 
 ```mermaid
+%%{init: {"theme": "base", "flowchart": {"htmlLabels": true, "nodeSpacing": 90, "rankSpacing": 90, "curve": "basis"}, "themeVariables": {"fontFamily": "Arial, Microsoft YaHei, sans-serif", "fontSize": "24px", "primaryTextColor": "#111827", "lineColor": "#6b7280"}}}%%
 flowchart TD
-  M03B["M03B 参数事实画像"]
-  M04C["M04C 卖点事实画像"]
-  M05C["M05C 评论事实画像"]
-  M07["M07 市场画像"]
-  M09C["M09C 用户任务画像"]
-  M10C["M10C 目标客群画像"]
-  M11C["M11C 价值战场画像"]
-  M11D["M11D 语义市场图谱与销量分配"]
+  A["识别 SKU<br/>品牌、型号、价格、销量、尺寸"]:::main --> B["确定主要价值战场<br/>例如：高端画质升级、游戏体育流畅、智能互联"]:::main
+  B --> C["建立可比市场池<br/>同价值战场 + 同尺寸/相邻尺寸 + 同价格带 + 有评论事实"]:::main
+  C --> D["判断本品市场位置<br/>价格高/持平/低<br/>销量强/持平/弱"]:::main
+  D --> E["判断用户支付价值的转化方式"]:::main
 
-  Candidate["卖点候选状态构建"]
-  Pool["可比池构建"]
-  Metric["池级卖点价值指标"]
-  Attribution["SKU 卖点商业价值分析"]
-  Summary["卖点维度汇总"]
-  Review["复核与降级问题"]
+  E --> F1["价格高 + 销量不弱<br/>高溢价承接"]:::scenario
+  E --> F2["价格持平 + 销量强<br/>份额转化"]:::scenario
+  E --> F3["价格低 + 销量强<br/>客户获得价值高"]:::scenario
+  E --> F4["价格高 + 销量弱<br/>价格压力"]:::scenario
+  E --> F5["价格低/持平 + 销量弱<br/>用户支付价值未验证"]:::scenario
 
-  CLI["catforge_analyst CLI"]
-  Agent["小奥智能体"]
-  Report["飞书/Markdown 报告"]
+  F1 --> G["筛选该战场相关卖点"]:::main
+  F2 --> G
+  F3 --> G
+  F4 --> G
+  F5 --> G
 
-  M03B --> Candidate
-  M04C --> Candidate
-  M05C --> Candidate
-  M07 --> Pool
-  M09C --> Pool
-  M10C --> Pool
-  M11C --> Pool
-  M11D --> Pool
-  Candidate --> Metric
-  Pool --> Metric
-  Metric --> Attribution
-  Candidate --> Attribution
-  Attribution --> Summary
-  Metric --> Summary
-  Metric --> Review
-  Attribution --> Review
-  Summary --> CLI
-  Attribution --> CLI
-  CLI --> Agent
-  CLI --> Report
+  G --> H["逐个卖点评分<br/>像竞品分析一样可解释"]:::main
+  H --> I1["战场相关度<br/>是不是该战场核心支付理由"]:::score
+  H --> I2["参数强度<br/>有没有真实参数支撑"]:::score
+  H --> I3["用户评论感知<br/>用户是否真的感知到"]:::score
+  H --> I4["竞品差异<br/>竞品是否也都有"]:::score
+  H --> I5["市场表现支撑<br/>价格/销量是否验证"]:::score
+
+  I1 --> J["计算卖点价值分"]:::main
+  I2 --> J
+  I3 --> J
+  I4 --> J
+  I5 --> J
+
+  J --> K["输出卖点类型"]:::main
+  K --> L1["高溢价卖点"]:::type
+  K --> L2["份额转化卖点"]:::type
+  K --> L3["客户获得价值卖点"]:::type
+  K --> L4["门槛卖点"]:::type
+  K --> L5["待激活卖点"]:::type
+  K --> L6["厂家主张卖点"]:::type
+  K --> L7["价格压力卖点"]:::type
+  K --> L8["只对证据成立的卖点量化<br/>分配用户支付价值金额"]:::action
+  L8 --> M["生成业务解释<br/>先输出整机口径结果<br/>分战场依据放入详细报告"]:::main
+
+  classDef main fill:#ffffff,stroke:#cbd5e1,stroke-width:2px,color:#111827,font-size:24px,font-weight:bold;
+  classDef scenario fill:#f8fafc,stroke:#94a3b8,stroke-width:2px,color:#111827,font-size:22px,font-weight:bold;
+  classDef score fill:#eef6ff,stroke:#60a5fa,stroke-width:2px,color:#0f172a,font-size:22px,font-weight:bold;
+  classDef type fill:#fff7ed,stroke:#fb923c,stroke-width:2px,color:#111827,font-size:22px,font-weight:bold;
+  classDef action fill:#f0fdf4,stroke:#22c55e,stroke-width:2px,color:#111827,font-size:22px,font-weight:bold;
 ```
 
-## 3. 输入契约
+图中节点只用于表达处理顺序。实际报告和 Skill 回答必须在图后追加业务解释，避免用户只看到“高溢价、份额转化”等标签但不知道含义。
 
-### 3.1 SKU 基础范围
+### 3.1 支付价值转化方式解释
 
-首版支持两个 population：
-
-| population | 构成 | 用途 |
+| 分支 | 业务含义 | 输出要求 |
 | --- | --- | --- |
-| `claim_value_ready_with_comment` | M04C + M05C + M07 + M09C + M10C + M11C + M11D | 默认业务问答 |
-| `claim_value_ready` | M04C + M07 + M09C + M10C + M11C + M11D | 新品、低评论 SKU 补充分析 |
+| 价格高 + 销量不弱，高溢价承接 | 价格已经上探，销量没有明显受损，用户支付意愿被价格承接 | 可以分配可解释金额，但必须保留可比池和证据链 |
+| 价格持平 + 销量强，份额转化 | 卖点主要提高选择率，价值体现在销量、销额或份额 | 输出销量/销额贡献，不输出高溢价金额 |
+| 价格低 + 销量强，客户获得价值高 | 用户获得的价值高于当前价格，形成“更值”的选择理由 | 输出客户获得价值和份额表现，不写成高价溢价 |
+| 价格高 + 销量弱，价格压力 | 卖点没有充分支撑高价，或竞品表达更强 | 输出风险和降级原因，不进入正向价值总榜 |
+| 价格低/持平 + 销量弱，用户支付价值未验证 | 当前价格和销量都没有验证卖点价值 | 输出待验证或厂家主张，不强行量化 |
 
-如果用户问“真实用户为什么买”，默认使用 `claim_value_ready_with_comment`。如果目标 SKU 没有评论事实，允许退到 `claim_value_ready`，但必须提示“用户评论验证不足”。
+### 3.2 卖点类型解释
 
-### 3.2 卖点状态输入
-
-从 M04C、M03B、M05C 组合生成 `SkuClaimState`：
-
-| 字段 | 来源 | 说明 |
+| 卖点类型 | 程序判定 | 报告解释 |
 | --- | --- | --- |
-| `sku_code` | M04C/M07 | SKU |
-| `claim_code` | M04C | 标准卖点 |
-| `claim_name` | M04C | 中文卖点名 |
-| `claim_dimension` | M04C | 卖点一级维度 |
-| `claim_position` | M04C | 卖点维度位置 |
-| `param_support_status` | M04C/M03B | 参数支撑状态 |
-| `param_support_score` | M04C/M03B | 参数支撑分 |
-| `comment_support_status` | M05C | 评论支持、反证、负向或未知 |
-| `comment_support_score` | M05C | 评论支撑分 |
-| `positive_comment_count` | M05C | 正向评论证据数量 |
-| `negative_comment_count` | M05C | 负向评论证据数量 |
-| `evidence_ids` | M04C/M05C | 可追溯证据 |
+| 高溢价卖点 | `market_position_type=premium_accepted`，卖点价值分达标，且非门槛 | 用户愿意为该卖点多付钱；展示整机口径可解释金额和主要成立场景 |
+| 份额转化卖点 | `market_position_type=share_conversion`，销量或销额优势明显 | 卖点提高选择率；展示可解释销量/销额，不展示为价格溢价 |
+| 客户获得价值卖点 | `market_position_type=customer_value_gain`，价格低但销量强 | 用户觉得更值；展示价值感和性价比来源 |
+| 门槛卖点 | 同池覆盖高、对照组不足或组间价格差异不稳定 | 进入市场池的基础能力；缺了会掉队，有了不单独加价 |
+| 待激活卖点 | 参数或卖点事实强，但评论、市场或表达验证不足 | 本品有潜在优势；需要加强用户教育、导购表达或评论验证 |
+| 厂家主张卖点 | 主要来自宣传文本，参数/评论/市场证据不足 | 厂家已表达但用户支付价值未成立；不分配金额 |
+| 竞品拦截卖点 | 竞品具备并验证，本品缺失、弱表达或弱感知 | 竞品可能改变用户选择；作为补强和防守方向 |
+| 价格压力卖点 | 价格高但销量弱，卖点未被用户或市场承接 | 该卖点不足以解释当前价格；作为定价或表达风险 |
 
-### 3.3 市场状态输入
+这两张解释表必须进入 Markdown 和飞书报告模板，也要进入小奥 Skill 的长答和“解释这个卖点为什么是这个类型”的回答中。
 
-从 M07 读取 `SkuMarketState`：
+## 4. 核心数据结构
 
-| 字段 | 说明 |
+### 4.1 `SkuClaimValueContext`
+
+```text
+SkuClaimValueContext
+- category_code
+- batch_id
+- market_window
+- sku_code
+- brand
+- model_name
+- size_value
+- size_tier
+- price_band
+- price_wavg
+- avg_weekly_sales_volume
+- avg_weekly_sales_amount
+- primary_battlefield
+- secondary_battlefields
+- battlefield_allocations
+- primary_user_tasks
+- primary_target_groups
+```
+
+`battlefield_allocations` 优先来自 M11D。缺失时用关系权重兜底。
+
+### 4.2 `ClaimAnalysisUnit`
+
+每个 SKU 的每个标准卖点生成一个分析单元：
+
+```text
+ClaimAnalysisUnit
+- sku_code
+- claim_code
+- claim_name
+- claim_dimension
+- claim_fact_status
+- param_support_status
+- comment_support_status
+- related_param_codes
+- related_comment_topics
+- related_battlefield_codes
+- service_excluded_flag
+```
+
+`service_excluded_flag=true` 的服务履约、物流安装、售后卖点不得进入产品用户支付价值分析。
+
+### 4.3 `BattlefieldClaimResult`
+
+单战场卖点结果：
+
+```text
+BattlefieldClaimResult
+- sku_code
+- battlefield_code
+- claim_code
+- claim_type
+- claim_value_score
+- value_space_amount
+- allocated_value_amount
+- allocated_weekly_sales_effect
+- market_position_type
+- parameter_evidence
+- comment_evidence
+- competitor_evidence
+- sample_grade
+- downgrade_reason
+- explanation_cn
+```
+
+### 4.4 `SkuClaimValueSummary`
+
+SKU 汇总结果：
+
+```text
+SkuClaimValueSummary
+- sku_code
+- claim_code
+- claim_name
+- final_claim_type
+- total_value_amount
+- total_weekly_sales_effect
+- main_supporting_battlefields
+- score_by_dimension
+- evidence_summary_cn
+- risk_or_opportunity_cn
+- calculation_trace
+```
+
+## 5. 分析战场选择
+
+默认分析范围：
+
+```text
+analysis_battlefields
+= primary_battlefield
++ secondary_battlefields
+```
+
+机会战场、厂家主张战场、拖后腿战场不进入正向汇总：
+
+| 关系状态 | 处理方式 |
 | --- | --- |
-| `size_tier` | 五档尺寸口径 |
-| `price_band_in_size_tier` | 尺寸内五档价格带 |
-| `price_wavg` | 加权均价 |
-| `sales_volume_total` | 观察窗口销量 |
-| `sales_amount_total` | 观察窗口销额 |
-| `avg_weekly_sales_volume` | 周均销量 |
-| `avg_weekly_sales_amount` | 周均销额 |
-| `active_week_count` | 活跃周 |
-| `main_platform` | 主平台 |
-| `main_channel_type` | 主渠道 |
+| 主战场 | 进入正向计算，默认权重 1.0 |
+| 辅战场 | 进入正向计算，默认权重 0.6-0.8 |
+| 机会战场 | 只进入机会分析，不计入正向总额 |
+| 厂家主张战场 | 只用于表达不足或待验证分析 |
+| 拖后腿战场 | 只用于风险分析 |
 
-如果 M07 价格带与 M03B 尺寸档不一致，M12C 必须优先使用 M03B 五档尺寸口径，并记录 `size_tier_source=param_fact`。
+如果用户指定战场，只计算指定战场，不做 SKU 汇总。
 
-### 3.4 语义状态输入
+## 6. 可比市场池构建
 
-从 M09C/M10C/M11C/M11D 读取：
+### 6.1 初始池
 
-| 字段 | 说明 |
+单个战场的初始池：
+
+```text
+same category
++ same batch
++ same market_window
++ same battlefield_code
++ same size_tier or exact size
++ same price_band
++ market facts ready
++ param and claim facts ready
+```
+
+默认优先使用有评论事实的 SKU。样本不足时可放宽评论要求，但结果必须降级。
+
+### 6.2 放宽规则
+
+放宽必须按顺序执行，并记录 `pool_relax_level`：
+
+| 等级 | 规则 |
 | --- | --- |
-| `primary_user_task_code` | 主用户任务 |
-| `secondary_user_task_codes` | 辅用户任务 |
-| `primary_target_group_code` | 主目标客群 |
-| `secondary_target_group_codes` | 辅目标客群 |
-| `primary_battlefield_code` | 主价值战场 |
-| `secondary_battlefield_codes` | 辅价值战场 |
-| `opportunity_battlefield_codes` | 机会战场 |
-| `drag_factor_battlefield_codes` | 拖后腿战场 |
-| `semantic_allocation` | M11D 的任务/客群/战场销量分配 |
-| `dimension_market_space` | M11D 的任务/客群/战场市场空间 |
+| L0 | 同战场、同具体尺寸、同价格带、有评论 |
+| L1 | 同战场、同尺寸档、同价格带、有评论 |
+| L2 | 同战场、同尺寸档、相邻价格带、有评论 |
+| L3 | 同战场、同尺寸档、同/相邻价格带，不强制评论 |
+| L4 | 同尺寸档、同/相邻价格带，不限定战场，仅用于门槛判断 |
 
-## 4. 可比池设计
+L4 不得输出高溢价，只能用于判断基础门槛、样本不足和待激活。
 
-### 4.1 Pool Key
+### 6.3 样本等级
 
-M12C 的核心结果都必须带 `pool_key`。
+| 等级 | 条件 | 可输出结论 |
+| --- | --- | --- |
+| 样本充分 | 池内 SKU >= 6，且有卖点组和对照组都 >= 2 | 可输出高溢价、份额转化、门槛等 |
+| 弱样本 | 池内 SKU >= 4，但某组样本不足 | 可输出倾向性结论，必须提示 |
+| 样本不足 | 池内 SKU < 4，或缺少对照组 | 只能输出待验证或定性判断 |
 
-首版定义：
+## 7. 市场位置判断
+
+对目标 SKU 在单战场可比池中计算：
 
 ```text
-pool_key =
-  product_category
-  + market_window
-  + population
-  + size_tier
-  + price_band_group
-  + context_type
-  + context_code
+price_gap_ratio = (target_price - baseline_price) / baseline_price
+sales_gap_ratio = (target_weekly_sales - baseline_weekly_sales) / baseline_weekly_sales
+amount_gap_ratio = (target_weekly_amount - baseline_weekly_amount) / baseline_weekly_amount
 ```
 
-其中：
+阈值建议：
 
-| 字段 | 说明 |
+| 指标 | 判定 |
 | --- | --- |
-| `size_tier` | 五档尺寸 |
-| `price_band_group` | 同价带或相邻价带扩展 |
-| `context_type` | `market_pool`、`battlefield`、`user_task`、`target_group`、`competitor_set` |
-| `context_code` | 对应战场、任务、客群或候选池编码 |
+| `price_gap_ratio >= 0.05` | 价格高 |
+| `abs(price_gap_ratio) < 0.05` | 价格接近 |
+| `price_gap_ratio <= -0.05` | 价格低 |
+| `sales_gap_ratio >= 0.10` | 销量强 |
+| `sales_gap_ratio <= -0.10` | 销量弱 |
+| 其余 | 销量接近 |
 
-### 4.2 可比池构建步骤
+市场位置类型：
 
-对每个目标 SKU、每个标准卖点、每个上下文：
-
-1. 从同 `product_category` 和 `market_window` 中取候选 SKU。
-2. 限定同 `size_tier`。
-3. 限定同 `price_band_in_size_tier`。
-4. 限定同 `context_type/context_code`，例如同主价值战场或同主用户任务。
-5. 若样本不足，允许按顺序放宽：
-   - 同价格带 -> 相邻价格带。
-   - 主战场 -> 主辅战场。
-   - 主任务 -> 主辅任务。
-   - 主客群 -> 主辅客群。
-   - 单一市场场景 -> 尺寸价格池。
-6. 每次放宽必须写入 `relaxation_path_json`。
-
-### 4.3 样本门槛
-
-首版建议门槛：
-
-| 门槛 | 建议值 | 处理 |
-| --- | ---: | --- |
-| `min_pool_sku_count` | 8 | 低于则降级为弱估计 |
-| `min_with_claim_sku_count` | 3 | 低于则不能判断正向价值 |
-| `min_without_claim_sku_count` | 3 | 低于则不能稳定计算对照差异 |
-| `min_active_week_count_median` | 4 | 低于则市场表现置信度降低 |
-| `min_comment_supported_sku_count` | 2 | 低于则不能判用户验证普遍成立 |
-
-样本不足或弱样本时可以保留观察结果，但 `sample_status=insufficient/weak` 的记录，`claim_value_role` 不能输出 `premium_driver_estimated`、`sales_driver_estimated`、`value_bundle_claim` 或 `basic_threshold` 等正向价值角色。若参数、卖点事实和评论均强支撑，只能展示为“本品优势卖点（待量化）”；若事实证据也不足，则展示为“样本不足待复核”。
-
-### 4.4 有卖点组和对照组
-
-`with_claim` 组：
-
-- M04C 命中该标准卖点。
-- 参数支撑状态为 `supported` 或 `partial_supported`。
-- 非服务履约卖点。
-
-`strong_with_claim` 组：
-
-- M04C 命中该标准卖点。
-- 参数支撑 `supported`。
-- M05C 评论支持或 M11C 主/辅战场强支撑。
-
-`without_claim` 组：
-
-- 未命中该标准卖点。
-- 或命中但参数支撑不足。
-- 或命中但被评论明显反证。
-
-`unknown` 组：
-
-- 数据缺失导致不能判断有无。
-
-计算对照差异时默认使用 `strong_with_claim` 对比 `without_claim`。如果 `strong_with_claim` 样本不足，则退到 `with_claim` 并降低置信度。
-
-## 5. 池级卖点价值指标
-
-### 5.1 基础聚合
-
-对每个 `claim_code + pool_key` 聚合：
-
-```text
-with_price_median
-without_price_median
-with_avg_weekly_sales_volume_median
-without_avg_weekly_sales_volume_median
-with_avg_weekly_sales_amount_median
-without_avg_weekly_sales_amount_median
-with_sales_volume_share
-without_sales_volume_share
-```
-
-默认使用中位数减少极端 SKU 影响，同时保留均值。
-
-### 5.2 异常处理
-
-在池内做轻量 winsorize：
-
-- 价格低于 P5 或高于 P95 的 SKU 不删除，但计算均值时截尾。
-- 周均销量低于 P5 或高于 P95 的 SKU 不删除，但计算均值时截尾。
-- 中位数不截尾。
-
-如果池内 SKU 少于 8，不做截尾，只标记 `small_pool`。
-
-### 5.3 核心指标公式
-
-价格溢价：
-
-```text
-price_premium_abs = with_price_median - without_price_median
-price_premium_rate = price_premium_abs / without_price_median
-```
-
-销量提升：
-
-```text
-weekly_sales_lift_abs =
-  with_avg_weekly_sales_volume_median
-  - without_avg_weekly_sales_volume_median
-
-weekly_sales_lift_rate =
-  weekly_sales_lift_abs / without_avg_weekly_sales_volume_median
-```
-
-销额提升：
-
-```text
-weekly_sales_amount_lift_abs =
-  with_avg_weekly_sales_amount_median
-  - without_avg_weekly_sales_amount_median
-```
-
-市场份额优势：
-
-```text
-market_share_lift =
-  with_sales_volume_share / with_claim_sku_count
-  - without_sales_volume_share / without_claim_sku_count
-```
-
-字段在数据库中可以继续沿用 `price_premium_abs` 等名称，但对 CLI、Skill、飞书报告必须使用业务别名：
-
-| 内部字段 | 业务展示名 | 解释边界 |
+| 类型 | 条件 | 解释 |
 | --- | --- | --- |
-| `price_premium_abs` | 可比池卖点价格差异 | 有卖点组价格中位数 - 对照组价格中位数 |
-| `price_premium_rate` | 可比池卖点价格差异率 | 组间价格差异率 |
-| `weekly_sales_lift_abs` | 可比池卖点周均销量差异 | 有卖点组周均销量中位数 - 对照组周均销量中位数 |
-| `weekly_sales_amount_lift_abs` | 可比池卖点周均销额差异 | 有卖点组周均销额中位数 - 对照组周均销额中位数 |
-| `market_share_lift` | 可比池份额差异 | 组间份额优势 |
+| `premium_accepted` | 价格高，销量不弱 | 可承接高溢价 |
+| `price_pressure` | 价格高，销量弱 | 高价承压 |
+| `share_conversion` | 价格接近，销量强 | 卖点转化为份额 |
+| `customer_value_gain` | 价格低，销量强 | 用户获得价值强 |
+| `unverified` | 价格不高且销量不强 | 用户支付价值未验证 |
 
-这些指标只能说明组间可观测差异。由于同池 SKU 常常同时具备多个卖点，不能把 `price_premium_abs=280` 解释成“该卖点单独值 280 元”。
+## 8. 门槛卖点先行校验
 
-### 5.4 价值强度分
+在计算强溢价之前，必须先判门槛。
 
-将指标归一到 0-1：
-
-```text
-price_effect_score = clamp(price_premium_rate / 0.20, -1, 1)
-sales_effect_score = clamp(weekly_sales_lift_rate / 0.50, -1, 1)
-amount_effect_score = clamp(weekly_sales_amount_lift_rate / 0.50, -1, 1)
-comment_effect_score = positive_comment_support_rate - negative_comment_rate
-semantic_effect_score = share_of_primary_or_secondary_semantic_relation
-```
-
-综合：
+门槛判断同时看 M04C 卖点覆盖和 M03B 参数覆盖：
 
 ```text
-claim_value_effect_score =
-  0.25 * price_effect_score
-  + 0.25 * sales_effect_score
-  + 0.20 * amount_effect_score
-  + 0.15 * comment_effect_score
-  + 0.15 * semantic_effect_score
+claim_coverage = pool_skus_with_claim / pool_sku_count
+param_coverage = pool_skus_with_core_param / pool_sku_count
 ```
 
-如果样本不足，综合分只作为观察分，不用于高置信结论。
+满足以下任一情况，优先进入门槛或待验证，不得直接判强溢价：
 
-## 6. SKU 卖点商业价值分析
+1. `param_coverage >= 0.75` 且有无卖点组价格差异不稳定。
+2. `claim_coverage >= 0.75` 且对照组不足。
+3. 卖点是战场入围条件，例如 65 寸高价 MiniLED 池中的 MiniLED、高刷、HDR 基础支持。
+4. 宣传覆盖低但参数覆盖高，例如 HDMI2.1 文本少但参数普遍存在。
 
-### 6.1 SKU 相对可比产品基准表现
+门槛卖点仍可参与组合解释，但不能作为高溢价主结论。
 
-对目标 SKU 在某个 `pool_key` 下计算相对基准：
+## 9. 卖点价值分计算
+
+### 9.1 公式
 
 ```text
-baseline_price = pool_without_claim_or_pool_median_price
-baseline_weekly_sales = pool_without_claim_or_pool_median_weekly_sales
-baseline_weekly_sales_amount = pool_without_claim_or_pool_median_weekly_amount
-
-sku_price_premium_abs = sku_price - baseline_price
-sku_weekly_sales_lift_abs = sku_avg_weekly_sales_volume - baseline_weekly_sales
-sku_weekly_sales_amount_lift_abs = sku_avg_weekly_sales_amount - baseline_weekly_sales_amount
+claim_value_score
+= 0.20 * battlefield_relevance_score
++ 0.25 * parameter_strength_score
++ 0.25 * comment_perception_score
++ 0.15 * competitor_difference_score
++ 0.15 * market_validation_score
 ```
 
-若目标 SKU 低于基准，则该部分为负向或拖后腿，不参与正向溢价分摊。
+输出分值统一为 0-100。
 
-### 6.2 候选卖点权重
+### 9.2 战场相关度
 
-对 SKU 的每个卖点计算 `claim_attribution_weight_raw`：
+| 分值 | 条件 |
+| ---: | --- |
+| 90-100 | 卖点是该战场核心支付理由 |
+| 70-89 | 卖点强相关，但不是唯一核心 |
+| 40-69 | 卖点间接相关 |
+| 0-39 | 与该战场弱相关 |
+
+例如 HDMI2.1 对游戏体育流畅战场相关度高，对高端画质升级战场相关度较低。
+
+### 9.3 参数强度
+
+参数强度来自参数事实和同池位置：
 
 ```text
-claim_attribution_weight_raw =
-  claim_value_effect_score_positive
-  * claim_evidence_strength
-  * semantic_support_strength
-  * user_validation_factor
+parameter_strength_score =
+  parameter_presence_score
++ parameter_tier_score
++ parameter_rank_score
+- missing_or_conflict_penalty
 ```
 
-组成：
+示例：
 
-| 因子 | 来源 | 说明 |
-| --- | --- | --- |
-| `claim_value_effect_score_positive` | 池级指标 | 只取正向部分，负向进入风险 |
-| `claim_evidence_strength` | M04C/M03B | 卖点文本和参数支撑 |
-| `semantic_support_strength` | M09C/M10C/M11C | 是否支撑主战场、主任务、主客群 |
-| `user_validation_factor` | M05C | 评论正向、负向或未知 |
+- 亮度 5200nits 在 65 寸高价池显著领先，应给高参数强度。
+- MiniLED 如果同池普遍具备，只能给基础参数存在分，不能给高差异分。
+- 参数缺失不能直接判否，除非上游标准明确“缺失即无”。
 
-建议权重：
+### 9.4 用户评论感知
 
-```text
-claim_evidence_strength =
-  0.60 * param_support_score
-  + 0.40 * claim_match_score
+评论感知分来自 M05C：
 
-semantic_support_strength =
-  max(
-    battlefield_support_weight,
-    user_task_support_weight,
-    target_group_support_weight
-  )
-
-user_validation_factor =
-  1.20 if comment positive and no strong negative
-  1.00 if comment unknown but semantic/param strong
-  0.60 if mixed comments
-  0.20 if negative concentrated
-```
-
-### 6.3 贡献归一
-
-对同一个 SKU、同一个 `pool_key`：
-
-```text
-claim_attribution_weight =
-  claim_attribution_weight_raw / sum(raw weights of positive candidate claims)
-```
-
-估算贡献：
-
-```text
-estimated_price_premium_abs =
-  max(0, sku_price_premium_abs) * claim_attribution_weight
-
-estimated_weekly_sales_lift_abs =
-  max(0, sku_weekly_sales_lift_abs) * claim_attribution_weight
-
-estimated_weekly_sales_amount_lift_abs =
-  max(0, sku_weekly_sales_amount_lift_abs) * claim_attribution_weight
-```
-
-这三个估算是解释性分摊，不是卖点真实因果贡献。
-
-对外展示必须使用以下业务别名：
-
-| 内部字段 | 业务展示名 | 解释边界 |
-| --- | --- | --- |
-| `estimated_price_premium_abs` | 本品可解释价差份额 | 本品相对可比产品基准的价格差中，由该卖点参与解释的部分 |
-| `estimated_weekly_sales_lift_abs` | 本品可解释销量差份额 | 本品相对可比产品基准的销量差中，由该卖点参与解释的部分 |
-| `estimated_weekly_sales_amount_lift_abs` | 本品可解释销额差份额 | 本品相对可比产品基准的销额差中，由该卖点参与解释的部分 |
-| `contribution_share_in_sku` | 可比产品基准差异解释占比 | 该卖点在本品正向候选卖点中的权重占比 |
-
-如果目标 SKU 本身低于可比产品基准，则正向解释份额为 0，应转入补强、拖后腿或竞品拦截分析。不得为了展示正数而把负向差异取绝对值。
-
-### 6.4 负向贡献
-
-如果卖点存在以下情况，输出 `drag_factor`：
-
-- 评论负向集中。
-- 参数支撑不足但厂家强宣传。
-- 该卖点支撑本 SKU 主战场，但 M11C 标为拖后腿战场。
-- 同池竞品普遍具备且评论正向，本品缺失或弱。
-
-负向贡献不从正向表现差异中分摊，单独输出：
-
-```text
-estimated_drag_weekly_sales_abs
-estimated_drag_sales_amount_abs
-drag_reason_cn
-```
-
-首版可以只输出等级和原因，不强行输出负销量。
-
-### 6.5 高价竞品拦截与价格上探机会
-
-当目标 SKU 的某卖点池级价格差异为负或不显著，或目标 SKU 低于同池高价 SKU 时，需要补充“高价竞品拦截/价格上探机会”分析。
-
-候选高价竞品池：
-
-1. 同 `size_tier`。
-2. 同 `price_band_in_size_tier` 或相邻更高价格带。
-3. 主/辅价值战场、用户任务、目标客群与目标 SKU 有有效重合。
-4. `avg_weekly_sales_volume` 不低于同池 P25，或销额/销量处于可观察活跃水平。
-5. 非服务履约卖点驱动。
-
-对每个高价竞品计算：
-
-```text
-competitor_price_delta = competitor_price - target_price
-competitor_sales_valid = competitor_avg_weekly_sales >= pool_weekly_sales_p25
-claim_gap_strength =
-  competitor_claim_support_strength
-  - target_claim_support_strength
-```
-
-输出规则：
-
-| 情况 | 输出标签 | 说明 |
-| --- | --- | --- |
-| 高价竞品有，本品缺失，且该卖点池级价格差异为正 | `high_price_competitor_intercept` | 竞品用该卖点解释更高价格或更高端心智 |
-| 高价竞品有，本品也有，但竞品评论/参数/场景表达显著更强 | `weak_user_perception_claim` | 本品存在卖点，但用户感知或证据不够强 |
-| 多个高价竞品反复出现同一卖点，本品缺失或弱 | `price_up_opportunity` | 可作为本品价格上探或高端表达机会 |
-| 高价竞品只是具备同池普遍卖点 | `basic_threshold` | 不能作为差异化机会 |
-
-### 6.6 组合型增值卖点
-
-如果单个卖点的池级价格差异为负或不显著，但该卖点在高价 SKU 中反复与其他高价值卖点组合出现，需要识别为组合型增值卖点。
-
-组合识别步骤：
-
-1. 在同 `pool_key` 中筛选高价且有成交能力的 SKU，默认价格高于池内 P60，周均销量高于 P25。
-2. 抽取这些 SKU 的正向卖点集合，只保留参数和评论至少一项成立的卖点。
-3. 统计二元或三元卖点组合的出现频次和覆盖 SKU。
-4. 组合内至少一个卖点有正向池级价格差异或正向销额差异。
-5. 若目标 SKU 具备组合的一部分，输出 `value_bundle_claim`；若缺失关键组合卖点，输出 `price_up_opportunity`。
-
-组合型增值卖点的自然语言必须写清楚“与哪些卖点组合后参与高端价值解释”，不能写成单点独立溢价。
-
-## 7. 卖点价值角色判定
-
-### 7.1 判定规则
-
-| 角色 | 判定条件 |
+| 情况 | 分值方向 |
 | --- | --- |
-| `premium_driver_estimated` | 池级价格差异为正，销额提升为正，SKU 该卖点支撑主战场/主任务/主客群，参数和评论至少一项强验证 |
-| `sales_driver_estimated` | 价格溢价不显著，但周均销量或市场份额提升明显，且评论或语义支撑成立 |
-| `basic_threshold` | 同池覆盖率高，具备该卖点不产生明显溢价，但缺失 SKU 表现明显弱 |
-| `value_bundle_claim` | 单点价格差异不强，但在高价 SKU 的卖点组合中反复出现，并与正向卖点共同支撑高端价值 |
-| `weak_user_perception_claim` | 本品具备卖点或参数，但评论支撑弱、负向明显，或弱于同池高价竞品 |
-| `high_price_competitor_intercept` | 同池高价且有成交能力的竞品具备，本品缺失、表达弱或评论弱 |
-| `price_up_opportunity` | 高价 SKU 反复具备且有市场价值，本品补强后可能提升高端解释空间 |
-| `brand_claim_only` | 卖点文本强，参数或评论验证不足，市场效果不稳定 |
-| `user_validated_need` | 评论需求强，但本品卖点或参数支撑不足 |
-| `drag_factor` | 评论负向、参数不支撑或竞品强对照导致本品被削弱 |
-| `opportunity_gap` | 同池强竞品具备且有正向价值，本品缺失或弱 |
-| `sample_insufficient` | with/without 样本、活跃周或评论样本不足 |
+| 正向评论数量充足，且与卖点直接相关 | 高 |
+| 评论提到但正负混合 | 中 |
+| 评论很少或只间接相关 | 低 |
+| 负向集中 | 进入风险或拖后腿 |
 
-`premium_driver_estimated` 必须同时满足“池级价格差异为正”和“证据成立”。如果池级价格差异为负，即使 SKU 本品可解释价差份额为正，也不能展示为价格支撑卖点；应转为 `sales_driver_estimated`、`basic_threshold`、`value_bundle_claim`、`weak_user_perception_claim` 或补强/拦截分析。
+评论权重必须高于单纯厂家宣传。对“用户卖点支付价值”问题，如果没有评论验证，应降级为待激活或厂家主张。
 
-### 7.2 业务展示优先级
+### 9.5 竞品差异
 
-一个 SKU 的卖点列表展示顺序：
+竞品差异分按可替代压力判断，不能简单按“竞品越少有越高”处理：
 
-1. `premium_driver_estimated`
-2. `sales_driver_estimated`
-3. `value_bundle_claim`
-4. `basic_threshold`
-5. `high_price_competitor_intercept`
-6. `price_up_opportunity`
-7. `weak_user_perception_claim`
-8. `opportunity_gap`
-9. `drag_factor`
-10. `brand_claim_only`
-11. `user_validated_need`
-12. `sample_insufficient`
+| 情况 | 分值方向 |
+| --- | --- |
+| 本品强，主要直接竞品弱或缺失 | 高 |
+| 本品与竞品都有，但本品参数档位明显更强 | 中高 |
+| 同池普遍具备 | 低，通常进入门槛 |
+| 竞品更强 | 输出竞品拦截或价格压力 |
 
-自然语言短答默认只讲前三个业务结论；飞书报告默认展示 Top5，并保留明显机会/拖后腿。
+### 9.6 市场验证
 
-## 8. 数据模型
+市场验证分来自价格、销量、销额和战场分配：
 
-### 8.1 `core3_claim_value_context_pool`
+| 情况 | 分值方向 |
+| --- | --- |
+| 价格高且销量不弱 | 支持高溢价 |
+| 价格接近但销量强 | 支持份额转化 |
+| 价格低且销量强 | 支持客户获得价值 |
+| 价格高但销量弱 | 进入价格压力 |
+| 样本不足 | 降级 |
 
-| 字段 | 类型建议 | 说明 |
+### 9.7 可追溯评分卡结构
+
+程序必须为每个 `sku_code + battlefield_code + claim_code` 保存完整评分卡，保证结果像竞品分析一样可复核。
+
+```text
+ClaimValueScorecard
+- sku_code
+- battlefield_code
+- claim_code
+- total_score
+- final_claim_type
+- dimension_scores
+  - battlefield_relevance: raw_score, weight, weighted_score, reason_cn, evidence_refs
+  - parameter_strength: raw_score, weight, weighted_score, reason_cn, evidence_refs
+  - comment_perception: raw_score, weight, weighted_score, reason_cn, evidence_refs
+  - competitor_difference: raw_score, weight, weighted_score, reason_cn, evidence_refs
+  - market_validation: raw_score, weight, weighted_score, reason_cn, evidence_refs
+- downgrade_reasons
+- sample_grade
+- pool_key
+- report_explanation_cn
+```
+
+评分卡写入和展示要求：
+
+| 要求 | 说明 |
+| --- | --- |
+| 维度权重固定可见 | 报告中能看到 20%、25%、25%、15%、15% 的权重 |
+| 每个维度有业务解释 | 不能只输出分数，必须说明该分数来自什么事实 |
+| 每个维度有证据引用 | 参数、评论、竞品、市场池证据至少保留可追溯引用 |
+| 降级原因独立输出 | 门槛、样本不足、评论不足、竞品更强不能被总分掩盖 |
+| 总分不替代业务类型 | 高分仍可能是门槛；业务类型由市场位置、门槛校验和证据链共同决定 |
+
+报告层建议展示：
+
+| 维度 | 权重 | 得分 | 加权贡献 | 业务解释 |
+| --- | ---: | ---: | ---: | --- |
+| 战场相关度 | 20% | 90 | 18.0 | 该卖点直接服务该战场核心支付理由 |
+| 参数强度 | 25% | 95 | 23.8 | 参数在同池处于领先或高位 |
+| 用户评论感知 | 25% | 70 | 17.5 | 用户评论有正向感知，但直指样本仍需增强 |
+| 竞品差异 | 15% | 75 | 11.3 | 主要竞品具备相近卖点，但本品参数更强 |
+| 市场验证 | 15% | 80 | 12.0 | 同战场高价下销量不弱，市场验证成立 |
+
+## 10. 单战场金额和销量空间
+
+### 10.1 价格空间
+
+```text
+raw_price_space = target_price - baseline_price
+effective_price_space = abs(raw_price_space) * market_validation_coefficient
+```
+
+`market_validation_coefficient` 由销量位置、样本等级和评论验证决定：
+
+| 条件 | 系数 |
+| --- | ---: |
+| 销量强，样本充分，评论支持 | 0.90-1.00 |
+| 销量接近，样本充分 | 0.70-0.85 |
+| 销量弱或评论弱 | 0.30-0.60 |
+| 样本不足 | 0.10-0.30 |
+
+价格空间的业务含义必须随市场位置变化：
+
+| 市场位置 | 金额解释 |
+| --- | --- |
+| 高价且销量不弱 | 高溢价承接空间 |
+| 高价且销量弱 | 价格压力空间 |
+| 低价且销量强 | 客户获得价值空间 |
+| 同价且销量强 | 主要看销量/销额，不强调金额 |
+
+### 10.2 销量空间
+
+```text
+weekly_sales_space = max(0, target_weekly_sales - baseline_weekly_sales)
+weekly_amount_space = max(0, target_weekly_amount - baseline_weekly_amount)
+```
+
+如果目标价格低但销量强，优先输出销量和销额空间，避免误写“溢价”。
+
+### 10.3 卖点分配
+
+同一战场中，先筛选相关卖点：
+
+```text
+eligible_claims =
+  claims where battlefield_relevance_score >= min_relevance
+  and service_excluded_flag = false
+  and claim_type not in brand_claim_only
+```
+
+卖点分配权重：
+
+```text
+claim_share =
+  claim_value_score
+  / sum(claim_value_score of eligible_claims in same battlefield and same value_type)
+```
+
+卖点金额：
+
+```text
+claim_price_value =
+  effective_price_space
+  * claim_share
+  * claim_type_coefficient
+```
+
+卖点销量：
+
+```text
+claim_weekly_sales_value =
+  weekly_sales_space
+  * claim_share
+  * claim_type_coefficient
+```
+
+如果该战场没有正向价格空间，则 `claim_price_value` 不展示为溢价金额；可展示为客户获得价值、份额转化或待验证。
+
+## 11. SKU 层汇总
+
+SKU 层汇总必须按战场权重合并，不能把原始金额直接相加。
+
+```text
+sku_claim_price_value =
+  sum(claim_price_value_by_battlefield * battlefield_weight)
+```
+
+```text
+sku_claim_weekly_sales_value =
+  sum(claim_weekly_sales_value_by_battlefield * battlefield_weight)
+```
+
+战场权重：
+
+1. 优先使用 M11D allocation weight。
+2. 若缺失，主战场 1.0，辅战场 0.6-0.8。
+3. 机会、厂家主张、拖后腿不进入正向总额。
+
+汇总时必须保留来源：
+
+```text
+main_supporting_battlefields = [
+  {battlefield_code, battlefield_name, relation_status, battlefield_weight, claim_type, claim_value}
+]
+```
+
+同一卖点在不同战场可能类型不同。例如 HDMI2.1 在游戏体育流畅战场可能是份额转化卖点，在高端画质战场可能只是弱相关或门槛。
+
+### 11.1 用户默认看到的结果
+
+CLI 和 Skill 面向业务用户输出时，默认展示 SKU 整机口径的最终结果。分战场金额、战场权重、可比池和样本等级是结果依据，不是短答主结构。
+
+当用户问“某 SKU 的某个卖点用户卖点支付价值是多少”时，输出应按以下顺序组织：
+
+1. 最终分类：该卖点在整机口径下是高溢价卖点、份额转化卖点、客户获得价值卖点、门槛卖点、待激活卖点、价格压力卖点等。
+2. 最终数值：该卖点在整机口径下的用户卖点支付价值，或说明当前不支持金额量化。
+3. 业务含义：该数值代表用户对什么价值的认可，例如亮度、HDR 明暗层次、强光客厅观看、高端画质感知。
+4. 主要成立场景：用业务语言概括主要成立场景，例如高端画质升级、影院沉浸、主流客厅观看。
+5. 依据摘要：只保留关键事实，例如参数领先、用户评论正向、主要竞品差异、市场验证成立。
+6. 详细链接：分战场明细和计算过程放到 Markdown 或飞书报告。
+
+短答中不得把“在哪个战场多少钱、乘以哪个权重、怎么汇总”作为主要答案。用户需要追问“为什么是这个数”或打开详细报告时，才展开分战场计算过程。
+
+## 12. 分类规则
+
+分类优先级：
+
+1. 服务履约类直接排除。
+2. 样本不足先降级。
+3. 门槛校验先于高溢价判断。
+4. 再根据市场位置、卖点价值分和证据链分类。
+
+分类规则：
+
+| 分类 | 必要条件 |
+| --- | --- |
+| 高溢价卖点 | 市场位置为 `premium_accepted`；卖点价值分 >= 75；不是门槛；参数和评论至少一个强，另一个不弱 |
+| 份额转化卖点 | 市场位置为 `share_conversion`；卖点价值分 >= 70；销量或销额强 |
+| 客户获得价值卖点 | 市场位置为 `customer_value_gain`；卖点价值分 >= 70；价格低但销量强 |
+| 门槛卖点 | 同池覆盖高、对照组不足或价差不稳定 |
+| 待激活卖点 | 参数强但评论/市场验证不足，或样本弱 |
+| 厂家主张卖点 | 卖点文本存在，但参数、评论、市场都弱 |
+| 竞品拦截卖点 | 主要竞品具备且验证强，本品缺失或弱 |
+| 价格压力卖点 | 价格高但销量弱，且卖点未能获得用户或市场验证 |
+
+同一卖点如果命中多个分类，按业务输出优先级展示：
+
+```text
+价格压力 > 竞品拦截 > 高溢价 > 份额转化 > 客户获得价值 > 待激活 > 门槛 > 厂家主张
+```
+
+但在详情中保留全部战场来源。
+
+## 13. 65E7Q 计算示例
+
+以下是海信 65E7Q 在“高端画质升级战场”的示例计算口径，用于验收算法是否自洽。
+
+### 13.1 战场与可比池
+
+| 项目 | 示例 |
+| --- | --- |
+| 目标 SKU | 海信 65E7Q |
+| 价值战场 | 高端画质升级 |
+| 尺寸 | 65 英寸 |
+| 价格带 | 65 寸 high |
+| 目标价格 | 约 5,949 元 |
+| 直接可比基准 | 约 5,580 元 |
+| 原始价差 | 约 370 元 |
+| 市场验证系数 | 约 0.90 |
+| 单战场高溢价承接空间 | 约 333 元/台 |
+
+该数值表示在该可比战场中，当前价格差可被卖点和市场证据解释的空间；它不代表所有卖点共同必然让价格高 333 元。
+
+### 13.2 卖点判断
+
+| 卖点 | 初步业务判断 | 原因 |
 | --- | --- | --- |
-| `pool_id` | text | 主键 |
-| `project_id` | text | 项目 |
-| `category_code` | text | 源品类 |
-| `product_category` | text | 业务品类 |
-| `batch_id` | text | 批次 |
-| `market_window` | text | 市场窗口 |
-| `analysis_population` | text | 分析 SKU 集 |
-| `claim_code` | text | 标准卖点 |
-| `context_type` | text | market_pool/battlefield/user_task/target_group/competitor_set |
-| `context_code` | text | 上下文 code |
-| `size_tier` | text | 五档尺寸 |
-| `price_band_group` | text | 价格带或扩展价格带 |
-| `pool_sku_count` | integer | 池内 SKU 数 |
-| `with_claim_sku_count` | integer | 有卖点组 SKU 数 |
-| `without_claim_sku_count` | integer | 对照组 SKU 数 |
-| `unknown_claim_sku_count` | integer | 未知组 SKU 数 |
-| `pool_sku_codes_json` | jsonb | 池内 SKU |
-| `relaxation_path_json` | jsonb | 放宽路径 |
-| `sample_status` | text | sufficient/weak/insufficient |
-| `pool_hash` | text | 输入 hash |
-| `rule_version` | text | 规则版本 |
-| `is_current` | boolean | 当前结果 |
+| 5200nits 高亮 | 高溢价候选 | 与高端画质战场强相关，参数强，能解释高亮 HDR 体验 |
+| 1920 分区控光 | 待激活高溢价候选 | 参数强，但评论对控光/黑位直接感知可能不足 |
+| MT9655/画质芯片 | 高溢价候选 | 与画质处理、控光、高刷和智能体验相关，竞品显式芯片覆盖低 |
+| 98% 色域/色彩 | 体验支撑卖点 | 与画质体验相关，评论有色彩反馈时增强 |
+| MiniLED | 门槛卖点 | 65 寸高价池普遍具备，不能单独解释高价 |
+| HDMI2.1 | 非本战场主卖点 | 更适合在游戏体育流畅战场判断 |
+| 护眼显示 | 待验证卖点 | 需要护眼参数和长看评论支撑 |
+| 杜比/影音认证 | 待验证卖点 | 需要影音任务和评论验证，不能只靠认证文本 |
 
-### 8.2 `core3_claim_value_pool_metric`
+### 13.3 分配示例
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `metric_id` | text | 主键 |
-| `pool_id` | text | 可比池 |
-| `claim_code` | text | 标准卖点 |
-| `claim_name` | text | 卖点中文 |
-| `with_price_median` | numeric | 有卖点组价格中位数 |
-| `without_price_median` | numeric | 对照组价格中位数 |
-| `price_premium_abs` | numeric | 可比池卖点价格差异金额 |
-| `price_premium_rate` | numeric | 可比池卖点价格差异率 |
-| `with_weekly_sales_median` | numeric | 有卖点组周均销量中位数 |
-| `without_weekly_sales_median` | numeric | 对照组周均销量中位数 |
-| `weekly_sales_lift_abs` | numeric | 周均销量优势 |
-| `weekly_sales_lift_rate` | numeric | 周均销量优势率 |
-| `weekly_sales_amount_lift_abs` | numeric | 周均销额优势 |
-| `market_share_lift` | numeric | 池内市场份额优势 |
-| `claim_value_effect_score` | numeric | 综合价值效果分 |
-| `effect_confidence` | numeric | 置信度 |
-| `business_summary_cn` | text | 中文解释 |
-| `quality_flags_json` | jsonb | 样本、异常和降级标记 |
-| `result_hash` | text | 结果 hash |
+如果高端画质战场中有效候选为高亮、控光、画质芯片、色彩、MiniLED，则示例输出应类似：
 
-对外输出时，`price_premium_abs` 必须显示为“可比池卖点价格差异”，`weekly_sales_lift_abs` 必须显示为“可比池卖点周均销量差异”。字段名可以在 debug 模式出现，业务模式不得直接展示。
+| 卖点 | 类型 | 可解释金额 | 说明 |
+| --- | --- | ---: | --- |
+| 5200nits 高亮 | 高溢价卖点 | 约 90 元/台 | 参数强且与高端画质战场直接相关 |
+| MT9655/画质芯片 | 高溢价卖点 | 约 80 元/台 | 支撑画质处理和高阶体验，具备差异性 |
+| 98% 色域/色彩 | 体验支撑卖点 | 约 70 元/台 | 支撑画质感知，需要评论验证增强 |
+| 1920 分区控光 | 待激活卖点 | 约 50 元/台 | 参数强，但用户直接感知证据不足时降级 |
+| MiniLED | 门槛卖点 | 低权重计入 | 作为战场入围条件，不作为高溢价主因 |
 
-### 8.3 `core3_sku_claim_value_quantification`
+以上金额仅为示例计算口径，实际数值必须由当前数据库重新计算，并保留可比池和权重。
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `sku_claim_value_id` | text | 主键 |
-| `pool_id` | text | 可比池 |
-| `sku_code` | text | SKU |
-| `brand_name` | text | 品牌 |
-| `model_name` | text | 型号 |
-| `claim_code` | text | 标准卖点 |
-| `claim_name` | text | 中文卖点 |
-| `claim_value_role` | text | 卖点价值角色 |
-| `claim_evidence_strength` | numeric | 卖点证据强度 |
-| `param_support_strength` | numeric | 参数支撑强度 |
-| `comment_support_strength` | numeric | 评论支撑强度 |
-| `semantic_support_strength` | numeric | 语义支撑强度 |
-| `estimated_price_premium_abs` | numeric | 本品可解释价差份额 |
-| `estimated_weekly_sales_lift_abs` | numeric | 本品可解释销量差份额 |
-| `estimated_weekly_sales_amount_lift_abs` | numeric | 本品可解释销额差份额 |
-| `contribution_share_in_sku` | numeric | 可比产品基准差异解释占比 |
-| `attribution_confidence` | numeric | 归因置信度 |
-| `supporting_dimensions_json` | jsonb | 支撑的战场/任务/客群 |
-| `evidence_ids_json` | jsonb | 证据 |
-| `reason_cn` | text | 中文解释 |
-| `quality_flags_json` | jsonb | 降级、样本、异常 |
-| `rule_version` | text | 规则版本 |
-| `is_current` | boolean | 当前结果 |
+## 14. 输出格式
 
-对外输出时，`estimated_price_premium_abs` 必须显示为“本品可解释价差份额”，`estimated_weekly_sales_lift_abs` 必须显示为“本品可解释销量差份额”。业务模式不得显示为“卖点加价金额”。
+### 14.1 短答
 
-建议新增或派生以下展示字段：
+短答控制在 600 字以内：
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `business_value_label` | text | 强溢价卖点/强销量卖点/基础门槛/组合型增值/用户感知不足/高价竞品拦截/价格上探机会 |
-| `business_value_meaning_cn` | text | 业务类型含义 |
-| `pool_claim_price_delta_abs` | numeric | 对外展示的可比池卖点价格差异 |
-| `pool_claim_weekly_sales_delta_abs` | numeric | 对外展示的可比池卖点销量差异 |
-| `sku_excess_price_explained_abs` | numeric | 对外展示的本品可解释价差份额 |
-| `sku_excess_weekly_sales_explained_abs` | numeric | 对外展示的本品可解释销量差份额 |
-| `bundle_claims_json` | jsonb | 组合型增值时依赖的卖点组合 |
-| `intercept_competitor_skus_json` | jsonb | 高价竞品拦截时的代表 SKU |
+```text
+结论：海信 65E7Q 的 5200nits 高亮属于高溢价卖点。按整机口径汇总后，它当前可解释的用户卖点支付价值约 X 元/台。
 
-### 8.4 `core3_sku_claim_contribution_attribution`
+这个卖点的业务价值主要来自高端画质升级、影院沉浸观看和强光客厅观看场景。用户认可的是高亮度带来的明暗层次、强对比和白天客厅观看清晰度。它可以支撑海信 65E7Q 的高端画质解释；游戏体育或智能互联等弱相关场景只作为辅助背景，不进入该卖点的主要价值口径。
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `attribution_id` | text | 主键 |
-| `sku_code` | text | SKU |
-| `context_type` | text | 上下文 |
-| `context_code` | text | 上下文 code |
-| `pool_id` | text | 可比池 |
-| `baseline_price` | numeric | 基准价格 |
-| `baseline_weekly_sales_volume` | numeric | 基准周均销量 |
-| `baseline_weekly_sales_amount` | numeric | 基准周均销额 |
-| `sku_price_premium_abs` | numeric | SKU 相对基准价格差 |
-| `sku_weekly_sales_lift_abs` | numeric | SKU 相对基准销量差 |
-| `sku_weekly_sales_amount_lift_abs` | numeric | SKU 相对基准销额差 |
-| `positive_claims_json` | jsonb | 正向贡献卖点 |
-| `drag_claims_json` | jsonb | 拖后腿卖点 |
-| `opportunity_claims_json` | jsonb | 机会缺口卖点 |
-| `attribution_summary_cn` | text | 中文归因摘要 |
-| `confidence` | numeric | 整体置信度 |
+详细报告见：{link}
+```
 
-### 8.5 `core3_claim_value_dimension_summary`
+### 14.2 Markdown/飞书报告
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `summary_id` | text | 主键 |
-| `claim_code` | text | 卖点 |
-| `dimension_type` | text | battlefield/user_task/target_group/market_pool |
-| `dimension_code` | text | 维度 code |
-| `dimension_name` | text | 中文名 |
-| `size_tier` | text | 尺寸档 |
-| `price_band_group` | text | 价格带 |
-| `sku_count` | integer | 覆盖 SKU 数 |
-| `premium_driver_sku_count` | integer | 溢价卖点 SKU 数 |
-| `sales_driver_sku_count` | integer | 销量卖点 SKU 数 |
-| `basic_threshold_sku_count` | integer | 基础门槛 SKU 数 |
-| `drag_factor_sku_count` | integer | 拖后腿 SKU 数 |
-| `opportunity_gap_sku_count` | integer | 机会缺口 SKU 数 |
-| `estimated_sales_volume` | numeric | 维度相关销量空间 |
-| `estimated_avg_weekly_sales_volume` | numeric | 周均销量空间 |
-| `top_skus_json` | jsonb | 代表 SKU |
-| `business_summary_cn` | text | 中文总结 |
+报告结构：
 
-### 8.6 `core3_claim_value_review_issue`
+1. 结论摘要。
+2. 用户卖点支付价值总榜，展示整机口径的最终分类和最终数值。
+3. 分价值战场分析，作为结果依据和可追溯明细。
+4. 卖点逐项解释。
+5. 门槛卖点与待激活卖点。
+6. 竞品拦截和价格压力。
+7. 计算口径和样本说明。
 
-| 字段 | 类型建议 | 说明 |
-| --- | --- | --- |
-| `issue_id` | text | 主键 |
-| `issue_scope` | text | sku/claim/pool/context |
-| `sku_code` | text | 可空 |
-| `claim_code` | text | 可空 |
-| `pool_id` | text | 可空 |
-| `issue_code` | text | 问题 code |
-| `issue_level` | text | info/warning/blocker |
-| `issue_cn` | text | 中文问题 |
-| `recommended_action_cn` | text | 建议 |
-| `resolved_status` | text | open/resolved/ignored |
+报告表格建议：
 
-## 9. 处理流程
+| 卖点 | 业务分类 | 主要成立战场 | 可解释金额 | 可解释销量 | 参数证据 | 评论证据 | 竞品差异 | 降级/风险 |
+| --- | --- | --- | ---: | ---: | --- | --- | --- | --- |
 
-### 9.1 批处理入口
+表格下必须放置口径备注：
 
-建议 CLI：
+```text
+说明：可解释金额和可解释销量是基于可比市场池、价值战场权重和证据分数得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。
+```
+
+## 15. CLI 设计
+
+### 15.1 `claim-value sku`
 
 ```bash
-python -m app.cli.catforge_pipeline run-claim-value-quantification \
-  --project-id core3 \
+catforge_analyst claim-value sku \
   --category-code TV \
-  --product-category tv \
-  --batch-id latest \
+  --query "海信 65E7Q" \
   --market-window full_observed_window \
-  --analysis-population claim_value_ready_with_comment
+  --top-n 8 \
+  --format markdown
 ```
 
-也可以纳入 `catforge_pipeline run-all-semantic-analysis` 的后续步骤，但首版建议独立执行，方便复核口径。
+输出 SKU 层总榜和分战场来源。
 
-### 9.2 批处理步骤
-
-1. 解析 batch、品类、market_window、analysis_population。
-2. 加载 eligible SKU。
-3. 构建每个 SKU 的 `SkuClaimState`。
-4. 构建每个 SKU 的 `SkuMarketState`。
-5. 构建语义状态和 M11D 图谱空间。
-6. 枚举 `claim_code + context_type/context_code + size_tier/price_band`。
-7. 构建可比池并写 `core3_claim_value_context_pool`。
-8. 计算池级卖点价值指标并写 `core3_claim_value_pool_metric`。
-9. 对每个 SKU 做卖点角色判断并写 `core3_sku_claim_value_quantification`。
-10. 对每个 SKU 做相对可比产品基准表现差异分摊并写 `core3_sku_claim_contribution_attribution`。
-11. 聚合卖点维度汇总并写 `core3_claim_value_dimension_summary`。
-12. 写 review issue。
-13. 写批次 summary 和 hash。
-
-## 10. CLI 查询设计
-
-### 10.1 统一 CLI 约定
-
-M12C 查询能力统一放在 `catforge_analyst` 下，由 `catforge_analyst ask` 做自然语言路由，原子 CLI 负责稳定输出。
-
-所有 M12C CLI 都必须支持：
-
-| 参数 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `--project-id` | 否 | 当前配置 | 项目 ID |
-| `--category-code` | 否 | `TV` | 源品类 |
-| `--product-category` | 否 | `tv` | 业务品类 |
-| `--batch-id` | 否 | `latest` | 批次 |
-| `--market-window` | 否 | `full_observed_window` | 市场窗口 |
-| `--analysis-population` | 否 | `claim_value_ready_with_comment` | 分析 SKU 集 |
-| `--format` | 否 | `text` | `text` 或 `json` |
-| `--top-n` | 否 | `5` | 报告默认展示数量；短答可由 Skill 压缩为 3 |
-| `--debug` | 否 | `false` | 是否暴露技术字段 |
-| `--include-business-labels` | 否 | `true` | 是否输出业务类型和业务含义 |
-| `--include-intercept-opportunities` | 否 | `true` | 是否输出高价竞品拦截和价格上探机会 |
-
-统一 JSON 外壳：
-
-```json
-{
-  "status": "ok",
-  "question_type": "claim_contribution",
-  "result": {},
-  "business_answer": {
-    "short_answer_cn": "",
-    "key_findings": [],
-    "limitations": [],
-    "report_payload": {}
-  },
-  "data_scope": {
-    "batch_id": "",
-    "market_window": "",
-    "analysis_population": "",
-    "sample_status": ""
-  }
-}
-```
-
-状态码：
-
-| status | 含义 | 用户侧处理 |
-| --- | --- | --- |
-| `ok` | 成功 | 输出业务结论 |
-| `not_found` | SKU、卖点或维度不存在 | 给出可选搜索建议 |
-| `ambiguous` | SKU 或卖点匹配多个候选 | 要求二次选择 |
-| `insufficient_data` | 数据不足，不能稳定量化 | 输出限制和可观察事实 |
-| `not_supported` | 当前品类或层级尚未支持 | 说明边界，不套用其他品类 |
-| `error` | 程序错误 | 输出简短失败信息，debug 模式给技术信息 |
-
-### 10.1.1 业务输出聚合约束
-
-M12C 数据表可以保留 `SKU × 卖点 × 市场场景 × 尺寸价格池` 的原始粒度，但 CLI 在非 debug 模式下不得直接输出原始行。业务模式必须聚合为“业务分类 -> 具体卖点 -> 战场总量化 -> 价值战场明细”，再把用户任务、目标客群和整体市场池作为解释证据。
-
-聚合主键：
-
-```text
-sku_code + display_business_category + claim_code
-```
-
-展示分类：
-
-| display_business_category | 来源角色 | 展示原则 |
-| --- | --- | --- |
-| 强溢价卖点 | `premium_driver_estimated` | 只统计该卖点在价值战场中的正向价格/销量/销额解释份额 |
-| 强销量卖点 | `sales_driver_estimated` | 只统计该卖点在价值战场中的正向销量/销额解释份额，价格为负时不得作为溢价表达 |
-| 组合型增值卖点 | `value_bundle_claim` | 组合只是计算背景，报告仍展示具体卖点及其分摊结果 |
-| 基础门槛卖点 | `basic_threshold` | 展示为门槛能力，不强行解释为溢价 |
-| 本品优势卖点（待量化） | `sample_insufficient`，或 `sample_status=weak/insufficient` 且参数、评论、卖点事实强 | 例如 HDR/高亮画质。事实成立但对照样本不足或弱样本，不进入强溢价/强销量/基础门槛量化，用业务语言说明为本品优势表达 |
-| 竞品优势/本品短板 | `opportunity_gap` / `high_price_competitor_intercept` / `price_up_opportunity` | 说明竞品或高价 SKU 有、本品缺弱；无法稳定量化时用文字说明 |
-| 用户感知风险/拖后腿 | `weak_user_perception_claim` / `drag_factor` | 不进入正向分摊，只说明风险和需要复核的证据 |
-| 厂家主张待市场验证 | `brand_claim_only` | 只说明厂家表达，不作为价格或销量结论 |
-
-聚合规则：
-
-1. 同一 SKU 的同一卖点可以在不同展示分类中分别成立，但不能在一个单元格中写成“强溢价/强销量”等混合分类；每个分类必须单独计算、单独展示。
-2. 单个分类内部的总量化只使用该分类、该卖点、`context_type = battlefield` 的记录。
-3. 战场可解释价差合计 = 该分类下该卖点在价值战场中的去重 `sku_excess_price_explained_abs` 之和。
-4. 战场可解释销量合计 = 该分类下该卖点在价值战场中的去重 `sku_excess_weekly_sales_explained_abs` 之和。
-5. 战场可解释销额合计 = 该分类下该卖点在价值战场中的去重 `sku_excess_weekly_sales_amount_explained_abs` 之和。
-6. 目标客群、用户任务、整体市场池记录不得参与总量化求和；它们只进入“解释证据”。
-7. 每个卖点必须展示价值战场明细，说明价值战场下的可比池价格差异、销量差异、本品可解释价差份额和本品可解释销量份额；多个价值战场共用同一组量化结果时合并展示、只计一次。
-8. 如果某卖点没有价值战场记录，但属于本品优势卖点、竞品优势/本品短板或用户感知风险，可用文字说明，不生成总量化数字。
-9. 输出必须补充可比池样本数：总 SKU 数、有卖点组 SKU 数、对照组 SKU 数、样本状态、放宽路径。`sample_status=weak/insufficient` 时只允许写“事实成立但暂不量化”或“观察到”，不得写“形成溢价”“形成销量支撑”或“基础门槛卖点”。
-10. `--debug=true` 才允许返回原始行、内部字段、枚举 code、表名和规则版本。
-
-业务模式 `report_payload` 必须输出以下结构：
-
-```json
-{
-  "claim_value_report": {
-    "conclusion_cards": [],
-    "core_claim_value_rank": [],
-    "effective_markets": [],
-    "baseline_gap_analysis": [],
-    "evidence_support_matrix": [],
-    "competitor_intercept_and_action": [],
-    "method_notes": []
-  }
-}
-```
-
-各节点的业务含义：
-
-| 节点 | 报告标题 | 回答的问题 |
-| --- | --- | --- |
-| `conclusion_cards` | 卖点价值结论 | 本品最值得讲的溢价卖点、销量卖点、门槛卖点、补强方向是什么 |
-| `core_claim_value_rank` | 核心卖点商业价值排序 | 按业务分类展示具体卖点；每个卖点有战场总量化和战场明细 |
-| `effective_markets` | 卖点有效市场 | 该卖点在哪些尺寸价格池和价值战场中形成量化结果；用户任务、目标客群只作为解释证据 |
-| `baseline_gap_analysis` | 本品相对可比产品表现差异 | 本品相对可比产品基准高在哪里、低在哪里，哪些卖点参与解释 |
-| `evidence_support_matrix` | 证据支撑强度 | 卖点事实、参数事实、评论事实、价值战场、用户任务和目标客群是否互相支撑 |
-| `competitor_intercept_and_action` | 竞品拦截与补强建议 | 竞品靠哪些卖点拦截，本品哪些卖点需要补强或重新表达 |
-| `method_notes` | 口径说明 | 数值是可观测差异和解释性分摊，不是单点因果贡献 |
-
-### 10.2 `claim-value-space`
-
-用途：查询某卖点在某市场池、价值战场、用户任务或目标客群中的价值表现。
-
-命令：
+### 15.2 `claim-value battlefield`
 
 ```bash
-catforge_analyst claim-value-space \
-  --claim "MiniLED" \
-  --dimension-type battlefield \
-  --dimension "高端画质升级" \
-  --size-tier large_60_69 \
-  --price-band mid_high \
-  --format json
+catforge_analyst claim-value battlefield \
+  --category-code TV \
+  --query "海信 65E7Q" \
+  --battlefield-code BF_PREMIUM_PICTURE_UPGRADE \
+  --format markdown
 ```
 
-专属参数：
+只计算指定价值战场。
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--claim` 或 `--claim-code` | 是 | 卖点名称或标准卖点 code |
-| `--dimension-type` | 否 | `market_pool`、`battlefield`、`user_task`、`target_group` |
-| `--dimension` 或 `--dimension-code` | 否 | 战场、任务、客群名称或 code |
-| `--size-tier` | 否 | 五档尺寸 |
-| `--price-band` | 否 | 尺寸内价格带 |
-| `--include-relaxed-pool` | 否 | 是否允许样本不足时展示放宽池 |
-
-`result` 结构：
-
-```json
-{
-  "claim": {"claim_code": "", "claim_name": ""},
-  "context": {"dimension_type": "", "dimension_code": "", "dimension_name": "", "size_tier": "", "price_band": ""},
-  "pool": {
-    "pool_sku_count": 0,
-    "with_claim_sku_count": 0,
-    "without_claim_sku_count": 0,
-    "sample_status": "",
-    "relaxation_path": []
-  },
-  "market_effect": {
-    "price_premium_abs": 0,
-    "price_premium_rate": 0,
-    "weekly_sales_lift_abs": 0,
-    "weekly_sales_amount_lift_abs": 0,
-    "market_share_lift": 0,
-    "effect_confidence": 0
-  },
-  "business_effect": {
-    "pool_claim_price_delta_abs": 0,
-    "pool_claim_weekly_sales_delta_abs": 0,
-    "pool_claim_weekly_sales_amount_delta_abs": 0,
-    "display_caution_cn": ""
-  },
-  "representative_skus": {"with_claim": [], "without_claim": []}
-}
-```
-
-业务短答要点：
-
-- 先说这个卖点在该池中是否具备可观测价值。
-- 再说价格溢价、周均销量优势、周均销额优势。
-- 最后说明样本是否足够。
-
-### 10.3 `sku-claim-value`
-
-用途：查询某 SKU 的全部卖点价值量化。
-
-命令：
+### 15.3 `claim-value explain`
 
 ```bash
-catforge_analyst sku-claim-value \
-  --sku "海信 65E7Q" \
-  --context-type battlefield \
-  --context "高端画质升级" \
-  --format json
+catforge_analyst claim-value explain \
+  --category-code TV \
+  --query "海信 65E7Q" \
+  --claim-code tv_claim_hdmi_2_1
 ```
 
-专属参数：
+解释某个卖点为什么是高溢价、门槛、待激活或风险。
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--sku` 或 `--sku-code` | 是 | SKU、型号或品牌型号 |
-| `--context-type` | 否 | `market_pool`、`battlefield`、`user_task`、`target_group` |
-| `--context` 或 `--context-code` | 否 | 指定分析上下文 |
-| `--role` | 否 | 过滤 `premium_driver_estimated`、`sales_driver_estimated` 等 |
-
-`result` 结构：
-
-```json
-{
-  "sku": {"sku_code": "", "brand_name": "", "model_name": ""},
-  "context": {},
-  "claim_roles": {
-    "premium_drivers": [],
-    "sales_drivers": [],
-    "basic_thresholds": [],
-    "brand_claim_only": [],
-    "opportunity_gaps": [],
-    "drag_factors": [],
-    "sample_insufficient": []
-  },
-  "claim_details": [
-    {
-      "claim_code": "",
-      "claim_name": "",
-      "claim_value_role": "",
-      "business_value_label": "",
-      "business_value_meaning_cn": "",
-      "pool_claim_price_delta_abs": 0,
-      "pool_claim_weekly_sales_delta_abs": 0,
-      "sku_excess_price_explained_abs": 0,
-      "sku_excess_weekly_sales_explained_abs": 0,
-      "estimated_price_premium_abs": 0,
-      "estimated_weekly_sales_lift_abs": 0,
-      "estimated_weekly_sales_amount_lift_abs": 0,
-      "param_support_strength": 0,
-      "comment_support_strength": 0,
-      "semantic_support_strength": 0,
-      "attribution_confidence": 0,
-      "reason_cn": ""
-    }
-  ]
-}
-```
-
-### 10.4 `claim-contribution`
-
-用途：回答“某 SKU 卖得好，哪些卖点贡献最大”。
-
-命令：
+### 15.4 `claim-value compare`
 
 ```bash
-catforge_analyst claim-contribution \
-  --sku "海信 65E7Q" \
-  --context-type battlefield \
-  --context "高端画质升级" \
-  --top-n 5 \
-  --format json
+catforge_analyst claim-value compare \
+  --category-code TV \
+  --query "海信 65E7Q" \
+  --competitors "创维 65A7H PRO,TCL 65Q9L PRO,创维 65A6F ULTRA"
 ```
 
-专属参数：
+横向对比本品和竞品的卖点支付价值。
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
-| `--context-type` | 否 | 默认优先主价值战场 |
-| `--context` 或 `--context-code` | 否 | 指定战场、任务、客群或市场池 |
-| `--include-drag` | 否 | 是否同时输出拖后腿卖点 |
-| `--include-opportunity` | 否 | 是否同时输出机会缺口 |
-
-`result` 结构：
-
-```json
-{
-  "sku": {},
-  "baseline": {
-    "pool_name": "",
-    "baseline_price": 0,
-    "baseline_weekly_sales_volume": 0,
-    "baseline_weekly_sales_amount": 0
-  },
-  "sku_excess_performance": {
-    "sku_price_premium_abs": 0,
-    "sku_weekly_sales_lift_abs": 0,
-    "sku_weekly_sales_amount_lift_abs": 0
-  },
-  "top_contributing_claims": [],
-  "value_bundle_claims": [],
-  "high_price_competitor_intercepts": [],
-  "price_up_opportunities": [],
-  "drag_claims": [],
-  "opportunity_claims": [],
-  "attribution_summary_cn": "",
-  "confidence": 0
-}
-```
-
-业务短答模板：
-
-```text
-结论：本品当前 Top5 核心卖点商业价值分为 A、B、C、D、E：其中 A/B 是更强的价格或销量支撑，C 是组合型增值，D 是基础门槛，E 是高价竞品拦截或价格上探机会。
-
-A 在{可比池}中，有卖点组相对对照组价格差异约 X 元，并支撑本品的{主战场/主任务/主客群}。
-B 更偏销量卖点，价格差异不显著，但有卖点组对应周均销量差异约 Y 台。
-C 单点不构成独立溢价，但与{卖点组合}共同支撑高端价值解释。
-D 是基础门槛，用户默认期待，缺失会拖累成交，但不应单独包装成高溢价。
-E 来自同池高价竞品，本品缺失、表达弱或评论感知弱，适合作为上探机会。
-
-以上是可观测贡献估计，不代表严格因果。
-```
-
-### 10.5 `claim-opportunity-gaps`
-
-用途：查询本品相对竞品或可比池缺哪些有市场价值的卖点。
-
-命令：
+### 15.5 `claim-value report`
 
 ```bash
-catforge_analyst claim-opportunity-gaps \
-  --sku "海信 65E7Q" \
-  --competitor "创维 65A7H PRO" \
-  --format json
+catforge_analyst claim-value report \
+  --category-code TV \
+  --query "海信 65E7Q" \
+  --report-target feishu
 ```
 
-专属参数：
+生成 Markdown 或飞书文档链接。
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
-| `--competitor` 或 `--competitor-sku-code` | 否 | 指定竞品；为空则使用当前竞品集 |
-| `--competitor-set-source` | 否 | `existing_competitor_set` 或 `same_pool_top_skus` |
-| `--context-type` | 否 | 指定战场/任务/客群 |
-| `--min-opportunity-score` | 否 | 机会阈值 |
+## 16. Skill 设计
 
-`result` 结构：
+小奥 Skill 路由：
 
-```json
-{
-  "sku": {},
-  "competitors": [],
-  "opportunity_gaps": [
-    {
-      "claim_code": "",
-      "claim_name": "",
-      "competitor_support": "",
-      "target_support": "",
-      "market_effect": {},
-      "related_dimensions": [],
-      "opportunity_priority": "high|medium|low",
-      "reason_cn": ""
-    }
-  ],
-  "not_actionable_claims": []
-}
-```
-
-业务回答必须区分：
-
-- 竞品有、本品没有，且该卖点在同池有价值。
-- 竞品有、本品也有，但竞品评论或场景表达更强。
-- 竞品有，但该卖点只是基础门槛，不建议作为机会重点。
-
-### 10.6 `claim-value-compare`
-
-用途：比较本品和一个或多个竞品在核心卖点上的价值差异。
-
-命令：
-
-```bash
-catforge_analyst claim-value-compare \
-  --sku "海信 65E7Q" \
-  --competitor "创维 65A7H PRO" \
-  --competitor "TCL 65Q9L PRO" \
-  --format json
-```
-
-专属参数：
-
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| `--sku` 或 `--sku-code` | 是 | 目标 SKU |
-| `--competitor` 或 `--competitor-sku-code` | 是 | 可重复，最多默认 3 个 |
-| `--claim` 或 `--claim-code` | 否 | 限定某些卖点 |
-| `--context-type` | 否 | 默认使用主价值战场和共同竞品池 |
-| `--explain-delta` | 否 | 是否输出价差/销量差解释 |
-
-`result` 结构：
-
-```json
-{
-  "target_sku": {},
-  "competitor_skus": [],
-  "comparison_matrix": [
-    {
-      "claim_code": "",
-      "claim_name": "",
-      "target_role": "",
-      "competitor_roles": {},
-      "target_business_value_label": "",
-      "competitor_business_value_labels": {},
-      "pool_claim_price_delta_abs": 0,
-      "pool_claim_weekly_sales_delta_abs": 0,
-      "target_sku_excess_price_explained_abs": 0,
-      "pair_price_delta_explained_abs": {},
-      "pair_weekly_sales_delta_explained_abs": {},
-      "explanation_role": "target_advantage|competitor_intercept|shared_threshold|not_decisive",
-      "reason_cn": ""
-    }
-  ],
-  "summary_cn": ""
-}
-```
-
-`claim-value-compare` 是回答“本品比某竞品贵多少、销量高多少，哪些卖点能解释”的主入口。判断规则：
-
-- 如果本品和竞品都有同一卖点，只有本品在参数强度、评论验证、语义支撑或市场效果上更强，才能解释本品价差。
-- 如果双方都有且强度相近，该卖点应标为共同门槛，不解释价差。
-- 如果竞品有且市场价值强，本品缺失或弱，该卖点是竞品拦截或本品机会缺口。
-- 如果卖点只有厂家表达，没有评论或市场验证，不能用于解释价差。
-
-### 10.7 `catforge_analyst ask` 路由
-
-自然语言入口必须优先解析三类对象：
-
-1. SKU：型号、品牌型号、sku_code。
-2. 卖点：卖点名称、同义词、标准卖点 code。
-3. 对比对象：竞品、价值战场、用户任务、目标客群、尺寸价格池。
-
-路由表：
-
-| 用户问法 | 主 CLI | 组合 CLI |
-| --- | --- | --- |
-| “某 SKU 哪些卖点是溢价卖点” | `sku-claim-value` | `claim-contribution` |
-| “某 SKU 卖得好靠什么卖点” | `claim-contribution` | `sku-claim-value` |
-| “某卖点在某市场中的价格和销量表现” | `claim-value-space` | 无 |
-| “某 SKU 比竞品贵在哪里” | `claim-value-compare` | `claim-contribution` |
-| “竞品靠哪些卖点拦截本品” | `claim-value-compare` | `claim-opportunity-gaps` |
-| “本品怎么扩大销量” | `claim-opportunity-gaps` | `claim-contribution`、`claim-value-space` |
-| “某卖点是不是基础门槛” | `claim-value-space` | `sku-claim-value` |
-
-歧义处理：
-
-- 多个 SKU 命中：返回候选列表，要求二次选择。
-- 多个卖点命中：返回候选卖点，例如 MiniLED、高亮 HDR、精细分区控光。
-- 指定 AC 但 AC 卖点或评论 taxonomy 未发布：返回 `not_supported`，不得套用 TV taxonomy。
-
-## 11. Skill 与智能体设计
-
-### 11.1 Skill 文件职责
-
-M12C 完成后需要更新两个 Skill。
-
-| Skill | 文件 | 职责 |
-| --- | --- | --- |
-| `catforge-insight` | `tools/claude/skills/catforge-insight/SKILL.md` | 遇到卖点价值、卖点商业价值、价格差异等问题时转交 `catforge_analyst`，不虚构未实现的 insight 命令 |
-| `xiaoao-home-appliance-market-analysis` | `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` | 规定小奥如何调用 M12C 原子能力并组织卖点价值分析答案 |
-
-### 11.2 Skill 路由规则
-
-Skill 必须把用户问题转成以下 SOP。
-
-#### SOP A：某 SKU 哪些卖点是溢价卖点
-
-1. 调 `sku-claim-value` 获取卖点角色。
-2. 调 `claim-contribution` 获取本品相对可比产品表现差异。
-3. 只在短答中讲前三个核心卖点。
-4. 对每个卖点说明：支撑哪个战场、任务、客群；价格溢价或销量优势；置信度。
-5. 如果生成报告，附飞书链接。
-
-#### SOP B：某卖点在某市场中的价格和销量表现
-
-1. 调 `claim-value-space`。
-2. 必须确认上下文：尺寸、价格带、战场/任务/客群。
-3. 样本不足时只讲观察，不给强结论。
-4. 输出价格溢价、周均销量优势、周均销额优势。
-
-#### SOP C：本品比竞品贵在哪里
-
-1. 调 `claim-value-compare`。
-2. 若没有指定竞品，先调用现有竞品 SOP 获取前三竞品。
-3. 区分本品优势、竞品拦截、共同门槛、不构成差异的卖点。
-4. 不能把双方都有且强度相近的卖点写成价差支撑。
-
-#### SOP D：怎么扩大销量
-
-1. 调 `claim-contribution` 看当前正向卖点。
-2. 调 `claim-opportunity-gaps` 看竞品有价值卖点。
-3. 调 `claim-value-space` 验证机会卖点所在池空间。
-4. 输出机会优先级：高价值且本品弱、客群/战场匹配、样本可靠的优先。
-
-### 11.3 小奥回答结构
-
-默认短答控制在 600 字以内：
-
-```text
-结论：
-本品当前最有价值的卖点建议看 A、B、C。A 是强溢价卖点，B 是强销量卖点，C 是高价竞品拦截或价格上探机会。
-
-分析：
-A 在{可比池}中，有卖点组相对对照组价格差异约 X 元，并支撑{主战场/主任务/主客群}。
-B 价格差异不明显，但有卖点组对应周均销量差异约 Y 台，适合解释成交规模。
-C 来自同池高价竞品或高价卖点组合，本品缺失、表达弱或评论感知弱，适合作为上探机会。
-
-限制：
-以上是可观测贡献估计；详细分析见飞书报告链接。
-```
-
-禁止回答：
-
-- “A 卖点导致销量增加 X 台。”
-- “A 卖点绝对值 X 元。”
-- “所有 SKU 的 A 卖点平均价格差异是多少。”
-- “服务好所以产品可以溢价。”
-- “空调用彩电卖点规则判断。”
-
-### 11.4 飞书报告集成
-
-现有竞品报告应新增独立章节：`卖点价值量化`。该章节不能并入“卖点画像”；“卖点画像”只展示事实，“卖点价值量化”展示商业价值、可比产品差异、竞品拦截和补强建议。
-
-章节结构：
-
-1. **本品卖点价值结论**：按业务分类展示具体卖点，区分强溢价、强销量、基础门槛、本品优势卖点（待量化）、竞品优势/本品短板、用户感知风险和拖后腿。
-2. **四款产品卖点价值横向对比**：横轴为本品和前三竞品，纵轴以本品的“业务分类 + 具体卖点”为基准，放在具体产品画像之前。
-3. **本品核心卖点商业价值拆解**：分类、卖点、战场总量化、价值战场明细、解释证据、业务解释。
-4. **每个竞品卖点价值拆解**：按同样口径展示前三竞品。
-5. **卖点-战场-任务-客群证据表**：说明卖点支撑哪些业务维度。
-6. **竞品拦截与补强建议**：可比高价 SKU 的有价值卖点、本品缺失或弱的点、代表 SKU。
-7. **组合型增值卖点和用户感知不足**：说明哪些卖点需要与其他卖点组合表达，哪些卖点存在但评论/市场场景感知弱。
-8. **样本和口径限制**：可比池、样本数、是否放宽、是否评论不足。
-
-四款产品横向对比建议包含以下子表：
-
-1. 市场画像对比。
-2. 价值战场画像对比。
-3. 用户任务画像对比。
-4. 目标客群画像对比。
-5. 卖点画像事实对比。
-6. 参数画像事实对比。
-7. 卖点价值量化对比。
-
-单品卖点价值量化表头：
-
-| 分类 | 卖点 | 战场可解释价差合计 | 战场可解释销量合计 | 战场可解释销额合计 | 覆盖价值战场 | 证据 | 业务解释 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-
-价值战场明细表头：
-
-| 卖点 | 价值战场 | 可比池价格差异 | 可比池销量差异 | 本品可解释价差份额 | 本品可解释销量份额 | 说明 |
-| --- | --- | --- | --- | --- | --- | --- |
-
-四款产品横向对比表头：
-
-| 本品分类与卖点 | 本品 | 竞品1 | 竞品2 | 竞品3 |
-| --- | --- | --- | --- | --- |
-
-横向对比规则：
-
-1. 横向对比以本品的分类和卖点为基准，例如“强溢价卖点：芯片/处理器性能”。
-2. 竞品只有在同一卖点、同一业务分类下有 M12C 量化结果时，才展示对应战场总量化。
-3. 如果竞品有同一卖点但属于其他分类，不得混入本分类表格；单元格写“未进入该分类”。
-4. 竞品独有卖点不放在本品卖点横向表中，应放入竞品自身画像或“竞品拦截/机会缺口”章节。
-
-报告不得只展示“卖点 + 指数”或“卖点 + 分数”。每一行必须同时回答四个问题：
-
-1. 该卖点属于价格溢价、销量驱动、基础门槛、组合增值、竞品拦截还是补强方向。
-2. 该判断来自哪个可比市场，至少说明尺寸价格池和一个价值战场/用户任务/目标客群。
-3. 该卖点对应的可比产品价格差异、销量差异或销额差异是什么。
-4. 参数、评论、卖点事实、价值战场、用户任务和目标客群是否相互支撑；证据不足时必须明确降级。
-
-飞书正文不得展示内部表名、rule version、JSON 字段和代码枚举；必要时用业务中文替代，例如：
-
-| 内部角色 | 飞书展示 |
+| 用户话术 | 调用 |
 | --- | --- |
-| `premium_driver_estimated` | 强溢价卖点 |
-| `sales_driver_estimated` | 强销量卖点 |
-| `basic_threshold` | 基础门槛卖点 |
-| `value_bundle_claim` | 组合型增值卖点 |
-| `weak_user_perception_claim` | 用户感知不足卖点 |
-| `high_price_competitor_intercept` | 高价竞品拦截卖点 |
-| `price_up_opportunity` | 价格上探机会卖点 |
-| `brand_claim_only` | 厂家主张待市场验证 |
-| `drag_factor` | 拖后腿卖点 |
-| `opportunity_gap` | 机会缺口 |
-| `sample_insufficient` | 样本不足 |
+| “某 SKU 的用户卖点价值有哪些” | `claim-value sku` |
+| “哪些卖点能支撑高价” | `claim-value sku --focus premium` |
+| “某卖点为什么不是高溢价” | `claim-value explain` |
+| “在某战场靠什么卖点” | `claim-value battlefield` |
+| “和竞品相比哪些卖点有优势” | `claim-value compare` |
 
-卖点价值量化表下方必须放置口径备注：
+回答约束：
 
-```text
-说明：战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在价值战场中的去重量化结果；多个战场共用同一组可比池差异和本品解释份额时，合并展示、只计一次；目标客群、用户任务和整体市场池只作为解释证据，不参与求和。可比产品价格差异/销量差异是有卖点组与对照组的可观测差异，不是单一卖点因果贡献。本品可解释价差份额和销量差份额，是把本品相对可比产品基准的价格、销量、销额表现按卖点证据权重做解释性分摊，不能理解为“一个卖点单独增加 X 元或 X 台/周”。
-```
+1. 不暴露内部 JSON 和数据库字段。
+2. 不使用后台字段名、算法过程词或工程调试语言。
+3. 对金额和销量必须说清楚是解释性分摊。
+4. 样本不足时直接说“当前只能定性判断，不能量化为高溢价”。
+5. 基础门槛卖点不能包装成优势卖点。
 
-## 12. 测试设计
+## 17. 测试设计
 
-### 12.1 单元测试
+单元测试必须覆盖：
 
-必须覆盖：
+1. 同池普遍具备卖点被判为门槛，而不是高溢价。
+2. 宣传覆盖低但参数覆盖高的卖点被校准为门槛或待验证。
+3. 价格高且销量不弱时，允许输出高溢价候选。
+4. 价格高且销量弱时，输出价格压力。
+5. 价格低且销量强时，输出客户获得价值，不输出高溢价。
+6. 样本不足时降级。
+7. 指定单战场时不做跨战场汇总。
+8. SKU 汇总时按战场权重合并，不直接相加。
+9. 服务履约卖点被排除。
+10. CLI 输出不包含内部过程语言。
 
-1. 可比池构建优先级。
-2. 样本不足降级。
-3. with/without 组计算。
-4. 价格溢价、销量提升、销额提升公式。
-5. SKU 正向贡献分摊。
-6. 负向卖点不进入正向分摊。
-7. 服务履约不进入产品溢价。
-8. 缺失不当成否定。
-9. 同一 SKU 多视角贡献不相加。
-10. 中文回答不暴露内部字段。
-11. 池级价格差异为负时，不输出 `premium_driver_estimated`。
-12. 本品可解释价差/销量差份额不被展示为单卖点因果金额。
-13. 组合型增值卖点必须带 `bundle_claims_json` 或业务解释。
-14. 高价竞品拦截必须带代表竞品 SKU 和同池可比原因。
+集成验收：
 
-### 12.2 集成测试
+1. 用海信 65E7Q 生成独立卖点价值报告。
+2. 验证 HDMI2.1、MiniLED、HDR 不会因为取数扩大被误列为高端画质战场的高溢价 Top。
+3. 验证高亮、分区控光、画质芯片能在高端画质战场进入候选，并能说明证据和降级原因。
+4. 验证飞书报告可读、结构稳定、权限由报告生成层统一处理。
 
-至少构造以下场景：
+## 18. 实现顺序
 
-| 场景 | 预期 |
-| --- | --- |
-| MiniLED 在高端画质池中有足够样本且价格更高 | 输出 `premium_driver_estimated` |
-| 高刷在游戏体育池中销量优势明显但价格溢价弱 | 输出 `sales_driver_estimated` |
-| 4K 在同池普遍具备 | 输出 `basic_threshold` |
-| 厂家宣传智能但评论负向 | 输出 `drag_factor` 或 `brand_claim_only` |
-| 竞品有护眼且市场表现好，本品缺失 | 输出 `opportunity_gap` |
-| with_claim 样本只有 1 个 | 输出 `sample_insufficient` |
-| 某卖点池级价格差异为负但销量差异为正 | 输出 `sales_driver_estimated`，不得输出 `premium_driver_estimated` |
-| 本品可解释价差份额为正但该卖点池级价格差异为负 | 不展示为价格支撑卖点 |
-| 高价竞品反复具备某卖点组合，本品只具备其中一部分 | 输出 `value_bundle_claim` 或 `price_up_opportunity` |
-| 本品具备卖点但评论支撑弱于高价竞品 | 输出 `weak_user_perception_claim` |
-| 飞书报告生成卖点价值表 | 表头包含业务类型、业务含义、可比产品差异、本品可解释价差/销量差份额和口径备注 |
+建议按以下顺序实现：
 
-### 12.3 验收样例
-
-首版验收建议选择：
-
-- 海信 65E7Q。
-- 创维 65A7H PRO。
-- TCL 65Q9L PRO。
-- 创维 65A6F ULTRA。
-
-需要能回答：
-
-1. 海信 65E7Q 的 Top5 核心卖点商业价值是什么，哪些是溢价、销量、基础门槛、组合增值或机会。
-2. 创维 65A7H PRO 对海信形成压力的卖点是什么。
-3. TCL 65Q9L PRO 是配置对标还是卖点价值替代。
-4. 创维 65A6F ULTRA 的低价分流是否由基础门槛卖点支撑。
-5. 哪些卖点在该 65 寸高价池中只是门槛，不应作为溢价宣传。
-6. 海信 65E7Q 与前三竞品的卖点价值横向对比是否能解释竞品拦截点。
-7. 当报告展示“+X 元/+Y 台/周”时，是否清楚区分可比产品差异和本品可解释价差/销量差份额。
-
-## 13. 性能和运行要求
-
-M12C 不调用外部 LLM，应该可以批量运行。
-
-性能策略：
-
-1. 按 `product_category + batch_id + market_window` 一次性加载基础画像。
-2. 先构建内存中的 SKU 状态索引，再批量计算 pool。
-3. pool 结果去重，多个 SKU 共享同一个 `claim_code + pool_key` 指标。
-4. 写入使用批量 upsert，并用 `is_current` 标记当前版本。
-5. 支持 `--sku-codes` 小范围重算和 `--claim-codes` 单卖点重算。
-
-预计 TV 当前 100-300 个 SKU 规模可以秒级到分钟级完成。后续扩展到数千 SKU 时，需要把 pool 聚合下推到 SQL。
-
-## 14. 增量重算
-
-以下变化必须触发重算：
-
-| 变化 | 重算范围 |
-| --- | --- |
-| M04C 卖点事实变化 | 相关 SKU 和相关 claim 的 pool |
-| M05C 评论事实变化 | 相关 SKU 的 claim value 和相关 pool 的评论因子 |
-| M07 市场画像变化 | 同 batch 全量 pool metric 和 SKU attribution |
-| M09C/M10C/M11C 画像变化 | 相关市场场景 pool 和 SKU attribution |
-| M11D 图谱变化 | 相关维度 summary 和上下文 pool |
-| claim taxonomy 变化 | 相关品类全量重算 |
-| 规则版本变化 | 全量重算 |
-
-## 15. 风险和降级
-
-| 风险 | 处理 |
-| --- | --- |
-| 样本少 | 标记 `sample_insufficient`，只做观察 |
-| 卖点高度共线 | 输出组合贡献，不强拆单个卖点 |
-| 品牌力影响无法完全控制 | 在解释中说明品牌和渠道未完全隔离 |
-| 促销资源缺失 | 不把短期销量异常直接归因给卖点 |
-| 评论不足 | 降级为参数/厂家表达成立，用户验证不足 |
-| 价格带内 SKU 差异仍大 | 输出可比池放宽路径和置信度 |
-| 服务卖点混入 | 服务隔离，不进入产品溢价 |
-
-## 16. 首版实现顺序
-
-建议分四步实现：
-
-1. **结果模型和批处理骨架**：新增表、repository、service、pipeline CLI。
-2. **池级卖点价值指标**：先实现 `claim-value-space` 和 pool metric。
-3. **SKU 卖点商业价值分析**：实现 `sku-claim-value` 和 `claim-contribution`。
-4. **竞品和报告集成**：实现 `claim-opportunity-gaps`、`claim-value-compare`，接入小奥 Skill 和飞书报告。
-
-每一步都必须有测试，不依赖外部 LLM。
+1. 重构 M12C 结果模型，增加单战场结果和 SKU 汇总结果。
+2. 实现可比市场池和样本等级。
+3. 实现门槛卖点先行校验。
+4. 实现卖点价值分。
+5. 实现单战场金额/销量空间。
+6. 实现 SKU 层战场权重汇总。
+7. 实现 CLI 原子能力。
+8. 实现 Skill 路由和短答模板。
+9. 实现 Markdown/飞书报告模板。
+10. 用 65E7Q 完成回归验收。

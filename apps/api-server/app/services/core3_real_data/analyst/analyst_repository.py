@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
@@ -95,6 +95,18 @@ M12C_ROLE_PRIORITY = {
     M12C_ROLE_OPPORTUNITY: 9,
     M12C_ROLE_BRAND: 10,
     M12C_ROLE_SAMPLE: 11,
+}
+
+M12C_BUSINESS_CLAIM_TYPE_PRIORITY = {
+    "高溢价卖点": 0,
+    "份额转化卖点": 1,
+    "客户获得价值卖点": 2,
+    "门槛卖点": 3,
+    "待激活卖点": 4,
+    "厂家主张卖点": 5,
+    "竞品拦截卖点": 6,
+    "价格压力卖点": 7,
+    "样本不足待复核": 8,
 }
 
 
@@ -1023,7 +1035,7 @@ class AnalystRepository:
         limit: int = 20,
     ) -> dict[str, Any]:
         population = _m12c_population(analysis_population)
-        quant_rows = self._m12c_sku_claim_rows(
+        quant_rows_all = self._m12c_sku_claim_rows(
             batch_id=batch_id,
             product_category=product_category,
             sku_code=sku_code,
@@ -1036,8 +1048,9 @@ class AnalystRepository:
             size_tier=size_tier,
             price_band=price_band,
             role=role,
-            limit=limit,
+            limit=0,
         )
+        quant_rows = quant_rows_all[: max(limit, 0)] if limit else quant_rows_all
         attr_rows = self._m12c_attribution_rows(
             batch_id=batch_id,
             product_category=product_category,
@@ -1050,7 +1063,8 @@ class AnalystRepository:
             price_band=price_band,
             limit=limit,
         )
-        metric_by_id = self._m12c_metrics_by_id(row.metric_id for row in quant_rows)
+        metric_by_id = self._m12c_metrics_by_id(row.metric_id for row in quant_rows_all)
+        claim_value_payloads_all = [_sku_claim_value_payload(row, metric_by_id.get(row.metric_id or "")) for row in quant_rows_all]
         return {
             "sku_code": sku_code,
             "market_window": market_window,
@@ -1065,10 +1079,11 @@ class AnalystRepository:
                 "role": role,
                 "limit": limit,
             },
-            "role_counts": _count_by([row.claim_value_role for row in quant_rows]),
-            "claim_values": [_sku_claim_value_payload(row, metric_by_id.get(row.metric_id or "")) for row in quant_rows],
+            "role_counts": _count_by([row.claim_value_role for row in quant_rows_all]),
+            "sku_level_claim_values": _sku_level_claim_value_summary(claim_value_payloads_all),
+            "claim_values": claim_value_payloads_all[: max(limit, 0)] if limit else claim_value_payloads_all,
             "attributions": [_claim_attribution_payload(row) for row in attr_rows],
-            "method_note_cn": "可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异；本品超额解释份额是对本品高于同池基准表现的解释性分摊，不代表单一卖点因果增量。",
+            "method_note_cn": "卖点支付价值先在单个价值战场内判断，再按战场相关度汇总到 SKU 层；可比池卖点价格差异/销量差异是有卖点组与对照组的可观测差异，不代表单一卖点因果增量。",
         }
 
     def claim_contribution(
@@ -2356,6 +2371,10 @@ def _sku_claim_value_payload(
     sku_amount_share = _number(row.estimated_weekly_sales_amount_lift_abs)
     business_label = _m12c_business_value_label(row.claim_value_role, pool_price_delta)
     business_meaning = _m12c_business_value_meaning_cn(row.claim_value_role, pool_price_delta)
+    supporting_dimensions = row.supporting_dimensions_json or {}
+    scorecard = supporting_dimensions.get("scorecard") if isinstance(supporting_dimensions.get("scorecard"), dict) else {}
+    business_claim_type = str(supporting_dimensions.get("business_claim_type") or _m12c_business_claim_type(row.claim_value_role, pool_price_delta))
+    business_claim_type_cn = str(supporting_dimensions.get("business_claim_type_cn") or _m12c_business_claim_type_label(business_claim_type))
     return {
         "sku_code": row.sku_code,
         "brand_name": row.brand_name,
@@ -2364,6 +2383,10 @@ def _sku_claim_value_payload(
         "claim_name": row.claim_name,
         "claim_dimension": row.claim_dimension,
         "claim_value_role": row.claim_value_role,
+        "business_claim_type": business_claim_type,
+        "business_claim_type_cn": business_claim_type_cn,
+        "business_claim_type_definition_cn": supporting_dimensions.get("business_claim_type_definition_cn") or _m12c_business_claim_type_meaning_cn(business_claim_type),
+        "claim_value_score": supporting_dimensions.get("claim_value_score") or scorecard.get("total_score"),
         "business_value_label": business_label,
         "business_value_meaning_cn": business_meaning,
         "context_type": row.context_type,
@@ -2398,7 +2421,12 @@ def _sku_claim_value_payload(
             "contribution_share_in_sku": _number(row.contribution_share_in_sku),
         },
         "attribution_confidence": _number(row.attribution_confidence),
-        "supporting_dimensions": row.supporting_dimensions_json or {},
+        "scorecard": scorecard,
+        "market_position": {
+            "type": supporting_dimensions.get("market_position_type"),
+            "summary_cn": supporting_dimensions.get("market_position_cn"),
+        },
+        "supporting_dimensions": supporting_dimensions,
         "reason_cn": row.reason_cn,
         "quality_flags": row.quality_flags_json or [],
         "evidence_id_count": len(row.evidence_ids_json or []),
@@ -2436,6 +2464,132 @@ def _claim_attribution_payload(row: entities.Core3SkuClaimContributionAttributio
         "attribution_summary_cn": row.attribution_summary_cn,
         "confidence": _number(row.confidence),
     }
+
+
+def _sku_level_claim_value_summary(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    battlefield_rows = [row for row in rows if str(row.get("context_type") or "") == "battlefield"]
+    source_rows = battlefield_rows or list(rows)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in source_rows:
+        claim_key = str(row.get("claim_code") or row.get("claim_name") or "")
+        if not claim_key:
+            continue
+        grouped.setdefault(claim_key, []).append(row)
+    result: list[dict[str, Any]] = []
+    for claim_key, claim_rows in grouped.items():
+        context_rows = _dedupe_sku_level_claim_context_rows(claim_rows)
+        business_claim_type_cn = _best_m12c_business_claim_type_cn(context_rows)
+        price_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("price_premium_abs")) or 0) or Decimal("0") for row in context_rows)
+        sales_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_lift_abs")) or 0) or Decimal("0") for row in context_rows)
+        amount_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")) or 0) or Decimal("0") for row in context_rows)
+        score = _m12c_aggregate_score(context_rows)
+        result.append(
+            {
+                "claim_code": claim_key,
+                "claim_name": str(context_rows[0].get("claim_name") or claim_key),
+                "business_claim_type_cn": business_claim_type_cn,
+                "business_claim_type": str(context_rows[0].get("business_claim_type") or _m12c_business_claim_type_from_cn(business_claim_type_cn)),
+                "sku_level_user_payment_value_abs": _number(price_total),
+                "sku_level_weekly_sales_lift_abs": _number(sales_total),
+                "sku_level_weekly_sales_amount_lift_abs": _number(amount_total),
+                "claim_value_score": _number(score),
+                "main_contexts": _unique_nonempty(row.get("context_name") or row.get("context_code") for row in context_rows),
+                "evidence_summary_cn": _sku_level_claim_evidence_summary(context_rows),
+                "context_values": [
+                    {
+                        "context_type": row.get("context_type"),
+                        "context_code": row.get("context_code"),
+                        "context_name": row.get("context_name"),
+                        "business_claim_type_cn": row.get("business_claim_type_cn") or _m12c_business_claim_type_label(_m12c_business_claim_type(row.get("claim_value_role"), ((row.get("pool_effect") or {}).get("pool_claim_price_delta_abs")))),
+                        "claim_value_score": row.get("claim_value_score"),
+                        "price_premium_abs": ((row.get("estimated_contribution") or {}).get("price_premium_abs")),
+                        "weekly_sales_lift_abs": ((row.get("estimated_contribution") or {}).get("weekly_sales_lift_abs")),
+                        "weekly_sales_amount_lift_abs": ((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")),
+                        "pool_effect": row.get("pool_effect") or {},
+                        "scorecard": row.get("scorecard") or {},
+                        "quality_flags": row.get("quality_flags") or [],
+                    }
+                    for row in context_rows[:8]
+                ],
+            }
+        )
+    return sorted(result, key=_sku_level_claim_sort_key)
+
+
+def _dedupe_sku_level_claim_context_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("context_type") or ""),
+            str(row.get("context_code") or row.get("context_name") or ""),
+            str(row.get("business_claim_type_cn") or _m12c_business_claim_type_label(_m12c_business_claim_type(row.get("claim_value_role"), ((row.get("pool_effect") or {}).get("pool_claim_price_delta_abs"))))),
+        )
+        existing = deduped.get(key)
+        if existing is None or _sku_level_claim_row_strength(row) > _sku_level_claim_row_strength(existing):
+            deduped[key] = row
+    return list(deduped.values())
+
+
+def _sku_level_claim_row_strength(row: Mapping[str, Any]) -> Decimal:
+    estimated = row.get("estimated_contribution") or {}
+    score = _decimal(row.get("claim_value_score")) or Decimal("0")
+    amount = _decimal(estimated.get("weekly_sales_amount_lift_abs")) or Decimal("0")
+    price = _decimal(estimated.get("price_premium_abs")) or Decimal("0")
+    return score + max(amount, Decimal("0")) / Decimal("100000") + max(price, Decimal("0")) / Decimal("100")
+
+
+def _best_m12c_business_claim_type_cn(rows: Sequence[dict[str, Any]]) -> str:
+    if not rows:
+        return "未分类卖点"
+    return min((_m12c_business_claim_type_cn(row) for row in rows), key=lambda label: M12C_BUSINESS_CLAIM_TYPE_PRIORITY.get(label, 99))
+
+
+def _m12c_business_claim_type_cn(row: Mapping[str, Any]) -> str:
+    label = str(row.get("business_claim_type_cn") or "").strip()
+    if label:
+        return label
+    return _m12c_business_claim_type_label(_m12c_business_claim_type(row.get("claim_value_role"), ((row.get("pool_effect") or {}).get("pool_claim_price_delta_abs"))))
+
+
+def _m12c_aggregate_score(rows: Sequence[dict[str, Any]]) -> Decimal:
+    values = [_decimal(row.get("claim_value_score")) for row in rows]
+    values = [value for value in values if value is not None]
+    if not values:
+        strengths: list[Decimal] = []
+        for row in rows:
+            evidence = row.get("evidence_strength") or {}
+            for key in ("param", "comment", "semantic"):
+                value = _decimal(evidence.get(key))
+                if value is not None:
+                    strengths.append(value * Decimal("100"))
+        return _avg_decimal(strengths) or Decimal("0")
+    return _avg_decimal(values) or Decimal("0")
+
+
+def _sku_level_claim_evidence_summary(rows: Sequence[dict[str, Any]]) -> str:
+    if not rows:
+        return ""
+    best = max(rows, key=_sku_level_claim_row_strength)
+    evidence = best.get("evidence_strength") or {}
+    parts: list[str] = []
+    param = _decimal(evidence.get("param"))
+    comment = _decimal(evidence.get("comment"))
+    semantic = _decimal(evidence.get("semantic"))
+    if param is not None:
+        parts.append("参数强" if param >= Decimal("0.75") else "参数中等" if param >= Decimal("0.45") else "参数弱")
+    if comment is not None:
+        parts.append("评论强" if comment >= Decimal("0.75") else "评论中等" if comment >= Decimal("0.45") else "评论弱")
+    if semantic is not None:
+        parts.append("战场相关强" if semantic >= Decimal("0.75") else "战场相关中等" if semantic >= Decimal("0.45") else "战场相关弱")
+    evidence_text = "、".join(parts) if parts else "证据待补充"
+    return f"证据结构：{evidence_text}。"
+
+
+def _sku_level_claim_sort_key(item: Mapping[str, Any]) -> tuple[int, float, float, str]:
+    label = str(item.get("business_claim_type_cn") or "")
+    price = float(_decimal(item.get("sku_level_user_payment_value_abs")) or Decimal("0"))
+    score = float(_decimal(item.get("claim_value_score")) or Decimal("0"))
+    return (M12C_BUSINESS_CLAIM_TYPE_PRIORITY.get(label, 99), -price, -score, str(item.get("claim_name") or ""))
 
 
 def _m12c_business_value_label(role: str | None, pool_price_delta: Any = None) -> str:
@@ -2492,6 +2646,71 @@ def _m12c_business_value_meaning_cn(role: str | None, pool_price_delta: Any = No
     if role == M12C_ROLE_USER_NEED:
         return "评论中存在需求，但本品卖点或参数支撑不足。"
     return "可比池、对照组或评论样本不足，不能稳定判断。"
+
+
+def _m12c_business_claim_type(role: Any, pool_price_delta: Any = None) -> str:
+    price_delta = _decimal(pool_price_delta) or Decimal("0")
+    role = str(role or "")
+    if role == M12C_ROLE_PREMIUM:
+        return "premium_payment_claim" if price_delta > 0 else "customer_value_claim"
+    if role == M12C_ROLE_SALES:
+        return "share_conversion_claim"
+    if role == M12C_ROLE_VALUE_BUNDLE:
+        return "customer_value_claim"
+    if role == M12C_ROLE_BASIC:
+        return "threshold_claim"
+    if role in {M12C_ROLE_WEAK_USER, M12C_ROLE_USER_NEED}:
+        return "pending_activation_claim"
+    if role == M12C_ROLE_BRAND:
+        return "brand_claim"
+    if role in {M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C_ROLE_PRICE_UP, M12C_ROLE_OPPORTUNITY}:
+        return "competitor_intercept_claim"
+    if role == M12C_ROLE_DRAG:
+        return "price_pressure_claim"
+    return "sample_insufficient_claim"
+
+
+def _m12c_business_claim_type_label(claim_type: str) -> str:
+    return {
+        "premium_payment_claim": "高溢价卖点",
+        "share_conversion_claim": "份额转化卖点",
+        "customer_value_claim": "客户获得价值卖点",
+        "threshold_claim": "门槛卖点",
+        "pending_activation_claim": "待激活卖点",
+        "brand_claim": "厂家主张卖点",
+        "competitor_intercept_claim": "竞品拦截卖点",
+        "price_pressure_claim": "价格压力卖点",
+        "sample_insufficient_claim": "样本不足待复核",
+    }.get(str(claim_type or ""), "未分类卖点")
+
+
+def _m12c_business_claim_type_from_cn(label: str) -> str:
+    reverse = {
+        "高溢价卖点": "premium_payment_claim",
+        "份额转化卖点": "share_conversion_claim",
+        "客户获得价值卖点": "customer_value_claim",
+        "门槛卖点": "threshold_claim",
+        "待激活卖点": "pending_activation_claim",
+        "厂家主张卖点": "brand_claim",
+        "竞品拦截卖点": "competitor_intercept_claim",
+        "价格压力卖点": "price_pressure_claim",
+        "样本不足待复核": "sample_insufficient_claim",
+    }
+    return reverse.get(str(label or ""), "sample_insufficient_claim")
+
+
+def _m12c_business_claim_type_meaning_cn(claim_type: str) -> str:
+    return {
+        "premium_payment_claim": "用户愿意为该卖点支付更高价格，并且参数、评论和市场验证共同成立。",
+        "share_conversion_claim": "该卖点不一定抬高价格，但能解释同价或相近价格下的销量/份额优势。",
+        "customer_value_claim": "该卖点让用户觉得产品更值，主要体现为价格压力更小或销量承接更强。",
+        "threshold_claim": "该卖点是进入购买清单的基础要求，有了不加价，缺了会掉队。",
+        "pending_activation_claim": "本品有参数或厂家表达，但用户评论或市场验证还不足，需要继续激活。",
+        "brand_claim": "当前主要是厂家主张，尚未形成稳定用户支付价值。",
+        "competitor_intercept_claim": "竞品具备并形成市场验证，本品缺失或表达弱，会影响购买转化。",
+        "price_pressure_claim": "卖点表达、参数或用户反馈没有支撑当前价格，可能削弱成交理由。",
+        "sample_insufficient_claim": "样本或对照组不足，只能作为观察线索。",
+    }.get(str(claim_type or ""), "当前分类尚未定义。")
 
 
 def _section_evidence_sources(**sections: Any) -> list[dict[str, Any]]:
@@ -2596,6 +2815,18 @@ def _count_by(values: Sequence[Any]) -> dict[str, int]:
     for value in values:
         key = str(value)
         result[key] = result.get(key, 0) + 1
+    return result
+
+
+def _unique_nonempty(values: Iterable[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
     return result
 
 
