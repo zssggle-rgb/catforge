@@ -4234,7 +4234,7 @@ def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[di
     return _feishu_table(
         element_id="competitor_market_table",
         columns=[
-            _feishu_text_column("rank", "#"),
+            _feishu_text_column("rank", "序号", width="80px"),
             _feishu_text_column("name", "竞品/目标"),
             _feishu_text_column("position", "定位"),
             _feishu_text_column("price", "均价"),
@@ -4456,14 +4456,14 @@ def _feishu_table(*, element_id: str, columns: list[dict[str, Any]], rows: list[
     }
 
 
-def _feishu_text_column(name: str, display_name: str) -> dict[str, Any]:
+def _feishu_text_column(name: str, display_name: str, *, width: str = "auto") -> dict[str, Any]:
     return {
         "name": name,
         "display_name": display_name,
         "data_type": "text",
         "horizontal_align": "left",
         "vertical_align": "top",
-        "width": "auto",
+        "width": width,
     }
 
 
