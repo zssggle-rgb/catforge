@@ -1383,6 +1383,12 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if battlefield not in existing["battlefields"]:
                 existing["battlefields"].append(battlefield)
     for group in merged.values():
+        group["battlefield_rows"] = _dedupe_claim_value_cli_battlefield_rows(group["battlefield_rows"])
+        group["battlefields"] = []
+        for row in group["battlefield_rows"]:
+            battlefield = str(row.get("context_name") or row.get("context_code") or "").strip()
+            if battlefield and battlefield not in group["battlefields"]:
+                group["battlefields"].append(battlefield)
         quant_groups = _claim_value_cli_quant_groups(group["battlefield_rows"])
         group["quant_groups"] = quant_groups
         group["price_total"] = Decimal("0")
@@ -1394,6 +1400,28 @@ def _claim_value_cli_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             group["sales_total"] += _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0")
     order = {category: index for index, category in enumerate(_claim_value_cli_category_order())}
     return sorted(merged.values(), key=lambda item: (order.get(str(item.get("category") or ""), 99), str(item.get("claim_name") or "")))
+
+
+def _dedupe_claim_value_cli_battlefield_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best_by_context: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        context_key = str(row.get("context_code") or row.get("context_name") or "")
+        if not context_key:
+            context_key = f"context-{len(best_by_context)}"
+        existing = best_by_context.get(context_key)
+        if existing is None or _claim_value_cli_row_rank(row) > _claim_value_cli_row_rank(existing):
+            best_by_context[context_key] = row
+    return list(best_by_context.values())
+
+
+def _claim_value_cli_row_rank(row: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+    return (
+        _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or Decimal("0"),
+        _decimal(sku_excess.get("sku_excess_weekly_sales_amount_explained_abs") or sku_excess.get("weekly_sales_amount_lift_abs")) or Decimal("0"),
+        _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0"),
+        _decimal(row.get("attribution_confidence")) or Decimal("0"),
+    )
 
 
 def _claim_value_cli_category(row: dict[str, Any]) -> str:

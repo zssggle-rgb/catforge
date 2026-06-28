@@ -803,6 +803,8 @@ main_supporting_battlefields = [
 
 显示层处理样本标记时，`insufficient_comparison_group`、`sample_weak`、`sample_insufficient` 直接降级；`small_comparable_pool` 只作为样本提示，不单独覆盖 M12C 已经成立的高溢价、份额转化或客户获得价值结论。
 
+显示层汇总前必须按 `(business_claim_type, claim_code, context_code)` 去重。若同一卖点同一战场存在多个可比池候选，取 `estimated_price_premium_abs`、`estimated_weekly_sales_amount_lift_abs`、`estimated_weekly_sales_lift_abs`、`attribution_confidence` 排序最强的一条，避免同一战场金额被重复累加。
+
 ### 11.1 用户默认看到的结果
 
 CLI 和 Skill 面向业务用户输出时，默认展示 SKU 整机口径的最终结果。分战场金额、战场权重、可比池和样本等级是结果依据，不是短答主结构。

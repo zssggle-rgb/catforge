@@ -1273,7 +1273,8 @@ def _claim_value_category_groups(rows: list[dict[str, Any]]) -> list[dict[str, A
         and str(group.get("category") or "") in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}
     }
     for group in grouped.values():
-        battlefield_rows = group["battlefield_rows"]
+        battlefield_rows = _dedupe_claim_value_battlefield_rows(group["battlefield_rows"])
+        group["battlefield_rows"] = battlefield_rows
         if _claim_value_group_needs_nonquantified_category(group):
             if str(group.get("claim_key") or "") in claim_keys_with_quantified_battlefields:
                 continue
@@ -1305,6 +1306,28 @@ def _claim_value_group_needs_nonquantified_category(group: dict[str, Any]) -> bo
     if category not in {"强溢价卖点", "强销量卖点", "组合型增值卖点", "基础门槛卖点"}:
         return False
     return any(_claim_value_has_strong_fact_evidence(row) for row in group.get("rows") or [])
+
+
+def _dedupe_claim_value_battlefield_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best_by_context: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        context_key = str(row.get("context_code") or row.get("context_name") or "")
+        if not context_key:
+            context_key = f"context-{len(best_by_context)}"
+        existing = best_by_context.get(context_key)
+        if existing is None or _claim_value_row_rank(row) > _claim_value_row_rank(existing):
+            best_by_context[context_key] = row
+    return list(best_by_context.values())
+
+
+def _claim_value_row_rank(row: dict[str, Any]) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+    return (
+        _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or Decimal("0"),
+        _decimal(sku_excess.get("sku_excess_weekly_sales_amount_explained_abs") or sku_excess.get("weekly_sales_amount_lift_abs")) or Decimal("0"),
+        _decimal(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) or Decimal("0"),
+        _decimal(row.get("attribution_confidence")) or Decimal("0"),
+    )
 
 
 def _claim_value_groups_by_category(groups: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
