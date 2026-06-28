@@ -150,7 +150,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 Stable command examples:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format json --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
 ```
 
 ```bash
