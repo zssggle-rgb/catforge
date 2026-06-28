@@ -7,6 +7,7 @@ numbers are market-contribution estimates, not causal effects.
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
@@ -17,6 +18,7 @@ from sqlalchemy import select
 
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
@@ -71,6 +73,7 @@ M12C_TIER_DIFFERENTIATED_CLAIM_CODES = {
     "tv_claim_chip_performance",
     "tv_claim_wide_color_accuracy",
     "tv_claim_refresh_rate",
+    "tv_claim_high_refresh_rate",
 }
 
 M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
@@ -85,10 +88,69 @@ M12C_CLAIM_TYPE_SAMPLE = "sample_insufficient_claim"
 
 M12C_SCORE_WEIGHTS = {
     "battlefield_relevance": Decimal("0.20"),
-    "parameter_strength": Decimal("0.25"),
+    "parameter_competitiveness": Decimal("0.25"),
     "comment_perception": Decimal("0.25"),
     "competitor_difference": Decimal("0.15"),
     "market_validation": Decimal("0.15"),
+}
+
+M12C_PARAM_LEVEL_LEADING = "leading_advantage"
+M12C_PARAM_LEVEL_STRONG = "strong_advantage"
+M12C_PARAM_LEVEL_PARITY = "parity_threshold"
+M12C_PARAM_LEVEL_WEAK = "weak_or_missing"
+M12C_PARAM_LEVEL_SPARSE = "sparse_unknown"
+
+M12C_TARGET_FACT_CLAIM = "target_fact_claim"
+M12C_TARGET_PARAM_CAPABILITY = "target_param_capability"
+M12C_COMPETITOR_GAP = "competitor_opportunity_gap"
+
+M12C_CLAIM_PARAM_FALLBACKS: dict[str, tuple[str, ...]] = {
+    "tv_claim_hdr_high_brightness": ("declared_brightness_nit_or_band", "hdr_support_flag"),
+    "tv_claim_local_dimming": ("local_dimming_zone_count",),
+    "tv_claim_picture_engine_ai": ("picture_engine_chip", "ai_picture_engine_flag", "processor_chip_model"),
+    "tv_claim_chip_performance": ("processor_chip_model", "processor_vendor", "cpu_core_count", "cpu_frequency_ghz"),
+    "tv_claim_wide_color_accuracy": ("color_gamut_ratio", "wide_color_gamut_pct", "color_gamut_percent", "high_color_gamut_flag", "quantum_dot_flag"),
+    "tv_claim_high_refresh_rate": ("declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"),
+    "tv_claim_refresh_rate": ("declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"),
+    "tv_claim_gaming_low_latency": ("declared_refresh_rate_hz", "hdmi_2_1_port_count", "hdmi21_flag", "hdmi_version_mix"),
+    "tv_claim_hdmi21_connectivity": ("hdmi_2_1_port_count", "hdmi21_flag", "hdmi_version_mix"),
+    "tv_claim_miniled_display": ("mini_led_flag", "mini_led_type", "display_tech_class", "declared_brightness_nit_or_band", "local_dimming_zone_count"),
+    "tv_claim_eye_care_display": ("low_blue_light_flag", "flicker_free_flag", "eye_care_certification"),
+    "tv_claim_dolby_audio_video": ("dolby_vision_flag", "dolby_atmos_flag", "hdr_support_flag"),
+    "tv_claim_theater_scene": ("screen_size_inch", "declared_brightness_nit_or_band", "speaker_output_power_w", "dolby_atmos_flag"),
+}
+
+M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
+    "declared_brightness_nit_or_band": ("declared_brightness_nit_or_band", "peak_brightness_nits", "brightness_nit", "brightness_nits", "亮度", "峰值亮度"),
+    "hdr_support_flag": ("hdr_support_flag", "hdr_flag", "HDR"),
+    "local_dimming_zone_count": ("local_dimming_zone_count", "dimming_zone_count", "local_dimming_zones", "控光分区", "背光分区"),
+    "picture_engine_chip": ("picture_engine_chip", "ai_picture_engine", "画质芯片", "画质引擎"),
+    "ai_picture_engine_flag": ("ai_picture_engine_flag", "ai_picture_flag", "AI画质"),
+    "processor_chip_model": ("processor_chip_model", "chip_model", "soc_model", "处理器", "芯片"),
+    "processor_vendor": ("processor_vendor", "chip_vendor", "芯片厂商"),
+    "cpu_core_count": ("cpu_core_count", "cpu_cores", "CPU核心"),
+    "cpu_frequency_ghz": ("cpu_frequency_ghz", "cpu_frequency", "CPU频率"),
+    "color_gamut_ratio": ("color_gamut_ratio", "color_gamut_percent", "wide_color_gamut_pct", "色域", "广色域"),
+    "wide_color_gamut_pct": ("wide_color_gamut_pct", "color_gamut_percent", "color_gamut_ratio", "色域"),
+    "color_gamut_percent": ("color_gamut_percent", "wide_color_gamut_pct", "color_gamut_ratio", "色域"),
+    "high_color_gamut_flag": ("high_color_gamut_flag", "wide_color_gamut_flag", "广色域"),
+    "quantum_dot_flag": ("quantum_dot_flag", "qd_flag", "量子点"),
+    "declared_refresh_rate_hz": ("declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz", "刷新率"),
+    "native_refresh_rate_hz": ("native_refresh_rate_hz", "declared_refresh_rate_hz", "refresh_rate_hz", "刷新率"),
+    "refresh_rate_hz": ("refresh_rate_hz", "declared_refresh_rate_hz", "native_refresh_rate_hz", "刷新率"),
+    "hdmi_2_1_port_count": ("hdmi_2_1_port_count", "hdmi21_port_count", "HDMI2.1接口数量"),
+    "hdmi21_flag": ("hdmi21_flag", "hdmi_2_1_flag", "HDMI2.1"),
+    "hdmi_version_mix": ("hdmi_version_mix", "hdmi_version", "HDMI版本"),
+    "mini_led_flag": ("mini_led_flag", "miniled_flag", "MiniLED"),
+    "mini_led_type": ("mini_led_type", "miniled_type", "MiniLED类型"),
+    "display_tech_class": ("display_tech_class", "display_technology", "显示技术"),
+    "low_blue_light_flag": ("low_blue_light_flag", "low_blue_flag", "低蓝光"),
+    "flicker_free_flag": ("flicker_free_flag", "no_flicker_flag", "无频闪"),
+    "eye_care_certification": ("eye_care_certification", "eye_care_cert", "护眼认证"),
+    "dolby_vision_flag": ("dolby_vision_flag", "dolby_vision", "杜比视界"),
+    "dolby_atmos_flag": ("dolby_atmos_flag", "dolby_atmos", "杜比全景声"),
+    "screen_size_inch": ("screen_size_inch", "screen_size", "尺寸"),
+    "speaker_output_power_w": ("speaker_output_power_w", "speaker_power_w", "音响功率"),
 }
 
 
@@ -162,6 +224,13 @@ class ClaimState:
         if status in {"param_unknown", "missing"}:
             return Decimal("0.3500")
         return Decimal("0.1000")
+
+
+@dataclass(frozen=True)
+class ParamProfileState:
+    sku_code: str
+    values: Mapping[str, Any]
+    evidence_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -289,6 +358,27 @@ class M12CRepository(Core3BaseRepository):
             if existing is None or state.confidence > existing.confidence:
                 result[row.sku_code][row.claim_code] = state
         return dict(result)
+
+    def list_param_states(self, *, batch_id: str, product_category: str) -> dict[str, ParamProfileState]:
+        prefix = "TV" if product_category.upper() == "TV" else "AC"
+        rule_version = CORE3_M03B_AC_RULE_VERSION if product_category.upper() == "AC" else CORE3_M03B_RULE_VERSION
+        stmt = (
+            select(entities.Core3SkuParamProfile)
+            .where(entities.Core3SkuParamProfile.project_id == self.project_id)
+            .where(entities.Core3SkuParamProfile.category_code == self.category_code.value)
+            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
+            .where(entities.Core3SkuParamProfile.rule_version == rule_version)
+            .where(entities.Core3SkuParamProfile.sku_code.like(f"{prefix}%"))
+            .order_by(entities.Core3SkuParamProfile.sku_code)
+        )
+        result: dict[str, ParamProfileState] = {}
+        for row in self.db.execute(stmt).scalars():
+            result[row.sku_code] = ParamProfileState(
+                sku_code=row.sku_code,
+                values=_param_profile_values(row),
+                evidence_ids=tuple(str(item) for item in (row.evidence_ids or [])),
+            )
+        return result
 
     def list_comment_states(self, *, batch_id: str, product_category: str) -> dict[str, CommentState]:
         stmt = (
@@ -647,6 +737,7 @@ class M12CClaimValueQuantificationService:
         normalized_category = product_category.upper()
         markets_all = self.repository.list_market_states(batch_id=batch_id, market_window=market_window, product_category=normalized_category)
         claims_all = self.repository.list_claim_states(batch_id=batch_id, product_category=normalized_category)
+        param_profiles_all = self.repository.list_param_states(batch_id=batch_id, product_category=normalized_category)
         comments_all = self.repository.list_comment_states(batch_id=batch_id, product_category=normalized_category)
         semantics_all = self.repository.list_semantic_states(
             batch_id=batch_id,
@@ -692,6 +783,7 @@ class M12CClaimValueQuantificationService:
 
         markets = {sku: markets_all[sku] for sku in sorted(comparable_skus)}
         claims = {sku: claims_all[sku] for sku in sorted(comparable_skus)}
+        param_profiles = {sku: param_profiles_all[sku] for sku in sorted(comparable_skus) if sku in param_profiles_all}
         comments = {sku: comments_all.get(sku, _empty_comment(sku)) for sku in sorted(comparable_skus)}
         semantics = {sku: semantics_all[sku] for sku in sorted(comparable_skus)}
         pools = _build_pools(markets=markets, claims=claims, semantics=semantics, dimension_names=dimension_names)
@@ -713,6 +805,7 @@ class M12CClaimValueQuantificationService:
             metric_by_pool=metric_by_pool,
             markets=markets,
             claims=claims,
+            param_profiles=param_profiles,
             comments=comments,
             semantics=semantics,
             batch_id=batch_id,
@@ -1100,6 +1193,7 @@ def _quantification_rows(
     metric_by_pool: Mapping[str, Mapping[str, Any]],
     markets: Mapping[str, MarketState],
     claims: Mapping[str, Mapping[str, ClaimState]],
+    param_profiles: Mapping[str, ParamProfileState],
     comments: Mapping[str, CommentState],
     semantics: Mapping[str, SemanticState],
     batch_id: str,
@@ -1129,9 +1223,25 @@ def _quantification_rows(
             battlefield_weight = semantics[sku].allocation_weight(pool.context_type, pool.context_code)
             battlefield_claim_relevance = _battlefield_claim_relevance_strength(pool, claim)
             semantic_strength = _q4(sku_battlefield_strength * Decimal("0.45") + battlefield_claim_relevance * Decimal("0.55"))
-            param_strength = claim.param_support_strength if claim else Decimal("0.0000")
+            parameter_competitiveness = _claim_parameter_competitiveness(
+                pool=pool,
+                target_sku=sku,
+                claim=claim,
+                claims=claims,
+                comments=comments,
+                param_profiles=param_profiles,
+            )
+            parameter_competitiveness_strength = _q4(
+                Decimal(str(parameter_competitiveness.get("overall_parameter_competitiveness_score") or 0)) / Decimal("100")
+            )
+            param_strength = max(claim.param_support_strength if claim else Decimal("0.0000"), parameter_competitiveness_strength)
             claim_strength = _claim_evidence_strength(claim) if claim else Decimal("0.0000")
             comment_strength = comment.support_strength(pool.claim_code)
+            source_type = _claim_source_type(
+                has_claim=has_claim,
+                parameter_competitiveness=parameter_competitiveness,
+                battlefield_claim_relevance=battlefield_claim_relevance,
+            )
             target_baseline = _target_baseline(pool, markets, sku)
             baseline_price = target_baseline["baseline_price"]
             baseline_sales = target_baseline["baseline_weekly_sales"]
@@ -1160,10 +1270,12 @@ def _quantification_rows(
                 comment_strength=comment_strength,
                 semantic_strength=semantic_strength,
                 battlefield_claim_relevance=battlefield_claim_relevance,
+                parameter_competitiveness=parameter_competitiveness,
+                source_type=source_type,
                 has_negative=comment.has_negative(pool.claim_code),
                 market_price=market.price,
             )
-            if not has_claim and role not in OPPORTUNITY_ROLES:
+            if source_type == M12C_COMPETITOR_GAP and role not in OPPORTUNITY_ROLES:
                 continue
             scorecard = _claim_value_scorecard(
                 pool=pool,
@@ -1176,8 +1288,15 @@ def _quantification_rows(
                 has_negative=comment.has_negative(pool.claim_code),
                 market_position=market_position,
                 market_acceptance=market_acceptance,
+                parameter_competitiveness=parameter_competitiveness,
             )
-            business_claim_type = _business_claim_type(role, metric, scorecard, market_position=market_position)
+            business_claim_type = _business_claim_type(
+                role,
+                metric,
+                scorecard,
+                market_position=market_position,
+                parameter_competitiveness=parameter_competitiveness,
+            )
             business_claim_type_cn = _business_claim_type_label(business_claim_type)
             weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength, scorecard)
             effective_price_space = _effective_price_space(market, baseline_price, market_position, market_acceptance)
@@ -1220,9 +1339,14 @@ def _quantification_rows(
                     "context_type": pool.context_type,
                     "context_code": pool.context_code,
                     "context_name": pool.context_name,
+                    "target_has_claim": source_type != M12C_COMPETITOR_GAP,
+                    "target_fact_claim_flag": has_claim,
+                    "claim_source_type": source_type,
+                    "claim_source_type_cn": _source_type_cn(source_type),
                     "semantic_support_strength": float(semantic_strength),
                     "sku_battlefield_strength": float(sku_battlefield_strength),
                     "battlefield_claim_relevance": float(battlefield_claim_relevance),
+                    "parameter_competitiveness": parameter_competitiveness,
                     "business_claim_type": business_claim_type,
                     "business_claim_type_cn": business_claim_type_cn,
                     "business_claim_type_definition_cn": _business_claim_type_meaning_cn(business_claim_type),
@@ -1253,7 +1377,7 @@ def _quantification_rows(
                         "effective_price_space": float(effective_price_space),
                         "weekly_sales_space": float(weekly_sales_space),
                         "weekly_amount_space": float(weekly_amount_space),
-                        "formula_cn": "战场支付价值空间 = 可解释价差 × 市场承接系数；卖点金额 = 战场空间 × 卖点价值分占比 × 卖点类型系数。",
+                        "formula_cn": "战场支付价值空间 = 可解释价差 × 市场承接系数；卖点金额 = 战场空间 × 卖点支付价值分占比 × 卖点类型系数。",
                     },
                     "claim_type_coefficient": float(_claim_type_coefficient(business_claim_type)),
                     "battlefield_allocation_weight": float(battlefield_weight),
@@ -1548,6 +1672,437 @@ def _pool_metric(pool: ClaimPool, markets: Mapping[str, MarketState]) -> dict[st
     }
 
 
+def _param_profile_values(row: entities.Core3SkuParamProfile) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for blob in (
+        row.param_values_json or {},
+        row.core_picture_params_json or {},
+        row.core_gaming_params_json or {},
+        row.core_system_params_json or {},
+        row.core_eye_care_params_json or {},
+    ):
+        _merge_param_values(values, blob)
+    return values
+
+
+def _merge_param_values(target: dict[str, Any], blob: Mapping[str, Any]) -> None:
+    for key, value in blob.items():
+        key_text = str(key)
+        target.setdefault(key_text, value)
+        if isinstance(value, Mapping) and not _looks_like_param_value(value):
+            for child_key, child_value in value.items():
+                target.setdefault(str(child_key), child_value)
+
+
+def _looks_like_param_value(value: Mapping[str, Any]) -> bool:
+    return any(key in value for key in ("value", "raw_value", "normalized_value", "unit", "source_field", "confidence", "exists"))
+
+
+def _claim_parameter_competitiveness(
+    *,
+    pool: ClaimPool,
+    target_sku: str,
+    claim: ClaimState | None,
+    claims: Mapping[str, Mapping[str, ClaimState]],
+    comments: Mapping[str, CommentState],
+    param_profiles: Mapping[str, ParamProfileState],
+) -> dict[str, Any]:
+    support_param_codes = _claim_support_param_codes(claim, pool.claim_code)
+    target_entries: list[dict[str, Any]] = []
+    param_results: list[dict[str, Any]] = []
+    for param_code in support_param_codes:
+        target_entry = _param_entry(param_profiles, claim, target_sku, param_code)
+        if target_entry is None:
+            continue
+        target_entries.append(target_entry)
+        pool_entries = [
+            entry
+            for sku in pool.sku_codes
+            if (entry := _param_entry(param_profiles, claims.get(sku, {}).get(pool.claim_code), sku, param_code)) is not None
+        ]
+        param_results.append(_single_param_competitiveness(param_code=param_code, target_entry=target_entry, pool_entries=pool_entries))
+
+    comment_strength = comments.get(target_sku, _empty_comment(target_sku)).support_strength(pool.claim_code)
+    claim_label_coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    if not support_param_codes:
+        level = M12C_PARAM_LEVEL_WEAK
+        score = Decimal("0")
+        downgrade_reason = "该卖点缺少可用于比较的支撑参数，不能判断用户支付价值。"
+    elif not target_entries:
+        level = M12C_PARAM_LEVEL_WEAK
+        score = Decimal("0")
+        downgrade_reason = "本品没有找到该卖点的可比较参数事实，不能作为高溢价依据。"
+    else:
+        score_snapshot = _aggregate_param_competitiveness(param_results, comment_strength)
+        level = str(score_snapshot["level"])
+        score = _q4(Decimal(str(score_snapshot["score"])))
+        downgrade_reason = str(score_snapshot.get("downgrade_reason_cn") or "")
+
+    if target_entries:
+        score_snapshot = _aggregate_param_competitiveness(param_results, comment_strength)
+        level = str(score_snapshot["level"])
+        score = _q4(Decimal(str(score_snapshot["score"])))
+        downgrade_reason = str(score_snapshot.get("downgrade_reason_cn") or downgrade_reason)
+        dimension_scores = score_snapshot.get("dimension_scores") or {}
+    else:
+        dimension_scores = {}
+    differentiated_count = sum(1 for item in param_results if item.get("level") in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG})
+    sparse_flag = any(item.get("level") == M12C_PARAM_LEVEL_SPARSE for item in param_results) or level == M12C_PARAM_LEVEL_SPARSE
+    return {
+        "support_param_codes": list(support_param_codes),
+        "support_param_count": len(support_param_codes),
+        "target_has_supporting_param": bool(target_entries),
+        "key_param_results": param_results[:8],
+        "claim_label_coverage_rate": float(_q4(claim_label_coverage_rate)),
+        "differentiated_param_coverage_rate": float(_q4(Decimal(differentiated_count) / Decimal(max(len(param_results), 1)))) if param_results else 0.0,
+        "overall_parameter_competitiveness_score": float(score),
+        "overall_parameter_competitiveness_level": level,
+        "overall_parameter_competitiveness_level_cn": _parameter_level_cn(level),
+        "dimension_scores": dimension_scores,
+        "sparse_sample_flag": sparse_flag,
+        "downgrade_reason_cn": downgrade_reason,
+        "explanation_cn": _parameter_competitiveness_explanation(level, param_results, downgrade_reason),
+    }
+
+
+def _claim_support_param_codes(claim: ClaimState | None, claim_code: str) -> tuple[str, ...]:
+    ordered: list[str] = []
+    for code in (claim.supporting_param_codes if claim else ()):
+        text = str(code).strip()
+        if text and text not in ordered:
+            ordered.append(text)
+    for code in M12C_CLAIM_PARAM_FALLBACKS.get(claim_code, ()):
+        if code not in ordered:
+            ordered.append(code)
+    return tuple(ordered)
+
+
+def _param_entry(
+    param_profiles: Mapping[str, ParamProfileState],
+    claim: ClaimState | None,
+    sku_code: str,
+    param_code: str,
+) -> dict[str, Any] | None:
+    aliases = (param_code, *M12C_PARAM_ALIASES.get(param_code, ()))
+    profile = param_profiles.get(sku_code)
+    if profile:
+        for alias in aliases:
+            if alias in profile.values:
+                raw = profile.values[alias]
+                normalized = _normalized_param_value(raw)
+                if not _missing_value(normalized):
+                    return {
+                        "sku_code": sku_code,
+                        "param_code": param_code,
+                        "source_param_code": alias,
+                        "raw_value": raw,
+                        "normalized_value": normalized,
+                        "value_type": _param_value_type(normalized),
+                        "source_module": "M03B",
+                    }
+    snapshot = claim.supporting_param_snapshot if claim else {}
+    if isinstance(snapshot, Mapping):
+        for alias in aliases:
+            if alias in snapshot:
+                raw = snapshot[alias]
+                normalized = _normalized_param_value(raw)
+                if not _missing_value(normalized):
+                    return {
+                        "sku_code": sku_code,
+                        "param_code": param_code,
+                        "source_param_code": alias,
+                        "raw_value": raw,
+                        "normalized_value": normalized,
+                        "value_type": _param_value_type(normalized),
+                        "source_module": "M04C",
+                    }
+    return None
+
+
+def _single_param_competitiveness(*, param_code: str, target_entry: Mapping[str, Any], pool_entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    target_value = target_entry.get("normalized_value")
+    numeric_target = _decimal_param_value(target_value)
+    numeric_values = [_decimal_param_value(entry.get("normalized_value")) for entry in pool_entries]
+    numeric_values = [value for value in numeric_values if value is not None]
+    known_values = [entry.get("normalized_value") for entry in pool_entries if not _missing_value(entry.get("normalized_value"))]
+    sample_count = len(known_values)
+    if not _boolean_like_param(param_code, target_value) and numeric_target is not None and numeric_values:
+        return _numeric_param_competitiveness(param_code, target_entry, numeric_target, numeric_values)
+    return _categorical_param_competitiveness(param_code, target_entry, known_values, sample_count)
+
+
+def _numeric_param_competitiveness(param_code: str, target_entry: Mapping[str, Any], target_value: Decimal, pool_values: Sequence[Decimal]) -> dict[str, Any]:
+    sorted_values = sorted(pool_values)
+    sample_count = len(sorted_values)
+    if sample_count < 3:
+        level = M12C_PARAM_LEVEL_SPARSE
+        score = Decimal("58")
+        percentile = Decimal("0")
+        reason = "可比池中该参数样本不足，保留观察但不能强判。"
+    else:
+        less_equal = sum(1 for value in sorted_values if value <= target_value)
+        percentile = _q4(Decimal(less_equal) / Decimal(sample_count))
+        if percentile >= Decimal("0.8500"):
+            level = M12C_PARAM_LEVEL_LEADING
+            score = Decimal("92")
+            reason = "本品关键参数位于同战场可比池前列，可支撑差异化支付价值。"
+        elif percentile >= Decimal("0.6500"):
+            level = M12C_PARAM_LEVEL_STRONG
+            score = Decimal("78")
+            reason = "本品关键参数高于多数可比 SKU，具备较强支撑。"
+        elif percentile >= Decimal("0.3500"):
+            level = M12C_PARAM_LEVEL_PARITY
+            score = Decimal("52")
+            reason = "本品关键参数接近可比池中位，更接近入围门槛。"
+        else:
+            level = M12C_PARAM_LEVEL_WEAK
+            score = Decimal("32")
+            reason = "本品关键参数低于多数可比 SKU，不能支撑高溢价。"
+    median_value = _median(sorted_values) or Decimal("0")
+    max_value = max(sorted_values) if sorted_values else Decimal("0")
+    return {
+        "param_code": param_code,
+        "source_param_code": target_entry.get("source_param_code"),
+        "target_value": _json_value(target_entry.get("normalized_value")),
+        "target_numeric_value": float(_q4(target_value)),
+        "sample_count": sample_count,
+        "pool_median": float(_q4(median_value)),
+        "pool_max": float(_q4(max_value)),
+        "pool_percentile": float(percentile),
+        "score": float(_q4(score)),
+        "level": level,
+        "level_cn": _parameter_level_cn(level),
+        "reason_cn": reason,
+    }
+
+
+def _categorical_param_competitiveness(param_code: str, target_entry: Mapping[str, Any], known_values: Sequence[Any], sample_count: int) -> dict[str, Any]:
+    target_value = target_entry.get("normalized_value")
+    if sample_count < 3:
+        level = M12C_PARAM_LEVEL_SPARSE
+        score = Decimal("55") if not _missing_value(target_value) else Decimal("0")
+        coverage_rate = Decimal("0")
+        reason = "可比池中该参数样本不足，保留观察但不能强判。"
+    else:
+        boolean_like = _boolean_like_param(param_code, target_value)
+        target_truthy = _truthy_param_value(target_value)
+        true_count = sum(1 for value in known_values if _truthy_param_value(value))
+        same_count = sum(1 for value in known_values if _normalized_text(value) == _normalized_text(target_value))
+        true_rate = Decimal(true_count) / Decimal(sample_count)
+        same_rate = Decimal(same_count) / Decimal(sample_count)
+        coverage_rate = true_rate if boolean_like else same_rate
+        if target_truthy is False or _missing_value(target_value):
+            level = M12C_PARAM_LEVEL_WEAK
+            score = Decimal("25")
+            reason = "本品没有形成该参数能力，不能作为高溢价依据。"
+        elif coverage_rate >= Decimal("0.7500"):
+            level = M12C_PARAM_LEVEL_PARITY
+            score = Decimal("45")
+            reason = "可比池中多数 SKU 都具备该能力，更接近基础门槛。"
+        elif coverage_rate >= Decimal("0.4000"):
+            level = M12C_PARAM_LEVEL_STRONG
+            score = Decimal("68")
+            reason = "该能力在可比池中不是普遍配置，具备一定差异化。"
+        else:
+            level = M12C_PARAM_LEVEL_LEADING
+            score = Decimal("82")
+            reason = "该能力在同战场可比池中相对稀缺，可作为差异化卖点。"
+    return {
+        "param_code": param_code,
+        "source_param_code": target_entry.get("source_param_code"),
+        "target_value": _json_value(target_value),
+        "sample_count": sample_count,
+        "pool_coverage_rate": float(_q4(coverage_rate)),
+        "score": float(_q4(score)),
+        "level": level,
+        "level_cn": _parameter_level_cn(level),
+        "reason_cn": reason,
+    }
+
+
+def _aggregate_param_competitiveness(param_results: Sequence[Mapping[str, Any]], comment_strength: Decimal) -> dict[str, Any]:
+    if not param_results:
+        return {
+            "score": 0,
+            "level": M12C_PARAM_LEVEL_WEAK,
+            "downgrade_reason_cn": "缺少可比较参数。",
+            "dimension_scores": {},
+        }
+    param_scores = [_q4(Decimal(str(item.get("score") or 0))) for item in param_results]
+    best_score = max(param_scores)
+    avg_score = _avg(param_scores)
+    leading_count = sum(1 for item in param_results if item.get("level") == M12C_PARAM_LEVEL_LEADING)
+    strong_count = sum(1 for item in param_results if item.get("level") == M12C_PARAM_LEVEL_STRONG)
+    sparse_count = sum(1 for item in param_results if item.get("level") == M12C_PARAM_LEVEL_SPARSE)
+    parameter_truth_score = Decimal("100") if best_score > 0 else Decimal("0")
+    pool_position_score = best_score
+    direct_competitor_gap_score = _q4(best_score * Decimal("0.70") + avg_score * Decimal("0.30"))
+    param_comment_perception_score = _strength_score(comment_strength)
+    total = _q4(
+        parameter_truth_score * Decimal("0.35")
+        + pool_position_score * Decimal("0.30")
+        + direct_competitor_gap_score * Decimal("0.20")
+        + param_comment_perception_score * Decimal("0.15")
+    )
+    if sparse_count == len(param_results):
+        level = M12C_PARAM_LEVEL_SPARSE
+        reason = "支撑参数样本不足，不能强判为高溢价。"
+    elif leading_count > 0 and total >= Decimal("75"):
+        level = M12C_PARAM_LEVEL_LEADING
+        reason = ""
+    elif leading_count + strong_count > 0 and total >= Decimal("65"):
+        level = M12C_PARAM_LEVEL_STRONG
+        reason = ""
+    elif best_score >= Decimal("40"):
+        level = M12C_PARAM_LEVEL_PARITY
+        reason = "关键参数接近同战场门槛，不能单独支撑高溢价。"
+    else:
+        level = M12C_PARAM_LEVEL_WEAK
+        reason = "关键参数竞争力不足，不能支撑该卖点支付价值。"
+    return {
+        "score": float(total),
+        "level": level,
+        "downgrade_reason_cn": reason,
+        "dimension_scores": {
+            "parameter_truth_score": float(_q4(parameter_truth_score)),
+            "pool_position_score": float(_q4(pool_position_score)),
+            "direct_competitor_gap_score": float(_q4(direct_competitor_gap_score)),
+            "param_comment_perception_score": float(_q4(param_comment_perception_score)),
+            "formula_cn": "参数竞争力 = 参数事实成立35% + 战场池位置30% + 竞品差距20% + 评论感知15%。",
+        },
+    }
+
+
+def _normalized_param_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        for key in ("normalized_value", "business_value", "value", "raw_value", "exists"):
+            if key in value and not _missing_value(value[key]):
+                return _normalized_param_value(value[key])
+        return value
+    if isinstance(value, (list, tuple)):
+        if len(value) == 1:
+            return _normalized_param_value(value[0])
+        return ",".join(str(_normalized_param_value(item)) for item in value if not _missing_value(item))
+    return value
+
+
+def _missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() in {"", "-", "—", "无", "未知", "不详", "None", "null"}
+    return False
+
+
+def _decimal_param_value(value: Any) -> Decimal | None:
+    if isinstance(value, bool):
+        return Decimal("1") if value else Decimal("0")
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            return Decimal(str(value))
+        except Exception:
+            return None
+    if isinstance(value, Mapping):
+        return _decimal_param_value(_normalized_param_value(value))
+    if isinstance(value, str):
+        text = value.replace(",", "").replace("，", "").strip()
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if match:
+            try:
+                return Decimal(match.group(0))
+            except Exception:
+                return None
+    return None
+
+
+def _truthy_param_value(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, Decimal)):
+        return Decimal(str(value)) > 0
+    if isinstance(value, Mapping):
+        return _truthy_param_value(_normalized_param_value(value))
+    text = str(value or "").strip().lower()
+    if not text or text in {"0", "false", "no", "none", "null", "无", "否", "不支持", "未见", "-"}:
+        return False
+    if text in {"1", "true", "yes", "有", "支持", "是"}:
+        return True
+    return True
+
+
+def _boolean_like_param(param_code: str, value: Any) -> bool:
+    if param_code.endswith("_flag") or param_code.endswith("_support"):
+        return True
+    text = str(value or "").strip().lower()
+    return text in {"0", "1", "true", "false", "yes", "no", "有", "无", "支持", "不支持", "是", "否", "未见"}
+
+
+def _param_value_type(value: Any) -> str:
+    if _decimal_param_value(value) is not None:
+        return "numeric"
+    if isinstance(_truthy_param_value(value), bool):
+        return "boolean_or_category"
+    return "text"
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(_q4(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _normalized_text(value: Any) -> str:
+    return str(_normalized_param_value(value) or "").strip().lower()
+
+
+def _parameter_level_cn(level: str) -> str:
+    return {
+        M12C_PARAM_LEVEL_LEADING: "领先优势",
+        M12C_PARAM_LEVEL_STRONG: "较强优势",
+        M12C_PARAM_LEVEL_PARITY: "基础门槛",
+        M12C_PARAM_LEVEL_WEAK: "弱或缺失",
+        M12C_PARAM_LEVEL_SPARSE: "样本不足",
+    }.get(level, "未判断")
+
+
+def _parameter_competitiveness_explanation(level: str, param_results: Sequence[Mapping[str, Any]], downgrade_reason: str) -> str:
+    if downgrade_reason:
+        return downgrade_reason
+    leading = [str(item.get("param_code") or "") for item in param_results if item.get("level") in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG}]
+    if leading:
+        return f"关键参数 {'、'.join(leading[:3])} 在同战场可比池中具备优势。"
+    if level == M12C_PARAM_LEVEL_PARITY:
+        return "支撑参数更多表现为入围能力，不宜作为单独溢价来源。"
+    return "参数竞争力未形成稳定优势。"
+
+
+def _source_type_cn(source_type: str) -> str:
+    return {
+        M12C_TARGET_FACT_CLAIM: "本品已成立卖点",
+        M12C_TARGET_PARAM_CAPABILITY: "本品参数能力待激活",
+        M12C_COMPETITOR_GAP: "竞品拦截/机会缺口",
+    }.get(source_type, "未分类来源")
+
+
+def _claim_source_type(
+    *,
+    has_claim: bool,
+    parameter_competitiveness: Mapping[str, Any],
+    battlefield_claim_relevance: Decimal,
+) -> str:
+    if has_claim:
+        return M12C_TARGET_FACT_CLAIM
+    level = str(parameter_competitiveness.get("overall_parameter_competitiveness_level") or "")
+    has_param = bool(parameter_competitiveness.get("target_has_supporting_param"))
+    if has_param and battlefield_claim_relevance >= Decimal("0.7000") and level in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG}:
+        return M12C_TARGET_PARAM_CAPABILITY
+    return M12C_COMPETITOR_GAP
+
+
 def _claim_role(
     *,
     has_claim: bool,
@@ -1557,11 +2112,19 @@ def _claim_role(
     comment_strength: Decimal,
     semantic_strength: Decimal,
     battlefield_claim_relevance: Decimal = Decimal("1.0000"),
-    has_negative: bool,
+    has_negative: bool = False,
+    parameter_competitiveness: Mapping[str, Any] | None = None,
+    source_type: str = M12C_TARGET_FACT_CLAIM,
     market_price: Decimal | None = None,
 ) -> str:
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
+    param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
+    param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
+    if parameter_competitiveness is None:
+        param_can_premium = param_strength >= Decimal("0.6000")
+    else:
+        param_can_premium = param_level in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG} and not param_sparse
     if has_claim and pool.claim_code in M12C_FORCE_THRESHOLD_CLAIM_CODES:
         return M12C_ROLE_BASIC
     price_delta = _q4(metric["price_premium_abs"])
@@ -1571,6 +2134,8 @@ def _claim_role(
     sales_positive = sales_delta > Decimal("0")
     amount_positive = amount_delta > Decimal("0")
     if not has_claim:
+        if source_type == M12C_TARGET_PARAM_CAPABILITY:
+            return M12C_ROLE_WEAK_USER if param_can_premium else M12C_ROLE_BRAND
         if price_positive and metric["effect_confidence"] >= Decimal("0.4000"):
             with_price_median = metric.get("with_price_median")
             if market_price is not None and with_price_median is not None and _q4(market_price) < _q4(with_price_median):
@@ -1586,12 +2151,13 @@ def _claim_role(
         and battlefield_claim_relevance >= Decimal("0.9000")
         and semantic_strength >= Decimal("0.5000")
         and max(param_strength, comment_strength) >= Decimal("0.6000")
+        and param_can_premium
         and pool.pool_relax_level != "L4"
         and pool.sample_status != "insufficient"
         and (pool.sample_status != "weak" or pool.pool_relax_level == "L3")
     )
     if battlefield_claim_relevance < Decimal("0.9000"):
-        if sales_positive and max(comment_strength, param_strength) >= Decimal("0.6000"):
+        if sales_positive and max(comment_strength, param_strength) >= Decimal("0.6000") and (param_can_premium or comment_strength >= Decimal("0.8000")):
             return M12C_ROLE_SALES
         if param_strength >= Decimal("0.6000") or comment_strength >= Decimal("0.6000"):
             return M12C_ROLE_WEAK_USER
@@ -1605,7 +2171,7 @@ def _claim_role(
     if pool.sample_status == "insufficient":
         return M12C_ROLE_SAMPLE
     if pool.sample_status == "weak":
-        if positive_price_value:
+        if positive_price_value and param_can_premium:
             return M12C_ROLE_PREMIUM
         return M12C_ROLE_SAMPLE
     if positive_price_value:
@@ -1633,6 +2199,7 @@ def _claim_value_scorecard(
     has_negative: bool,
     market_position: Mapping[str, Any],
     market_acceptance: Mapping[str, Any] | None = None,
+    parameter_competitiveness: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
     price_delta = _q4(metric["price_premium_abs"])
@@ -1647,11 +2214,14 @@ def _claim_value_scorecard(
             evidence_refs=[_evidence_ref(pool.context_type, pool.context_code)],
         ),
         _score_dimension(
-            code="parameter_strength",
-            name_cn="参数强度",
-            raw_score=_strength_score(param_strength),
-            reason_cn=_parameter_strength_reason(has_claim, param_strength),
-            evidence_refs=[{"source_module": "M04C", "evidence_type": "claim_param_support"}],
+            code="parameter_competitiveness",
+            name_cn="参数竞争力",
+            raw_score=_parameter_competitiveness_score(param_strength, parameter_competitiveness),
+            reason_cn=_parameter_competitiveness_reason(has_claim, param_strength, parameter_competitiveness),
+            evidence_refs=[
+                {"source_module": "M03B", "evidence_type": "sku_param_profile"},
+                {"source_module": "M04C", "evidence_type": "claim_param_support"},
+            ],
         ),
         _score_dimension(
             code="comment_perception",
@@ -1683,12 +2253,13 @@ def _claim_value_scorecard(
         coverage_rate=coverage_rate,
         param_strength=param_strength,
         comment_strength=comment_strength,
+        parameter_competitiveness=parameter_competitiveness,
     )
     total_score = _q4(sum(_q4(Decimal(str(item["raw_score"])) * Decimal(str(item["weight"]))) for item in dimensions))
     return {
         "total_score": float(total_score),
         "score_unit": "0-100",
-        "score_method_cn": "卖点价值分 = 战场相关度20% + 参数强度25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。",
+        "score_method_cn": "卖点支付价值分 = 战场相关度20% + 参数竞争力25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。",
         "dimensions": dimensions,
         "downgrade_reasons": downgrade_reasons,
         "sample_status": pool.sample_status,
@@ -1788,7 +2359,17 @@ def _context_relevance_reason(pool: ClaimPool, semantic_strength: Decimal) -> st
     return "整体市场池只用于兜底观察，不作为强支付价值的核心场景。"
 
 
-def _parameter_strength_reason(has_claim: bool, param_strength: Decimal) -> str:
+def _parameter_competitiveness_score(param_strength: Decimal, parameter_competitiveness: Mapping[str, Any] | None) -> Decimal:
+    if parameter_competitiveness:
+        return _q4(Decimal(str(parameter_competitiveness.get("overall_parameter_competitiveness_score") or 0)))
+    return _strength_score(param_strength)
+
+
+def _parameter_competitiveness_reason(has_claim: bool, param_strength: Decimal, parameter_competitiveness: Mapping[str, Any] | None) -> str:
+    if parameter_competitiveness:
+        explanation = str(parameter_competitiveness.get("explanation_cn") or "").strip()
+        if explanation:
+            return explanation
     if not has_claim:
         return "本品没有形成该标准卖点，参数证据不成立。"
     if param_strength >= Decimal("0.8000"):
@@ -1880,6 +2461,7 @@ def _scorecard_downgrade_reasons(
     coverage_rate: Decimal,
     param_strength: Decimal,
     comment_strength: Decimal,
+    parameter_competitiveness: Mapping[str, Any] | None = None,
 ) -> list[str]:
     reasons: list[str] = []
     if pool.sample_status != "sufficient":
@@ -1890,6 +2472,17 @@ def _scorecard_downgrade_reasons(
         reasons.append("评论或参数存在负向/矛盾反馈，支付价值降级。")
     if coverage_rate >= Decimal("0.7500") and has_claim:
         reasons.append("可比池普遍具备，更接近基础门槛。")
+    if parameter_competitiveness:
+        level = str(parameter_competitiveness.get("overall_parameter_competitiveness_level") or "")
+        downgrade = str(parameter_competitiveness.get("downgrade_reason_cn") or "").strip()
+        if downgrade:
+            reasons.append(downgrade)
+        elif level == M12C_PARAM_LEVEL_PARITY and has_claim:
+            reasons.append("支撑参数在同战场内接近基础门槛，不单独支撑高溢价。")
+        elif level == M12C_PARAM_LEVEL_SPARSE:
+            reasons.append("支撑参数样本不足，不能强判为高溢价。")
+        elif level == M12C_PARAM_LEVEL_WEAK and has_claim:
+            reasons.append("支撑参数竞争力不足。")
     if param_strength < Decimal("0.5000") and has_claim:
         reasons.append("参数支撑不足。")
     if comment_strength < Decimal("0.5000") and has_claim:
@@ -1925,10 +2518,23 @@ def _market_position_signal(
     return {"type": "payment_unverified", "summary_cn": "价格和销量暂未验证支付价值"}
 
 
-def _business_claim_type(role: str, metric: Mapping[str, Any], scorecard: Mapping[str, Any], market_position: Mapping[str, Any] | None = None) -> str:
+def _business_claim_type(
+    role: str,
+    metric: Mapping[str, Any],
+    scorecard: Mapping[str, Any],
+    market_position: Mapping[str, Any] | None = None,
+    parameter_competitiveness: Mapping[str, Any] | None = None,
+) -> str:
     price_delta = _q4(metric.get("price_premium_abs") or metric.get("_pool_claim_price_delta_abs"))
     total_score = Decimal(str(scorecard.get("total_score") or 0))
     market_type = str((market_position or {}).get("type") or "")
+    param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
+    param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
+    if role == M12C_ROLE_PREMIUM and parameter_competitiveness is not None:
+        if param_sparse:
+            return M12C_CLAIM_TYPE_SAMPLE
+        if param_level not in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG}:
+            return M12C_CLAIM_TYPE_PENDING
     if role == M12C_ROLE_SAMPLE:
         return M12C_CLAIM_TYPE_SAMPLE
     if role == M12C_ROLE_BASIC:

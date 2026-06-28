@@ -2375,6 +2375,11 @@ def _sku_claim_value_payload(
     scorecard = supporting_dimensions.get("scorecard") if isinstance(supporting_dimensions.get("scorecard"), dict) else {}
     business_claim_type = str(supporting_dimensions.get("business_claim_type") or _m12c_business_claim_type(row.claim_value_role, pool_price_delta))
     business_claim_type_cn = str(supporting_dimensions.get("business_claim_type_cn") or _m12c_business_claim_type_label(business_claim_type))
+    target_has_claim = bool(supporting_dimensions.get("target_has_claim")) if "target_has_claim" in supporting_dimensions else _m12c_target_has_claim(row)
+    claim_source_type = str(
+        supporting_dimensions.get("claim_source_type")
+        or _m12c_claim_source_type(target_has_claim=target_has_claim, business_claim_type_cn=business_claim_type_cn)
+    )
     return {
         "sku_code": row.sku_code,
         "brand_name": row.brand_name,
@@ -2386,7 +2391,11 @@ def _sku_claim_value_payload(
         "business_claim_type": business_claim_type,
         "business_claim_type_cn": business_claim_type_cn,
         "business_claim_type_definition_cn": supporting_dimensions.get("business_claim_type_definition_cn") or _m12c_business_claim_type_meaning_cn(business_claim_type),
+        "target_has_claim": target_has_claim,
+        "claim_source_type": claim_source_type,
+        "claim_source_type_cn": _m12c_claim_source_type_label(claim_source_type),
         "claim_value_score": supporting_dimensions.get("claim_value_score") or scorecard.get("total_score"),
+        "parameter_competitiveness": supporting_dimensions.get("parameter_competitiveness") or {},
         "business_value_label": business_label,
         "business_value_meaning_cn": business_meaning,
         "context_type": row.context_type,
@@ -2479,6 +2488,8 @@ def _sku_level_claim_value_summary(rows: Sequence[dict[str, Any]]) -> list[dict[
     for claim_key, claim_rows in grouped.items():
         context_rows = _dedupe_sku_level_claim_context_rows(claim_rows)
         business_claim_type_cn = _best_m12c_business_claim_type_cn(context_rows)
+        target_has_claim = any(_m12c_payload_target_has_claim(row) for row in context_rows)
+        claim_source_type = _best_m12c_claim_source_type(context_rows, target_has_claim=target_has_claim, business_claim_type_cn=business_claim_type_cn)
         price_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("price_premium_abs")) or 0) or Decimal("0") for row in context_rows)
         sales_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_lift_abs")) or 0) or Decimal("0") for row in context_rows)
         amount_total = sum(_decimal(((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")) or 0) or Decimal("0") for row in context_rows)
@@ -2489,10 +2500,14 @@ def _sku_level_claim_value_summary(rows: Sequence[dict[str, Any]]) -> list[dict[
                 "claim_name": str(context_rows[0].get("claim_name") or claim_key),
                 "business_claim_type_cn": business_claim_type_cn,
                 "business_claim_type": str(context_rows[0].get("business_claim_type") or _m12c_business_claim_type_from_cn(business_claim_type_cn)),
+                "target_has_claim": target_has_claim,
+                "claim_source_type": claim_source_type,
+                "claim_source_type_cn": _m12c_claim_source_type_label(claim_source_type),
                 "sku_level_user_payment_value_abs": _number(price_total),
                 "sku_level_weekly_sales_lift_abs": _number(sales_total),
                 "sku_level_weekly_sales_amount_lift_abs": _number(amount_total),
                 "claim_value_score": _number(score),
+                "parameter_competitiveness": _best_m12c_parameter_competitiveness(context_rows),
                 "main_contexts": _unique_nonempty(row.get("context_name") or row.get("context_code") for row in context_rows),
                 "evidence_summary_cn": _sku_level_claim_evidence_summary(context_rows),
                 "context_values": [
@@ -2507,7 +2522,10 @@ def _sku_level_claim_value_summary(rows: Sequence[dict[str, Any]]) -> list[dict[
                         "weekly_sales_amount_lift_abs": ((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")),
                         "pool_effect": row.get("pool_effect") or {},
                         "scorecard": row.get("scorecard") or {},
+                        "parameter_competitiveness": row.get("parameter_competitiveness") or {},
                         "quality_flags": row.get("quality_flags") or [],
+                        "target_has_claim": _m12c_payload_target_has_claim(row),
+                        "claim_source_type_cn": row.get("claim_source_type_cn") or _m12c_claim_source_type_label(str(row.get("claim_source_type") or claim_source_type)),
                     }
                     for row in context_rows[:8]
                 ],
@@ -2572,10 +2590,14 @@ def _sku_level_claim_evidence_summary(rows: Sequence[dict[str, Any]]) -> str:
     best = max(rows, key=_sku_level_claim_row_strength)
     evidence = best.get("evidence_strength") or {}
     parts: list[str] = []
+    parameter_competitiveness = _best_m12c_parameter_competitiveness(rows)
+    parameter_label = str(parameter_competitiveness.get("overall_parameter_competitiveness_level_cn") or "").strip()
+    if parameter_label:
+        parts.append(f"参数竞争力{parameter_label}")
     param = _decimal(evidence.get("param"))
     comment = _decimal(evidence.get("comment"))
     semantic = _decimal(evidence.get("semantic"))
-    if param is not None:
+    if param is not None and not parameter_label:
         parts.append("参数强" if param >= Decimal("0.75") else "参数中等" if param >= Decimal("0.45") else "参数弱")
     if comment is not None:
         parts.append("评论强" if comment >= Decimal("0.75") else "评论中等" if comment >= Decimal("0.45") else "评论弱")
@@ -2585,11 +2607,66 @@ def _sku_level_claim_evidence_summary(rows: Sequence[dict[str, Any]]) -> str:
     return f"证据结构：{evidence_text}。"
 
 
+def _best_m12c_parameter_competitiveness(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    snapshots = [row.get("parameter_competitiveness") for row in rows if isinstance(row.get("parameter_competitiveness"), dict)]
+    snapshots = [dict(item) for item in snapshots if item]
+    if not snapshots:
+        return {}
+    return max(snapshots, key=lambda item: float(_decimal(item.get("overall_parameter_competitiveness_score")) or Decimal("0")))
+
+
+def _best_m12c_claim_source_type(rows: Sequence[Mapping[str, Any]], *, target_has_claim: bool, business_claim_type_cn: str) -> str:
+    source_types = [str(row.get("claim_source_type") or "").strip() for row in rows if str(row.get("claim_source_type") or "").strip()]
+    if "target_fact_claim" in source_types:
+        return "target_fact_claim"
+    if "target_param_capability" in source_types:
+        return "target_param_capability"
+    if "competitor_opportunity_gap" in source_types:
+        return "competitor_opportunity_gap"
+    return _m12c_claim_source_type(target_has_claim=target_has_claim, business_claim_type_cn=business_claim_type_cn)
+
+
 def _sku_level_claim_sort_key(item: Mapping[str, Any]) -> tuple[int, float, float, str]:
     label = str(item.get("business_claim_type_cn") or "")
     price = float(_decimal(item.get("sku_level_user_payment_value_abs")) or Decimal("0"))
     score = float(_decimal(item.get("claim_value_score")) or Decimal("0"))
     return (M12C_BUSINESS_CLAIM_TYPE_PRIORITY.get(label, 99), -price, -score, str(item.get("claim_name") or ""))
+
+
+def _m12c_target_has_claim(row: entities.Core3SkuClaimValueQuantification) -> bool:
+    evidence_count = len(row.evidence_ids_json or [])
+    claim_strength = _decimal(row.claim_evidence_strength) or Decimal("0")
+    return evidence_count > 0 and claim_strength > 0
+
+
+def _m12c_payload_target_has_claim(row: Mapping[str, Any]) -> bool:
+    if "target_has_claim" in row:
+        return bool(row.get("target_has_claim"))
+    evidence = row.get("evidence_strength") or {}
+    claim_strength = _decimal(evidence.get("claim")) or Decimal("0")
+    evidence_count = row.get("evidence_id_count")
+    try:
+        evidence_count_int = int(evidence_count or 0)
+    except (TypeError, ValueError):
+        evidence_count_int = 0
+    return evidence_count_int > 0 and claim_strength > 0
+
+
+def _m12c_claim_source_type(*, target_has_claim: bool, business_claim_type_cn: str) -> str:
+    if target_has_claim:
+        return "target_fact_claim"
+    if business_claim_type_cn == "竞品拦截卖点":
+        return "competitor_opportunity_gap"
+    return "non_target_signal"
+
+
+def _m12c_claim_source_type_label(source_type: str) -> str:
+    return {
+        "target_fact_claim": "本品已成立卖点",
+        "target_param_capability": "本品参数能力待激活",
+        "competitor_opportunity_gap": "竞品拦截/机会缺口",
+        "non_target_signal": "非本品已成立卖点",
+    }.get(str(source_type or ""), "来源待确认")
 
 
 def _m12c_business_value_label(role: str | None, pool_price_delta: Any = None) -> str:

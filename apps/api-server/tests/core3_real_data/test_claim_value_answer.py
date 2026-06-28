@@ -15,15 +15,33 @@ def _payload() -> dict:
                 "claim_code": "tv_claim_hdr_high_brightness",
                 "claim_name": "HDR/高亮画质",
                 "business_claim_type_cn": "高溢价卖点",
+                "target_has_claim": True,
+                "claim_source_type_cn": "本品已成立卖点",
                 "sku_level_user_payment_value_abs": 41,
                 "sku_level_weekly_sales_lift_abs": 3.7,
                 "main_contexts": ["高端画质升级战场"],
                 "evidence_summary_cn": "参数强、评论强、市场承接成立。",
+                "parameter_competitiveness": {
+                    "overall_parameter_competitiveness_score": 91,
+                    "overall_parameter_competitiveness_level_cn": "领先优势",
+                    "explanation_cn": "亮度参数在同战场可比池中领先。",
+                    "key_param_results": [
+                        {
+                            "source_param_code": "declared_brightness_nit_or_band",
+                            "target_value": 5200,
+                            "level_cn": "领先优势",
+                        }
+                    ],
+                },
                 "context_values": [
                     {
                         "context_name": "高端画质升级战场",
                         "price_premium_abs": 41,
                         "weekly_sales_lift_abs": 3.7,
+                        "parameter_competitiveness": {
+                            "overall_parameter_competitiveness_score": 91,
+                            "overall_parameter_competitiveness_level_cn": "领先优势",
+                        },
                     }
                 ],
             },
@@ -31,19 +49,45 @@ def _payload() -> dict:
                 "claim_code": "tv_claim_hdmi21_connectivity",
                 "claim_name": "HDMI2.1 连接",
                 "business_claim_type_cn": "门槛卖点",
+                "target_has_claim": True,
+                "claim_source_type_cn": "本品已成立卖点",
                 "sku_level_user_payment_value_abs": 0,
                 "sku_level_weekly_sales_lift_abs": 0,
                 "main_contexts": ["游戏体育流畅战场"],
                 "evidence_summary_cn": "同池普遍具备，属于入围能力。",
+                "parameter_competitiveness": {
+                    "overall_parameter_competitiveness_score": 45,
+                    "overall_parameter_competitiveness_level_cn": "基础门槛",
+                    "key_param_results": [
+                        {
+                            "source_param_code": "hdmi21_flag",
+                            "target_value": True,
+                            "level_cn": "基础门槛",
+                        }
+                    ],
+                },
             },
             {
                 "claim_code": "tv_claim_dolby_audio_video",
                 "claim_name": "杜比/影音认证",
                 "business_claim_type_cn": "待激活卖点",
+                "target_has_claim": True,
+                "claim_source_type_cn": "本品已成立卖点",
                 "sku_level_user_payment_value_abs": 0,
                 "sku_level_weekly_sales_lift_abs": 0,
                 "main_contexts": ["高端画质升级战场"],
                 "evidence_summary_cn": "用户评论和市场验证不足。",
+            },
+            {
+                "claim_code": "tv_claim_ai_large_model",
+                "claim_name": "AI 大模型/智能能力",
+                "business_claim_type_cn": "竞品拦截卖点",
+                "target_has_claim": False,
+                "claim_source_type_cn": "竞品拦截/机会缺口",
+                "sku_level_user_payment_value_abs": 0,
+                "sku_level_weekly_sales_lift_abs": 0,
+                "main_contexts": ["智能互联体验战场"],
+                "evidence_summary_cn": "竞品侧有表达，本品未形成已成立卖点。",
             },
         ],
         "claim_values": [
@@ -51,6 +95,7 @@ def _payload() -> dict:
                 "claim_code": "tv_claim_hdr_high_brightness",
                 "claim_name": "HDR/高亮画质",
                 "business_claim_type_cn": "高溢价卖点",
+                "target_has_claim": True,
                 "context_type": "battlefield",
                 "context_name": "高端画质升级战场",
                 "pool_effect": {
@@ -66,6 +111,7 @@ def _payload() -> dict:
                 "claim_code": "tv_claim_hdmi21_connectivity",
                 "claim_name": "HDMI2.1 连接",
                 "business_claim_type_cn": "门槛卖点",
+                "target_has_claim": True,
                 "context_type": "battlefield",
                 "context_name": "游戏体育流畅战场",
                 "pool_effect": {
@@ -82,9 +128,13 @@ def test_render_claim_value_report_separates_premium_and_threshold_claims() -> N
     markdown = render_claim_value_report(title="海信 65E7Q 用户卖点价值分析报告", target=_target(), payload=_payload())
 
     assert "# 海信 65E7Q 用户卖点价值分析报告" in markdown
-    assert "## 二、用户卖点价值总榜" in markdown
-    assert "| HDR/高亮画质 | 高溢价卖点 | 高端画质升级战场 | 41元 | 3.7台/周 |" in markdown
-    assert "| HDMI2.1 连接 | 门槛卖点 | 游戏体育流畅战场 | 不作为正向量化 | 不作为正向量化 |" in markdown
+    assert "## 二、本品已成立卖点价值总榜" in markdown
+    assert "| HDR/高亮画质 | 本品已成立卖点 | 高溢价卖点 | 高端画质升级战场 | 领先优势（91分）；关键参数：declared_brightness_nit_or_band=5200（领先优势） | 41元 | 3.7台/周 |" in markdown
+    assert "| HDMI2.1 连接 | 本品已成立卖点 | 门槛卖点 | 游戏体育流畅战场 | 基础门槛（45分）；关键参数：hdmi21_flag=True（基础门槛） | 不作为正向量化 | 不作为正向量化 |" in markdown
+    assert "参数竞争力：亮度参数在同战场可比池中领先" in markdown
+    assert "## 六、竞品拦截与机会缺口" in markdown
+    assert "AI 大模型/智能能力" in markdown
+    assert "不是本品当前已成立卖点" in markdown
     assert "可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊" in markdown
 
 

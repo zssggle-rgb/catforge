@@ -89,11 +89,14 @@ def render_claim_value_short_answer(
 ) -> str:
     name = _display_name(target)
     summary_rows = _sorted_summary_rows(payload)
-    premium = _rows_by_category(summary_rows, "高溢价卖点")[:4]
-    share = _rows_by_category(summary_rows, "份额转化卖点")[:3]
-    threshold = _rows_by_category(summary_rows, "门槛卖点")[:4]
-    pending = _rows_by_category(summary_rows, "待激活卖点")[:3]
-    risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(summary_rows, category)][:3]
+    target_rows = _target_claim_rows(summary_rows)
+    gap_rows = _non_target_claim_rows(summary_rows)
+    premium = _rows_by_category(target_rows, "高溢价卖点")[:4]
+    share = _rows_by_category(target_rows, "份额转化卖点")[:3]
+    threshold = _rows_by_category(target_rows, "门槛卖点")[:4]
+    pending = _rows_by_category(target_rows, "待激活卖点")[:3]
+    target_risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(target_rows, category)][:3]
+    competitor_gaps = [row for row in gap_rows if _category(row) == "竞品拦截卖点"][:3]
     lines: list[str] = [f"{name} 的用户卖点价值结论："]
     if premium:
         lines.append(f"高溢价卖点主要是{_claim_names(premium)}，当前可解释金额约 {_range_or_total(premium, 'sku_level_user_payment_value_abs')}。")
@@ -105,8 +108,10 @@ def render_claim_value_short_answer(
         lines.append(f"门槛卖点包括{_claim_names(threshold)}，有助于进入购买清单，但不作为单独加价理由。")
     if pending:
         lines.append(f"待激活卖点包括{_claim_names(pending)}，产品事实或厂家表达存在，但用户感知和市场验证仍需加强。")
-    if risks:
-        lines.append(f"风险和拦截信号集中在{_claim_names(risks)}。")
+    if target_risks:
+        lines.append(f"本品价格压力或风险卖点集中在{_claim_names(target_risks)}。")
+    if competitor_gaps:
+        lines.append(f"竞品侧拦截/机会缺口集中在{_claim_names(competitor_gaps)}，这些不是本品当前已成立卖点。")
     if report_location:
         lines.append(f"详细报告：{report_location}")
     elif report_message:
@@ -117,6 +122,8 @@ def render_claim_value_short_answer(
 def render_claim_value_report(*, title: str, target: dict[str, Any], payload: dict[str, Any]) -> str:
     summary_rows = _sorted_summary_rows(payload)
     detail_rows = [row for row in payload.get("claim_values") or [] if isinstance(row, dict)]
+    target_summary_rows = _target_claim_rows(summary_rows)
+    target_detail_rows = _target_claim_rows(detail_rows)
     lines = [
         f"# {title}",
         "",
@@ -124,41 +131,48 @@ def render_claim_value_report(*, title: str, target: dict[str, Any], payload: di
         "",
         *_conclusion_lines(target, summary_rows),
         "",
-        "## 二、用户卖点价值总榜",
+        "## 二、本品已成立卖点价值总榜",
         "",
-        *_summary_table_lines(summary_rows),
+        *_summary_table_lines(target_summary_rows),
         "",
         "## 三、高溢价卖点明细",
         "",
-        *_positive_detail_lines(summary_rows, category="高溢价卖点"),
+        *_positive_detail_lines(target_summary_rows, category="高溢价卖点"),
         "",
         "## 四、分价值战场拆解",
         "",
-        *_battlefield_breakdown_lines(detail_rows),
+        *_battlefield_breakdown_lines(target_detail_rows),
         "",
         "## 五、门槛、待激活和风险卖点",
         "",
-        *_non_positive_lines(summary_rows),
+        *_non_positive_lines(target_summary_rows),
         "",
-        "## 六、可追溯计算依据",
+        "## 六、竞品拦截与机会缺口",
+        "",
+        *_competitor_gap_lines(summary_rows),
+        "",
+        "## 七、可追溯计算依据",
         "",
         *_method_lines(payload),
         "",
-        "## 七、口径说明",
+        "## 八、口径说明",
         "",
-        "可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。",
+        "本报告把本品已成立卖点和竞品拦截/机会缺口分开呈现。本品已成立卖点以 M04C 卖点事实为边界；竞品侧机会项用于识别外部拦截方向，不计入本品当前卖点数量。可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。",
     ]
     return "\n".join(lines).strip() + "\n"
 
 
 def _conclusion_lines(target: dict[str, Any], summary_rows: list[dict[str, Any]]) -> list[str]:
     name = _display_name(target)
-    premium = _rows_by_category(summary_rows, "高溢价卖点")[:5]
-    threshold = _rows_by_category(summary_rows, "门槛卖点")[:5]
-    pending = _rows_by_category(summary_rows, "待激活卖点")[:5]
-    risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(summary_rows, category)][:5]
+    target_rows = _target_claim_rows(summary_rows)
+    gap_rows = _non_target_claim_rows(summary_rows)
+    premium = _rows_by_category(target_rows, "高溢价卖点")[:5]
+    threshold = _rows_by_category(target_rows, "门槛卖点")[:5]
+    pending = _rows_by_category(target_rows, "待激活卖点")[:5]
+    risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(target_rows, category)][:5]
+    competitor_gaps = [row for row in gap_rows if _category(row) == "竞品拦截卖点"][:5]
     lines = [
-        f"{name} 的用户卖点价值应按价值战场来理解：先判断本品进入哪些主/辅价值战场，再看每个战场里用户真正愿意为哪些卖点支付更高价格或给出销量承接。",
+        f"{name} 的用户卖点价值应按价值战场来理解：先判断本品进入哪些主/辅价值战场，再看每个战场里用户真正愿意为哪些已成立卖点支付更高价格或给出销量承接。",
     ]
     if premium:
         lines.append(f"当前稳定高溢价卖点为：{_claim_names(premium)}。这些卖点在对应价值战场内同时具备参数支撑、用户评论感知和市场承接。")
@@ -170,15 +184,17 @@ def _conclusion_lines(target: dict[str, Any], summary_rows: list[dict[str, Any]]
         lines.append(f"待激活卖点为：{_claim_names(pending)}。这些卖点需要通过导购表达、内容教育或产品证据强化，才能转化为用户支付理由。")
     if risks:
         lines.append(f"需要关注的风险/拦截卖点为：{_claim_names(risks)}。这些方向可能影响本品在同战场中的成交解释力。")
+    if competitor_gaps:
+        lines.append(f"竞品侧拦截/机会缺口为：{_claim_names(competitor_gaps)}。这些不是本品当前已成立卖点，用于判断竞品可能从哪些方向分流。")
     return lines
 
 
 def _summary_table_lines(rows: list[dict[str, Any]]) -> list[str]:
     if not rows:
-        return ["当前 SKU 没有 M12C 卖点价值量化结果。"]
+        return ["当前 SKU 没有本品已成立卖点价值量化结果。"]
     lines = [
-        "| 卖点 | 业务分类 | 主要成立战场 | 可解释金额 | 可解释销量 | 证据摘要 |",
-        "| --- | --- | --- | ---: | ---: | --- |",
+        "| 卖点 | 归属口径 | 业务分类 | 主要成立战场 | 关键参数竞争力 | 可解释金额 | 可解释销量 | 证据摘要 |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | --- |",
     ]
     for row in rows[:40]:
         lines.append(
@@ -186,8 +202,10 @@ def _summary_table_lines(rows: list[dict[str, Any]]) -> list[str]:
             + " | ".join(
                 [
                     _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
+                    _md(_claim_source_label(row)),
                     _md(_category(row)),
                     _md("、".join(str(item) for item in (row.get("main_contexts") or [])[:4]) or "待形成稳定战场"),
+                    _md(_parameter_competitiveness_label(row)),
                     _md(_money(row.get("sku_level_user_payment_value_abs")) or "不作为正向量化"),
                     _md((_volume(row.get("sku_level_weekly_sales_lift_abs")) + "台/周") if _volume(row.get("sku_level_weekly_sales_lift_abs")) else "不作为正向量化"),
                     _md(row.get("evidence_summary_cn") or _claim_type_meaning(_category(row))),
@@ -223,6 +241,9 @@ def _positive_detail_lines(rows: list[dict[str, Any]], *, category: str) -> list
         evidence = str(row.get("evidence_summary_cn") or "").strip()
         if evidence:
             lines.append(f"- 证据解释：{evidence}")
+        parameter_summary = _parameter_competitiveness_detail(row)
+        if parameter_summary:
+            lines.append(f"- 参数竞争力：{parameter_summary}")
         lines.append("")
     return lines
 
@@ -264,7 +285,7 @@ def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
 
 def _non_positive_lines(rows: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
-    for category in ("门槛卖点", "待激活卖点", "厂家主张卖点", "竞品拦截卖点", "价格压力卖点", "样本不足待复核"):
+    for category in ("门槛卖点", "待激活卖点", "厂家主张卖点", "价格压力卖点", "样本不足待复核"):
         items = _rows_by_category(rows, category)
         if not items:
             continue
@@ -279,6 +300,20 @@ def _non_positive_lines(rows: list[dict[str, Any]]) -> list[str]:
     return lines or ["当前没有门槛、待激活或风险卖点结果。"]
 
 
+def _competitor_gap_lines(rows: list[dict[str, Any]]) -> list[str]:
+    gap_rows = [row for row in _non_target_claim_rows(rows) if _category(row) == "竞品拦截卖点"]
+    if not gap_rows:
+        return ["当前没有竞品侧拦截或机会缺口结果。"]
+    lines = [
+        "以下项目不是本品当前已成立卖点，而是同一价值战场内竞品已经形成表达或市场验证、本品缺失或表达较弱的方向。",
+        "",
+    ]
+    for row in gap_rows[:12]:
+        contexts = "、".join(str(item) for item in (row.get("main_contexts") or [])[:4]) or "相关场景待复核"
+        lines.append(f"- {row.get('claim_name') or row.get('claim_code') or '未命名方向'}：{contexts}。{row.get('evidence_summary_cn') or ''}")
+    return lines
+
+
 def _method_lines(payload: dict[str, Any]) -> list[str]:
     note = str(payload.get("method_note_cn") or "").strip()
     lines = [
@@ -286,7 +321,8 @@ def _method_lines(payload: dict[str, Any]) -> list[str]:
         "2. 在同价值战场、同尺寸层级、同价格带中建立可比市场池，并区分有该卖点组与对照组。",
         "3. 观察可比池中有卖点组与对照组的价格差异、销量差异和销额差异。",
         "4. 再判断本品相对直接可比基准的市场位置，是溢价承接、份额转化、客户获得价值、价格压力，还是支付价值未验证。",
-        "5. 最后结合参数证据、评论感知、竞品差异、样本充分性和战场权重，把可解释金额和销量分摊到卖点。",
+        "5. 对卖点下的支撑参数做战场内竞争力判断，区分领先优势、较强优势、基础门槛、弱或缺失、样本不足。",
+        "6. 最后结合参数竞争力、评论感知、竞品差异、样本充分性和战场权重，把可解释金额和销量分摊到卖点。",
     ]
     if note:
         lines.append(f"补充口径：{note}")
@@ -326,6 +362,92 @@ def _business_report_message(*, with_report: ReportMode, publish_result: ReportP
 def _sorted_summary_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     rows = [row for row in payload.get("sku_level_claim_values") or [] if isinstance(row, dict)]
     return sorted(rows, key=_summary_sort_key)
+
+
+def _target_claim_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if _target_has_claim(row)]
+
+
+def _non_target_claim_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if not _target_has_claim(row)]
+
+
+def _target_has_claim(row: dict[str, Any]) -> bool:
+    if "target_has_claim" in row:
+        return bool(row.get("target_has_claim"))
+    source_type = str(row.get("claim_source_type") or "").strip()
+    if source_type == "competitor_opportunity_gap":
+        return False
+    if _category(row) == "竞品拦截卖点":
+        return False
+    evidence = row.get("evidence_strength") or {}
+    claim_strength = _decimal(evidence.get("claim")) or Decimal("0")
+    if claim_strength > 0:
+        return True
+    return True
+
+
+def _claim_source_label(row: dict[str, Any]) -> str:
+    label = str(row.get("claim_source_type_cn") or "").strip()
+    if label:
+        return label
+    return "本品已成立卖点" if _target_has_claim(row) else "竞品拦截/机会缺口"
+
+
+def _parameter_competitiveness_label(row: dict[str, Any]) -> str:
+    snapshot = _parameter_competitiveness_snapshot(row)
+    if not snapshot:
+        return "参数竞争力待补充"
+    level = str(snapshot.get("overall_parameter_competitiveness_level_cn") or "").strip() or "未判断"
+    score = _decimal(snapshot.get("overall_parameter_competitiveness_score"))
+    score_text = f"{score.quantize(Decimal('1'), rounding=ROUND_HALF_UP)}分" if score is not None else "未评分"
+    key_params = _key_param_labels(snapshot)[:2]
+    suffix = f"；关键参数：{'、'.join(key_params)}" if key_params else ""
+    return f"{level}（{score_text}）{suffix}"
+
+
+def _parameter_competitiveness_detail(row: dict[str, Any]) -> str:
+    snapshot = _parameter_competitiveness_snapshot(row)
+    if not snapshot:
+        return ""
+    explanation = str(snapshot.get("explanation_cn") or "").strip()
+    key_params = _key_param_labels(snapshot)[:4]
+    parts: list[str] = []
+    if explanation:
+        parts.append(explanation)
+    if key_params:
+        parts.append("关键参数：" + "、".join(key_params))
+    return "；".join(parts)
+
+
+def _parameter_competitiveness_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    snapshot = row.get("parameter_competitiveness")
+    if isinstance(snapshot, dict) and snapshot:
+        return snapshot
+    supporting = row.get("supporting_dimensions") or {}
+    if isinstance(supporting, dict) and isinstance(supporting.get("parameter_competitiveness"), dict):
+        return supporting.get("parameter_competitiveness") or {}
+    contexts = [item for item in (row.get("context_values") or []) if isinstance(item, dict)]
+    snapshots = [item.get("parameter_competitiveness") for item in contexts if isinstance(item.get("parameter_competitiveness"), dict)]
+    snapshots = [item for item in snapshots if item]
+    if not snapshots:
+        return {}
+    return max(snapshots, key=lambda item: _decimal(item.get("overall_parameter_competitiveness_score")) or Decimal("0"))
+
+
+def _key_param_labels(snapshot: dict[str, Any]) -> list[str]:
+    labels: list[str] = []
+    for item in snapshot.get("key_param_results") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("source_param_code") or item.get("param_code") or "").strip()
+        value = item.get("target_value")
+        level = str(item.get("level_cn") or "").strip()
+        if not name:
+            continue
+        value_text = "" if value is None else f"={value}"
+        labels.append(f"{name}{value_text}{f'（{level}）' if level else ''}")
+    return labels
 
 
 def _summary_sort_key(row: dict[str, Any]) -> tuple[int, Decimal, Decimal, str]:

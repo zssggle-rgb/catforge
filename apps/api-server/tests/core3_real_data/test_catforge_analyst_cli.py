@@ -138,10 +138,10 @@ def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
         market_position=market_position,
     )
 
-    assert scorecard["score_method_cn"] == "卖点价值分 = 战场相关度20% + 参数强度25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
+    assert scorecard["score_method_cn"] == "卖点支付价值分 = 战场相关度20% + 参数竞争力25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
     assert {item["code"] for item in scorecard["dimensions"]} == {
         "battlefield_relevance",
-        "parameter_strength",
+        "parameter_competitiveness",
         "comment_perception",
         "competitor_difference",
         "market_validation",
@@ -277,6 +277,122 @@ def test_m12c_interface_spec_claim_is_threshold_before_premium() -> None:
     )
 
     assert role == m12c_service.M12C_ROLE_BASIC
+
+
+def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_hdr_high_brightness",
+        claim_name="HDR/高亮画质",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        with_claim_skus=("sku-a", "sku-b", "sku-c"),
+        without_claim_skus=("sku-d", "sku-e", "sku-f"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        pool_relax_level="L1",
+    )
+    target_claim = m12c_service.ClaimState(
+        sku_code="sku-a",
+        claim_code="tv_claim_hdr_high_brightness",
+        claim_name="HDR/高亮画质",
+        claim_dimension="画质",
+        claim_subtype="高亮",
+        claim_kind="fact",
+        param_support_status="supported",
+        supporting_param_codes=("declared_brightness_nit_or_band",),
+        supporting_param_snapshot={},
+        match_score=Decimal("0.9000"),
+        confidence=Decimal("0.9000"),
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=("e1",),
+    )
+    claims = {
+        sku: {
+            "tv_claim_hdr_high_brightness": dataclasses.replace(target_claim, sku_code=sku)
+        }
+        for sku in pool.sku_codes
+    }
+    param_profiles = {
+        "sku-a": m12c_service.ParamProfileState("sku-a", {"declared_brightness_nit_or_band": 5200}, ()),
+        "sku-b": m12c_service.ParamProfileState("sku-b", {"declared_brightness_nit_or_band": 2400}, ()),
+        "sku-c": m12c_service.ParamProfileState("sku-c", {"declared_brightness_nit_or_band": 2000}, ()),
+        "sku-d": m12c_service.ParamProfileState("sku-d", {"declared_brightness_nit_or_band": 1800}, ()),
+        "sku-e": m12c_service.ParamProfileState("sku-e", {"declared_brightness_nit_or_band": 1200}, ()),
+        "sku-f": m12c_service.ParamProfileState("sku-f", {"declared_brightness_nit_or_band": 800}, ()),
+    }
+    comments = {"sku-a": m12c_service.CommentState("sku-a", ("tv_claim_hdr_high_brightness",), (), 8, 0, Decimal("0.9000"))}
+
+    competitiveness = m12c_service._claim_parameter_competitiveness(
+        pool=pool,
+        target_sku="sku-a",
+        claim=target_claim,
+        claims=claims,
+        comments=comments,
+        param_profiles=param_profiles,
+    )
+
+    assert competitiveness["overall_parameter_competitiveness_level"] == m12c_service.M12C_PARAM_LEVEL_LEADING
+    assert competitiveness["key_param_results"][0]["target_numeric_value"] == 5200.0
+
+    metric = {
+        "with_price_median": Decimal("6500"),
+        "price_premium_abs": Decimal("900"),
+        "weekly_sales_lift_abs": Decimal("12"),
+        "weekly_sales_amount_lift_abs": Decimal("180000"),
+        "effect_confidence": Decimal("0.8500"),
+    }
+    role = m12c_service._claim_role(
+        has_claim=True,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("0.9000"),
+        semantic_strength=Decimal("1.0000"),
+        battlefield_claim_relevance=Decimal("1.0000"),
+        parameter_competitiveness=competitiveness,
+        has_negative=False,
+    )
+
+    assert role == m12c_service.M12C_ROLE_PREMIUM
+
+    hdmi_pool = dataclasses.replace(pool, claim_code="tv_claim_hdmi21_connectivity", claim_name="HDMI2.1 连接", context_code="BF_GAMING_SPORTS_FLUENCY")
+    hdmi_claim = dataclasses.replace(
+        target_claim,
+        claim_code="tv_claim_hdmi21_connectivity",
+        claim_name="HDMI2.1 连接",
+        supporting_param_codes=("hdmi21_flag",),
+    )
+    hdmi_claims = {sku: {"tv_claim_hdmi21_connectivity": dataclasses.replace(hdmi_claim, sku_code=sku)} for sku in hdmi_pool.sku_codes}
+    hdmi_params = {sku: m12c_service.ParamProfileState(sku, {"hdmi21_flag": True}, ()) for sku in hdmi_pool.sku_codes}
+    hdmi_competitiveness = m12c_service._claim_parameter_competitiveness(
+        pool=hdmi_pool,
+        target_sku="sku-a",
+        claim=hdmi_claim,
+        claims=hdmi_claims,
+        comments={"sku-a": m12c_service.CommentState("sku-a", ("tv_claim_hdmi21_connectivity",), (), 4, 0, Decimal("0.9000"))},
+        param_profiles=hdmi_params,
+    )
+    hdmi_role = m12c_service._claim_role(
+        has_claim=True,
+        metric=metric,
+        pool=hdmi_pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("1.0000"),
+        semantic_strength=Decimal("1.0000"),
+        battlefield_claim_relevance=Decimal("1.0000"),
+        parameter_competitiveness=hdmi_competitiveness,
+        has_negative=False,
+    )
+
+    assert hdmi_competitiveness["overall_parameter_competitiveness_level"] == m12c_service.M12C_PARAM_LEVEL_PARITY
+    assert hdmi_role == m12c_service.M12C_ROLE_BASIC
 
 
 def make_session() -> Session:
