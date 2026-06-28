@@ -1769,10 +1769,10 @@ def _claim_support_param_codes(claim: ClaimState | None, claim_code: str) -> tup
     ordered: list[str] = []
     for code in (claim.supporting_param_codes if claim else ()):
         text = str(code).strip()
-        if text and text not in ordered:
+        if text and not text.startswith("_") and text not in ordered:
             ordered.append(text)
     for code in M12C_CLAIM_PARAM_FALLBACKS.get(claim_code, ()):
-        if code not in ordered:
+        if code and not code.startswith("_") and code not in ordered:
             ordered.append(code)
     return tuple(ordered)
 
@@ -2003,7 +2003,10 @@ def _decimal_param_value(value: Any) -> Decimal | None:
         except Exception:
             return None
     if isinstance(value, Mapping):
-        return _decimal_param_value(_normalized_param_value(value))
+        normalized = _normalized_param_value(value)
+        if isinstance(normalized, Mapping):
+            return None
+        return _decimal_param_value(normalized)
     if isinstance(value, str):
         text = value.replace(",", "").replace("，", "").strip()
         match = re.search(r"-?\d+(?:\.\d+)?", text)
@@ -2021,7 +2024,10 @@ def _truthy_param_value(value: Any) -> bool | None:
     if isinstance(value, (int, float, Decimal)):
         return Decimal(str(value)) > 0
     if isinstance(value, Mapping):
-        return _truthy_param_value(_normalized_param_value(value))
+        normalized = _normalized_param_value(value)
+        if isinstance(normalized, Mapping):
+            return None
+        return _truthy_param_value(normalized)
     text = str(value or "").strip().lower()
     if not text or text in {"0", "false", "no", "none", "null", "无", "否", "不支持", "未见", "-"}:
         return False
