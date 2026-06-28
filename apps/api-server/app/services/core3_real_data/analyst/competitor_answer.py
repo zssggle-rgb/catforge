@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+from hashlib import sha256
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal
@@ -4072,8 +4073,9 @@ def publish_feishu_card_reply(
     ]
     if reply_in_thread:
         command.append("--reply-in-thread")
-    if idempotency_key and idempotency_key.strip():
-        command.extend(["--idempotency-key", idempotency_key.strip()])
+    normalized_idempotency_key = _feishu_idempotency_key(idempotency_key)
+    if normalized_idempotency_key:
+        command.extend(["--idempotency-key", normalized_idempotency_key])
     env = os.environ.copy()
     cli_dir = os.path.dirname(cli_bin)
     if cli_dir:
@@ -4243,9 +4245,20 @@ def _feishu_im_failure_message(output: str) -> str:
         return f"飞书卡片发送失败：飞书应用或用户缺少消息发送权限{scope_text}。{url_text}".strip()
     if "invalid message" in normalized or "message_id" in normalized or "message id" in normalized:
         return "飞书卡片发送失败：当前消息 ID 不可回复或已失效。"
+    if "field validation failed" in normalized or "field_violations" in normalized:
+        return "飞书卡片发送失败：飞书消息字段校验未通过。"
     if "auth" in normalized or "login" in normalized or "user identity" in normalized:
         return "飞书卡片发送失败：飞书用户身份未授权或授权已失效。"
     return "飞书卡片发送失败：请检查飞书 CLI 配置、机器人是否在会话中以及消息发送权限。"
+
+
+def _feishu_idempotency_key(value: str | None) -> str | None:
+    if not value or not value.strip():
+        return None
+    key = value.strip()
+    if len(key) <= 50:
+        return key
+    return f"cf-card-{sha256(key.encode('utf-8')).hexdigest()[:32]}"
 
 
 def _feishu_public_permission_failure_message(output: str) -> str:
