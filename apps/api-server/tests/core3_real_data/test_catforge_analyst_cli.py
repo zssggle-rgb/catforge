@@ -129,7 +129,12 @@ def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
         has_negative=False,
         market_position=market_position,
     )
-    claim_type = m12c_service._business_claim_type(m12c_service.M12C_ROLE_PREMIUM, metric, scorecard)
+    claim_type = m12c_service._business_claim_type(
+        m12c_service.M12C_ROLE_PREMIUM,
+        metric,
+        scorecard,
+        market_position=market_position,
+    )
 
     assert scorecard["score_method_cn"] == "卖点价值分 = 战场相关度20% + 参数强度25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
     assert {item["code"] for item in scorecard["dimensions"]} == {
@@ -141,6 +146,42 @@ def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
     }
     assert scorecard["total_score"] > 70
     assert claim_type == m12c_service.M12C_CLAIM_TYPE_PREMIUM
+
+
+def test_m12c_price_pressure_does_not_become_premium_claim() -> None:
+    metric = {
+        "price_premium_abs": Decimal("500"),
+        "weekly_sales_lift_abs": Decimal("12"),
+        "weekly_sales_amount_lift_abs": Decimal("60000"),
+    }
+    pool = _m12c_test_pool()
+    market_position = m12c_service._market_position_signal(
+        market_price=Decimal("6200"),
+        market_sales=Decimal("60"),
+        baseline_price=Decimal("5800"),
+        baseline_sales=Decimal("90"),
+    )
+
+    scorecard = m12c_service._claim_value_scorecard(
+        pool=pool,
+        role=m12c_service.M12C_ROLE_PREMIUM,
+        metric=metric,
+        has_claim=True,
+        param_strength=Decimal("0.9000"),
+        comment_strength=Decimal("0.8500"),
+        semantic_strength=Decimal("0.9500"),
+        has_negative=False,
+        market_position=market_position,
+    )
+    claim_type = m12c_service._business_claim_type(
+        m12c_service.M12C_ROLE_PREMIUM,
+        metric,
+        scorecard,
+        market_position=market_position,
+    )
+
+    assert market_position["type"] == "price_pressure"
+    assert claim_type == m12c_service.M12C_CLAIM_TYPE_PRICE_PRESSURE
 
 
 def make_session() -> Session:

@@ -993,7 +993,7 @@ def _quantification_rows(
                 market_position=market_position,
                 market_acceptance=market_acceptance,
             )
-            business_claim_type = _business_claim_type(role, metric, scorecard)
+            business_claim_type = _business_claim_type(role, metric, scorecard, market_position=market_position)
             business_claim_type_cn = _business_claim_type_label(business_claim_type)
             weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength, scorecard)
             effective_price_space = _effective_price_space(market, baseline_price, market_position, market_acceptance)
@@ -1052,6 +1052,12 @@ def _quantification_rows(
                         "with_claim_sku_count": len(pool.with_claim_skus),
                         "without_claim_sku_count": len(pool.without_claim_skus),
                         "sample_status": pool.sample_status,
+                        "target_price": float(_q4(market.price)),
+                        "target_weekly_sales": float(_q6(market.avg_weekly_sales_volume)),
+                        "target_weekly_amount": float(_q6(market.avg_weekly_sales_amount)),
+                        "baseline_price": float(_q4(baseline_price)),
+                        "baseline_weekly_sales": float(_q6(baseline_sales)),
+                        "baseline_weekly_amount": float(_q6(baseline_amount)),
                         "baseline_price_method": target_baseline["baseline_price_method"],
                         "baseline_explanation_cn": target_baseline["baseline_explanation_cn"],
                         "comparison_sku_codes": target_baseline["comparison_sku_codes"],
@@ -1705,9 +1711,10 @@ def _market_position_signal(
     return {"type": "payment_unverified", "summary_cn": "价格和销量暂未验证支付价值"}
 
 
-def _business_claim_type(role: str, metric: Mapping[str, Any], scorecard: Mapping[str, Any]) -> str:
+def _business_claim_type(role: str, metric: Mapping[str, Any], scorecard: Mapping[str, Any], market_position: Mapping[str, Any] | None = None) -> str:
     price_delta = _q4(metric.get("price_premium_abs") or metric.get("_pool_claim_price_delta_abs"))
     total_score = Decimal(str(scorecard.get("total_score") or 0))
+    market_type = str((market_position or {}).get("type") or "")
     if role == M12C_ROLE_SAMPLE:
         return M12C_CLAIM_TYPE_SAMPLE
     if role == M12C_ROLE_BASIC:
@@ -1720,12 +1727,16 @@ def _business_claim_type(role: str, metric: Mapping[str, Any], scorecard: Mappin
         return M12C_CLAIM_TYPE_PENDING
     if role == M12C_ROLE_BRAND:
         return M12C_CLAIM_TYPE_BRAND
-    if role == M12C_ROLE_PREMIUM and price_delta > 0 and total_score >= Decimal("65"):
+    if market_type == "price_pressure" and role in {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}:
+        return M12C_CLAIM_TYPE_PRICE_PRESSURE
+    if role == M12C_ROLE_PREMIUM and market_type == "premium_accepted" and price_delta > 0 and total_score >= Decimal("65"):
         return M12C_CLAIM_TYPE_PREMIUM
-    if role == M12C_ROLE_SALES:
+    if role == M12C_ROLE_SALES and market_type == "share_conversion":
         return M12C_CLAIM_TYPE_SHARE
-    if role == M12C_ROLE_VALUE_BUNDLE or role == M12C_ROLE_PREMIUM:
+    if role == M12C_ROLE_VALUE_BUNDLE and market_type == "customer_value_gain":
         return M12C_CLAIM_TYPE_CUSTOMER_VALUE
+    if role in {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}:
+        return M12C_CLAIM_TYPE_PENDING
     return M12C_CLAIM_TYPE_BRAND
 
 
