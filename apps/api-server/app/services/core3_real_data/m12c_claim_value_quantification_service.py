@@ -51,8 +51,9 @@ M12C_ROLE_SAMPLE = "sample_insufficient"
 
 POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
 OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C_ROLE_PRICE_UP}
-MIN_POOL_SKU_COUNT = 8
-MIN_GROUP_SKU_COUNT = 3
+MIN_POOL_SKU_COUNT = 6
+MIN_WEAK_POOL_SKU_COUNT = 4
+MIN_GROUP_SKU_COUNT = 2
 
 M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
 M12C_CLAIM_TYPE_SHARE = "share_conversion_claim"
@@ -99,6 +100,7 @@ class MarketState:
     brand_name: str | None
     model_name: str | None
     size_tier: str
+    exact_size_tier: str
     price_band: str
     price: Decimal
     sales_volume_total: Decimal
@@ -116,7 +118,11 @@ class ClaimState:
     claim_code: str
     claim_name: str
     claim_dimension: str
+    claim_subtype: str
+    claim_kind: str
     param_support_status: str
+    supporting_param_codes: tuple[str, ...]
+    supporting_param_snapshot: Mapping[str, Any]
     match_score: Decimal
     confidence: Decimal
     fact_claim_flag: bool
@@ -195,6 +201,8 @@ class ClaimPool:
     sample_status: str
     quality_flags: tuple[str, ...]
     relaxation_path: tuple[dict[str, Any], ...]
+    pool_relax_level: str = "L0"
+    baseline_price_method: str = "weighted_median_excluding_target"
 
 
 class M12CRepository(Core3BaseRepository):
@@ -233,7 +241,11 @@ class M12CRepository(Core3BaseRepository):
                 claim_code=row.claim_code,
                 claim_name=row.claim_name,
                 claim_dimension=row.claim_dimension or "",
+                claim_subtype=row.claim_subtype or "",
+                claim_kind=row.claim_kind or "",
                 param_support_status=row.param_support_status or "unknown",
+                supporting_param_codes=tuple(str(item) for item in (row.supporting_param_codes or [])),
+                supporting_param_snapshot=row.supporting_param_snapshot_json or {},
                 match_score=_q4(row.match_score),
                 confidence=_q4(row.confidence),
                 fact_claim_flag=bool(row.fact_claim_flag),
@@ -276,8 +288,6 @@ class M12CRepository(Core3BaseRepository):
         market_window: str,
     ) -> dict[str, SemanticState]:
         contexts_by_sku: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
-        self._append_task_contexts(batch_id, product_category, contexts_by_sku)
-        self._append_group_contexts(batch_id, product_category, contexts_by_sku)
         self._append_battlefield_contexts(batch_id, product_category, contexts_by_sku)
         allocated_skus = self._m11d_allocated_skus(batch_id, product_category, analysis_population, market_window)
         if allocated_skus:
@@ -407,10 +417,6 @@ class M12CRepository(Core3BaseRepository):
                 result[row.sku_code].append(("battlefield", row.primary_battlefield_code, row.primary_battlefield_code, "primary"))
             for code in row.secondary_battlefield_codes_json or []:
                 result[row.sku_code].append(("battlefield", str(code), str(code), "secondary"))
-            for code in row.opportunity_battlefield_codes_json or []:
-                result[row.sku_code].append(("battlefield", str(code), str(code), "opportunity"))
-            for code in row.drag_factor_battlefield_codes_json or []:
-                result[row.sku_code].append(("battlefield", str(code), str(code), "drag"))
 
     def _m11d_allocated_skus(self, batch_id: str, product_category: str, analysis_population: str, market_window: str) -> set[str]:
         stmt = (
@@ -656,47 +662,40 @@ def _build_pools(
             claims_by_code.setdefault(state.claim_code, state.claim_name)
     contexts: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for sku, market in markets.items():
-        contexts[("market_pool", "all", "整体市场池")].add(sku)
         for context_type, context_code, context_name, _ in semantics[sku].contexts:
+            if context_type != "battlefield":
+                continue
             name = dimension_names.get((context_type, context_code), context_name or context_code)
             contexts[(context_type, context_code, name)].add(sku)
 
     pools: list[ClaimPool] = []
+    seen_keys: set[tuple[str, str, str, str, str]] = set()
     for (context_type, context_code, context_name), context_skus in sorted(contexts.items()):
-        buckets: dict[tuple[str, str], list[str]] = defaultdict(list)
+        starting_buckets: dict[tuple[str, str, str], list[str]] = defaultdict(list)
         for sku in sorted(context_skus):
             market = markets.get(sku)
             if not market:
                 continue
-            buckets[(market.size_tier, market.price_band)].append(sku)
-        for (size_tier, price_band), sku_codes in sorted(buckets.items()):
-            if len(sku_codes) < 2:
-                continue
+            starting_buckets[(market.exact_size_tier, market.size_tier, market.price_band)].append(sku)
+        for (exact_size_tier, size_tier, price_band), _ in sorted(starting_buckets.items()):
             for claim_code, claim_name in sorted(claims_by_code.items()):
-                with_skus: list[str] = []
-                without_skus: list[str] = []
-                unknown_skus: list[str] = []
-                for sku in sku_codes:
-                    claim_state = claims.get(sku, {}).get(claim_code)
-                    if claim_state is None:
-                        without_skus.append(sku)
-                    elif claim_state.is_supported:
-                        with_skus.append(sku)
-                    elif claim_state.service_separate_flag:
-                        unknown_skus.append(sku)
-                    else:
-                        without_skus.append(sku)
-                if not with_skus and not without_skus:
+                relaxed = _relaxed_pool_for_claim(
+                    all_skus=set(markets),
+                    context_skus=context_skus,
+                    markets=markets,
+                    claims=claims,
+                    claim_code=claim_code,
+                    exact_size_tier=exact_size_tier,
+                    size_tier=size_tier,
+                    price_band=price_band,
+                )
+                if relaxed is None:
                     continue
-                sample_status, quality_flags = _sample_status(len(sku_codes), len(with_skus), len(without_skus))
-                relaxation_path = ()
-                if sample_status != "sufficient":
-                    relaxation_path = (
-                        {
-                            "level": "observed_pool_only",
-                            "reason": "当前首版不自动跨尺寸或跨语义放宽，只保留观察池并降级。",
-                        },
-                    )
+                final_size_tier, final_price_band, pool_relax_level, sku_codes, with_skus, without_skus, unknown_skus, sample_status, quality_flags, relaxation_path = relaxed
+                pool_key = (claim_code, context_type, context_code, final_size_tier, final_price_band)
+                if pool_key in seen_keys:
+                    continue
+                seen_keys.add(pool_key)
                 pools.append(
                     ClaimPool(
                         claim_code=claim_code,
@@ -704,8 +703,8 @@ def _build_pools(
                         context_type=context_type,
                         context_code=context_code,
                         context_name=context_name,
-                        size_tier=size_tier,
-                        price_band_group=price_band,
+                        size_tier=final_size_tier,
+                        price_band_group=final_price_band,
                         sku_codes=tuple(sorted(sku_codes)),
                         with_claim_skus=tuple(sorted(with_skus)),
                         without_claim_skus=tuple(sorted(without_skus)),
@@ -713,9 +712,117 @@ def _build_pools(
                         sample_status=sample_status,
                         quality_flags=tuple(quality_flags),
                         relaxation_path=relaxation_path,
+                        pool_relax_level=pool_relax_level,
                     )
                 )
     return pools
+
+
+def _relaxed_pool_for_claim(
+    *,
+    all_skus: set[str],
+    context_skus: set[str],
+    markets: Mapping[str, MarketState],
+    claims: Mapping[str, Mapping[str, ClaimState]],
+    claim_code: str,
+    exact_size_tier: str,
+    size_tier: str,
+    price_band: str,
+) -> tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...]] | None:
+    levels = [
+        ("L0", context_skus, exact_size_tier, (price_band,), "同战场、同具体尺寸、同价格带。"),
+        ("L1", context_skus, size_tier, (price_band,), "同战场、同五档尺寸段、同价格带。"),
+        ("L2", context_skus, size_tier, tuple(_adjacent_price_bands(price_band)), "同战场、同五档尺寸段、相邻价格带。"),
+        ("L3", context_skus, size_tier, tuple(_adjacent_price_bands(price_band)), "同战场、同五档尺寸段、相邻价格带，不强制评论。"),
+        ("L4", all_skus, size_tier, tuple(_adjacent_price_bands(price_band)), "同五档尺寸段、相邻价格带，不限定价值战场；仅用于门槛和待验证。"),
+    ]
+    path: list[dict[str, Any]] = []
+    fallback: tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...]] | None = None
+    for level, candidate_skus, size_scope, price_scope, reason in levels:
+        sku_codes = tuple(sorted(_filter_pool_skus(candidate_skus, markets, size_scope, price_scope, exact_scope=(level == "L0"))))
+        with_skus, without_skus, unknown_skus = _split_claim_groups(sku_codes, claims, claim_code)
+        sample_status, quality_flags = _sample_status(len(sku_codes), len(with_skus), len(without_skus))
+        price_scope_label = price_band if level in {"L0", "L1"} else _price_scope_label(price_band, price_scope)
+        final_size = exact_size_tier if level == "L0" else size_tier
+        path_item = {
+            "level": level,
+            "reason": reason,
+            "size_scope": final_size,
+            "price_scope": price_scope_label,
+            "pool_sku_count": len(sku_codes),
+            "with_claim_sku_count": len(with_skus),
+            "without_claim_sku_count": len(without_skus),
+            "sample_status": sample_status,
+        }
+        path.append(path_item)
+        result = (
+            final_size,
+            price_scope_label,
+            level,
+            sku_codes,
+            tuple(sorted(with_skus)),
+            tuple(sorted(without_skus)),
+            tuple(sorted(unknown_skus)),
+            sample_status,
+            quality_flags,
+            tuple(path),
+        )
+        if fallback is None and sku_codes:
+            fallback = result
+        if level in {"L0", "L1", "L2"} and sample_status == "sufficient":
+            return result
+        if level == "L3" and sample_status in {"sufficient", "weak"}:
+            return result
+        if level == "L4" and sku_codes:
+            if sample_status == "sufficient":
+                quality_flags = [*quality_flags, "l4_threshold_only"]
+            result = (
+                final_size,
+                price_scope_label,
+                level,
+                sku_codes,
+                tuple(sorted(with_skus)),
+                tuple(sorted(without_skus)),
+                tuple(sorted(unknown_skus)),
+                sample_status,
+                quality_flags,
+                tuple(path),
+            )
+            return result
+    return fallback
+
+
+def _filter_pool_skus(candidate_skus: Iterable[str], markets: Mapping[str, MarketState], size_scope: str, price_scope: Sequence[str], *, exact_scope: bool) -> list[str]:
+    result: list[str] = []
+    price_set = {item for item in price_scope if item}
+    for sku in candidate_skus:
+        market = markets.get(sku)
+        if not market:
+            continue
+        current_size = market.exact_size_tier if exact_scope else market.size_tier
+        if current_size != size_scope:
+            continue
+        if market.price_band not in price_set:
+            continue
+        result.append(sku)
+    return result
+
+
+def _split_claim_groups(sku_codes: Sequence[str], claims: Mapping[str, Mapping[str, ClaimState]], claim_code: str) -> tuple[list[str], list[str], list[str]]:
+    with_skus: list[str] = []
+    without_skus: list[str] = []
+    unknown_skus: list[str] = []
+    for sku in sku_codes:
+        claim_state = claims.get(sku, {}).get(claim_code)
+        if claim_state is None:
+            without_skus.append(sku)
+        elif claim_state.is_supported:
+            with_skus.append(sku)
+        elif claim_state.service_separate_flag:
+            unknown_skus.append(sku)
+        else:
+            without_skus.append(sku)
+    return with_skus, without_skus, unknown_skus
 
 
 def _pool_and_metric_rows(
@@ -829,9 +936,6 @@ def _quantification_rows(
     for pool in pools:
         pool_id = _record_id("m12c_pool", batch_id, product_category, market_window, analysis_population, pool.claim_code, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group, rule_version)
         metric = metric_by_pool[pool_id]
-        baseline_price = _metric_baseline(metric, "without_price_median", "with_price_median")
-        baseline_sales = _metric_baseline(metric, "without_weekly_sales_median", "with_weekly_sales_median")
-        baseline_amount = _metric_baseline(metric, "without_weekly_sales_amount_median", "with_weekly_sales_amount_median")
         for sku in pool.sku_codes:
             if sku not in output_sku_codes:
                 continue
@@ -839,10 +943,32 @@ def _quantification_rows(
             claim = claims.get(sku, {}).get(pool.claim_code)
             has_claim = bool(claim and claim.is_supported)
             comment = comments.get(sku, _empty_comment(sku))
-            semantic_strength = semantics[sku].support_strength(pool.context_type, pool.context_code)
+            sku_battlefield_strength = semantics[sku].support_strength(pool.context_type, pool.context_code)
+            battlefield_claim_relevance = _battlefield_claim_relevance_strength(pool, claim)
+            semantic_strength = _q4(sku_battlefield_strength * Decimal("0.45") + battlefield_claim_relevance * Decimal("0.55"))
             param_strength = claim.param_support_strength if claim else Decimal("0.0000")
             claim_strength = _claim_evidence_strength(claim) if claim else Decimal("0.0000")
             comment_strength = comment.support_strength(pool.claim_code)
+            target_baseline = _target_baseline(pool, markets, sku)
+            baseline_price = target_baseline["baseline_price"]
+            baseline_sales = target_baseline["baseline_weekly_sales"]
+            baseline_amount = target_baseline["baseline_weekly_amount"]
+            market_position = _market_position_signal(
+                market_price=market.price,
+                market_sales=market.avg_weekly_sales_volume,
+                market_amount=market.avg_weekly_sales_amount,
+                baseline_price=baseline_price,
+                baseline_sales=baseline_sales,
+                baseline_amount=baseline_amount,
+            )
+            market_acceptance = _market_acceptance_score(
+                market=market,
+                baseline_price=baseline_price,
+                baseline_sales=baseline_sales,
+                baseline_amount=baseline_amount,
+                pool=pool,
+                comment=comment,
+            )
             role = _claim_role(
                 has_claim=has_claim,
                 metric=metric,
@@ -855,13 +981,6 @@ def _quantification_rows(
             )
             if not has_claim and role not in OPPORTUNITY_ROLES:
                 continue
-            weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength)
-            market_position = _market_position_signal(
-                market_price=market.price,
-                market_sales=market.avg_weekly_sales_volume,
-                baseline_price=baseline_price,
-                baseline_sales=baseline_sales,
-            )
             scorecard = _claim_value_scorecard(
                 pool=pool,
                 role=role,
@@ -872,9 +991,14 @@ def _quantification_rows(
                 semantic_strength=semantic_strength,
                 has_negative=comment.has_negative(pool.claim_code),
                 market_position=market_position,
+                market_acceptance=market_acceptance,
             )
             business_claim_type = _business_claim_type(role, metric, scorecard)
             business_claim_type_cn = _business_claim_type_label(business_claim_type)
+            weight_seed = _positive_weight(role, metric, claim_strength, semantic_strength, comment_strength, scorecard)
+            effective_price_space = _effective_price_space(market, baseline_price, market_position, market_acceptance)
+            weekly_sales_space = max(Decimal("0.000000"), _q6(market.avg_weekly_sales_volume - baseline_sales))
+            weekly_amount_space = max(Decimal("0.000000"), _q6(market.avg_weekly_sales_amount - baseline_amount))
             payload = {
                 "sku_claim_value_id": _record_id("m12c_sku_claim", batch_id, sku, pool.claim_code, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group, rule_version),
                 "pool_id": pool_id,
@@ -913,6 +1037,8 @@ def _quantification_rows(
                     "context_code": pool.context_code,
                     "context_name": pool.context_name,
                     "semantic_support_strength": float(semantic_strength),
+                    "sku_battlefield_strength": float(sku_battlefield_strength),
+                    "battlefield_claim_relevance": float(battlefield_claim_relevance),
                     "business_claim_type": business_claim_type,
                     "business_claim_type_cn": business_claim_type_cn,
                     "business_claim_type_definition_cn": _business_claim_type_meaning_cn(business_claim_type),
@@ -920,7 +1046,26 @@ def _quantification_rows(
                     "scorecard": scorecard,
                     "market_position_type": market_position["type"],
                     "market_position_cn": market_position["summary_cn"],
-                    "sku_level_aggregation_basis_cn": "先在单个价值战场内判断卖点支付价值，再按战场相关度汇总到 SKU 层。",
+                    "comparable_pool": {
+                        "pool_relax_level": pool.pool_relax_level,
+                        "pool_sku_count": len(pool.sku_codes),
+                        "with_claim_sku_count": len(pool.with_claim_skus),
+                        "without_claim_sku_count": len(pool.without_claim_skus),
+                        "sample_status": pool.sample_status,
+                        "baseline_price_method": target_baseline["baseline_price_method"],
+                        "baseline_explanation_cn": target_baseline["baseline_explanation_cn"],
+                        "comparison_sku_codes": target_baseline["comparison_sku_codes"],
+                    },
+                    "market_acceptance": market_acceptance,
+                    "value_space": {
+                        "raw_price_gap": float(_q4(market.price - baseline_price)),
+                        "effective_price_space": float(effective_price_space),
+                        "weekly_sales_space": float(weekly_sales_space),
+                        "weekly_amount_space": float(weekly_amount_space),
+                        "formula_cn": "战场支付价值空间 = 可解释价差 × 市场承接系数；卖点金额 = 战场空间 × 卖点价值分占比 × 卖点类型系数。",
+                    },
+                    "claim_type_coefficient": float(_claim_type_coefficient(business_claim_type)),
+                    "sku_level_aggregation_basis_cn": "先在单个价值战场内判断卖点支付价值，再按主/辅战场权重汇总到 SKU 层。",
                 },
                 "evidence_ids_json": list(claim.evidence_ids if claim else ()),
                 "reason_cn": _quant_reason_cn(pool, role, metric),
@@ -934,6 +1079,13 @@ def _quantification_rows(
                 "_baseline_sales": baseline_sales,
                 "_baseline_amount": baseline_amount,
                 "_weight_seed": weight_seed,
+                "_claim_value_score": Decimal(str(scorecard["total_score"])),
+                "_business_claim_type": business_claim_type,
+                "_claim_type_coefficient": _claim_type_coefficient(business_claim_type),
+                "_effective_price_space": effective_price_space,
+                "_weekly_sales_space": weekly_sales_space,
+                "_weekly_amount_space": weekly_amount_space,
+                "_market_acceptance_coefficient": Decimal(str(market_acceptance["market_validation_coefficient"])),
                 "_market_price": market.price,
                 "_market_sales": market.avg_weekly_sales_volume,
                 "_market_amount": market.avg_weekly_sales_amount,
@@ -943,15 +1095,23 @@ def _quantification_rows(
             by_sku_context[(sku, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group)].append(payload)
     normalized_rows: list[dict[str, Any]] = []
     for context_key, context_rows in by_sku_context.items():
-        positive_total = sum(_q6(row["_weight_seed"]) for row in context_rows if row["claim_value_role"] in POSITIVE_ROLES)
+        positive_total_by_type: dict[str, Decimal] = defaultdict(Decimal)
+        for context_row in context_rows:
+            if context_row["claim_value_role"] in POSITIVE_ROLES:
+                positive_total_by_type[str(context_row["_business_claim_type"])] += max(Decimal("0"), _q6(context_row["_claim_value_score"]))
         for row in context_rows:
             share = Decimal("0.000000")
-            if row["claim_value_role"] in POSITIVE_ROLES and positive_total > 0:
-                share = _q6(_q6(row["_weight_seed"]) / positive_total)
+            type_total = positive_total_by_type.get(str(row["_business_claim_type"]), Decimal("0"))
+            if row["claim_value_role"] in POSITIVE_ROLES and type_total > 0:
+                share = _q6(max(Decimal("0"), _q6(row["_claim_value_score"])) / type_total)
             row["contribution_share_in_sku"] = share
-            row["estimated_price_premium_abs"] = _q4(max(Decimal("0"), _q4(row["_market_price"]) - _q4(row["_baseline_price"])) * share)
-            row["estimated_weekly_sales_lift_abs"] = _q6(max(Decimal("0"), _q6(row["_market_sales"]) - _q6(row["_baseline_sales"])) * share)
-            row["estimated_weekly_sales_amount_lift_abs"] = _q6(max(Decimal("0"), _q6(row["_market_amount"]) - _q6(row["_baseline_amount"])) * share)
+            coeff = _q4(row["_claim_type_coefficient"])
+            if row["_business_claim_type"] == M12C_CLAIM_TYPE_PREMIUM:
+                row["estimated_price_premium_abs"] = _q4(row["_effective_price_space"] * share * coeff)
+            else:
+                row["estimated_price_premium_abs"] = Decimal("0.0000")
+            row["estimated_weekly_sales_lift_abs"] = _q6(row["_weekly_sales_space"] * share * coeff)
+            row["estimated_weekly_sales_amount_lift_abs"] = _q6(row["_weekly_amount_space"] * share * coeff)
             save_row = {key: value for key, value in row.items() if not key.startswith("_")}
             save_row["result_hash"] = stable_hash(save_row, version="m12c-sku-claim-v1")
             normalized_rows.append(save_row)
@@ -1204,10 +1364,6 @@ def _claim_role(
     has_negative: bool,
     market_price: Decimal | None = None,
 ) -> str:
-    if pool.sample_status == "insufficient":
-        return M12C_ROLE_SAMPLE
-    if pool.sample_status == "weak":
-        return M12C_ROLE_SAMPLE
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
     price_delta = _q4(metric["price_premium_abs"])
@@ -1226,14 +1382,20 @@ def _claim_role(
             return M12C_ROLE_OPPORTUNITY
         return M12C_ROLE_SAMPLE
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    if coverage_rate >= Decimal("0.7500"):
+        return M12C_ROLE_BASIC
+    if pool.pool_relax_level == "L4":
+        return M12C_ROLE_SAMPLE
+    if pool.sample_status == "insufficient":
+        return M12C_ROLE_SAMPLE
+    if pool.sample_status == "weak":
+        return M12C_ROLE_SAMPLE
     if price_positive and amount_positive and semantic_strength >= Decimal("0.5000") and max(param_strength, comment_strength) >= Decimal("0.6000"):
         return M12C_ROLE_PREMIUM
     if sales_positive and semantic_strength >= Decimal("0.4500") and max(comment_strength, param_strength) >= Decimal("0.5000"):
         return M12C_ROLE_SALES
     if not price_positive and (amount_positive or sales_positive) and semantic_strength >= Decimal("0.5000") and max(param_strength, comment_strength) >= Decimal("0.5500"):
         return M12C_ROLE_VALUE_BUNDLE
-    if coverage_rate >= Decimal("0.6500"):
-        return M12C_ROLE_BASIC
     if param_strength >= Decimal("0.6000") and comment_strength < Decimal("0.5000") and semantic_strength >= Decimal("0.4500"):
         return M12C_ROLE_WEAK_USER
     if comment_strength >= Decimal("0.8000") and param_strength < Decimal("0.5000"):
@@ -1252,6 +1414,7 @@ def _claim_value_scorecard(
     semantic_strength: Decimal,
     has_negative: bool,
     market_position: Mapping[str, Any],
+    market_acceptance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
     price_delta = _q4(metric["price_premium_abs"])
@@ -1289,8 +1452,8 @@ def _claim_value_scorecard(
         _score_dimension(
             code="market_validation",
             name_cn="市场验证",
-            raw_score=_market_validation_score(pool, price_delta, sales_delta, amount_delta, market_position),
-            reason_cn=_market_validation_reason(pool, price_delta, sales_delta, amount_delta, market_position),
+            raw_score=_market_validation_score(pool, price_delta, sales_delta, amount_delta, market_position, market_acceptance),
+            reason_cn=_market_validation_reason(pool, price_delta, sales_delta, amount_delta, market_position, market_acceptance),
             evidence_refs=[{"source_module": "M07", "evidence_type": "price_sales_market_profile"}],
         ),
     ]
@@ -1311,11 +1474,13 @@ def _claim_value_scorecard(
         "dimensions": dimensions,
         "downgrade_reasons": downgrade_reasons,
         "sample_status": pool.sample_status,
+        "pool_relax_level": pool.pool_relax_level,
         "pool_sku_count": len(pool.sku_codes),
         "with_claim_sku_count": len(pool.with_claim_skus),
         "without_claim_sku_count": len(pool.without_claim_skus),
         "claim_coverage_rate": float(_q4(coverage_rate)),
         "market_position_type": market_position["type"],
+        "market_acceptance": market_acceptance or {},
     }
 
 
@@ -1342,9 +1507,64 @@ def _context_relevance_score(context_type: str, semantic_strength: Decimal) -> D
     return min(raw, Decimal("60"))
 
 
+def _battlefield_claim_relevance_strength(pool: ClaimPool, claim: ClaimState | None) -> Decimal:
+    if pool.context_type != "battlefield" or claim is None:
+        return Decimal("0.0000")
+    text = " ".join(
+        [
+            pool.context_code,
+            pool.context_name,
+            claim.claim_code,
+            claim.claim_name,
+            claim.claim_dimension,
+            claim.claim_subtype,
+            " ".join(claim.supporting_param_codes),
+        ]
+    ).lower()
+    if _keyword_hit(text, _battlefield_core_keywords(pool.context_code)):
+        return Decimal("1.0000")
+    if _keyword_hit(text, _battlefield_support_keywords(pool.context_code)):
+        return Decimal("0.7000")
+    return Decimal("0.2500")
+
+
+def _battlefield_core_keywords(context_code: str) -> tuple[str, ...]:
+    code = context_code.upper()
+    if "PREMIUM_PICTURE" in code:
+        return ("画质", "亮度", "高亮", "控光", "分区", "色彩", "色域", "hdr", "miniled", "mini led", "oled", "qd", "量子点", "清晰", "分辨率", "芯片", "背光")
+    if "GAMING" in code or "SPORTS" in code:
+        return ("游戏", "高刷", "刷新", "hdmi", "vrr", "allm", "低延迟", "延迟", "运动", "体育", "流畅", "芯片")
+    if "SMART_CONNECTED" in code:
+        return ("智能", "ai", "语音", "投屏", "互联", "wifi", "蓝牙", "摄像头", "iot", "家电联动", "芯片", "内存", "系统")
+    if "EYE_CARE" in code:
+        return ("护眼", "蓝光", "频闪", "儿童", "舒适", "健康")
+    if "CINEMA" in code or "THEATER" in code:
+        return ("影院", "沉浸", "音响", "杜比", "hdr", "大屏", "画质", "亮度", "控光")
+    if "LIVING" in code or "FAMILY" in code:
+        return ("客厅", "家庭", "画质", "音响", "智能", "护眼", "大屏", "全面屏")
+    return ("画质", "智能", "价格", "销量", "性价比")
+
+
+def _battlefield_support_keywords(context_code: str) -> tuple[str, ...]:
+    code = context_code.upper()
+    if "PREMIUM_PICTURE" in code:
+        return ("杜比", "护眼", "影院", "音响", "高刷", "刷新")
+    if "GAMING" in code or "SPORTS" in code:
+        return ("高亮", "亮度", "运动补偿", "音效", "杜比")
+    if "SMART_CONNECTED" in code:
+        return ("遥控", "系统", "应用", "开机", "处理器")
+    if "EYE_CARE" in code:
+        return ("画质", "亮度", "儿童", "家庭")
+    return ("画质", "智能", "护眼", "音响", "芯片")
+
+
+def _keyword_hit(text: str, keywords: Sequence[str]) -> bool:
+    return any(keyword.lower() in text for keyword in keywords)
+
+
 def _context_relevance_reason(pool: ClaimPool, semantic_strength: Decimal) -> str:
     if pool.context_type == "battlefield":
-        return f"该卖点在 {pool.context_name} 内评估，战场相关度按 SKU 在该战场的主辅/机会关系折算为 {float(_strength_score(semantic_strength)):.0f} 分。"
+        return f"该卖点在 {pool.context_name} 内评估，战场相关度结合 SKU 主辅战场关系和卖点对该战场购买理由的相关度，折算为 {float(_strength_score(semantic_strength)):.0f} 分。"
     if pool.context_type == "user_task":
         return f"该卖点在用户任务 {pool.context_name} 内评估，作为战场解释的辅助证据。"
     if pool.context_type == "target_group":
@@ -1401,11 +1621,14 @@ def _market_validation_score(
     sales_delta: Decimal,
     amount_delta: Decimal,
     market_position: Mapping[str, Any],
+    market_acceptance: Mapping[str, Any] | None = None,
 ) -> Decimal:
     if pool.sample_status == "insufficient":
         return Decimal("25")
     if pool.sample_status == "weak":
         return Decimal("45")
+    if market_acceptance:
+        return _q4(Decimal(str(market_acceptance.get("market_validation_coefficient") or 0)) * Decimal("100"))
     if price_delta > 0 and (sales_delta > 0 or amount_delta > 0):
         return Decimal("90")
     if sales_delta > 0 or amount_delta > 0:
@@ -1417,9 +1640,15 @@ def _market_validation_score(
     return Decimal("35")
 
 
-def _market_validation_reason(pool: ClaimPool, price_delta: Decimal, sales_delta: Decimal, amount_delta: Decimal, market_position: Mapping[str, Any]) -> str:
+def _market_validation_reason(pool: ClaimPool, price_delta: Decimal, sales_delta: Decimal, amount_delta: Decimal, market_position: Mapping[str, Any], market_acceptance: Mapping[str, Any] | None = None) -> str:
     if pool.sample_status != "sufficient":
         return "可比池样本不足，保留观察但不能强判卖点支付价值。"
+    if market_acceptance:
+        return (
+            f"本品市场位置为{market_position['summary_cn']}；市场承接系数约 "
+            f"{float(Decimal(str(market_acceptance.get('market_validation_coefficient') or 0))):.2f}，"
+            "由销量承接、销额承接、评论验证和样本可靠性共同计算。"
+        )
     return (
         f"可比池有卖点组相对对照组价格差异约 {_fmt_money(price_delta)} 元，"
         f"周均销量差异约 {_fmt_num(sales_delta)} 台；本品市场位置为{market_position['summary_cn']}。"
@@ -1452,15 +1681,24 @@ def _scorecard_downgrade_reasons(
     return reasons
 
 
-def _market_position_signal(*, market_price: Decimal, market_sales: Decimal, baseline_price: Decimal, baseline_sales: Decimal) -> dict[str, Any]:
+def _market_position_signal(
+    *,
+    market_price: Decimal,
+    market_sales: Decimal,
+    baseline_price: Decimal,
+    baseline_sales: Decimal,
+    market_amount: Decimal | None = None,
+    baseline_amount: Decimal | None = None,
+) -> dict[str, Any]:
     price_gap = _q4(market_price - baseline_price)
     sales_gap = _q6(market_sales - baseline_sales)
+    amount_gap = _q6((market_amount or Decimal("0")) - (baseline_amount or Decimal("0")))
     price_neutral_threshold = max(abs(baseline_price) * Decimal("0.03"), Decimal("50"))
     if price_gap > price_neutral_threshold and sales_gap >= 0:
-        return {"type": "premium_accepted", "summary_cn": "价格较高且销量不弱，存在溢价承接"}
-    if abs(price_gap) <= price_neutral_threshold and sales_gap > 0:
+        return {"type": "premium_accepted", "summary_cn": "价格较高且销量不弱，存在溢价承接", "amount_gap": float(amount_gap)}
+    if abs(price_gap) <= price_neutral_threshold and (sales_gap > 0 or amount_gap > 0):
         return {"type": "share_conversion", "summary_cn": "价格持平但销量更强，偏份额转化"}
-    if price_gap < -price_neutral_threshold and sales_gap > 0:
+    if price_gap < -price_neutral_threshold and (sales_gap > 0 or amount_gap > 0):
         return {"type": "customer_value_gain", "summary_cn": "价格更低且销量更强，偏客户获得价值"}
     if price_gap > price_neutral_threshold and sales_gap < 0:
         return {"type": "price_pressure", "summary_cn": "价格较高但销量偏弱，存在价格压力"}
@@ -1537,7 +1775,7 @@ def _evidence_ref(context_type: str, context_code: str) -> dict[str, Any]:
 
 def _sample_status(pool_count: int, with_count: int, without_count: int) -> tuple[str, list[str]]:
     flags: list[str] = []
-    if pool_count < MIN_GROUP_SKU_COUNT or with_count == 0 or without_count == 0:
+    if pool_count < MIN_WEAK_POOL_SKU_COUNT or with_count == 0 or without_count == 0:
         flags.append("insufficient_comparison_group")
         return "insufficient", flags
     if pool_count < MIN_POOL_SKU_COUNT or with_count < MIN_GROUP_SKU_COUNT or without_count < MIN_GROUP_SKU_COUNT:
@@ -1550,11 +1788,15 @@ def _market_state(row: entities.Core3SkuMarketProfile) -> MarketState:
     active_weeks = int(row.active_week_count or 0)
     sales_volume = _q4(row.sales_volume_total)
     sales_amount = _q4(row.sales_amount_total)
+    screen_size = _decimal_or_none(row.screen_size_inch)
+    exact_size_tier = _exact_size_tier(screen_size, row.size_segment or row.screen_size_class)
+    five_tier = _five_size_tier(screen_size, row.size_segment or row.screen_size_class)
     return MarketState(
         sku_code=row.sku_code,
         brand_name=row.brand_name or row.brand,
         model_name=row.model_name,
-        size_tier=row.size_segment or row.screen_size_class or "unknown",
+        size_tier=five_tier,
+        exact_size_tier=exact_size_tier,
         price_band=row.price_band_size or row.price_band_category or "unknown",
         price=_q4(row.price_wavg or row.price_median or Decimal("0")),
         sales_volume_total=sales_volume,
@@ -1567,6 +1809,67 @@ def _market_state(row: entities.Core3SkuMarketProfile) -> MarketState:
     )
 
 
+def _decimal_or_none(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _exact_size_tier(screen_size: Decimal | None, fallback: str | None) -> str:
+    if screen_size and screen_size > 0:
+        return f"size_{int(screen_size.to_integral_value(rounding=ROUND_HALF_UP))}"
+    text = str(fallback or "").strip()
+    if text and text not in {"unknown", "UNKNOWN"}:
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if digits:
+            return f"size_{digits}"
+    return "size_unknown"
+
+
+def _five_size_tier(screen_size: Decimal | None, fallback: str | None) -> str:
+    text = str(fallback or "").strip()
+    if text in {"small_32_45", "medium_46_59", "large_60_69", "xlarge_70_85", "giant_98_plus"}:
+        return text
+    size = screen_size
+    if size is None:
+        digits = "".join(ch for ch in text if ch.isdigit())
+        size = Decimal(digits) if digits else None
+    if size is None or size <= 0:
+        return "unknown"
+    if size <= Decimal("45"):
+        return "small_32_45"
+    if size <= Decimal("59"):
+        return "medium_46_59"
+    if size <= Decimal("69"):
+        return "large_60_69"
+    if size <= Decimal("85"):
+        return "xlarge_70_85"
+    return "giant_98_plus"
+
+
+def _adjacent_price_bands(price_band: str) -> list[str]:
+    order = ["low", "mid_low", "mid", "mid_high", "high"]
+    if price_band not in order:
+        return [price_band]
+    idx = order.index(price_band)
+    result = [price_band]
+    if idx > 0:
+        result.append(order[idx - 1])
+    if idx < len(order) - 1:
+        result.append(order[idx + 1])
+    return result
+
+
+def _price_scope_label(price_band: str, price_scope: Sequence[str]) -> str:
+    unique = [item for item in price_scope if item]
+    if len(unique) <= 1:
+        return unique[0] if unique else price_band
+    return f"{price_band}_with_adjacent"
+
+
 def _empty_comment(sku_code: str) -> CommentState:
     return CommentState(sku_code=sku_code, supported_claim_codes=(), contradicted_claim_codes=(), positive_sentence_count=0, negative_sentence_count=0, confidence=Decimal("0.0000"))
 
@@ -1577,9 +1880,11 @@ def _claim_evidence_strength(claim: ClaimState | None) -> Decimal:
     return _q4(claim.param_support_strength * Decimal("0.60") + claim.match_score * Decimal("0.25") + claim.confidence * Decimal("0.15"))
 
 
-def _positive_weight(role: str, metric: Mapping[str, Any], claim_strength: Decimal, semantic_strength: Decimal, comment_strength: Decimal) -> Decimal:
+def _positive_weight(role: str, metric: Mapping[str, Any], claim_strength: Decimal, semantic_strength: Decimal, comment_strength: Decimal, scorecard: Mapping[str, Any] | None = None) -> Decimal:
     if role not in POSITIVE_ROLES:
         return Decimal("0.000000")
+    if scorecard:
+        return _q6(max(Decimal("0"), Decimal(str(scorecard.get("total_score") or 0))))
     effect = max(Decimal("0"), _q4(metric["claim_value_effect_score"]))
     return _q6(effect * claim_strength * max(semantic_strength, Decimal("0.2000")) * max(comment_strength, Decimal("0.3000")))
 
@@ -1589,6 +1894,142 @@ def _metric_baseline(metric: Mapping[str, Any], without_key: str, with_key: str)
     if without_value is not None:
         return _q6(without_value)
     return _q6(metric.get(with_key) or Decimal("0"))
+
+
+def _target_baseline(pool: ClaimPool, markets: Mapping[str, MarketState], target_sku: str) -> dict[str, Any]:
+    comparison_skus = [sku for sku in pool.sku_codes if sku != target_sku and sku in markets]
+    if not comparison_skus:
+        comparison_skus = [sku for sku in pool.sku_codes if sku in markets]
+    price_pairs = [(markets[sku].price, max(markets[sku].sales_volume_total, Decimal("1"))) for sku in comparison_skus]
+    sales_pairs = [(markets[sku].avg_weekly_sales_volume, max(markets[sku].sales_volume_total, Decimal("1"))) for sku in comparison_skus]
+    amount_pairs = [(markets[sku].avg_weekly_sales_amount, max(markets[sku].sales_amount_total, Decimal("1"))) for sku in comparison_skus]
+    baseline_price = _weighted_median(price_pairs)
+    baseline_sales = _weighted_median(sales_pairs)
+    baseline_amount = _weighted_median(amount_pairs)
+    return {
+        "baseline_price": _q4(baseline_price),
+        "baseline_weekly_sales": _q6(baseline_sales),
+        "baseline_weekly_amount": _q6(baseline_amount),
+        "baseline_price_method": "weighted_median_excluding_target",
+        "comparison_sku_codes": comparison_skus,
+        "baseline_explanation_cn": f"基准价按同战场可比池中排除目标 SKU 后的销量加权中位价计算；本次可比 SKU {len(comparison_skus)} 个，放宽层级 {pool.pool_relax_level}。",
+    }
+
+
+def _weighted_median(value_weight_pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal:
+    pairs = [(value, weight) for value, weight in value_weight_pairs if value is not None and _q6(value) > 0 and _q6(weight) > 0]
+    if not pairs:
+        return Decimal("0")
+    pairs.sort(key=lambda item: item[0])
+    total_weight = sum((weight for _, weight in pairs), Decimal("0"))
+    midpoint = total_weight / Decimal("2")
+    cumulative = Decimal("0")
+    for value, weight in pairs:
+        cumulative += weight
+        if cumulative >= midpoint:
+            return value
+    return pairs[-1][0]
+
+
+def _market_acceptance_score(
+    *,
+    market: MarketState,
+    baseline_price: Decimal,
+    baseline_sales: Decimal,
+    baseline_amount: Decimal,
+    pool: ClaimPool,
+    comment: CommentState,
+) -> dict[str, Any]:
+    sales_ratio = _ratio_or_zero(market.avg_weekly_sales_volume, baseline_sales)
+    amount_ratio = _ratio_or_zero(market.avg_weekly_sales_amount, baseline_amount)
+    sales_score = _acceptance_bucket(sales_ratio)
+    amount_score = _acceptance_bucket(amount_ratio)
+    comment_score = _battlefield_comment_validation_score(comment)
+    sample_score = _sample_reliability_score(pool)
+    coefficient = _q4(sales_score * Decimal("0.45") + amount_score * Decimal("0.25") + comment_score * Decimal("0.20") + sample_score * Decimal("0.10"))
+    return {
+        "sales_acceptance_score": float(sales_score),
+        "amount_acceptance_score": float(amount_score),
+        "comment_validation_score": float(comment_score),
+        "sample_reliability_score": float(sample_score),
+        "market_validation_coefficient": float(coefficient),
+        "sales_ratio": float(_q4(sales_ratio)),
+        "amount_ratio": float(_q4(amount_ratio)),
+        "sales_acceptance_reason_cn": _acceptance_reason_cn("销量", sales_ratio, sales_score),
+        "amount_acceptance_reason_cn": _acceptance_reason_cn("销额", amount_ratio, amount_score),
+        "comment_validation_reason_cn": _comment_validation_reason_cn(comment, comment_score),
+        "sample_reliability_reason_cn": f"可比池放宽层级 {pool.pool_relax_level}，样本状态 {pool.sample_status}。",
+    }
+
+
+def _ratio_or_zero(value: Decimal, baseline: Decimal) -> Decimal:
+    if _q6(baseline) == 0:
+        return Decimal("0")
+    return _q6(value / baseline)
+
+
+def _acceptance_bucket(ratio: Decimal) -> Decimal:
+    if ratio >= Decimal("1.20"):
+        return Decimal("1.0000")
+    if ratio >= Decimal("0.90"):
+        return Decimal("0.8000")
+    if ratio >= Decimal("0.70"):
+        return Decimal("0.6000")
+    return Decimal("0.3000")
+
+
+def _battlefield_comment_validation_score(comment: CommentState) -> Decimal:
+    positive = comment.positive_sentence_count
+    negative = comment.negative_sentence_count
+    if positive >= 5 and positive >= negative * 2:
+        return Decimal("1.0000")
+    if positive >= 2 and positive >= negative:
+        return Decimal("0.7500")
+    if positive > 0:
+        return Decimal("0.5000")
+    return Decimal("0.2000")
+
+
+def _sample_reliability_score(pool: ClaimPool) -> Decimal:
+    if pool.sample_status == "sufficient" and pool.pool_relax_level in {"L0", "L1"}:
+        return Decimal("1.0000")
+    if pool.pool_relax_level == "L2" and pool.sample_status == "sufficient":
+        return Decimal("0.8500")
+    if pool.pool_relax_level == "L3" and pool.sample_status in {"sufficient", "weak"}:
+        return Decimal("0.7000")
+    if pool.sample_status == "weak":
+        return Decimal("0.4000")
+    return Decimal("0.2000")
+
+
+def _acceptance_reason_cn(label: str, ratio: Decimal, score: Decimal) -> str:
+    return f"本品{label}约为可比基准的 {float(_q4(ratio)):.2f} 倍，对应承接分 {float(score):.2f}。"
+
+
+def _comment_validation_reason_cn(comment: CommentState, score: Decimal) -> str:
+    return f"评论正向句 {comment.positive_sentence_count} 条、负向句 {comment.negative_sentence_count} 条，对应评论验证分 {float(score):.2f}。"
+
+
+def _effective_price_space(market: MarketState, baseline_price: Decimal, market_position: Mapping[str, Any], market_acceptance: Mapping[str, Any]) -> Decimal:
+    if market_position.get("type") != "premium_accepted":
+        return Decimal("0.0000")
+    raw_gap = max(Decimal("0.0000"), _q4(market.price - baseline_price))
+    coefficient = Decimal(str(market_acceptance.get("market_validation_coefficient") or 0))
+    return _q4(raw_gap * coefficient)
+
+
+def _claim_type_coefficient(claim_type: str) -> Decimal:
+    if claim_type == M12C_CLAIM_TYPE_PREMIUM:
+        return Decimal("1.0000")
+    if claim_type == M12C_CLAIM_TYPE_SHARE:
+        return Decimal("0.8000")
+    if claim_type == M12C_CLAIM_TYPE_CUSTOMER_VALUE:
+        return Decimal("0.7000")
+    if claim_type == M12C_CLAIM_TYPE_PENDING:
+        return Decimal("0.5000")
+    if claim_type == M12C_CLAIM_TYPE_THRESHOLD:
+        return Decimal("0.3000")
+    return Decimal("0.0000")
 
 
 def _claim_brief(row: Mapping[str, Any]) -> dict[str, Any]:

@@ -2347,6 +2347,105 @@ def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
     assert role == m12c_service.M12C_ROLE_SAMPLE
 
 
+def test_m12c_target_baseline_excludes_target_sku_and_uses_weighted_median() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_brightness_hdr",
+        claim_name="高亮 HDR",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("target", "comp-a", "comp-b"),
+        with_claim_skus=("target", "comp-a"),
+        without_claim_skus=("comp-b",),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        pool_relax_level="L1",
+    )
+    markets = {
+        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("9000"), Decimal("100"), Decimal("900000"), Decimal("10"), Decimal("90000"), 10, 1, 10),
+        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_65", "high", Decimal("5000"), Decimal("100"), Decimal("500000"), Decimal("10"), Decimal("50000"), 10, 1, 10),
+        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_65", "high", Decimal("6000"), Decimal("300"), Decimal("1800000"), Decimal("30"), Decimal("180000"), 10, 1, 10),
+    }
+
+    baseline = m12c_service._target_baseline(pool, markets, "target")
+
+    assert baseline["baseline_price"] == Decimal("6000.0000")
+    assert "target" not in baseline["comparison_sku_codes"]
+    assert baseline["baseline_price_method"] == "weighted_median_excluding_target"
+
+
+def test_m12c_market_acceptance_coefficient_is_traceable() -> None:
+    pool = _m12c_test_pool()
+    market = m12c_service.MarketState("sku-a", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("6200"), Decimal("120"), Decimal("744000"), Decimal("120"), Decimal("744000"), 1, 1, 1)
+    comment = m12c_service.CommentState("sku-a", ("tv_claim_brightness_hdr",), (), 6, 1, Decimal("0.9000"))
+
+    score = m12c_service._market_acceptance_score(
+        market=market,
+        baseline_price=Decimal("5800"),
+        baseline_sales=Decimal("100"),
+        baseline_amount=Decimal("600000"),
+        pool=pool,
+        comment=comment,
+    )
+
+    assert score["sales_acceptance_score"] == 1.0
+    assert score["amount_acceptance_score"] == 1.0
+    assert score["comment_validation_score"] == 1.0
+    assert score["sample_reliability_score"] == 1.0
+    assert score["market_validation_coefficient"] == 1.0
+
+
+def test_m12c_relaxed_pool_uses_five_tier_before_sample_insufficient() -> None:
+    markets = {
+        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("6000"), Decimal("100"), Decimal("600000"), Decimal("10"), Decimal("60000"), 10, 1, 10),
+        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_66", "high", Decimal("5600"), Decimal("100"), Decimal("560000"), Decimal("10"), Decimal("56000"), 10, 1, 10),
+        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_66", "high", Decimal("5500"), Decimal("100"), Decimal("550000"), Decimal("10"), Decimal("55000"), 10, 1, 10),
+        "comp-c": m12c_service.MarketState("comp-c", "竞品C", "C", "large_60_69", "size_66", "high", Decimal("5400"), Decimal("100"), Decimal("540000"), Decimal("10"), Decimal("54000"), 10, 1, 10),
+        "comp-d": m12c_service.MarketState("comp-d", "竞品D", "D", "large_60_69", "size_66", "high", Decimal("5300"), Decimal("100"), Decimal("530000"), Decimal("10"), Decimal("53000"), 10, 1, 10),
+        "comp-e": m12c_service.MarketState("comp-e", "竞品E", "E", "large_60_69", "size_66", "high", Decimal("5200"), Decimal("100"), Decimal("520000"), Decimal("10"), Decimal("52000"), 10, 1, 10),
+    }
+    claims = {
+        sku: {
+            "tv_claim_brightness_hdr": m12c_service.ClaimState(
+                sku,
+                "tv_claim_brightness_hdr",
+                "高亮 HDR",
+                "picture_quality",
+                "brightness",
+                "product_function",
+                "supported" if sku in {"target", "comp-a", "comp-b"} else "unsupported",
+                ("brightness_nits",),
+                {},
+                Decimal("1.0000"),
+                Decimal("1.0000"),
+                sku in {"target", "comp-a", "comp-b"},
+                False,
+                (),
+            )
+        }
+        for sku in markets
+    }
+
+    relaxed = m12c_service._relaxed_pool_for_claim(
+        all_skus=set(markets),
+        context_skus=set(markets),
+        markets=markets,
+        claims=claims,
+        claim_code="tv_claim_brightness_hdr",
+        exact_size_tier="size_65",
+        size_tier="large_60_69",
+        price_band="high",
+    )
+
+    assert relaxed is not None
+    assert relaxed[2] == "L1"
+    assert relaxed[7] == "sufficient"
+
+
 def test_claim_value_report_sums_same_claim_within_same_category_battlefields() -> None:
     rows = []
     for context_code, context_name, price, sales, amount in [
