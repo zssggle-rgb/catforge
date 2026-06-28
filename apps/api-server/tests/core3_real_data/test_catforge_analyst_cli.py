@@ -3608,12 +3608,24 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert all(row["matched_points_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
     assert all(row["impact_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
     assert "高端画质升级" in dashboard["competitors"][0]["overlap_rows"][0]["matched_points_cn"]
+    battlefield_structure = dashboard["competitors"][0]["battlefield_overlap_structure"]
+    assert battlefield_structure["score"] == 83
+    assert [row["segment_cn"] for row in battlefield_structure["segments"]] == [
+        "主战场重合",
+        "辅战场重合",
+        "错位/缺口",
+    ]
+    assert battlefield_structure["segments"][0]["battlefields_cn"] == ["高端画质升级"]
+    assert any("游戏体育流畅" in note for note in battlefield_structure["notes_cn"])
     card = answer["feishu_card_payload"]
     card_json = json.dumps(card, ensure_ascii=False)
     assert card["schema"] == "2.0"
     assert card["config"]["summary"]["content"] == "海信 65E7Q 重点竞品看板"
     assert [element["tag"] for element in card["body"]["elements"]] == [
         "markdown",
+        "hr",
+        "markdown",
+        "chart",
         "hr",
         "markdown",
         "chart",

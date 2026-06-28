@@ -575,6 +575,11 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
         elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**多维评分雷达图**"))
         elements.append(_feishu_score_radar_chart(competitors))
+        battlefield_chart_values = _dashboard_battlefield_chart_values(competitors)
+        if battlefield_chart_values:
+            elements.append({"tag": "hr"})
+            elements.append(_feishu_markdown("**价值战场重合结构**"))
+            elements.append(_feishu_battlefield_overlap_chart(battlefield_chart_values))
         elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品排序表**"))
         elements.append(_feishu_competitor_ranking_table(competitors))
@@ -3754,6 +3759,7 @@ def _dashboard_competitor_payload(index: int, item: dict[str, Any], *, report_ur
         "score_cn": _dashboard_score_cn(item.get("business_score")),
         "strength_cn": _dashboard_strength_cn(item.get("business_score")),
         "score_dimensions": _dashboard_score_dimensions(item),
+        "battlefield_overlap_structure": _dashboard_battlefield_overlap_structure(item),
         "reason_cn": _dashboard_reason_cn(item),
         "overlap_rows": overlap_rows,
         "shared_anchors_cn": [str(value) for value in shared_anchors[:5] if value],
@@ -3787,6 +3793,82 @@ def _dashboard_score_dimensions(item: dict[str, Any]) -> list[dict[str, Any]]:
         {"dimension_cn": "价值锚点", "score": _dashboard_score_value((item.get("value_anchor") or {}).get("score"))},
         {"dimension_cn": "市场验证", "score": _dashboard_score_value(_market_validation_score((item.get("market_validation") or {}).get("level")))},
     ]
+
+
+def _dashboard_battlefield_overlap_structure(item: dict[str, Any]) -> dict[str, Any]:
+    battlefield = ((item.get("semantic_overlap") or {}).get("value_battlefield") or {})
+    target_items = {
+        str(row.get("code")): [str(role) for role in row.get("roles") or []]
+        for row in battlefield.get("target_items") or []
+        if row.get("code")
+    }
+    candidate_items = {
+        str(row.get("code")): [str(role) for role in row.get("roles") or []]
+        for row in battlefield.get("candidate_items") or []
+        if row.get("code")
+    }
+    codes = set(target_items) | set(candidate_items)
+    union = _decimal(battlefield.get("positive_weighted_union")) or Decimal("0")
+    if union <= 0:
+        return {"score": 0, "segments": [], "loss": 0, "notes_cn": []}
+
+    grouped: dict[str, dict[str, Any]] = {
+        "主战场重合": {"segment_cn": "主战场重合", "value": Decimal("0"), "battlefields_cn": []},
+        "辅战场重合": {"segment_cn": "辅战场重合", "value": Decimal("0"), "battlefields_cn": []},
+        "机会战场重合": {"segment_cn": "机会战场重合", "value": Decimal("0"), "battlefields_cn": []},
+    }
+    loss = Decimal("0")
+    notes: list[str] = []
+    for code in sorted(codes):
+        target_weight = max(_role_weight(target_items.get(code, [])), Decimal("0"))
+        candidate_weight = max(_role_weight(candidate_items.get(code, [])), Decimal("0"))
+        contribution = min(target_weight, candidate_weight)
+        segment_loss = max(target_weight, candidate_weight) - contribution
+        name = BATTLEFIELD_NAMES.get(code, code)
+        if contribution > 0:
+            bucket = _battlefield_overlap_segment_bucket(target_weight)
+            grouped[bucket]["value"] += contribution
+            grouped[bucket]["battlefields_cn"].append(name)
+        if segment_loss > 0:
+            loss += segment_loss
+            if target_weight > 0 and candidate_weight > 0:
+                notes.append(f"{name}主辅/机会错位")
+            elif target_weight > 0:
+                notes.append(f"{name}目标独有")
+            elif candidate_weight > 0:
+                notes.append(f"{name}竞品独有")
+
+    segments = [
+        {
+            "segment_cn": row["segment_cn"],
+            "value": _dashboard_pct_value(row["value"], union),
+            "battlefields_cn": row["battlefields_cn"],
+        }
+        for row in grouped.values()
+        if row["value"] > 0
+    ]
+    if loss > 0:
+        segments.append({"segment_cn": "错位/缺口", "value": _dashboard_pct_value(loss, union), "battlefields_cn": notes[:5]})
+    return {
+        "score": _dashboard_score_value(battlefield.get("weighted_overlap_score")),
+        "segments": segments,
+        "loss": _dashboard_pct_value(loss, union),
+        "notes_cn": notes[:5],
+    }
+
+
+def _battlefield_overlap_segment_bucket(target_weight: Decimal) -> str:
+    if target_weight >= Decimal("1"):
+        return "主战场重合"
+    if target_weight >= Decimal("0.75"):
+        return "辅战场重合"
+    return "机会战场重合"
+
+
+def _dashboard_pct_value(value: Decimal, denominator: Decimal) -> float:
+    if denominator <= 0:
+        return 0.0
+    return float((value / denominator * Decimal("100")).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def _dashboard_score_value(value: Any) -> int:
@@ -3970,6 +4052,56 @@ def _dashboard_score_dimension_rows(competitor: dict[str, Any]) -> list[dict[str
     fallback.append({"dimension_cn": "价值锚点", "score": 0})
     fallback.append({"dimension_cn": "市场验证", "score": _market_validation_score_from_text(str(competitor.get("market_validation_cn") or ""))})
     return [row for row in fallback if row["dimension_cn"]]
+
+
+def _feishu_battlefield_overlap_chart(values: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "tag": "chart",
+        "element_id": "battlefield_overlap",
+        "aspect_ratio": "16:9",
+        "height": "240px",
+        "preview": False,
+        "chart_spec": {
+            "type": "bar",
+            "data": {"values": values},
+            "direction": "horizontal",
+            "xField": "value",
+            "yField": "competitor",
+            "seriesField": "segment",
+            "stack": True,
+            "color": ["#174EA6", "#3B82F6", "#93C5FD", "#CBD5E1"],
+            "axes": [
+                {"orient": "bottom", "min": 0, "max": 100, "title": {"visible": True, "text": "占总并集权重比例"}},
+                {"orient": "left", "label": {"visible": True}},
+            ],
+            "legends": {"visible": True, "orient": "bottom"},
+            "tooltip": {"visible": True},
+        },
+    }
+
+
+def _dashboard_battlefield_chart_values(competitors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    for item in competitors[:3]:
+        competitor_name = _dashboard_competitor_alias(item)
+        structure = item.get("battlefield_overlap_structure") or {}
+        for row in structure.get("segments") or []:
+            if not isinstance(row, dict):
+                continue
+            segment = str(row.get("segment_cn") or "")
+            value = _decimal(row.get("value"))
+            if not segment or value is None or value <= 0:
+                continue
+            values.append(
+                {
+                    "competitor": competitor_name,
+                    "segment": segment,
+                    "value": float(value),
+                    "battlefields": "、".join(str(name) for name in (row.get("battlefields_cn") or [])[:4]),
+                    "score": structure.get("score"),
+                }
+            )
+    return values
 
 
 def _score_cn_to_int(value: Any) -> int:
