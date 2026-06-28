@@ -1194,10 +1194,10 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
 def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     target = result.get("target") or {}
     payload = ((result.get("result") or {}).get("sku_claim_value") or {})
-    summary_rows = [row for row in payload.get("sku_level_claim_values") or [] if isinstance(row, dict)]
-    if summary_rows:
-        return _format_sku_level_claim_value_text(target, summary_rows)
     rows = [row for row in payload.get("claim_values") or [] if isinstance(row, dict)]
+    summary_rows = [row for row in payload.get("sku_level_claim_values") or [] if isinstance(row, dict)]
+    if not rows and summary_rows:
+        return _format_sku_level_claim_value_text(target, summary_rows)
     if not rows:
         return result.get("message_cn") or "当前 SKU 没有 M12C 卖点价值量化结果。"
     lines = [f"{_brand_model(target)} 的卖点价值量化结果："]

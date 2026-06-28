@@ -238,6 +238,46 @@ def test_m12c_high_coverage_claim_can_remain_premium_when_price_value_is_support
     assert role == m12c_service.M12C_ROLE_PREMIUM
 
 
+def test_m12c_interface_spec_claim_is_threshold_before_premium() -> None:
+    metric = {
+        "with_price_median": Decimal("6500"),
+        "price_premium_abs": Decimal("900"),
+        "weekly_sales_lift_abs": Decimal("40"),
+        "weekly_sales_amount_lift_abs": Decimal("180000"),
+        "effect_confidence": Decimal("0.8500"),
+    }
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_hdmi21_connectivity",
+        claim_name="HDMI2.1 连接",
+        context_type="battlefield",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+        context_name="游戏体育流畅战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        with_claim_skus=("sku-a", "sku-b", "sku-c"),
+        without_claim_skus=("sku-d", "sku-e", "sku-f"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=("L2",),
+        pool_relax_level="L2",
+    )
+
+    role = m12c_service._claim_role(
+        has_claim=True,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("1.0000"),
+        semantic_strength=Decimal("1.0000"),
+        has_negative=False,
+        market_price=Decimal("6200"),
+    )
+
+    assert role == m12c_service.M12C_ROLE_BASIC
+
+
 def make_session() -> Session:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -2302,9 +2342,9 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
 
     assert "溢价卖点" in text
     assert "份额转化卖点" in text
-    assert "用户卖点支付价值约280元" in text
+    assert "战场可解释价差合计280元" in text
     assert "卖点价值分" not in text
-    assert "先在单个价值战场内判断卖点支付价值" in text
+    assert "战场合计只汇总同一分类、同一卖点在价值战场中的去重量化结果" in text
     assert "MiniLED" in text
 
 
@@ -2439,7 +2479,7 @@ def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
         market_price=Decimal("5949.0000"),
     )
 
-    assert role == m12c_service.M12C_ROLE_SAMPLE
+    assert role == m12c_service.M12C_ROLE_BASIC
 
 
 def test_m12c_target_baseline_excludes_target_sku_and_uses_weighted_median() -> None:

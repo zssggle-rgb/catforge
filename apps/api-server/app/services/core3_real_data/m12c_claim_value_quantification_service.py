@@ -57,6 +57,12 @@ MIN_GROUP_SKU_COUNT = 2
 M12C_PREMIUM_MIN_SALES_RATIO = Decimal("0.7000")
 M12C_PREMIUM_MIN_REVENUE_RATIO = Decimal("1.0000")
 M12C_PREMIUM_REVENUE_BACKUP_MIN_SALES_RATIO = Decimal("0.6000")
+M12C_FORCE_THRESHOLD_CLAIM_CODES = {
+    # Interface availability is an entry-ticket signal in the current TV taxonomy.
+    # If a later taxonomy splits out a scarce high-spec implementation, that new
+    # claim can be measured separately instead of inheriting this threshold rule.
+    "tv_claim_hdmi21_connectivity",
+}
 
 M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
 M12C_CLAIM_TYPE_SHARE = "share_conversion_claim"
@@ -1499,6 +1505,8 @@ def _claim_role(
 ) -> str:
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
+    if has_claim and pool.claim_code in M12C_FORCE_THRESHOLD_CLAIM_CODES:
+        return M12C_ROLE_BASIC
     price_delta = _q4(metric["price_premium_abs"])
     sales_delta = _q6(metric["weekly_sales_lift_abs"])
     amount_delta = _q6(metric["weekly_sales_amount_lift_abs"])
