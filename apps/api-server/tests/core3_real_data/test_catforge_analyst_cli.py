@@ -2482,7 +2482,7 @@ def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
     assert role == m12c_service.M12C_ROLE_BASIC
 
 
-def test_m12c_target_baseline_excludes_target_sku_and_uses_weighted_median() -> None:
+def test_m12c_target_baseline_excludes_target_sku_and_uses_direct_price_median() -> None:
     pool = m12c_service.ClaimPool(
         claim_code="tv_claim_brightness_hdr",
         claim_name="高亮 HDR",
@@ -2508,9 +2508,56 @@ def test_m12c_target_baseline_excludes_target_sku_and_uses_weighted_median() -> 
 
     baseline = m12c_service._target_baseline(pool, markets, "target")
 
-    assert baseline["baseline_price"] == Decimal("6000.0000")
+    assert baseline["baseline_price"] == Decimal("5500.0000")
     assert "target" not in baseline["comparison_sku_codes"]
-    assert baseline["baseline_price_method"] == "weighted_median_excluding_target"
+    assert baseline["baseline_price_method"] == "median_excluding_target"
+
+
+def test_m12c_target_baseline_not_dragged_down_by_high_sales_low_price_sku() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_brightness_hdr",
+        claim_name="高亮 HDR",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("target", "low-volume-hit", "comp-a", "comp-b", "comp-c"),
+        with_claim_skus=("target", "comp-a", "comp-b"),
+        without_claim_skus=("low-volume-hit", "comp-c"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        pool_relax_level="L3",
+    )
+    markets = {
+        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("5949"), Decimal("100"), Decimal("594900"), Decimal("10"), Decimal("59490"), 10, 1, 10),
+        "low-volume-hit": m12c_service.MarketState("low-volume-hit", "竞品低价", "L", "large_60_69", "size_65", "high", Decimal("2861"), Decimal("10000"), Decimal("28610000"), Decimal("1000"), Decimal("2861000"), 10, 1, 10),
+        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_65", "high", Decimal("5522"), Decimal("100"), Decimal("552200"), Decimal("10"), Decimal("55220"), 10, 1, 10),
+        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_65", "high", Decimal("5637"), Decimal("100"), Decimal("563700"), Decimal("10"), Decimal("56370"), 10, 1, 10),
+        "comp-c": m12c_service.MarketState("comp-c", "竞品C", "C", "large_60_69", "size_65", "high", Decimal("5853"), Decimal("100"), Decimal("585300"), Decimal("10"), Decimal("58530"), 10, 1, 10),
+    }
+
+    baseline = m12c_service._target_baseline(pool, markets, "target")
+
+    assert baseline["baseline_price"] == Decimal("5579.5000")
+    assert "low-volume-hit" in baseline["comparison_sku_codes"]
+    assert baseline["baseline_price"] > Decimal("5000.0000")
+
+
+def test_m12c_semantic_state_uses_m11d_weight_and_normalized_fallback() -> None:
+    state = m12c_service.SemanticState(
+        sku_code="target",
+        contexts=(
+            ("battlefield", "BF_PRIMARY", "主战场", "primary"),
+            ("battlefield", "BF_SECONDARY", "辅战场", "secondary"),
+        ),
+        allocation_weights={("battlefield", "BF_PRIMARY"): Decimal("0.620000")},
+    )
+
+    assert state.allocation_weight("battlefield", "BF_PRIMARY") == Decimal("0.620000")
+    assert state.allocation_weight("battlefield", "BF_SECONDARY") == Decimal("0.411765")
 
 
 def test_m12c_market_acceptance_coefficient_is_traceable() -> None:

@@ -179,6 +179,7 @@ class CommentState:
 class SemanticState:
     sku_code: str
     contexts: tuple[tuple[str, str, str, str], ...]
+    allocation_weights: Mapping[tuple[str, str], Decimal] | None = None
 
     def support_strength(self, context_type: str, context_code: str) -> Decimal:
         for item_type, item_code, _, relation_role in self.contexts:
@@ -192,6 +193,21 @@ class SemanticState:
                 if relation_role == "drag":
                     return Decimal("0.3000")
         return Decimal("0.4500") if context_type == "market_pool" else Decimal("0.0000")
+
+    def allocation_weight(self, context_type: str, context_code: str) -> Decimal:
+        key = (context_type, context_code)
+        if self.allocation_weights and key in self.allocation_weights:
+            return _q6(self.allocation_weights[key])
+        raw_weights = {
+            (item_type, item_code): _fallback_context_weight(relation_role)
+            for item_type, item_code, _, relation_role in self.contexts
+            if item_type == "battlefield" and relation_role in {"primary", "secondary"}
+        }
+        raw = raw_weights.get(key, Decimal("0.000000"))
+        total = sum(raw_weights.values(), Decimal("0.000000"))
+        if total > Decimal("1.000000"):
+            return _q6(raw / total)
+        return _q6(raw)
 
 
 @dataclass(frozen=True)
@@ -298,10 +314,18 @@ class M12CRepository(Core3BaseRepository):
     ) -> dict[str, SemanticState]:
         contexts_by_sku: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
         self._append_battlefield_contexts(batch_id, product_category, contexts_by_sku)
-        allocated_skus = self._m11d_allocated_skus(batch_id, product_category, analysis_population, market_window)
+        allocation_weights = self._m11d_allocation_weights(batch_id, product_category, analysis_population, market_window)
+        allocated_skus = set(allocation_weights)
         if allocated_skus:
             contexts_by_sku = {sku: value for sku, value in contexts_by_sku.items() if sku in allocated_skus}
-        return {sku: SemanticState(sku_code=sku, contexts=tuple(items)) for sku, items in contexts_by_sku.items()}
+        return {
+            sku: SemanticState(
+                sku_code=sku,
+                contexts=tuple(items),
+                allocation_weights=allocation_weights.get(sku, {}),
+            )
+            for sku, items in contexts_by_sku.items()
+        }
 
     def list_dimension_names(
         self,
@@ -531,20 +555,36 @@ class M12CRepository(Core3BaseRepository):
             for code in row.secondary_battlefield_codes_json or []:
                 result[row.sku_code].append(("battlefield", str(code), str(code), "secondary"))
 
-    def _m11d_allocated_skus(self, batch_id: str, product_category: str, analysis_population: str, market_window: str) -> set[str]:
+    def _m11d_allocation_weights(
+        self,
+        batch_id: str,
+        product_category: str,
+        analysis_population: str,
+        market_window: str,
+    ) -> dict[str, dict[tuple[str, str], Decimal]]:
         stmt = (
-            select(entities.Core3SemanticMarketAllocation.sku_code)
+            select(
+                entities.Core3SemanticMarketAllocation.sku_code,
+                entities.Core3SemanticMarketAllocation.dimension_type,
+                entities.Core3SemanticMarketAllocation.dimension_code,
+                entities.Core3SemanticMarketAllocation.allocation_weight,
+            )
             .where(entities.Core3SemanticMarketAllocation.project_id == self.project_id)
             .where(entities.Core3SemanticMarketAllocation.category_code == self.category_code.value)
             .where(entities.Core3SemanticMarketAllocation.batch_id == batch_id)
             .where(entities.Core3SemanticMarketAllocation.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketAllocation.analysis_population == _m11d_population(analysis_population))
             .where(entities.Core3SemanticMarketAllocation.market_window == market_window)
+            .where(entities.Core3SemanticMarketAllocation.dimension_type == "battlefield")
+            .where(entities.Core3SemanticMarketAllocation.allocation_value_type == "positive_value")
+            .where(entities.Core3SemanticMarketAllocation.allocation_weight > Decimal("0"))
             .where(entities.Core3SemanticMarketAllocation.rule_version == CORE3_M11D_RULE_VERSION)
             .where(entities.Core3SemanticMarketAllocation.is_current.is_(True))
-            .distinct()
         )
-        return {str(row[0]) for row in self.db.execute(stmt).all()}
+        result: dict[str, dict[tuple[str, str], Decimal]] = defaultdict(dict)
+        for sku_code, dimension_type, dimension_code, allocation_weight in self.db.execute(stmt).all():
+            result[str(sku_code)][(str(dimension_type), str(dimension_code))] = _q6(allocation_weight)
+        return dict(result)
 
     def _save_many(self, model_cls: Any, payloads: Sequence[dict[str, Any]], *, unique_fields: tuple[str, ...], hash_field: str = "result_hash") -> M12CWriteResult:
         records: list[Any] = []
@@ -1077,6 +1117,7 @@ def _quantification_rows(
             has_claim = bool(claim and claim.is_supported)
             comment = comments.get(sku, _empty_comment(sku))
             sku_battlefield_strength = semantics[sku].support_strength(pool.context_type, pool.context_code)
+            battlefield_weight = semantics[sku].allocation_weight(pool.context_type, pool.context_code)
             battlefield_claim_relevance = _battlefield_claim_relevance_strength(pool, claim)
             semantic_strength = _q4(sku_battlefield_strength * Decimal("0.45") + battlefield_claim_relevance * Decimal("0.55"))
             param_strength = claim.param_support_strength if claim else Decimal("0.0000")
@@ -1194,6 +1235,7 @@ def _quantification_rows(
                         "baseline_price_method": target_baseline["baseline_price_method"],
                         "baseline_explanation_cn": target_baseline["baseline_explanation_cn"],
                         "comparison_sku_codes": target_baseline["comparison_sku_codes"],
+                        "baseline_sku_codes": target_baseline["baseline_sku_codes"],
                     },
                     "market_acceptance": market_acceptance,
                     "value_space": {
@@ -1204,6 +1246,7 @@ def _quantification_rows(
                         "formula_cn": "战场支付价值空间 = 可解释价差 × 市场承接系数；卖点金额 = 战场空间 × 卖点价值分占比 × 卖点类型系数。",
                     },
                     "claim_type_coefficient": float(_claim_type_coefficient(business_claim_type)),
+                    "battlefield_allocation_weight": float(battlefield_weight),
                     "sku_level_aggregation_basis_cn": "先在单个价值战场内判断卖点支付价值，再按主/辅战场权重汇总到 SKU 层。",
                 },
                 "evidence_ids_json": list(claim.evidence_ids if claim else ()),
@@ -1221,6 +1264,7 @@ def _quantification_rows(
                 "_claim_value_score": Decimal(str(scorecard["total_score"])),
                 "_business_claim_type": business_claim_type,
                 "_claim_type_coefficient": _claim_type_coefficient(business_claim_type),
+                "_battlefield_weight": battlefield_weight,
                 "_effective_price_space": effective_price_space,
                 "_weekly_sales_space": weekly_sales_space,
                 "_weekly_amount_space": weekly_amount_space,
@@ -1243,14 +1287,16 @@ def _quantification_rows(
             type_total = positive_total_by_type.get(str(row["_business_claim_type"]), Decimal("0"))
             if row["claim_value_role"] in POSITIVE_ROLES and type_total > 0:
                 share = _q6(max(Decimal("0"), _q6(row["_claim_value_score"])) / type_total)
-            row["contribution_share_in_sku"] = share
+            battlefield_weight = _q6(row.get("_battlefield_weight") or Decimal("0"))
+            weighted_share = _q6(share * battlefield_weight)
+            row["contribution_share_in_sku"] = weighted_share
             coeff = _q4(row["_claim_type_coefficient"])
             if row["_business_claim_type"] == M12C_CLAIM_TYPE_PREMIUM:
-                row["estimated_price_premium_abs"] = _q4(row["_effective_price_space"] * share * coeff)
+                row["estimated_price_premium_abs"] = _q4(row["_effective_price_space"] * weighted_share * coeff)
             else:
                 row["estimated_price_premium_abs"] = Decimal("0.0000")
-            row["estimated_weekly_sales_lift_abs"] = _q6(row["_weekly_sales_space"] * share * coeff)
-            row["estimated_weekly_sales_amount_lift_abs"] = _q6(row["_weekly_amount_space"] * share * coeff)
+            row["estimated_weekly_sales_lift_abs"] = _q6(row["_weekly_sales_space"] * weighted_share * coeff)
+            row["estimated_weekly_sales_amount_lift_abs"] = _q6(row["_weekly_amount_space"] * weighted_share * coeff)
             save_row = {key: value for key, value in row.items() if not key.startswith("_")}
             save_row["result_hash"] = stable_hash(save_row, version="m12c-sku-claim-v1")
             normalized_rows.append(save_row)
@@ -2063,20 +2109,55 @@ def _target_baseline(pool: ClaimPool, markets: Mapping[str, MarketState], target
     comparison_skus = [sku for sku in pool.sku_codes if sku != target_sku and sku in markets]
     if not comparison_skus:
         comparison_skus = [sku for sku in pool.sku_codes if sku in markets]
-    price_pairs = [(markets[sku].price, max(markets[sku].sales_volume_total, Decimal("1"))) for sku in comparison_skus]
-    sales_pairs = [(markets[sku].avg_weekly_sales_volume, max(markets[sku].sales_volume_total, Decimal("1"))) for sku in comparison_skus]
-    amount_pairs = [(markets[sku].avg_weekly_sales_amount, max(markets[sku].sales_amount_total, Decimal("1"))) for sku in comparison_skus]
-    baseline_price = _weighted_median(price_pairs)
-    baseline_sales = _weighted_median(sales_pairs)
-    baseline_amount = _weighted_median(amount_pairs)
+    target_market = markets.get(target_sku)
+    baseline_skus = _direct_baseline_skus(pool, markets, target_market, comparison_skus)
+    price_values = [markets[sku].price for sku in baseline_skus if sku in markets and markets[sku].price > 0]
+    sales_values = [markets[sku].avg_weekly_sales_volume for sku in baseline_skus if sku in markets]
+    amount_values = [markets[sku].avg_weekly_sales_amount for sku in baseline_skus if sku in markets]
+    baseline_price = _median(price_values) or Decimal("0")
+    baseline_sales = _median(sales_values) or Decimal("0")
+    baseline_amount = _median(amount_values) or Decimal("0")
+    method = "nearest_price_median_excluding_target" if set(baseline_skus) != set(comparison_skus) else "median_excluding_target"
     return {
         "baseline_price": _q4(baseline_price),
         "baseline_weekly_sales": _q6(baseline_sales),
         "baseline_weekly_amount": _q6(baseline_amount),
-        "baseline_price_method": "weighted_median_excluding_target",
+        "baseline_price_method": method,
         "comparison_sku_codes": comparison_skus,
-        "baseline_explanation_cn": f"基准价按同战场可比池中排除目标 SKU 后的销量加权中位价计算；本次可比 SKU {len(comparison_skus)} 个，放宽层级 {pool.pool_relax_level}。",
+        "baseline_sku_codes": baseline_skus,
+        "baseline_explanation_cn": (
+            "基准价按同战场可比池中排除目标 SKU 后、价格最接近的一组直接可比 SKU 的成交均价中位价计算；"
+            f"本次可比 SKU {len(comparison_skus)} 个，直接基准 SKU {len(baseline_skus)} 个，放宽层级 {pool.pool_relax_level}。"
+        ),
     }
+
+
+def _direct_baseline_skus(
+    pool: ClaimPool,
+    markets: Mapping[str, MarketState],
+    target_market: MarketState | None,
+    comparison_skus: Sequence[str],
+) -> list[str]:
+    candidates = [sku for sku in comparison_skus if sku in markets and markets[sku].price > 0]
+    if not candidates or target_market is None or target_market.price <= 0:
+        return list(candidates)
+    same_price_band = [sku for sku in candidates if markets[sku].price_band == target_market.price_band]
+    if len(same_price_band) >= 3:
+        candidates = same_price_band
+    same_exact_size = [sku for sku in candidates if markets[sku].exact_size_tier == target_market.exact_size_tier]
+    if len(same_exact_size) >= 3:
+        candidates = same_exact_size
+    ranked = sorted(
+        candidates,
+        key=lambda sku: (
+            abs(_q4(markets[sku].price - target_market.price)),
+            markets[sku].price,
+            sku,
+        ),
+    )
+    if len(ranked) <= 5:
+        return list(ranked)
+    return list(ranked[:5])
 
 
 def _weighted_median(value_weight_pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal:
@@ -2329,6 +2410,14 @@ def _m11d_population(analysis_population: str) -> str:
     if analysis_population == ANALYSIS_POPULATION_READY:
         return "all_semantic_profiles"
     return analysis_population
+
+
+def _fallback_context_weight(relation_role: str) -> Decimal:
+    if relation_role == "primary":
+        return Decimal("1.000000")
+    if relation_role == "secondary":
+        return Decimal("0.700000")
+    return Decimal("0.000000")
 
 
 def _assign(record: Any, payload: Mapping[str, Any]) -> None:
