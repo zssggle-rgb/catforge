@@ -1730,8 +1730,6 @@ def _battlefield_claim_relevance_strength(pool: ClaimPool, claim: ClaimState | N
         return Decimal("0.0000")
     text = " ".join(
         [
-            pool.context_code,
-            pool.context_name,
             claim.claim_code,
             claim.claim_name,
             claim.claim_dimension,

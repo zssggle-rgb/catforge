@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import re
 from datetime import datetime, timezone
@@ -2544,6 +2545,50 @@ def test_m12c_target_baseline_not_dragged_down_by_high_sales_low_price_sku() -> 
     assert baseline["baseline_price"] == Decimal("5637.0000")
     assert "low-volume-hit" in baseline["comparison_sku_codes"]
     assert baseline["baseline_price"] > Decimal("5000.0000")
+
+
+def test_m12c_battlefield_claim_relevance_uses_claim_text_not_context_name() -> None:
+    claim = m12c_service.ClaimState(
+        "target",
+        "tv_claim_eye_care_display",
+        "护眼显示",
+        "eye_care",
+        "low_blue_light",
+        "product_function",
+        "supported",
+        ("eye_care_certification",),
+        {},
+        Decimal("1.0000"),
+        Decimal("1.0000"),
+        True,
+        False,
+        (),
+    )
+    gaming_pool = m12c_service.ClaimPool(
+        claim_code=claim.claim_code,
+        claim_name=claim.claim_name,
+        context_type="battlefield",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+        context_name="游戏体育流畅战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("target",),
+        with_claim_skus=("target",),
+        without_claim_skus=(),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        pool_relax_level="L1",
+    )
+    eye_care_pool = dataclasses.replace(
+        gaming_pool,
+        context_code="BF_EYE_CARE_FAMILY_COMFORT",
+        context_name="家庭护眼舒适战场",
+    )
+
+    assert m12c_service._battlefield_claim_relevance_strength(gaming_pool, claim) == Decimal("0.2500")
+    assert m12c_service._battlefield_claim_relevance_strength(eye_care_pool, claim) == Decimal("1.0000")
 
 
 def test_m12c_semantic_state_uses_m11d_weight_and_normalized_fallback() -> None:
