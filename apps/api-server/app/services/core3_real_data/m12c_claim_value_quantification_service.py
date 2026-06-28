@@ -356,6 +356,110 @@ class M12CRepository(Core3BaseRepository):
             "batch_id", "sku_code", "context_type", "context_code", "size_tier", "price_band_group", "rule_version", "is_current",
         ))
 
+    def retire_stale_quantifications(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        analysis_population: str,
+        market_window: str,
+        rule_version: str,
+        sku_codes: set[str],
+        active_rows: Sequence[dict[str, Any]],
+    ) -> int:
+        active_keys = {
+            (
+                row["sku_code"],
+                row["claim_code"],
+                row["context_type"],
+                row["context_code"],
+                row["size_tier"],
+                row["price_band_group"],
+            )
+            for row in active_rows
+        }
+        stmt = (
+            select(entities.Core3SkuClaimValueQuantification)
+            .where(entities.Core3SkuClaimValueQuantification.project_id == self.project_id)
+            .where(entities.Core3SkuClaimValueQuantification.category_code == self.category_code.value)
+            .where(entities.Core3SkuClaimValueQuantification.batch_id == batch_id)
+            .where(entities.Core3SkuClaimValueQuantification.product_category == product_category.upper())
+            .where(entities.Core3SkuClaimValueQuantification.analysis_population == analysis_population)
+            .where(entities.Core3SkuClaimValueQuantification.market_window == market_window)
+            .where(entities.Core3SkuClaimValueQuantification.rule_version == rule_version)
+            .where(entities.Core3SkuClaimValueQuantification.is_current.is_(True))
+        )
+        if sku_codes:
+            stmt = stmt.where(entities.Core3SkuClaimValueQuantification.sku_code.in_(sorted(sku_codes)))
+        retired = 0
+        for record in self.db.execute(stmt).scalars():
+            key = (
+                record.sku_code,
+                record.claim_code,
+                record.context_type,
+                record.context_code,
+                record.size_tier,
+                record.price_band_group,
+            )
+            if key in active_keys:
+                continue
+            record.is_current = False
+            retired += 1
+        if retired:
+            self.db.flush()
+        return retired
+
+    def retire_stale_attributions(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        analysis_population: str,
+        market_window: str,
+        rule_version: str,
+        sku_codes: set[str],
+        active_rows: Sequence[dict[str, Any]],
+    ) -> int:
+        active_keys = {
+            (
+                row["sku_code"],
+                row["context_type"],
+                row["context_code"],
+                row["size_tier"],
+                row["price_band_group"],
+            )
+            for row in active_rows
+        }
+        stmt = (
+            select(entities.Core3SkuClaimContributionAttribution)
+            .where(entities.Core3SkuClaimContributionAttribution.project_id == self.project_id)
+            .where(entities.Core3SkuClaimContributionAttribution.category_code == self.category_code.value)
+            .where(entities.Core3SkuClaimContributionAttribution.batch_id == batch_id)
+            .where(entities.Core3SkuClaimContributionAttribution.product_category == product_category.upper())
+            .where(entities.Core3SkuClaimContributionAttribution.analysis_population == analysis_population)
+            .where(entities.Core3SkuClaimContributionAttribution.market_window == market_window)
+            .where(entities.Core3SkuClaimContributionAttribution.rule_version == rule_version)
+            .where(entities.Core3SkuClaimContributionAttribution.is_current.is_(True))
+        )
+        if sku_codes:
+            stmt = stmt.where(entities.Core3SkuClaimContributionAttribution.sku_code.in_(sorted(sku_codes)))
+        retired = 0
+        for record in self.db.execute(stmt).scalars():
+            key = (
+                record.sku_code,
+                record.context_type,
+                record.context_code,
+                record.size_tier,
+                record.price_band_group,
+            )
+            if key in active_keys:
+                continue
+            record.is_current = False
+            retired += 1
+        if retired:
+            self.db.flush()
+        return retired
+
     def save_dimension_summaries(self, rows: Sequence[dict[str, Any]]) -> M12CWriteResult:
         return self._save_many(entities.Core3ClaimValueDimensionSummary, rows, unique_fields=(
             "batch_id", "claim_code", "dimension_type", "dimension_code", "size_tier", "price_band_group", "analysis_population", "market_window", "rule_version", "is_current",
@@ -607,6 +711,24 @@ class M12CClaimValueQuantificationService:
         metric_write = self.repository.save_metrics(metric_rows)
         quant_write = self.repository.save_quantifications(quant_rows)
         attr_write = self.repository.save_attributions(attribution_rows)
+        retired_quant_count = self.repository.retire_stale_quantifications(
+            batch_id=batch_id,
+            product_category=normalized_category,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            rule_version=rule_version,
+            sku_codes=output_skus,
+            active_rows=quant_rows,
+        )
+        retired_attr_count = self.repository.retire_stale_attributions(
+            batch_id=batch_id,
+            product_category=normalized_category,
+            analysis_population=analysis_population,
+            market_window=market_window,
+            rule_version=rule_version,
+            sku_codes=output_skus,
+            active_rows=attribution_rows,
+        )
         summary_write = self.repository.save_dimension_summaries(summary_rows)
         review_write = self.repository.save_review_issues(review_rows)
         created = sum(item.created_count for item in (pool_write, metric_write, quant_write, attr_write, summary_write, review_write))
@@ -644,6 +766,8 @@ class M12CClaimValueQuantificationService:
                 "created_output_count": created,
                 "reused_output_count": reused,
                 "updated_output_count": updated,
+                "retired_quantification_count": retired_quant_count,
+                "retired_attribution_count": retired_attr_count,
                 "boundary_note": "M12C 输出为可观测市场贡献估计，不代表严格因果。",
             },
         )
