@@ -6,6 +6,7 @@ from typing import Any
 
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository, unique_skus
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
+from app.services.core3_real_data.analyst.claim_value_answer import build_claim_value_answer
 
 
 class AtomicAnalystHandlers:
@@ -498,6 +499,10 @@ class AtomicAnalystHandlers:
         price_band: str | None = None,
         role: str | None = None,
         limit: int = 20,
+        answer_style: str = "raw",
+        with_report: str = "none",
+        max_chat_chars: int = 600,
+        report_title: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         resolved = self._resolve_one(context, command="sku-claim-value", query=query, sku_code=sku_code, model_name=model_name)
@@ -520,7 +525,7 @@ class AtomicAnalystHandlers:
             limit=limit,
         )
         missing = not payload.get("claim_values") and not payload.get("attributions")
-        return base_result(
+        result = base_result(
             status=AnalystStatus.NOT_FOUND if missing else AnalystStatus.OK,
             command="sku-claim-value",
             context=context,
@@ -535,6 +540,15 @@ class AtomicAnalystHandlers:
             answer_outline=[f"已返回 {candidate.sku_code} 的 M12C SKU×卖点价值量化结果。"] if not missing else [],
             message_cn="目标 SKU 没有 M12C 卖点价值量化结果。" if missing else None,
         )
+        if not missing and (answer_style == "xiaoao" or with_report in {"markdown", "feishu-doc"}):
+            result["result"]["claim_value_answer"] = build_claim_value_answer(
+                target=candidate.to_dict(),
+                payload=payload,
+                with_report=with_report if with_report in {"none", "markdown", "feishu-doc"} else "none",
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+            )
+        return result
 
     def claim_contribution(
         self,

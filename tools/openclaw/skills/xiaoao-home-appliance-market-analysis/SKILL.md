@@ -144,7 +144,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 | --- | --- | --- | --- |
 | "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Use XiaoAo answer mode. Selection priority is same purchase pool, role-weighted value battlefield overlap, role-weighted user task overlap, role-weighted target group overlap, substitutable value anchors, replacement pressure, then sales as market validation only. |
 | "A 为什么比 B 卖得好/差", "销量差异原因" | `why-sales-diff` | `sku_code` and `candidate_sku_code` | Explain a pairwise sales difference. If only one SKU is provided, run `competitor-set` first and ask the user to confirm the comparison SKU if needed. |
-| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sku-claim-value` | `sku_code` or `query` | Broad SKU-level claim-value question. Use stable text output and send it directly. Do not request JSON, do not run jq/grep/Python post-processing, and do not make multiple exploratory tool calls. |
+| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sku-claim-value` | `sku_code` or `query` | Broad SKU-level claim-value question. Use stable XiaoAo text output with `--with-report feishu-doc` so the answer includes a Feishu report link. Do not request JSON, do not run jq/grep/Python post-processing, and do not make multiple exploratory tool calls. |
 | "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. This SOP now uses quantified claim-value and contribution results when available. |
 | "某个卖点值多少钱", "某卖点贡献多少销量" | `claim-value-space` | claim name/code, optional dimension | Return observable price premium, weekly-sales lift, weekly-amount lift, pool sample status, and confidence. |
 | "某 SKU 卖得好靠哪些卖点" | `claim-contribution` | `sku_code` or `query` | Explain SKU excess price/sales/amount performance by Top claim contributors. |
@@ -170,7 +170,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 ```
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 20 --format text
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
 ```
 
 ```bash
@@ -287,7 +287,7 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. `sku-claim-value --format text --limit 20` if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". Send the command output directly and do not parse JSON.
+1. `sku-claim-value --format text --answer-style xiaoao --with-report feishu-doc --limit 200 --max-chat-chars 600` if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". Send the command output directly and do not parse JSON. The visible answer must include a Feishu document link when publishing succeeds; if publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
 2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
 3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
 4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.
@@ -478,7 +478,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 Check claim-value quantification:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 20 --format text
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
 ```
 
 Check claim contribution:

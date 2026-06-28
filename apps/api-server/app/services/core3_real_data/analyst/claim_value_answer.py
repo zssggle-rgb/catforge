@@ -1,0 +1,441 @@
+"""Business-facing claim value report generation.
+
+This module turns existing M12C atom payloads into a short answer and a
+Markdown report. It does not recalculate M12C values.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
+from typing import Any, Literal
+
+from app.services.core3_real_data.analyst.competitor_answer import ReportPublishResult, _publish_report
+
+
+ReportMode = Literal["none", "markdown", "feishu-doc"]
+
+CATEGORY_ORDER = (
+    "高溢价卖点",
+    "份额转化卖点",
+    "客户获得价值卖点",
+    "门槛卖点",
+    "待激活卖点",
+    "厂家主张卖点",
+    "竞品拦截卖点",
+    "价格压力卖点",
+    "样本不足待复核",
+)
+
+POSITIVE_CATEGORIES = {"高溢价卖点", "份额转化卖点", "客户获得价值卖点"}
+RISK_CATEGORIES = {"竞品拦截卖点", "价格压力卖点"}
+
+
+@dataclass(frozen=True)
+class ClaimValueReportFile:
+    status: str
+    path: str | None = None
+    message_cn: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"status": self.status, "path": self.path, "message_cn": self.message_cn}
+
+
+def build_claim_value_answer(
+    *,
+    target: dict[str, Any],
+    payload: dict[str, Any],
+    with_report: ReportMode = "none",
+    max_chat_chars: int = 600,
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    title = report_title or f"{_display_name(target)} 用户卖点价值分析报告"
+    markdown = render_claim_value_report(title=title, target=target, payload=payload)
+    report_file = _write_markdown_report(title=title, markdown=markdown) if with_report in {"markdown", "feishu-doc"} else ClaimValueReportFile(status="disabled", message_cn="未请求生成 Markdown 文件。")
+    publish_result = _publish_report(title=title, markdown=markdown, with_report=with_report)
+    report_location = _business_report_location(with_report=with_report, publish_result=publish_result, report_file=report_file)
+    report_message = _business_report_message(with_report=with_report, publish_result=publish_result)
+    short_answer = render_claim_value_short_answer(
+        target=target,
+        payload=payload,
+        report_location=report_location,
+        report_message=report_message,
+        max_chat_chars=max_chat_chars,
+    )
+    report = publish_result.to_dict()
+    report["markdown_path"] = report_file.path
+    if report_file.message_cn:
+        report["markdown_message_cn"] = report_file.message_cn
+    return {
+        "short_answer": short_answer,
+        "report": report,
+        "markdown": markdown if with_report == "markdown" else None,
+        "report_title": title,
+    }
+
+
+def render_claim_value_short_answer(
+    *,
+    target: dict[str, Any],
+    payload: dict[str, Any],
+    report_location: str | None = None,
+    report_message: str | None = None,
+    max_chat_chars: int = 600,
+) -> str:
+    name = _display_name(target)
+    summary_rows = _sorted_summary_rows(payload)
+    premium = _rows_by_category(summary_rows, "高溢价卖点")[:4]
+    share = _rows_by_category(summary_rows, "份额转化卖点")[:3]
+    threshold = _rows_by_category(summary_rows, "门槛卖点")[:4]
+    pending = _rows_by_category(summary_rows, "待激活卖点")[:3]
+    risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(summary_rows, category)][:3]
+    lines: list[str] = [f"{name} 的用户卖点价值结论："]
+    if premium:
+        lines.append(f"高溢价卖点主要是{_claim_names(premium)}，当前可解释金额约 {_range_or_total(premium, 'sku_level_user_payment_value_abs')}。")
+    else:
+        lines.append("当前没有形成稳定高溢价卖点，正向价值更多需要看份额转化、客户获得价值或待激活卖点。")
+    if share:
+        lines.append(f"份额转化卖点包括{_claim_names(share)}，更适合解释同价位下的销量承接。")
+    if threshold:
+        lines.append(f"门槛卖点包括{_claim_names(threshold)}，有助于进入购买清单，但不作为单独加价理由。")
+    if pending:
+        lines.append(f"待激活卖点包括{_claim_names(pending)}，产品事实或厂家表达存在，但用户感知和市场验证仍需加强。")
+    if risks:
+        lines.append(f"风险和拦截信号集中在{_claim_names(risks)}。")
+    if report_location:
+        lines.append(f"详细报告：{report_location}")
+    elif report_message:
+        lines.append(report_message)
+    return _compress_text("\n".join(lines), max_chat_chars=max_chat_chars)
+
+
+def render_claim_value_report(*, title: str, target: dict[str, Any], payload: dict[str, Any]) -> str:
+    summary_rows = _sorted_summary_rows(payload)
+    detail_rows = [row for row in payload.get("claim_values") or [] if isinstance(row, dict)]
+    lines = [
+        f"# {title}",
+        "",
+        "## 一、分析结论",
+        "",
+        *_conclusion_lines(target, summary_rows),
+        "",
+        "## 二、用户卖点价值总榜",
+        "",
+        *_summary_table_lines(summary_rows),
+        "",
+        "## 三、高溢价卖点明细",
+        "",
+        *_positive_detail_lines(summary_rows, category="高溢价卖点"),
+        "",
+        "## 四、分价值战场拆解",
+        "",
+        *_battlefield_breakdown_lines(detail_rows),
+        "",
+        "## 五、门槛、待激活和风险卖点",
+        "",
+        *_non_positive_lines(summary_rows),
+        "",
+        "## 六、可追溯计算依据",
+        "",
+        *_method_lines(payload),
+        "",
+        "## 七、口径说明",
+        "",
+        "可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。",
+    ]
+    return "\n".join(lines).strip() + "\n"
+
+
+def _conclusion_lines(target: dict[str, Any], summary_rows: list[dict[str, Any]]) -> list[str]:
+    name = _display_name(target)
+    premium = _rows_by_category(summary_rows, "高溢价卖点")[:5]
+    threshold = _rows_by_category(summary_rows, "门槛卖点")[:5]
+    pending = _rows_by_category(summary_rows, "待激活卖点")[:5]
+    risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(summary_rows, category)][:5]
+    lines = [
+        f"{name} 的用户卖点价值应按价值战场来理解：先判断本品进入哪些主/辅价值战场，再看每个战场里用户真正愿意为哪些卖点支付更高价格或给出销量承接。",
+    ]
+    if premium:
+        lines.append(f"当前稳定高溢价卖点为：{_claim_names(premium)}。这些卖点在对应价值战场内同时具备参数支撑、用户评论感知和市场承接。")
+    else:
+        lines.append("当前没有稳定高溢价卖点，说明本品卖点更多表现为入围门槛、份额转化或待激活能力。")
+    if threshold:
+        lines.append(f"门槛卖点为：{_claim_names(threshold)}。这些能力有助于进入用户候选清单，但不宜直接解释为加价来源。")
+    if pending:
+        lines.append(f"待激活卖点为：{_claim_names(pending)}。这些卖点需要通过导购表达、内容教育或产品证据强化，才能转化为用户支付理由。")
+    if risks:
+        lines.append(f"需要关注的风险/拦截卖点为：{_claim_names(risks)}。这些方向可能影响本品在同战场中的成交解释力。")
+    return lines
+
+
+def _summary_table_lines(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["当前 SKU 没有 M12C 卖点价值量化结果。"]
+    lines = [
+        "| 卖点 | 业务分类 | 主要成立战场 | 可解释金额 | 可解释销量 | 证据摘要 |",
+        "| --- | --- | --- | ---: | ---: | --- |",
+    ]
+    for row in rows[:40]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
+                    _md(_category(row)),
+                    _md("、".join(str(item) for item in (row.get("main_contexts") or [])[:4]) or "待形成稳定战场"),
+                    _md(_money(row.get("sku_level_user_payment_value_abs")) or "不作为正向量化"),
+                    _md((_volume(row.get("sku_level_weekly_sales_lift_abs")) + "台/周") if _volume(row.get("sku_level_weekly_sales_lift_abs")) else "不作为正向量化"),
+                    _md(row.get("evidence_summary_cn") or _claim_type_meaning(_category(row))),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _positive_detail_lines(rows: list[dict[str, Any]], *, category: str) -> list[str]:
+    items = _rows_by_category(rows, category)
+    if not items:
+        return [f"当前没有形成稳定{category}。"]
+    lines: list[str] = []
+    for row in items:
+        claim_name = str(row.get("claim_name") or row.get("claim_code") or "未命名卖点")
+        lines.append(f"### {claim_name}")
+        lines.append("")
+        lines.append(
+            f"- 整机口径：可解释金额 {_money(row.get('sku_level_user_payment_value_abs')) or '暂不量化'}，"
+            f"可解释销量 {(_volume(row.get('sku_level_weekly_sales_lift_abs')) + '台/周') if _volume(row.get('sku_level_weekly_sales_lift_abs')) else '暂不量化'}。"
+        )
+        contexts = [item for item in (row.get("context_values") or []) if isinstance(item, dict)]
+        if contexts:
+            lines.append("- 分战场来源：")
+            for context in contexts[:6]:
+                lines.append(
+                    f"  - {context.get('context_name') or context.get('context_code') or '当前价值战场'}："
+                    f"可解释金额 {_money(context.get('price_premium_abs')) or '暂不量化'}，"
+                    f"可解释销量 {(_volume(context.get('weekly_sales_lift_abs')) + '台/周') if _volume(context.get('weekly_sales_lift_abs')) else '暂不量化'}。"
+                )
+        evidence = str(row.get("evidence_summary_cn") or "").strip()
+        if evidence:
+            lines.append(f"- 证据解释：{evidence}")
+        lines.append("")
+    return lines
+
+
+def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
+    battlefield_rows = [row for row in rows if str(row.get("context_type") or "") == "battlefield"]
+    if not battlefield_rows:
+        return ["当前没有可展示的价值战场明细。"]
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in battlefield_rows:
+        key = str(row.get("context_name") or row.get("context_code") or "未命名价值战场")
+        grouped.setdefault(key, []).append(row)
+    lines: list[str] = []
+    for battlefield, items in sorted(grouped.items()):
+        lines.append(f"### {battlefield}")
+        lines.append("")
+        lines.append("| 卖点 | 业务分类 | 可比池价格差异 | 可比池销量差异 | 本品可解释金额 | 本品可解释销量 |")
+        lines.append("| --- | --- | ---: | ---: | ---: | ---: |")
+        for row in _sort_detail_rows(items)[:12]:
+            pool_effect = row.get("pool_effect") or {}
+            sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
+                        _md(_category(row)),
+                        _md(_money(pool_effect.get("pool_claim_price_delta_abs")) or "无稳定差异"),
+                        _md((_volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) + "台/周") if _volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) else "无稳定差异"),
+                        _md(_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "不作为正向分摊"),
+                        _md((_volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) + "台/周") if _volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) else "不作为正向分摊"),
+                    ]
+                )
+                + " |"
+            )
+        lines.append("")
+    return lines
+
+
+def _non_positive_lines(rows: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for category in ("门槛卖点", "待激活卖点", "厂家主张卖点", "竞品拦截卖点", "价格压力卖点", "样本不足待复核"):
+        items = _rows_by_category(rows, category)
+        if not items:
+            continue
+        lines.append(f"### {category}")
+        lines.append("")
+        lines.append(_claim_type_meaning(category))
+        lines.append("")
+        for row in items[:8]:
+            contexts = "、".join(str(item) for item in (row.get("main_contexts") or [])[:4]) or "相关场景待复核"
+            lines.append(f"- {row.get('claim_name') or row.get('claim_code') or '未命名卖点'}：{contexts}。{row.get('evidence_summary_cn') or ''}")
+        lines.append("")
+    return lines or ["当前没有门槛、待激活或风险卖点结果。"]
+
+
+def _method_lines(payload: dict[str, Any]) -> list[str]:
+    note = str(payload.get("method_note_cn") or "").strip()
+    lines = [
+        "1. 先识别 SKU 的主/辅价值战场，正向量化以价值战场为主轴。",
+        "2. 在同价值战场、同尺寸层级、同价格带中建立可比市场池，并区分有该卖点组与对照组。",
+        "3. 观察可比池中有卖点组与对照组的价格差异、销量差异和销额差异。",
+        "4. 再判断本品相对直接可比基准的市场位置，是溢价承接、份额转化、客户获得价值、价格压力，还是支付价值未验证。",
+        "5. 最后结合参数证据、评论感知、竞品差异、样本充分性和战场权重，把可解释金额和销量分摊到卖点。",
+    ]
+    if note:
+        lines.append(f"补充口径：{note}")
+    return lines
+
+
+def _write_markdown_report(*, title: str, markdown: str) -> ClaimValueReportFile:
+    try:
+        base_dir = Path(os.environ.get("CATFORGE_ANALYST_REPORT_DIR") or Path(tempfile.gettempdir()) / "catforge_reports")
+        base_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        filename = f"{timestamp}_{_slug(title)}.md"
+        path = base_dir / filename
+        path.write_text(markdown, encoding="utf-8")
+        return ClaimValueReportFile(status="created", path=str(path), message_cn="已生成 Markdown 报告文件。")
+    except Exception:
+        return ClaimValueReportFile(status="failed", message_cn="Markdown 报告文件写入失败。")
+
+
+def _business_report_location(*, with_report: ReportMode, publish_result: ReportPublishResult, report_file: ClaimValueReportFile) -> str | None:
+    if with_report == "feishu-doc":
+        return publish_result.url
+    if with_report == "markdown":
+        return report_file.path
+    return None
+
+
+def _business_report_message(*, with_report: ReportMode, publish_result: ReportPublishResult) -> str | None:
+    if with_report != "feishu-doc":
+        return None
+    if publish_result.url:
+        return None
+    message = publish_result.message_cn or "飞书文档生成失败。"
+    return f"飞书文档未生成：{message}"
+
+
+def _sorted_summary_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = [row for row in payload.get("sku_level_claim_values") or [] if isinstance(row, dict)]
+    return sorted(rows, key=_summary_sort_key)
+
+
+def _summary_sort_key(row: dict[str, Any]) -> tuple[int, Decimal, Decimal, str]:
+    category_rank = {name: index for index, name in enumerate(CATEGORY_ORDER)}
+    return (
+        category_rank.get(_category(row), 99),
+        -(_decimal(row.get("sku_level_user_payment_value_abs")) or Decimal("0")),
+        -(_decimal(row.get("sku_level_weekly_sales_lift_abs")) or Decimal("0")),
+        str(row.get("claim_name") or row.get("claim_code") or ""),
+    )
+
+
+def _sort_detail_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            CATEGORY_ORDER.index(_category(row)) if _category(row) in CATEGORY_ORDER else 99,
+            -(_detail_price(row) or Decimal("0")),
+            str(row.get("claim_name") or row.get("claim_code") or ""),
+        ),
+    )
+
+
+def _detail_price(row: dict[str, Any]) -> Decimal | None:
+    sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+    return _decimal(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs"))
+
+
+def _rows_by_category(rows: list[dict[str, Any]], category: str) -> list[dict[str, Any]]:
+    return [row for row in rows if _category(row) == category]
+
+
+def _category(row: dict[str, Any]) -> str:
+    value = str(row.get("business_claim_type_cn") or row.get("claim_value_role_cn") or "").strip()
+    return value if value else "未分类卖点"
+
+
+def _claim_names(rows: list[dict[str, Any]]) -> str:
+    names = [str(row.get("claim_name") or row.get("claim_code") or "未命名卖点") for row in rows if row]
+    return "、".join(names)
+
+
+def _range_or_total(rows: list[dict[str, Any]], key: str) -> str:
+    values = [_decimal(row.get(key)) for row in rows]
+    values = [value for value in values if value is not None and value > 0]
+    if not values:
+        return "暂不量化"
+    if len(values) == 1:
+        return _money(values[0]) or "暂不量化"
+    return f"{_money(min(values))}-{_money(max(values))}"
+
+
+def _display_name(target: dict[str, Any]) -> str:
+    brand = str(target.get("brand_name") or "").strip()
+    model = str(target.get("model_name") or "").strip()
+    sku = str(target.get("sku_code") or "").strip()
+    return " ".join(part for part in (brand, model) if part) or sku or "目标 SKU"
+
+
+def _claim_type_meaning(category: str) -> str:
+    return {
+        "高溢价卖点": "用户愿意为该卖点支付更高价格，并且参数、评论和市场验证共同成立。",
+        "份额转化卖点": "该卖点不一定抬高价格，但能解释同价或相近价格下的销量/份额优势。",
+        "客户获得价值卖点": "该卖点让用户觉得产品更值，主要体现为价格压力更小或销量承接更强。",
+        "门槛卖点": "该卖点是进入购买清单的基础要求，有了不一定加价，缺了会掉队。",
+        "待激活卖点": "本品有参数或厂家表达，但用户评论或市场验证还不足，需要继续激活。",
+        "厂家主张卖点": "当前主要是厂家主张，尚未形成稳定用户支付价值。",
+        "竞品拦截卖点": "竞品具备并形成市场验证，本品缺失或表达弱，会影响购买转化。",
+        "价格压力卖点": "卖点表达、参数或用户反馈没有支撑当前价格，可能削弱成交理由。",
+        "样本不足待复核": "样本或对照组不足，只能作为观察线索。",
+    }.get(category, "当前分类尚未定义。")
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _money(value: Any) -> str:
+    number = _decimal(value)
+    if number is None or number <= 0:
+        return ""
+    return f"{number.quantize(Decimal('1'), rounding=ROUND_HALF_UP)}元"
+
+
+def _volume(value: Any) -> str:
+    number = _decimal(value)
+    if number is None or number <= 0:
+        return ""
+    quantized = number.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    if quantized == quantized.to_integral_value():
+        return str(quantized.to_integral_value())
+    return str(quantized)
+
+
+def _md(value: Any) -> str:
+    text = str(value or "")
+    return text.replace("|", "\\|").replace("\n", " ").strip()
+
+
+def _slug(value: str) -> str:
+    text = re.sub(r"[^\w\u4e00-\u9fff.-]+", "_", value, flags=re.UNICODE).strip("_")
+    return text[:80] or "claim_value_report"
+
+
+def _compress_text(text: str, *, max_chat_chars: int) -> str:
+    if max_chat_chars <= 0 or len(text) <= max_chat_chars:
+        return text
+    return text[: max(0, max_chat_chars - 1)].rstrip() + "…"

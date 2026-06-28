@@ -135,6 +135,8 @@ def build_parser() -> argparse.ArgumentParser:
         add_pair_args(command_parser)
         add_dimension_args(command_parser)
         command_parser.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
+        if command == "sku-claim-value":
+            add_answer_args(command_parser)
         add_format_arg(command_parser)
 
     for command in SOP_COMMAND_ORDER:
@@ -513,6 +515,10 @@ def sku_claim_value(
     price_band: str | None = None,
     role: str | None = None,
     limit: int = DEFAULT_CANDIDATE_LIMIT,
+    answer_style: str = "raw",
+    with_report: str = "none",
+    max_chat_chars: int = 600,
+    report_title: str | None = None,
 ) -> dict[str, Any]:
     return run_analyst_command(
         db,
@@ -533,6 +539,10 @@ def sku_claim_value(
         price_band=price_band,
         role=role,
         limit=limit,
+        answer_style=answer_style,
+        with_report=with_report,
+        max_chat_chars=max_chat_chars,
+        report_title=report_title,
     )
 
 
@@ -1064,6 +1074,9 @@ def format_business_text(result: dict[str, Any]) -> str:
     competitor_answer = payload.get("competitor_answer") or {}
     if competitor_answer.get("short_answer"):
         return str(competitor_answer["short_answer"])
+    claim_value_answer = payload.get("claim_value_answer") or {}
+    if claim_value_answer.get("short_answer"):
+        return str(claim_value_answer["short_answer"])
     if "competitor_set" in payload:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:

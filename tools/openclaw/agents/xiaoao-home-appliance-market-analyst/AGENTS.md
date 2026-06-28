@@ -173,10 +173,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ```bash
 cd /opt/catforge
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query "<用户给出的型号或 SKU>" --product-category tv --batch-id latest --limit 20 --format text
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query "<用户给出的型号或 SKU>" --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
 ```
 
-拿到文本输出后直接发送给用户。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用多个分析命令，也不要把输出重新扩写成更长报告。这类飞书聊天答案必须控制在一次工具调用和一段业务回答内。
+拿到文本输出后直接发送给用户。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用多个分析命令，也不要把输出重新扩写成更长报告。这类飞书聊天答案必须控制在一次工具调用和一段业务回答内。成功时必须包含飞书文档链接；如果飞书发布暂不可用，只能说明“详细报告链接暂时不可用”，禁止把服务器本地 Markdown 路径发给用户。
 
 用 `premium-claim-drivers`，需要量化时继续用 `sku-claim-value`、`claim-contribution`、`claim-value-space` 或 `claim-value-compare`。把卖点分为：
 
