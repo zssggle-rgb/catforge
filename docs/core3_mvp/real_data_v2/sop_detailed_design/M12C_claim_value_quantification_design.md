@@ -113,6 +113,24 @@ flowchart TD
 
 这两张解释表必须进入 Markdown 和飞书报告模板，也要进入小奥 Skill 的长答和“解释这个卖点为什么是这个类型”的回答中。
 
+“销量不弱”的程序口径：
+
+```text
+sales_ratio = target_weekly_sales / comparable_baseline_weekly_sales
+amount_ratio = target_weekly_sales_amount / comparable_baseline_weekly_sales_amount
+
+premium_market_accepted =
+  target_price > comparable_baseline_price + neutral_threshold
+  and (
+    sales_ratio >= 0.70
+    or (amount_ratio >= 1.00 and sales_ratio >= 0.60)
+  )
+```
+
+这个口径用于区分高价 SKU 的真实承接和价格压力。价格高、销量略低但销额和评论能承接时，可以进入高溢价判断；价格高且销量明显低于基准时，才进入价格压力。
+
+“卖点价值分”只用于评分卡和复核，不作为默认回答中的业务结论。`sku-claim-value --format text` 默认必须输出：卖点类型、整机口径可解释金额、可解释销量、成立价值战场和证据摘要；不得只输出“价值分 + 场景列表”。
+
 ### 3.3 实现硬约束
 
 M12C 的程序实现必须严格遵守以下顺序：

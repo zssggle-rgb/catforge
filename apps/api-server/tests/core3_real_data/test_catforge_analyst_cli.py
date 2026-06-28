@@ -149,6 +149,19 @@ def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
     assert claim_type == m12c_service.M12C_CLAIM_TYPE_PREMIUM
 
 
+def test_m12c_high_price_with_not_weak_sales_is_premium_accepted() -> None:
+    market_position = m12c_service._market_position_signal(
+        market_price=Decimal("6200"),
+        market_sales=Decimal("70"),
+        market_amount=Decimal("434000"),
+        baseline_price=Decimal("5800"),
+        baseline_sales=Decimal("90"),
+        baseline_amount=Decimal("522000"),
+    )
+
+    assert market_position["type"] == "premium_accepted"
+
+
 def test_m12c_price_pressure_does_not_become_premium_claim() -> None:
     metric = {
         "price_premium_abs": Decimal("500"),
@@ -183,6 +196,46 @@ def test_m12c_price_pressure_does_not_become_premium_claim() -> None:
 
     assert market_position["type"] == "price_pressure"
     assert claim_type == m12c_service.M12C_CLAIM_TYPE_PRICE_PRESSURE
+
+
+def test_m12c_high_coverage_claim_can_remain_premium_when_price_value_is_supported() -> None:
+    metric = {
+        "with_price_median": Decimal("6500"),
+        "price_premium_abs": Decimal("900"),
+        "weekly_sales_lift_abs": Decimal("-20"),
+        "weekly_sales_amount_lift_abs": Decimal("180000"),
+        "effect_confidence": Decimal("0.8000"),
+    }
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_hdr_high_brightness",
+        claim_name="HDR/高亮画质",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        with_claim_skus=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e"),
+        without_claim_skus=("sku-f",),
+        unknown_skus=(),
+        sample_status="weak",
+        quality_flags=("small_comparable_pool",),
+        relaxation_path=("L3",),
+        pool_relax_level="L3",
+    )
+
+    role = m12c_service._claim_role(
+        has_claim=True,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("0.8500"),
+        semantic_strength=Decimal("0.9500"),
+        has_negative=False,
+        market_price=Decimal("6200"),
+    )
+
+    assert role == m12c_service.M12C_ROLE_PREMIUM
 
 
 def make_session() -> Session:
@@ -2250,7 +2303,7 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "溢价卖点" in text
     assert "份额转化卖点" in text
     assert "用户卖点支付价值约280元" in text
-    assert "卖点价值分" in text
+    assert "卖点价值分" not in text
     assert "先在单个价值战场内判断卖点支付价值" in text
     assert "MiniLED" in text
 

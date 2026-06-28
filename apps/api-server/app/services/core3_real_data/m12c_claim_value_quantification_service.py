@@ -54,6 +54,9 @@ OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C
 MIN_POOL_SKU_COUNT = 6
 MIN_WEAK_POOL_SKU_COUNT = 4
 MIN_GROUP_SKU_COUNT = 2
+M12C_PREMIUM_MIN_SALES_RATIO = Decimal("0.7000")
+M12C_PREMIUM_MIN_REVENUE_RATIO = Decimal("1.0000")
+M12C_PREMIUM_REVENUE_BACKUP_MIN_SALES_RATIO = Decimal("0.6000")
 
 M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
 M12C_CLAIM_TYPE_SHARE = "share_conversion_claim"
@@ -1512,15 +1515,28 @@ def _claim_role(
             return M12C_ROLE_OPPORTUNITY
         return M12C_ROLE_SAMPLE
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    positive_price_value = (
+        price_positive
+        and amount_positive
+        and semantic_strength >= Decimal("0.5000")
+        and max(param_strength, comment_strength) >= Decimal("0.6000")
+        and pool.pool_relax_level != "L4"
+        and pool.sample_status != "insufficient"
+        and (pool.sample_status != "weak" or pool.pool_relax_level == "L3")
+    )
     if coverage_rate >= Decimal("0.7500"):
+        if positive_price_value:
+            return M12C_ROLE_PREMIUM
         return M12C_ROLE_BASIC
     if pool.pool_relax_level == "L4":
         return M12C_ROLE_SAMPLE
     if pool.sample_status == "insufficient":
         return M12C_ROLE_SAMPLE
     if pool.sample_status == "weak":
+        if positive_price_value:
+            return M12C_ROLE_PREMIUM
         return M12C_ROLE_SAMPLE
-    if price_positive and amount_positive and semantic_strength >= Decimal("0.5000") and max(param_strength, comment_strength) >= Decimal("0.6000"):
+    if positive_price_value:
         return M12C_ROLE_PREMIUM
     if sales_positive and semantic_strength >= Decimal("0.4500") and max(comment_strength, param_strength) >= Decimal("0.5000"):
         return M12C_ROLE_SALES
@@ -1823,8 +1839,12 @@ def _market_position_signal(
     price_gap = _q4(market_price - baseline_price)
     sales_gap = _q6(market_sales - baseline_sales)
     amount_gap = _q6((market_amount or Decimal("0")) - (baseline_amount or Decimal("0")))
+    sales_ratio = _ratio_or_zero(market_sales, baseline_sales)
+    amount_ratio = _ratio_or_zero(market_amount or Decimal("0"), baseline_amount or Decimal("0"))
     price_neutral_threshold = max(abs(baseline_price) * Decimal("0.03"), Decimal("50"))
-    if price_gap > price_neutral_threshold and sales_gap >= 0:
+    sales_not_weak = sales_ratio >= M12C_PREMIUM_MIN_SALES_RATIO
+    revenue_not_weak = amount_ratio >= M12C_PREMIUM_MIN_REVENUE_RATIO and sales_ratio >= M12C_PREMIUM_REVENUE_BACKUP_MIN_SALES_RATIO
+    if price_gap > price_neutral_threshold and (sales_not_weak or revenue_not_weak):
         return {"type": "premium_accepted", "summary_cn": "价格较高且销量不弱，存在溢价承接", "amount_gap": float(amount_gap)}
     if abs(price_gap) <= price_neutral_threshold and (sales_gap > 0 or amount_gap > 0):
         return {"type": "share_conversion", "summary_cn": "价格持平但销量更强，偏份额转化"}

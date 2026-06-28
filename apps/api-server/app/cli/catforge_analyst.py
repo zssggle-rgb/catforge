@@ -1240,6 +1240,9 @@ def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[s
     for row in rows:
         category = str(row.get("business_claim_type_cn") or "未分类卖点")
         grouped.setdefault(category, []).append(row)
+    positive_categories = {"高溢价卖点", "份额转化卖点", "客户获得价值卖点"}
+    if not any(grouped.get(category) for category in positive_categories):
+        lines.append("当前没有形成可稳定量化的正向用户支付价值卖点；以下结果更多用于说明入围门槛、待激活机会、竞品拦截和价格压力。")
     for category in _claim_value_cli_category_order():
         items = grouped.get(category, [])
         if not items:
@@ -1249,16 +1252,41 @@ def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[s
             claim_name = str(item.get("claim_name") or item.get("claim_code") or "未命名卖点")
             price = _decimal(item.get("sku_level_user_payment_value_abs")) or Decimal("0")
             sales = _decimal(item.get("sku_level_weekly_sales_lift_abs")) or Decimal("0")
-            score = _format_number(item.get("claim_value_score"))
             contexts = "、".join(str(value) for value in (item.get("main_contexts") or [])[:4]) or "相关价值战场"
             evidence = str(item.get("evidence_summary_cn") or "").strip()
             lines.append(
                 f"- {claim_name}：{_sku_level_claim_value_sentence(category, price, sales)}；"
-                f"卖点价值分{score or '暂无稳定分'}；主要成立场景：{contexts}。"
+                f"主要成立场景：{contexts}。"
                 f"{evidence}"
             )
+            if category in positive_categories:
+                for detail in _sku_level_positive_context_lines(item):
+                    lines.append(detail)
     lines.append("说明：以上为 SKU 层汇总结果，计算时先在单个价值战场内判断卖点支付价值，再按战场相关度汇总；用户任务、目标客群和整体市场池作为解释证据，不直接重复累加。")
     return "\n".join(lines)
+
+
+def _sku_level_positive_context_lines(item: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for context in [value for value in (item.get("context_values") or []) if isinstance(value, dict)][:3]:
+        price = _format_money(context.get("price_premium_abs"))
+        sales = _format_volume(context.get("weekly_sales_lift_abs"))
+        pool_effect = context.get("pool_effect") or {}
+        pool_price = _format_money(pool_effect.get("pool_claim_price_delta_abs"))
+        pool_sales = _format_volume(pool_effect.get("pool_claim_weekly_sales_delta_abs"))
+        context_name = str(context.get("context_name") or context.get("context_code") or "当前价值战场")
+        parts = []
+        if price:
+            parts.append(f"本品可解释价差约{price}")
+        if sales:
+            parts.append(f"可解释销量约{sales}台/周")
+        if pool_price:
+            parts.append(f"可比池卖点组价格差异约{pool_price}")
+        if pool_sales:
+            parts.append(f"可比池卖点组销量差异约{pool_sales}台/周")
+        if parts:
+            lines.append(f"  - {context_name}：{'；'.join(parts)}。")
+    return lines
 
 
 def _sku_level_claim_value_sentence(category: str, price: Decimal, sales: Decimal) -> str:
