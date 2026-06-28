@@ -3474,13 +3474,20 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert markdown.index("## 重点竞品看板") < markdown.index("## 一、分析结论")
     dashboard_section = markdown.split("## 一、分析结论", 1)[0]
     assert "### 重点竞品 Top 3" in dashboard_section
-    assert "1. **创维 65A7H PRO**｜首选直接竞品｜" in dashboard_section
-    assert "### 业务拆解" in dashboard_section
-    assert "- **价值战场**：" in dashboard_section
-    assert "- **用户任务**：" in dashboard_section
-    assert "- **目标客群**：" in dashboard_section
-    assert "- **共同锚点**：" in dashboard_section
-    assert "- **市场验证**：" in dashboard_section
+    assert "| 排名 | 竞品 | 角色 | 压力 | 重合 |" in dashboard_section
+    assert "| 1 | 创维 65A7H PRO | 首选直接 |" in dashboard_section
+    assert "### 多维评分雷达图数据" in dashboard_section
+    assert "| 维度 | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in dashboard_section
+    assert "| 购买池 |" in dashboard_section
+    assert "| 价值战场 |" in dashboard_section
+    assert "| 用户任务 |" in dashboard_section
+    assert "| 目标客群 |" in dashboard_section
+    assert "| 价值锚点 |" in dashboard_section
+    assert "| 市场验证 |" in dashboard_section
+    assert "### 市场验证条形图" in dashboard_section
+    assert "| 竞品 | 周均销量 | 重叠周 | 量级 |" in dashboard_section
+    assert "■■" in dashboard_section
+    assert "业务拆解" not in dashboard_section
     assert "### 看板 1" not in dashboard_section
     assert "两款产品共同争夺" not in dashboard_section
     assert "会影响同一批用户的最终候选清单" not in dashboard_section
@@ -3587,6 +3594,14 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert dashboard["schema_version"] == "competitor_dashboard_v1"
     assert dashboard["display_policy"]["main_answer"] == "feishu_card"
     assert dashboard["competitors"][0]["name"] == "创维 65A7H PRO"
+    assert [row["dimension_cn"] for row in dashboard["competitors"][0]["score_dimensions"]] == [
+        "购买池",
+        "价值战场",
+        "用户任务",
+        "目标客群",
+        "价值锚点",
+        "市场验证",
+    ]
     assert [row["dimension_cn"] for row in dashboard["competitors"][0]["overlap_rows"]] == ["价值战场", "用户任务", "目标客群"]
     assert all(row["matched_points_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
     assert all(row["impact_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
@@ -3595,13 +3610,33 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     card_json = json.dumps(card, ensure_ascii=False)
     assert card["schema"] == "2.0"
     assert card["config"]["summary"]["content"] == "海信 65E7Q 重点竞品看板"
-    assert [element["tag"] for element in card["body"]["elements"]] == ["markdown", "hr", "markdown", "hr", "markdown"]
+    assert [element["tag"] for element in card["body"]["elements"]] == [
+        "markdown",
+        "hr",
+        "markdown",
+        "chart",
+        "hr",
+        "markdown",
+        "table",
+        "hr",
+        "markdown",
+        "table",
+    ]
     assert "创维 65A7H PRO" in card_json
-    assert "重点竞品 Top 3" in card_json
-    assert "业务拆解" in card_json
+    assert "多维评分雷达图" in card_json
+    assert '"tag": "chart"' in card_json
+    assert '"type": "radar"' in card_json
+    assert "竞品排序表" in card_json
+    assert "市场验证条形图" in card_json
+    assert '"tag": "table"' in card_json
+    assert "购买池" in card_json
     assert "价值战场" in card_json
     assert "用户任务" in card_json
     assert "目标客群" in card_json
+    assert "价值锚点" in card_json
+    assert "市场验证" in card_json
+    assert "■■" in card_json
+    assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
     assert len(card_json.encode("utf-8")) < 30_000
@@ -3649,10 +3684,32 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert "查看完整报告" in card_json
     assert "https://my.feishu.cn/docx/ReportToken" in card_json
     assert '"tag": "action"' not in card_json
-    assert [element["tag"] for element in card["body"]["elements"]] == ["markdown", "hr", "markdown", "hr", "markdown", "hr", "button"]
+    assert [element["tag"] for element in card["body"]["elements"]] == [
+        "markdown",
+        "hr",
+        "markdown",
+        "chart",
+        "hr",
+        "markdown",
+        "table",
+        "hr",
+        "markdown",
+        "table",
+        "hr",
+        "button",
+    ]
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
-    assert card["body"]["elements"][2]["content"].startswith("**重点竞品 Top 3**")
-    assert card["body"]["elements"][4]["content"].startswith("**业务拆解**")
+    assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
+    assert card["body"]["elements"][3]["tag"] == "chart"
+    radar_values = card["body"]["elements"][3]["chart_spec"]["data"]["values"]
+    assert len(radar_values) == 6
+    assert {row["dimension"] for row in radar_values} == {"购买池", "价值战场", "用户任务", "目标客群", "价值锚点", "市场验证"}
+    assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
+    assert card["body"]["elements"][5]["content"] == "**竞品排序表**"
+    assert card["body"]["elements"][6]["tag"] == "table"
+    assert card["body"]["elements"][8]["content"] == "**市场验证条形图**"
+    assert card["body"]["elements"][9]["tag"] == "table"
+    assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
     report_button = card["body"]["elements"][-1]
@@ -3664,7 +3721,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "ios_url": "https://my.feishu.cn/docx/ReportToken",
         "android_url": "https://my.feishu.cn/docx/ReportToken",
     }
-    assert "高端画质升级" in card_json
+    assert "高端画质升级" in competitor["overlap_rows"][0]["matched_points_cn"]
     assert "TV00030001" not in card_json
     assert len(card_json.encode("utf-8")) < 30_000
 
