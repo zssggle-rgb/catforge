@@ -50,6 +50,7 @@ M12C_ROLE_USER_NEED = "user_validated_need"
 M12C_ROLE_DRAG = "drag_factor"
 M12C_ROLE_OPPORTUNITY = "opportunity_gap"
 M12C_ROLE_SAMPLE = "sample_insufficient"
+M12C_ROLE_UNIQUE = "unique_payment_potential"
 
 POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
 OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C_ROLE_PRICE_UP}
@@ -85,6 +86,7 @@ M12C_CLAIM_TYPE_BRAND = "brand_claim"
 M12C_CLAIM_TYPE_INTERCEPT = "competitor_intercept_claim"
 M12C_CLAIM_TYPE_PRICE_PRESSURE = "price_pressure_claim"
 M12C_CLAIM_TYPE_SAMPLE = "sample_insufficient_claim"
+M12C_CLAIM_TYPE_UNIQUE = "unique_payment_potential_claim"
 
 M12C_SCORE_WEIGHTS = {
     "battlefield_relevance": Decimal("0.20"),
@@ -92,6 +94,12 @@ M12C_SCORE_WEIGHTS = {
     "comment_perception": Decimal("0.25"),
     "competitor_difference": Decimal("0.15"),
     "market_validation": Decimal("0.15"),
+}
+M12C_UNIQUE_SCORE_WEIGHTS = {
+    "battlefield_relevance": Decimal("0.30"),
+    "parameter_competitiveness": Decimal("0.30"),
+    "comment_perception": Decimal("0.25"),
+    "competitor_gap": Decimal("0.15"),
 }
 
 M12C_PARAM_LEVEL_LEADING = "leading_advantage"
@@ -1262,7 +1270,9 @@ def _quantification_rows(
                 pool=pool,
                 comment=comment,
             )
+            amount_basis = _amount_quantification_basis(pool, sku)
             role = _claim_role(
+                target_sku=sku,
                 has_claim=has_claim,
                 metric=metric,
                 pool=pool,
@@ -1290,6 +1300,24 @@ def _quantification_rows(
                 market_acceptance=market_acceptance,
                 parameter_competitiveness=parameter_competitiveness,
             )
+            unique_potential_scorecard: dict[str, Any] | None = None
+            if role == M12C_ROLE_UNIQUE:
+                unique_potential_scorecard = _unique_payment_potential_scorecard(
+                    pool=pool,
+                    target_sku=sku,
+                    param_strength=param_strength,
+                    comment_strength=comment_strength,
+                    semantic_strength=semantic_strength,
+                    parameter_competitiveness=parameter_competitiveness,
+                    amount_basis=amount_basis,
+                )
+                scorecard = {
+                    **scorecard,
+                    "total_score": unique_potential_scorecard["total_score"],
+                    "score_method_cn": unique_potential_scorecard["score_method_cn"],
+                    "dimensions": unique_potential_scorecard["dimensions"],
+                    "unique_payment_potential": unique_potential_scorecard,
+                }
             business_claim_type = _business_claim_type(
                 role,
                 metric,
@@ -1370,8 +1398,13 @@ def _quantification_rows(
                         "baseline_explanation_cn": target_baseline["baseline_explanation_cn"],
                         "comparison_sku_codes": target_baseline["comparison_sku_codes"],
                         "baseline_sku_codes": target_baseline["baseline_sku_codes"],
+                        "amount_quantification_ready": amount_basis["amount_quantification_ready"],
+                        "sample_grade": amount_basis["sample_grade"],
+                        "no_amount_reason_cn": amount_basis["no_amount_reason_cn"],
                     },
                     "market_acceptance": market_acceptance,
+                    "amount_quantification_basis": amount_basis,
+                    "unique_payment_potential_scorecard": unique_potential_scorecard or {},
                     "value_space": {
                         "raw_price_gap": float(_q4(market.price - baseline_price)),
                         "effective_price_space": float(effective_price_space),
@@ -1385,7 +1418,15 @@ def _quantification_rows(
                 },
                 "evidence_ids_json": list(claim.evidence_ids if claim else ()),
                 "reason_cn": _quant_reason_cn(pool, role, metric),
-                "quality_flags_json": [*pool.quality_flags, *(["comment_negative"] if comment.has_negative(pool.claim_code) else [])],
+                "quality_flags_json": [
+                    *_unique_nonempty(
+                        [
+                            *pool.quality_flags,
+                            *amount_basis.get("quality_flags", ()),
+                            *(["comment_negative"] if comment.has_negative(pool.claim_code) else []),
+                        ]
+                    )
+                ],
                 "_pool_claim_price_delta_abs": _q4(metric["price_premium_abs"]),
                 "_pool_claim_weekly_sales_delta_abs": _q6(metric["weekly_sales_lift_abs"]),
                 "_pool_claim_weekly_sales_amount_delta_abs": _q6(metric["weekly_sales_amount_lift_abs"]),
@@ -2109,8 +2150,187 @@ def _claim_source_type(
     return M12C_COMPETITOR_GAP
 
 
+def _unique_nonempty(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _amount_quantification_basis(pool: ClaimPool, target_sku: str) -> dict[str, Any]:
+    reasons: list[str] = []
+    quality_flags: list[str] = []
+    if pool.pool_relax_level in {"L3", "L4"}:
+        reasons.append("可比池已放宽到趋势观察或兜底层级，不能分配金额。")
+        quality_flags.append("relaxed_pool_not_amount_quantifiable")
+    if pool.pool_relax_level == "L2" and pool.sample_status != "sufficient":
+        reasons.append("相邻价格带放宽后样本仍不足，不能分配金额。")
+        quality_flags.append("l2_sample_not_sufficient")
+    if pool.sample_status != "sufficient":
+        reasons.append("可比池样本状态不足，不能稳定量化。")
+        quality_flags.append("sample_not_sufficient_for_amount")
+    if len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT:
+        reasons.append("有卖点组少于 2 个 SKU，不能形成稳定卖点组。")
+        quality_flags.append("with_claim_group_too_small")
+    if len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT:
+        reasons.append("对照组少于 2 个 SKU，不能形成稳定对照组。")
+        quality_flags.append("without_claim_group_too_small")
+    if target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
+        reasons.append("目标 SKU 是有卖点组唯一样本，不能用组间价差量化本品卖点金额。")
+        quality_flags.append("target_only_with_claim_sample")
+    if "l4_threshold_only" in pool.quality_flags:
+        reasons.append("L4 兜底池只能用于门槛或待验证判断。")
+        quality_flags.append("l4_threshold_only_no_amount")
+    ready = not reasons
+    sample_grade = "可量化" if ready else ("本品孤例/无有效对照" if "target_only_with_claim_sample" in quality_flags else "对照样本不足")
+    return {
+        "amount_quantification_ready": ready,
+        "sample_grade": sample_grade,
+        "no_amount_reason_cn": "；".join(_unique_nonempty(reasons)) or "",
+        "quality_flags": tuple(_unique_nonempty(quality_flags)),
+    }
+
+
+def _is_unique_payment_potential_candidate(
+    *,
+    has_claim: bool,
+    pool: ClaimPool,
+    target_sku: str,
+    param_strength: Decimal,
+    comment_strength: Decimal,
+    semantic_strength: Decimal,
+    battlefield_claim_relevance: Decimal,
+    parameter_competitiveness: Mapping[str, Any] | None,
+    source_type: str,
+) -> bool:
+    if not has_claim or source_type != M12C_TARGET_FACT_CLAIM:
+        return False
+    if pool.claim_code in M12C_FORCE_THRESHOLD_CLAIM_CODES:
+        return False
+    if _amount_quantification_basis(pool, target_sku)["amount_quantification_ready"]:
+        return False
+    if semantic_strength < Decimal("0.5000") or battlefield_claim_relevance < Decimal("0.7000"):
+        return False
+    param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
+    param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
+    param_evidence = (
+        (param_level in {M12C_PARAM_LEVEL_LEADING, M12C_PARAM_LEVEL_STRONG} and not param_sparse)
+        or param_strength >= Decimal("0.7500")
+    )
+    user_evidence = comment_strength >= Decimal("0.5000")
+    weak_control = (
+        len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT
+        or len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT
+        or (target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1)
+    )
+    return weak_control and (param_evidence or user_evidence)
+
+
+def _unique_payment_potential_scorecard(
+    *,
+    pool: ClaimPool,
+    target_sku: str,
+    param_strength: Decimal,
+    comment_strength: Decimal,
+    semantic_strength: Decimal,
+    parameter_competitiveness: Mapping[str, Any] | None,
+    amount_basis: Mapping[str, Any],
+) -> dict[str, Any]:
+    coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    dimensions = [
+        _unique_score_dimension(
+            code="battlefield_relevance",
+            name_cn="战场相关度",
+            raw_score=_context_relevance_score(pool.context_type, semantic_strength),
+            reason_cn=_context_relevance_reason(pool, semantic_strength),
+        ),
+        _unique_score_dimension(
+            code="parameter_competitiveness",
+            name_cn="参数竞争力",
+            raw_score=_parameter_competitiveness_score(param_strength, parameter_competitiveness),
+            reason_cn=_parameter_competitiveness_reason(True, param_strength, parameter_competitiveness),
+        ),
+        _unique_score_dimension(
+            code="comment_perception",
+            name_cn="用户评论感知",
+            raw_score=_comment_score(comment_strength, False),
+            reason_cn=_comment_reason(comment_strength, False),
+        ),
+        _unique_score_dimension(
+            code="competitor_gap",
+            name_cn="竞品缺口",
+            raw_score=_unique_competitor_gap_score(pool, target_sku, coverage_rate),
+            reason_cn=_unique_competitor_gap_reason(pool, target_sku, coverage_rate),
+        ),
+    ]
+    total_score = _q4(sum(_q4(Decimal(str(item["raw_score"])) * Decimal(str(item["weight"]))) for item in dimensions))
+    if total_score >= Decimal("75"):
+        potential_level_cn = "高潜力"
+    elif total_score >= Decimal("60"):
+        potential_level_cn = "中等潜力"
+    else:
+        potential_level_cn = "低潜力"
+    return {
+        "total_score": float(total_score),
+        "score_unit": "0-100",
+        "potential_level_cn": potential_level_cn,
+        "score_method_cn": "人无我有支付价值潜力分 = 战场相关度30% + 参数竞争力30% + 用户评论感知25% + 竞品缺口15%。",
+        "dimensions": dimensions,
+        "no_amount_reason_cn": amount_basis.get("no_amount_reason_cn") or "同战场缺少稳定对照样本，不能量化金额。",
+        "verification_required_cn": "需要后续在同价值战场、同尺寸价格池中继续观察竞品跟进、用户评论、销量承接和价格变化。",
+        "sample_grade": amount_basis.get("sample_grade") or "对照样本不足",
+        "pool_relax_level": pool.pool_relax_level,
+        "pool_key": f"{pool.context_type}:{pool.context_code}:{pool.size_tier}:{pool.price_band_group}:{pool.claim_code}",
+        "report_explanation_cn": (
+            f"{pool.claim_name} 在 {pool.context_name} 中具备提高用户最高支付意愿的潜力，"
+            "但当前同战场可比对照不足，只能输出潜力和证据链，不能输出确定金额。"
+        ),
+    }
+
+
+def _unique_score_dimension(*, code: str, name_cn: str, raw_score: Decimal, reason_cn: str) -> dict[str, Any]:
+    weight = M12C_UNIQUE_SCORE_WEIGHTS[code]
+    raw = _q4(_clamp(raw_score, Decimal("0"), Decimal("100")))
+    return {
+        "code": code,
+        "name_cn": name_cn,
+        "weight": float(weight),
+        "raw_score": float(raw),
+        "weighted_score": float(_q4(raw * weight)),
+        "reason_cn": reason_cn,
+    }
+
+
+def _unique_competitor_gap_score(pool: ClaimPool, target_sku: str, coverage_rate: Decimal) -> Decimal:
+    if target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
+        return Decimal("90")
+    if len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT:
+        return Decimal("82")
+    if len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT:
+        return Decimal("62")
+    if coverage_rate <= Decimal("0.3000"):
+        return Decimal("78")
+    return Decimal("45")
+
+
+def _unique_competitor_gap_reason(pool: ClaimPool, target_sku: str, coverage_rate: Decimal) -> str:
+    if target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
+        return "目标 SKU 是同战场有卖点组的唯一样本，说明竞品缺少可直接对照的同类表达。"
+    if len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT:
+        return "同战场有卖点组样本过少，卖点具备稀缺性，但不能量化金额。"
+    if len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT:
+        return "同战场缺少稳定对照组，不能判断组间价差。"
+    return f"同战场约 {float(_q4(coverage_rate * Decimal('100'))):.0f}% SKU 具备该卖点，差异性需要继续验证。"
+
+
 def _claim_role(
     *,
+    target_sku: str,
     has_claim: bool,
     metric: Mapping[str, Any],
     pool: ClaimPool,
@@ -2139,6 +2359,7 @@ def _claim_role(
     price_positive = price_delta > Decimal("0")
     sales_positive = sales_delta > Decimal("0")
     amount_positive = amount_delta > Decimal("0")
+    amount_basis = _amount_quantification_basis(pool, target_sku)
     if not has_claim:
         if source_type == M12C_TARGET_PARAM_CAPABILITY:
             return M12C_ROLE_WEAK_USER if param_can_premium else M12C_ROLE_BRAND
@@ -2151,6 +2372,24 @@ def _claim_role(
             return M12C_ROLE_OPPORTUNITY
         return M12C_ROLE_SAMPLE
     coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
+    if not amount_basis["amount_quantification_ready"]:
+        if coverage_rate >= Decimal("0.7500"):
+            return M12C_ROLE_BASIC
+        if _is_unique_payment_potential_candidate(
+            has_claim=has_claim,
+            pool=pool,
+            target_sku=target_sku,
+            param_strength=param_strength,
+            comment_strength=comment_strength,
+            semantic_strength=semantic_strength,
+            battlefield_claim_relevance=battlefield_claim_relevance,
+            parameter_competitiveness=parameter_competitiveness,
+            source_type=source_type,
+        ):
+            return M12C_ROLE_UNIQUE
+        if param_strength >= Decimal("0.6000") or comment_strength >= Decimal("0.6000"):
+            return M12C_ROLE_WEAK_USER
+        return M12C_ROLE_SAMPLE
     positive_price_value = (
         price_positive
         and amount_positive
@@ -2158,9 +2397,7 @@ def _claim_role(
         and semantic_strength >= Decimal("0.5000")
         and max(param_strength, comment_strength) >= Decimal("0.6000")
         and param_can_premium
-        and pool.pool_relax_level != "L4"
-        and pool.sample_status != "insufficient"
-        and (pool.sample_status != "weak" or pool.pool_relax_level == "L3")
+        and amount_basis["amount_quantification_ready"]
     )
     if battlefield_claim_relevance < Decimal("0.9000"):
         if sales_positive and max(comment_strength, param_strength) >= Decimal("0.6000") and (param_can_premium or comment_strength >= Decimal("0.8000")):
@@ -2536,6 +2773,8 @@ def _business_claim_type(
     market_type = str((market_position or {}).get("type") or "")
     param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
     param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
+    if role == M12C_ROLE_UNIQUE:
+        return M12C_CLAIM_TYPE_UNIQUE
     if role == M12C_ROLE_PREMIUM and parameter_competitiveness is not None:
         if param_sparse:
             return M12C_CLAIM_TYPE_SAMPLE
@@ -2577,6 +2816,7 @@ def _business_claim_type_label(claim_type: str) -> str:
         M12C_CLAIM_TYPE_INTERCEPT: "竞品拦截卖点",
         M12C_CLAIM_TYPE_PRICE_PRESSURE: "价格压力卖点",
         M12C_CLAIM_TYPE_SAMPLE: "样本不足待复核",
+        M12C_CLAIM_TYPE_UNIQUE: "人无我有型支付价值卖点",
     }.get(claim_type, "未分类卖点")
 
 
@@ -2591,6 +2831,7 @@ def _business_claim_type_meaning_cn(claim_type: str) -> str:
         M12C_CLAIM_TYPE_INTERCEPT: "竞品具备并形成市场验证，本品缺失或表达弱，会影响购买转化。",
         M12C_CLAIM_TYPE_PRICE_PRESSURE: "卖点表达、参数或用户反馈没有支撑当前价格，可能削弱成交理由。",
         M12C_CLAIM_TYPE_SAMPLE: "样本或对照组不足，只能作为观察线索。",
+        M12C_CLAIM_TYPE_UNIQUE: "本品具备同池稀缺卖点或关键参数优势，可能提高用户最高支付意愿，但当前缺少稳定对照样本，不能量化金额。",
     }.get(claim_type, "当前分类尚未定义。")
 
 
@@ -2951,6 +3192,8 @@ def _business_value_label(role: str, metric: Mapping[str, Any]) -> str:
         return "基础门槛卖点"
     if role == M12C_ROLE_VALUE_BUNDLE:
         return "组合型增值卖点"
+    if role == M12C_ROLE_UNIQUE:
+        return "人无我有型支付价值卖点"
     if role == M12C_ROLE_WEAK_USER:
         return "用户感知不足卖点"
     if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
@@ -2978,6 +3221,8 @@ def _business_value_meaning_cn(role: str, metric: Mapping[str, Any]) -> str:
         return "同池普遍具备，有了不加价，缺了会掉队。"
     if role == M12C_ROLE_VALUE_BUNDLE or (role == M12C_ROLE_PREMIUM and price_delta <= 0):
         return "单点不一定独立溢价，但与一组高价值卖点组合后参与高端价值解释。"
+    if role == M12C_ROLE_UNIQUE:
+        return "本品具备同池稀缺卖点或关键参数优势，可能提高用户最高支付意愿；当前对照样本不足，只输出潜力和证据链，不输出金额。"
     if role == M12C_ROLE_WEAK_USER:
         return "参数或卖点存在，但评论验证弱、负向明显，或弱于高价竞品。"
     if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
@@ -3010,6 +3255,7 @@ def _quant_reason_cn(pool: ClaimPool, role: str, metric: Mapping[str, Any]) -> s
         M12C_ROLE_SALES: "强销量卖点",
         M12C_ROLE_BASIC: "基础门槛卖点",
         M12C_ROLE_VALUE_BUNDLE: "组合型增值卖点",
+        M12C_ROLE_UNIQUE: "人无我有型支付价值卖点",
         M12C_ROLE_WEAK_USER: "用户感知不足卖点",
         M12C_ROLE_HIGH_PRICE_INTERCEPT: "高价竞品拦截卖点",
         M12C_ROLE_PRICE_UP: "价格上探机会卖点",
@@ -3019,6 +3265,11 @@ def _quant_reason_cn(pool: ClaimPool, role: str, metric: Mapping[str, Any]) -> s
         M12C_ROLE_OPPORTUNITY: "机会缺口",
         M12C_ROLE_SAMPLE: "样本不足",
     }.get(role, role)
+    if role == M12C_ROLE_UNIQUE:
+        return (
+            f"{pool.claim_name} 被判为{role_cn}；同战场可比池缺少稳定对照或目标 SKU 是有卖点组孤例，"
+            "当前只说明该卖点可能提高用户最高支付意愿，不使用组间价差量化金额。"
+        )
     return (
         f"{pool.claim_name} 被判为{role_cn}；所在可比池有卖点组相对对照组价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
         f"周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。该数值是组间可观测差异，不是单一卖点因果贡献。"

@@ -80,6 +80,7 @@ def test_m12c_missing_high_price_claim_is_retained_as_intercept_or_price_up() ->
     pool = _m12c_test_pool()
 
     lower_price_role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=False,
         metric=metric,
         pool=pool,
@@ -90,6 +91,7 @@ def test_m12c_missing_high_price_claim_is_retained_as_intercept_or_price_up() ->
         market_price=Decimal("5200"),
     )
     higher_price_role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=False,
         metric=metric,
         pool=pool,
@@ -199,7 +201,7 @@ def test_m12c_price_pressure_does_not_become_premium_claim() -> None:
     assert claim_type == m12c_service.M12C_CLAIM_TYPE_PRICE_PRESSURE
 
 
-def test_m12c_high_coverage_claim_can_remain_premium_when_price_value_is_supported() -> None:
+def test_m12c_high_coverage_l3_claim_is_threshold_not_premium() -> None:
     metric = {
         "with_price_median": Decimal("6500"),
         "price_premium_abs": Decimal("900"),
@@ -226,6 +228,7 @@ def test_m12c_high_coverage_claim_can_remain_premium_when_price_value_is_support
     )
 
     role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=True,
         metric=metric,
         pool=pool,
@@ -236,7 +239,7 @@ def test_m12c_high_coverage_claim_can_remain_premium_when_price_value_is_support
         market_price=Decimal("6200"),
     )
 
-    assert role == m12c_service.M12C_ROLE_PREMIUM
+    assert role == m12c_service.M12C_ROLE_BASIC
 
 
 def test_m12c_interface_spec_claim_is_threshold_before_premium() -> None:
@@ -266,6 +269,7 @@ def test_m12c_interface_spec_claim_is_threshold_before_premium() -> None:
     )
 
     role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=True,
         metric=metric,
         pool=pool,
@@ -349,6 +353,7 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
         "effect_confidence": Decimal("0.8500"),
     }
     role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=True,
         metric=metric,
         pool=pool,
@@ -380,6 +385,7 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
         param_profiles=hdmi_params,
     )
     hdmi_role = m12c_service._claim_role(
+        target_sku="sku-a",
         has_claim=True,
         metric=metric,
         pool=hdmi_pool,
@@ -2581,6 +2587,7 @@ def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
     )
 
     role = m12c_service._claim_role(
+        target_sku="TV00029112",
         has_claim=True,
         metric={
             "price_premium_abs": Decimal("427.4241"),

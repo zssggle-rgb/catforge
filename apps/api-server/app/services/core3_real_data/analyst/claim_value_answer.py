@@ -24,6 +24,7 @@ CATEGORY_ORDER = (
     "高溢价卖点",
     "份额转化卖点",
     "客户获得价值卖点",
+    "人无我有型支付价值卖点",
     "门槛卖点",
     "待激活卖点",
     "厂家主张卖点",
@@ -93,6 +94,7 @@ def render_claim_value_short_answer(
     gap_rows = _non_target_claim_rows(summary_rows)
     premium = _rows_by_category(target_rows, "高溢价卖点")[:4]
     share = _rows_by_category(target_rows, "份额转化卖点")[:3]
+    unique = _rows_by_category(target_rows, "人无我有型支付价值卖点")[:3]
     threshold = _rows_by_category(target_rows, "门槛卖点")[:4]
     pending = _rows_by_category(target_rows, "待激活卖点")[:3]
     target_risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(target_rows, category)][:3]
@@ -104,6 +106,8 @@ def render_claim_value_short_answer(
         lines.append("当前没有形成稳定高溢价卖点，正向价值更多需要看份额转化、客户获得价值或待激活卖点。")
     if share:
         lines.append(f"份额转化卖点包括{_claim_names(share)}，更适合解释同价位下的销量承接。")
+    if unique:
+        lines.append(f"人无我有型支付价值卖点包括{_claim_names(unique)}，具备提高用户最高支付意愿的潜力，但当前同战场对照不足，暂不量化金额。")
     if threshold:
         lines.append(f"门槛卖点包括{_claim_names(threshold)}，有助于进入购买清单，但不作为单独加价理由。")
     if pending:
@@ -139,25 +143,29 @@ def render_claim_value_report(*, title: str, target: dict[str, Any], payload: di
         "",
         *_positive_detail_lines(target_summary_rows, category="高溢价卖点"),
         "",
-        "## 四、分价值战场拆解",
+        "## 四、人无我有型支付价值卖点",
+        "",
+        *_unique_potential_lines(target_summary_rows),
+        "",
+        "## 五、分价值战场拆解",
         "",
         *_battlefield_breakdown_lines(target_detail_rows),
         "",
-        "## 五、门槛、待激活和风险卖点",
+        "## 六、门槛、待激活和风险卖点",
         "",
         *_non_positive_lines(target_summary_rows),
         "",
-        "## 六、竞品拦截与机会缺口",
+        "## 七、竞品拦截与机会缺口",
         "",
         *_competitor_gap_lines(summary_rows),
         "",
-        "## 七、可追溯计算依据",
+        "## 八、可追溯计算依据",
         "",
         *_method_lines(payload),
         "",
-        "## 八、口径说明",
+        "## 九、口径说明",
         "",
-        "本报告把本品已成立卖点和竞品拦截/机会缺口分开呈现。本品已成立卖点以 M04C 卖点事实为边界；竞品侧机会项用于识别外部拦截方向，不计入本品当前卖点数量。可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。",
+        "本报告把本品已成立卖点和竞品拦截/机会缺口分开呈现。本品已成立卖点以 M04C 卖点事实为边界；竞品侧机会项用于识别外部拦截方向，不计入本品当前卖点数量。可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊，用于判断卖点价值强弱和排序，不代表该卖点单独导致价格或销量变化。人无我有型支付价值卖点只输出潜力等级和证据链，不输出金额。",
     ]
     return "\n".join(lines).strip() + "\n"
 
@@ -167,6 +175,7 @@ def _conclusion_lines(target: dict[str, Any], summary_rows: list[dict[str, Any]]
     target_rows = _target_claim_rows(summary_rows)
     gap_rows = _non_target_claim_rows(summary_rows)
     premium = _rows_by_category(target_rows, "高溢价卖点")[:5]
+    unique = _rows_by_category(target_rows, "人无我有型支付价值卖点")[:5]
     threshold = _rows_by_category(target_rows, "门槛卖点")[:5]
     pending = _rows_by_category(target_rows, "待激活卖点")[:5]
     risks = [row for category in RISK_CATEGORIES for row in _rows_by_category(target_rows, category)][:5]
@@ -180,6 +189,8 @@ def _conclusion_lines(target: dict[str, Any], summary_rows: list[dict[str, Any]]
         lines.append("当前没有稳定高溢价卖点，说明本品卖点更多表现为入围门槛、份额转化或待激活能力。")
     if threshold:
         lines.append(f"门槛卖点为：{_claim_names(threshold)}。这些能力有助于进入用户候选清单，但不宜直接解释为加价来源。")
+    if unique:
+        lines.append(f"人无我有型支付价值卖点为：{_claim_names(unique)}。这些能力可能提高用户最高支付意愿，但当前同战场缺少稳定对照样本，因此只输出潜力和验证条件，不输出金额。")
     if pending:
         lines.append(f"待激活卖点为：{_claim_names(pending)}。这些卖点需要通过导购表达、内容教育或产品证据强化，才能转化为用户支付理由。")
     if risks:
@@ -248,6 +259,38 @@ def _positive_detail_lines(rows: list[dict[str, Any]], *, category: str) -> list
     return lines
 
 
+def _unique_potential_lines(rows: list[dict[str, Any]]) -> list[str]:
+    items = _rows_by_category(rows, "人无我有型支付价值卖点")
+    if not items:
+        return ["当前没有人无我有型支付价值卖点。"]
+    lines = [
+        "这类卖点代表本品在同价值战场里具备稀缺能力或关键参数优势，可能提高用户最高支付意愿；但由于同战场缺少稳定对照样本，当前不输出金额。",
+        "",
+        "| 卖点 | 主要成立战场 | 潜力等级/分数 | 关键参数竞争力 | 当前不量化原因 | 验证条件 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in items[:12]:
+        scorecard = _unique_scorecard(row)
+        score = _decimal(scorecard.get("total_score"))
+        potential = str(scorecard.get("potential_level_cn") or "").strip()
+        score_text = f"{potential}（{score.quantize(Decimal('1'), rounding=ROUND_HALF_UP)}分）" if score is not None else potential or "潜力待复核"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
+                    _md("、".join(str(item) for item in (row.get("main_contexts") or [])[:4]) or "相关战场待复核"),
+                    _md(score_text),
+                    _md(_parameter_competitiveness_label(row)),
+                    _md(str(scorecard.get("no_amount_reason_cn") or "同战场对照样本不足，不能量化金额。")),
+                    _md(str(scorecard.get("verification_required_cn") or "需要后续观察竞品跟进、评论和市场承接。")),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
     battlefield_rows = [row for row in rows if str(row.get("context_type") or "") == "battlefield"]
     if not battlefield_rows:
@@ -265,16 +308,17 @@ def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
         for row in _sort_detail_rows(items)[:12]:
             pool_effect = row.get("pool_effect") or {}
             sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
+            unique_row = _category(row) == "人无我有型支付价值卖点"
             lines.append(
                 "| "
                 + " | ".join(
                     [
                         _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
                         _md(_category(row)),
-                        _md(_money(pool_effect.get("pool_claim_price_delta_abs")) or "无稳定差异"),
-                        _md((_volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) + "台/周") if _volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) else "无稳定差异"),
-                        _md(_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "不作为正向分摊"),
-                        _md((_volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) + "台/周") if _volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) else "不作为正向分摊"),
+                        _md("对照不足，不展示组间价差" if unique_row else (_money(pool_effect.get("pool_claim_price_delta_abs")) or "无稳定差异")),
+                        _md("对照不足，不展示组间销量差异" if unique_row else ((_volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) + "台/周") if _volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) else "无稳定差异")),
+                        _md("暂不量化" if unique_row else (_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "不作为正向分摊")),
+                        _md("暂不量化" if unique_row else ((_volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) + "台/周") if _volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) else "不作为正向分摊")),
                     ]
                 )
                 + " |"
@@ -322,7 +366,8 @@ def _method_lines(payload: dict[str, Any]) -> list[str]:
         "3. 观察可比池中有卖点组与对照组的价格差异、销量差异和销额差异。",
         "4. 再判断本品相对直接可比基准的市场位置，是溢价承接、份额转化、客户获得价值、价格压力，还是支付价值未验证。",
         "5. 对卖点下的支撑参数做战场内竞争力判断，区分领先优势、较强优势、基础门槛、弱或缺失、样本不足。",
-        "6. 最后结合参数竞争力、评论感知、竞品差异、样本充分性和战场权重，把可解释金额和销量分摊到卖点。",
+        "6. 如果目标 SKU 是有卖点组孤例，或有卖点组/对照组不足，则进入人无我有型支付价值判断，只输出潜力和验证条件，不分配金额。",
+        "7. 最后结合参数竞争力、评论感知、竞品差异、样本充分性和战场权重，把可解释金额和销量分摊到可量化卖点。",
     ]
     if note:
         lines.append(f"补充口径：{note}")
@@ -435,6 +480,33 @@ def _parameter_competitiveness_snapshot(row: dict[str, Any]) -> dict[str, Any]:
     return max(snapshots, key=lambda item: _decimal(item.get("overall_parameter_competitiveness_score")) or Decimal("0"))
 
 
+def _unique_scorecard(row: dict[str, Any]) -> dict[str, Any]:
+    supporting = row.get("supporting_dimensions") or {}
+    if isinstance(supporting, dict) and isinstance(supporting.get("unique_payment_potential_scorecard"), dict):
+        scorecard = supporting.get("unique_payment_potential_scorecard") or {}
+        if scorecard:
+            return scorecard
+    scorecard = row.get("unique_payment_potential_scorecard")
+    if isinstance(scorecard, dict) and scorecard:
+        return scorecard
+    contexts = [item for item in (row.get("context_values") or []) if isinstance(item, dict)]
+    candidates: list[dict[str, Any]] = []
+    for item in contexts:
+        supporting_item = item.get("supporting_dimensions") if isinstance(item.get("supporting_dimensions"), dict) else {}
+        scorecard = supporting_item.get("unique_payment_potential_scorecard") if isinstance(supporting_item, dict) else None
+        if isinstance(scorecard, dict) and scorecard:
+            candidates.append(scorecard)
+        direct = item.get("unique_payment_potential_scorecard")
+        if isinstance(direct, dict) and direct:
+            candidates.append(direct)
+        nested = (item.get("scorecard") or {}).get("unique_payment_potential") if isinstance(item.get("scorecard"), dict) else None
+        if isinstance(nested, dict) and nested:
+            candidates.append(nested)
+    if not candidates:
+        return {}
+    return max(candidates, key=lambda item: _decimal(item.get("total_score")) or Decimal("0"))
+
+
 def _key_param_labels(snapshot: dict[str, Any]) -> list[str]:
     labels: list[str] = []
     for item in snapshot.get("key_param_results") or []:
@@ -512,6 +584,7 @@ def _claim_type_meaning(category: str) -> str:
         "高溢价卖点": "用户愿意为该卖点支付更高价格，并且参数、评论和市场验证共同成立。",
         "份额转化卖点": "该卖点不一定抬高价格，但能解释同价或相近价格下的销量/份额优势。",
         "客户获得价值卖点": "该卖点让用户觉得产品更值，主要体现为价格压力更小或销量承接更强。",
+        "人无我有型支付价值卖点": "本品具备同池稀缺卖点或关键参数优势，可能提高用户最高支付意愿，但当前缺少稳定对照样本，不能量化金额。",
         "门槛卖点": "该卖点是进入购买清单的基础要求，有了不一定加价，缺了会掉队。",
         "待激活卖点": "本品有参数或厂家表达，但用户评论或市场验证还不足，需要继续激活。",
         "厂家主张卖点": "当前主要是厂家主张，尚未形成稳定用户支付价值。",

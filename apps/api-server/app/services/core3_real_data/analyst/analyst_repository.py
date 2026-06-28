@@ -73,6 +73,7 @@ M12C_ROLE_USER_NEED = "user_validated_need"
 M12C_ROLE_DRAG = "drag_factor"
 M12C_ROLE_OPPORTUNITY = "opportunity_gap"
 M12C_ROLE_SAMPLE = "sample_insufficient"
+M12C_ROLE_UNIQUE = "unique_payment_potential"
 
 M12C_POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
 M12C_GAP_ROLES = {
@@ -86,27 +87,29 @@ M12C_ROLE_PRIORITY = {
     M12C_ROLE_PREMIUM: 0,
     M12C_ROLE_SALES: 1,
     M12C_ROLE_VALUE_BUNDLE: 2,
-    M12C_ROLE_BASIC: 3,
-    M12C_ROLE_HIGH_PRICE_INTERCEPT: 4,
-    M12C_ROLE_PRICE_UP: 5,
-    M12C_ROLE_WEAK_USER: 6,
-    M12C_ROLE_USER_NEED: 7,
-    M12C_ROLE_DRAG: 8,
-    M12C_ROLE_OPPORTUNITY: 9,
-    M12C_ROLE_BRAND: 10,
-    M12C_ROLE_SAMPLE: 11,
+    M12C_ROLE_UNIQUE: 3,
+    M12C_ROLE_BASIC: 4,
+    M12C_ROLE_HIGH_PRICE_INTERCEPT: 5,
+    M12C_ROLE_PRICE_UP: 6,
+    M12C_ROLE_WEAK_USER: 7,
+    M12C_ROLE_USER_NEED: 8,
+    M12C_ROLE_DRAG: 9,
+    M12C_ROLE_OPPORTUNITY: 10,
+    M12C_ROLE_BRAND: 11,
+    M12C_ROLE_SAMPLE: 12,
 }
 
 M12C_BUSINESS_CLAIM_TYPE_PRIORITY = {
     "高溢价卖点": 0,
     "份额转化卖点": 1,
     "客户获得价值卖点": 2,
-    "门槛卖点": 3,
+    "人无我有型支付价值卖点": 3,
     "待激活卖点": 4,
-    "厂家主张卖点": 5,
-    "竞品拦截卖点": 6,
-    "价格压力卖点": 7,
-    "样本不足待复核": 8,
+    "门槛卖点": 5,
+    "厂家主张卖点": 6,
+    "竞品拦截卖点": 7,
+    "价格压力卖点": 8,
+    "样本不足待复核": 9,
 }
 
 
@@ -2522,6 +2525,7 @@ def _sku_level_claim_value_summary(rows: Sequence[dict[str, Any]]) -> list[dict[
                         "weekly_sales_amount_lift_abs": ((row.get("estimated_contribution") or {}).get("weekly_sales_amount_lift_abs")),
                         "pool_effect": row.get("pool_effect") or {},
                         "scorecard": row.get("scorecard") or {},
+                        "unique_payment_potential_scorecard": (row.get("supporting_dimensions") or {}).get("unique_payment_potential_scorecard") or (row.get("scorecard") or {}).get("unique_payment_potential") or {},
                         "parameter_competitiveness": row.get("parameter_competitiveness") or {},
                         "quality_flags": row.get("quality_flags") or [],
                         "target_has_claim": _m12c_payload_target_has_claim(row),
@@ -2680,6 +2684,8 @@ def _m12c_business_value_label(role: str | None, pool_price_delta: Any = None) -
         return "基础门槛卖点"
     if role == M12C_ROLE_VALUE_BUNDLE:
         return "组合型增值卖点"
+    if role == M12C_ROLE_UNIQUE:
+        return "人无我有型支付价值卖点"
     if role == M12C_ROLE_WEAK_USER:
         return "用户感知不足卖点"
     if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
@@ -2708,6 +2714,8 @@ def _m12c_business_value_meaning_cn(role: str | None, pool_price_delta: Any = No
         return "同池普遍具备，有了不加价，缺了会掉队。"
     if role == M12C_ROLE_VALUE_BUNDLE or (role == M12C_ROLE_PREMIUM and price_delta <= 0):
         return "单点不一定独立溢价，但与一组高价值卖点组合后参与高端价值解释。"
+    if role == M12C_ROLE_UNIQUE:
+        return "本品具备同池稀缺卖点或关键参数优势，可能提高用户最高支付意愿；当前对照样本不足，只输出潜力和证据链，不输出金额。"
     if role == M12C_ROLE_WEAK_USER:
         return "参数或卖点存在，但评论验证弱、负向明显，或弱于高价竞品。"
     if role == M12C_ROLE_HIGH_PRICE_INTERCEPT:
@@ -2734,6 +2742,8 @@ def _m12c_business_claim_type(role: Any, pool_price_delta: Any = None) -> str:
         return "share_conversion_claim"
     if role == M12C_ROLE_VALUE_BUNDLE:
         return "customer_value_claim"
+    if role == M12C_ROLE_UNIQUE:
+        return "unique_payment_potential_claim"
     if role == M12C_ROLE_BASIC:
         return "threshold_claim"
     if role in {M12C_ROLE_WEAK_USER, M12C_ROLE_USER_NEED}:
@@ -2758,6 +2768,7 @@ def _m12c_business_claim_type_label(claim_type: str) -> str:
         "competitor_intercept_claim": "竞品拦截卖点",
         "price_pressure_claim": "价格压力卖点",
         "sample_insufficient_claim": "样本不足待复核",
+        "unique_payment_potential_claim": "人无我有型支付价值卖点",
     }.get(str(claim_type or ""), "未分类卖点")
 
 
@@ -2772,6 +2783,7 @@ def _m12c_business_claim_type_from_cn(label: str) -> str:
         "竞品拦截卖点": "competitor_intercept_claim",
         "价格压力卖点": "price_pressure_claim",
         "样本不足待复核": "sample_insufficient_claim",
+        "人无我有型支付价值卖点": "unique_payment_potential_claim",
     }
     return reverse.get(str(label or ""), "sample_insufficient_claim")
 
@@ -2787,6 +2799,7 @@ def _m12c_business_claim_type_meaning_cn(claim_type: str) -> str:
         "competitor_intercept_claim": "竞品具备并形成市场验证，本品缺失或表达弱，会影响购买转化。",
         "price_pressure_claim": "卖点表达、参数或用户反馈没有支撑当前价格，可能削弱成交理由。",
         "sample_insufficient_claim": "样本或对照组不足，只能作为观察线索。",
+        "unique_payment_potential_claim": "本品具备同池稀缺卖点或关键参数优势，可能提高用户最高支付意愿，但当前缺少稳定对照样本，不能量化金额。",
     }.get(str(claim_type or ""), "当前分类尚未定义。")
 
 

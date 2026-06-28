@@ -46,6 +46,39 @@ def _payload() -> dict:
                 ],
             },
             {
+                "claim_code": "tv_claim_chip_performance",
+                "claim_name": "芯片/处理器性能",
+                "business_claim_type_cn": "人无我有型支付价值卖点",
+                "target_has_claim": True,
+                "claim_source_type_cn": "本品已成立卖点",
+                "sku_level_user_payment_value_abs": 0,
+                "sku_level_weekly_sales_lift_abs": 0,
+                "main_contexts": ["高端画质升级战场"],
+                "evidence_summary_cn": "本品芯片参数领先，但同战场缺少稳定对照样本。",
+                "parameter_competitiveness": {
+                    "overall_parameter_competitiveness_score": 92,
+                    "overall_parameter_competitiveness_level_cn": "领先优势",
+                    "key_param_results": [
+                        {
+                            "source_param_code": "processor_chip_model",
+                            "target_value": "MT9655",
+                            "level_cn": "领先优势",
+                        }
+                    ],
+                },
+                "context_values": [
+                    {
+                        "context_name": "高端画质升级战场",
+                        "unique_payment_potential_scorecard": {
+                            "total_score": 82,
+                            "potential_level_cn": "高潜力",
+                            "no_amount_reason_cn": "目标 SKU 是有卖点组唯一样本，不能用组间价差量化本品卖点金额。",
+                            "verification_required_cn": "需要后续观察竞品跟进、评论和市场承接。",
+                        },
+                    }
+                ],
+            },
+            {
                 "claim_code": "tv_claim_hdmi21_connectivity",
                 "claim_name": "HDMI2.1 连接",
                 "business_claim_type_cn": "门槛卖点",
@@ -108,6 +141,27 @@ def _payload() -> dict:
                 },
             },
             {
+                "claim_code": "tv_claim_chip_performance",
+                "claim_name": "芯片/处理器性能",
+                "business_claim_type_cn": "人无我有型支付价值卖点",
+                "target_has_claim": True,
+                "context_type": "battlefield",
+                "context_name": "高端画质升级战场",
+                "pool_effect": {
+                    "pool_claim_price_delta_abs": 1533,
+                    "pool_claim_weekly_sales_delta_abs": -71,
+                },
+                "sku_excess_explanation": {},
+                "supporting_dimensions": {
+                    "unique_payment_potential_scorecard": {
+                        "total_score": 82,
+                        "potential_level_cn": "高潜力",
+                        "no_amount_reason_cn": "目标 SKU 是有卖点组唯一样本，不能用组间价差量化本品卖点金额。",
+                        "verification_required_cn": "需要后续观察竞品跟进、评论和市场承接。",
+                    }
+                },
+            },
+            {
                 "claim_code": "tv_claim_hdmi21_connectivity",
                 "claim_name": "HDMI2.1 连接",
                 "business_claim_type_cn": "门槛卖点",
@@ -130,9 +184,13 @@ def test_render_claim_value_report_separates_premium_and_threshold_claims() -> N
     assert "# 海信 65E7Q 用户卖点价值分析报告" in markdown
     assert "## 二、本品已成立卖点价值总榜" in markdown
     assert "| HDR/高亮画质 | 本品已成立卖点 | 高溢价卖点 | 高端画质升级战场 | 领先优势（91分）；关键参数：declared_brightness_nit_or_band=5200（领先优势） | 41元 | 3.7台/周 |" in markdown
+    assert "| 芯片/处理器性能 | 本品已成立卖点 | 人无我有型支付价值卖点 | 高端画质升级战场 | 领先优势（92分）；关键参数：processor_chip_model=MT9655（领先优势） | 不作为正向量化 | 不作为正向量化 |" in markdown
+    assert "## 四、人无我有型支付价值卖点" in markdown
+    assert "高潜力（82分）" in markdown
+    assert "目标 SKU 是有卖点组唯一样本" in markdown
     assert "| HDMI2.1 连接 | 本品已成立卖点 | 门槛卖点 | 游戏体育流畅战场 | 基础门槛（45分）；关键参数：hdmi21_flag=True（基础门槛） | 不作为正向量化 | 不作为正向量化 |" in markdown
     assert "参数竞争力：亮度参数在同战场可比池中领先" in markdown
-    assert "## 六、竞品拦截与机会缺口" in markdown
+    assert "## 七、竞品拦截与机会缺口" in markdown
     assert "AI 大模型/智能能力" in markdown
     assert "不是本品当前已成立卖点" in markdown
     assert "可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊" in markdown
