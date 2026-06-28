@@ -209,7 +209,7 @@ def add_answer_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--feishu-reply-message-id", help="Feishu message_id to reply with the generated competitor card.")
     parser.add_argument("--feishu-reply-in-thread", action="store_true", help="Send the Feishu card as a thread reply.")
     parser.add_argument("--feishu-card-idempotency-key", help="Optional idempotency key for Feishu card reply.")
-    parser.add_argument("--feishu-card-only", action="store_true", help="For text output, print only card delivery status or fallback short answer.")
+    parser.add_argument("--feishu-card-only", action="store_true", help="For text output, print only Feishu card delivery status.")
 
 
 def list_analyst_abilities(
@@ -1014,11 +1014,15 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
     if output_format == "json":
         print(json.dumps(result, ensure_ascii=False, default=json_default, indent=2, sort_keys=True))
         return
-    if feishu_card_only:
+    card_delivery = _feishu_card_delivery(result)
+    if card_delivery:
         delivery_text = format_feishu_card_delivery_text(result)
         if delivery_text:
             print(delivery_text)
             return
+    if feishu_card_only:
+        print("未发送飞书竞品看板卡片：缺少发送结果。")
+        return
     business_text = format_business_text(result)
     if business_text:
         print(business_text)
@@ -1033,12 +1037,24 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
         print(json.dumps(result, ensure_ascii=False, default=json_default, indent=2, sort_keys=True))
 
 
+def _feishu_card_delivery(result: dict[str, Any]) -> dict[str, Any]:
+    competitor_answer = (result.get("result") or {}).get("competitor_answer") or {}
+    delivery = competitor_answer.get("feishu_card_delivery")
+    return delivery if isinstance(delivery, dict) else {}
+
+
 def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
     competitor_answer = (result.get("result") or {}).get("competitor_answer") or {}
-    delivery = competitor_answer.get("feishu_card_delivery") or {}
+    delivery = _feishu_card_delivery(result)
     if delivery.get("status") == "sent":
         return str(delivery.get("message_cn") or "已发送飞书竞品看板卡片。")
-    return str(competitor_answer.get("short_answer") or delivery.get("message_cn") or "")
+    if delivery.get("message_cn"):
+        return str(delivery["message_cn"])
+    if delivery.get("status") == "failed":
+        return "飞书卡片发送失败。"
+    if delivery.get("status"):
+        return "未发送飞书竞品看板卡片。"
+    return str(competitor_answer.get("short_answer") or "")
 
 
 def format_business_text(result: dict[str, Any]) -> str:

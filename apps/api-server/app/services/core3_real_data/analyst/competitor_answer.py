@@ -431,7 +431,8 @@ def build_competitor_answer(
         "display_policy": {
             "send_short_answer_as_is": True,
             "prefer_feishu_card": True,
-            "fallback_to_short_answer": True,
+            "card_delivery_stdout": True,
+            "fallback_to_short_answer": False,
             "report_as_evidence": True,
             "max_chat_chars": max_chat_chars,
             "hide_internal_fields": True,
@@ -554,7 +555,8 @@ def build_competitor_dashboard_payload(
         "display_policy": {
             "main_answer": "feishu_card",
             "report_as_evidence": True,
-            "fallback_to_short_answer": True,
+            "card_delivery_stdout": True,
+            "fallback_to_short_answer": False,
             "link_preview_optional": True,
         },
     }

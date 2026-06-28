@@ -105,7 +105,7 @@ def test_feishu_card_reply_field_validation_message_is_specific() -> None:
     assert message == "飞书卡片发送失败：飞书消息字段校验未通过。"
 
 
-def test_feishu_card_only_text_uses_delivery_status_or_short_answer() -> None:
+def test_feishu_card_delivery_text_uses_real_delivery_status() -> None:
     sent = {
         "result": {
             "competitor_answer": {
@@ -124,4 +124,27 @@ def test_feishu_card_only_text_uses_delivery_status_or_short_answer() -> None:
     }
 
     assert catforge_analyst.format_feishu_card_delivery_text(sent) == "已发送飞书竞品看板卡片。"
-    assert catforge_analyst.format_feishu_card_delivery_text(failed) == "短摘要"
+    assert catforge_analyst.format_feishu_card_delivery_text(failed) == "飞书卡片发送失败。"
+
+
+def test_text_output_prefers_feishu_card_delivery_status(capsys) -> None:
+    result = {
+        "result": {
+            "competitor_answer": {
+                "short_answer": "短摘要",
+                "feishu_card_delivery": {"status": "sent", "message_cn": "已发送飞书竞品看板卡片。"},
+            }
+        }
+    }
+
+    catforge_analyst.emit_result(result, "text", feishu_card_only=False)
+
+    assert capsys.readouterr().out.strip() == "已发送飞书竞品看板卡片。"
+
+
+def test_feishu_card_only_without_delivery_does_not_fallback_to_short_answer(capsys) -> None:
+    result = {"result": {"competitor_answer": {"short_answer": "短摘要"}}}
+
+    catforge_analyst.emit_result(result, "text", feishu_card_only=True)
+
+    assert capsys.readouterr().out.strip() == "未发送飞书竞品看板卡片：缺少发送结果。"

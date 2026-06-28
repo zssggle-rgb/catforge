@@ -97,12 +97,13 @@ Tooling hygiene:
   XiaoAo answer command with the current conversation `message_id` and let the
   CLI attempt to send the interactive card directly. Do not parse JSON or send
   the card payload yourself. Always send the CLI stdout as the visible user
-  reply. Do not emit `NO_REPLY`, an empty reply, or only a heartbeat. The CLI
-  owns ranking, dashboard structure, wording, report link, and card delivery
-  for this question; do not rewrite it.
+  reply, but stdout is only the card delivery status in this path. Do not emit
+  `NO_REPLY`, an empty reply, or only a heartbeat. The CLI owns ranking,
+  dashboard structure, wording, report link, and card delivery for this
+  question; do not rewrite it.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600 --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "competitor-card-<message_id>"
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600 --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "competitor-card-<message_id>" --feishu-card-only
 ```
 
 - In non-card chat channels, use the same command with `--format text` and send
@@ -238,11 +239,11 @@ For "这款和谁比":
    `competitor-set --format text --answer-style xiaoao --with-report
    feishu-doc --top-n 3 --max-chat-chars 600 --feishu-reply-message-id
    "<message_id>" --feishu-card-idempotency-key
-   "competitor-card-<message_id>"`. The `message_id` comes from the current
+   "competitor-card-<message_id>" --feishu-card-only`. The `message_id` comes from the current
    Feishu conversation metadata. The CLI attempts to send the interactive card
-   directly and still prints the short answer. Send that stdout to the user as
-   the visible reply. In non-card channels, call the same command with
-   `--format text`.
+   directly and prints only the card delivery status. Send that stdout to the
+   user as the visible reply so delivery failures are visible. In non-card
+   channels, call the same command with `--format text`.
 4. The CLI-generated Top 3 follows this business definition:
    首选竞品 = 同一购买池 × 主辅价值战场加权重合 × 主辅用户任务加权重合 ×
    主辅目标客群加权重合 × 关键价值锚点可替代 × 替代压力 × 市场验证.
@@ -254,9 +255,9 @@ For "这款和谁比":
    reason for selecting a competitor.
 7. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
-8. If JSON was used and card sending fails while
-   `result.competitor_answer.display_policy.fallback_to_short_answer=true`, send
-   `result.competitor_answer.short_answer` exactly. Do not rewrite the summary.
+8. In Feishu card-capable entrypoints, do not use JSON fallback logic for the
+   first competitor-list answer. Use the stable `--feishu-card-only` command
+   and send its stdout delivery status exactly.
 
 For follow-up references such as "第一款", "第一名", "上面第一款", "它", "这款",
 or "分析第一款为什么选它":

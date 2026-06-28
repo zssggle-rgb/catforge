@@ -3593,6 +3593,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     dashboard = answer["dashboard_payload"]
     assert dashboard["schema_version"] == "competitor_dashboard_v1"
     assert dashboard["display_policy"]["main_answer"] == "feishu_card"
+    assert dashboard["display_policy"]["card_delivery_stdout"] is True
+    assert dashboard["display_policy"]["fallback_to_short_answer"] is False
     assert dashboard["competitors"][0]["name"] == "创维 65A7H PRO"
     assert [row["dimension_cn"] for row in dashboard["competitors"][0]["score_dimensions"]] == [
         "购买池",

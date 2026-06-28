@@ -80,7 +80,7 @@
 
 1. 识别“竞品是谁”“为什么选第一款”“和谁竞争”“直接竞品有哪些”等竞品意图。
 2. 优先调用 CLI 的稳定竞品摘要命令。
-3. 在飞书入口把当前会话 `message_id` 传给 `competitor-set`，由 CLI 尝试用 bot 发送 `feishu_card_payload`；无论卡片发送是否成功，本轮都必须把 CLI stdout 中的 `short_answer` 作为可见文本回复发送给用户。
+3. 在飞书入口把当前会话 `message_id` 传给 `competitor-set`，并追加 `--feishu-card-only`，由 CLI 尝试用 bot 发送 `feishu_card_payload`；本轮可见文本只发送 CLI stdout 中的卡片发送状态。
 4. 在纯文本入口如果 CLI 返回 `short_answer`，必须原样发送，不得改写语气、重排名次或增删关键结论。
 5. 如果 CLI 返回 `report_url`，卡片和短摘要都必须提供完整报告入口。
 6. 如果 CLI 返回多候选 SKU，必须让用户二次选择；飞书入口可渲染为选择卡片。
@@ -249,7 +249,8 @@ python -m app.cli.catforge_analyst competitor-set \
       "display_policy": {
         "send_short_answer_as_is": true,
         "prefer_feishu_card": true,
-        "fallback_to_short_answer": true,
+        "card_delivery_stdout": true,
+        "fallback_to_short_answer": false,
         "max_chat_chars": 600,
         "hide_internal_fields": true
       }
@@ -427,7 +428,7 @@ TCL 65Q9L PRO 更像配置标杆型竞品，在画质、高刷、影音和游戏
 Skill 必须遵守：
 
 1. 在飞书入口，Skill 不解析或拼装卡片 JSON，必须调用带 `--feishu-reply-message-id` 的稳定 CLI，由 CLI 使用 `msg_type=interactive` 尝试回复卡片。
-2. 无论卡片是否发送成功，只要 CLI stdout 返回 `short_answer`，必须把它作为本轮可见文本回复发送给用户；禁止输出 `NO_REPLY` 或空回复。
+2. 飞书入口必须追加 `--feishu-card-only`；CLI stdout 必须是卡片发送状态。发送成功时可见回复为“已发送飞书竞品看板卡片”，发送失败时可见回复为业务安全失败原因；禁止退回长文本答案掩盖卡片失败。
 3. 不把 `top_competitors` 重新组织成另一套口径。
 4. 不自行补充泛化市场常识。
 5. 不暴露英文内部字段和技术模块。
@@ -484,8 +485,8 @@ Skill 必须遵守：
 - `dashboard_payload` 和 `feishu_card_payload` 不包含 `BF_`、`TASK_`、`TG_` 等内部 code。
 - `feishu_card_payload` 可 JSON 序列化，卡片消息体大小符合飞书限制。
 - 飞书报告生成失败时仍可返回短摘要。
-- 飞书卡片发送失败时仍可返回短摘要和报告链接，不暴露卡片错误，不产生空回复。
-- `--format text` 输出与 JSON 中 `short_answer` 一致。
+- 飞书卡片发送失败时仍可返回短摘要和报告链接给结构化调用方，但飞书入口的 `--feishu-card-only` stdout 必须输出业务安全失败原因，不产生空回复。
+- 不带飞书消息参数的 `--format text` 输出与 JSON 中 `short_answer` 一致；带 `feishu_card_delivery` 的 text 输出优先返回卡片发送状态。
 - 竞品详细报告必须把卖点画像和卖点价值量化拆开：卖点画像展示事实，卖点价值量化展示 M12C 的核心卖点商业价值、可比产品差异、本品可解释价差/销量差份额和业务标签。
 - M12C 缺失时报告明确提示“卖点价值量化待生成”，并用事实卖点/评论支撑作为兜底，不得伪造指数。
 
