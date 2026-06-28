@@ -3338,6 +3338,13 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert answer["top_competitors"][0]["weighted_overlap"]["target_group"] >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
+    assert "## 重点竞品看板" in markdown
+    assert markdown.index("## 重点竞品看板") < markdown.index("## 一、分析结论")
+    assert "| 排名 | 竞品 | 竞争角色 | 重合强度 | 替代压力 | 关键重合 |" in markdown
+    assert "### 看板 1：创维 65A7H PRO" in markdown
+    assert "- 价值战场：" in markdown
+    assert "- 用户任务：" in markdown
+    assert "- 目标客群：" in markdown
     assert "## 一、分析结论" in markdown
     assert "## 二、分析过程" in markdown
     assert "### 2.1 候选 SKU 综合评分" in markdown

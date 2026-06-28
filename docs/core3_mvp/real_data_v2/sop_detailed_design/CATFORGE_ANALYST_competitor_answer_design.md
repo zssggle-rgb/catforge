@@ -881,6 +881,7 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 - 小奥 Skill 使用 `--answer-style xiaoao`。
 - `--with-report none` 时不依赖飞书环境。
 - `dashboard_payload` 和 `feishu_card_payload` 只在 `--format json` 中消费；`--format text` 继续只输出短摘要。
+- 飞书佐证文档标题下必须同步插入 Markdown 版“重点竞品看板”，字段与 `dashboard_payload` 同源，先展示 Top 3、重合强度、替代压力，以及价值战场、用户任务、目标客群三行重合证据；详细分析章节仍作为佐证放在看板之后。
 - 205 上若未配置飞书 CLI，仍可回答短摘要。
 
 ### 17.2 205 部署后验收

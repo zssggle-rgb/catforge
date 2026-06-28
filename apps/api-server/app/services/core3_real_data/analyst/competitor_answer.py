@@ -356,6 +356,12 @@ def build_competitor_answer(
     buckets = _bucket_competitors(enriched)
     top_competitors = _select_top_competitors(enriched, target=target, top_n=max(top_n, 0))
     title = report_title or f"{_display_name(target)} 重点竞品分析报告"
+    dashboard_payload_for_report = build_competitor_dashboard_payload(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=None,
+    )
     markdown = render_competitor_report(
         title=title,
         target=target,
@@ -364,6 +370,7 @@ def build_competitor_answer(
         target_claim_contribution=target_claim_contribution,
         top_competitors=top_competitors,
         all_competitors=enriched,
+        dashboard_payload=dashboard_payload_for_report,
     )
     publish_result = _publish_report(title=title, markdown=markdown, with_report=with_report)
     short_answer = render_short_answer(
@@ -569,6 +576,69 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
     return _trim_feishu_card(card)
 
 
+def render_competitor_dashboard_markdown(dashboard_payload: dict[str, Any]) -> list[str]:
+    """Render the dashboard contract as the first screen of the evidence report."""
+
+    lines = [
+        "## 重点竞品看板",
+        "",
+        str(dashboard_payload.get("summary_cn") or "当前没有足够证据形成稳定重点竞品。"),
+        "",
+    ]
+    competitors = [item for item in dashboard_payload.get("competitors") or [] if isinstance(item, dict)]
+    if not competitors:
+        return lines
+    lines.extend(
+        [
+            "| 排名 | 竞品 | 竞争角色 | 重合强度 | 替代压力 | 关键重合 |",
+            "| ---: | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for competitor in competitors[:3]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_cell(competitor.get("rank")),
+                    _markdown_cell(competitor.get("name")),
+                    _markdown_cell(competitor.get("role_cn")),
+                    _markdown_cell(competitor.get("strength_cn")),
+                    _markdown_cell(competitor.get("pressure_cn")),
+                    _markdown_cell(_dashboard_overlap_summary(competitor)),
+                ]
+            )
+            + " |"
+        )
+    for competitor in competitors[:3]:
+        lines.extend(["", f"### 看板 {competitor.get('rank')}：{competitor.get('name')}", ""])
+        reason = str(competitor.get("reason_cn") or "").strip()
+        if reason:
+            lines.append(f"- 判断：{reason}")
+        for row in competitor.get("overlap_rows") or []:
+            if not isinstance(row, dict):
+                continue
+            points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:4] if value]) or "证据待复核"
+            lines.append(f"- {row.get('dimension_cn')}：{row.get('strength_cn')}；重合点：{points}；{row.get('impact_cn')}")
+        anchors = _join_cn([str(value) for value in (competitor.get("shared_anchors_cn") or [])[:5] if value])
+        market = str(competitor.get("market_validation_cn") or "").strip()
+        if anchors:
+            lines.append(f"- 共同价值锚点：{anchors}")
+        if market:
+            lines.append(f"- 市场验证：{market}")
+    return lines
+
+
+def _dashboard_overlap_summary(competitor: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for row in competitor.get("overlap_rows") or []:
+        if not isinstance(row, dict):
+            continue
+        points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:2] if value])
+        if points:
+            parts.append(f"{row.get('dimension_cn')}：{points}")
+    return "；".join(parts) if parts else "重合证据待复核"
+
+
 def render_competitor_report(
     *,
     title: str,
@@ -578,15 +648,18 @@ def render_competitor_report(
     target_claim_contribution: dict[str, Any] | None = None,
     top_competitors: list[dict[str, Any]],
     all_competitors: list[dict[str, Any]],
+    dashboard_payload: dict[str, Any] | None = None,
 ) -> str:
     target_name = _display_name(target)
     target_sections = _fact_sections(target_fact_brief)
     lines = [
         f"# {title}",
         "",
-        "## 一、分析结论",
-        "",
     ]
+    if dashboard_payload:
+        lines.extend(render_competitor_dashboard_markdown(dashboard_payload))
+        lines.append("")
+    lines.extend(["## 一、分析结论", ""])
     if top_competitors:
         lines.extend(_analysis_conclusion_lines(target_name, target, target_sections, top_competitors, all_competitors))
     else:
