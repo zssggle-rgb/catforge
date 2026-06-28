@@ -3632,24 +3632,31 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "hr",
         "markdown",
         "table",
-        "hr",
-        "markdown",
-        "table",
     ]
     assert "创维 65A7H PRO" in card_json
     assert "多维评分雷达图" in card_json
     assert '"tag": "chart"' in card_json
     assert '"type": "radar"' in card_json
-    assert "竞品排序表" in card_json
-    assert "市场验证条形图" in card_json
+    assert card["body"]["elements"][5]["content"] == "**价值战场重合结构**"
+    battlefield_chart = card["body"]["elements"][6]
+    assert battlefield_chart["chart_spec"]["label"]["position"] == "inside"
+    assert battlefield_chart["chart_spec"]["label"]["formatter"] == "{label}"
+    battlefield_values = battlefield_chart["chart_spec"]["data"]["values"]
+    assert any(row["battlefields"] == "高端画质升级" for row in battlefield_values)
+    assert any("高端画质" in row["label"] for row in battlefield_values)
+    assert "竞品与市场表现" in card_json
     assert '"tag": "table"' in card_json
+    market_table = card["body"]["elements"][9]
+    assert market_table["element_id"] == "competitor_market_table"
+    assert market_table["rows"][0] == {"name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["price"] == "4,700元"
+    assert market_table["rows"][1]["sales"] == "75台"
     assert "购买池" in card_json
     assert "价值战场" in card_json
     assert "用户任务" in card_json
     assert "目标客群" in card_json
     assert "价值锚点" in card_json
     assert "市场验证" in card_json
-    assert "■■" in card_json
     assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
@@ -3662,11 +3669,25 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
 
 def test_competitor_dashboard_payload_and_feishu_card_include_report_action() -> None:
     dashboard = competitor_answer.build_competitor_dashboard_payload(
-        target={"sku_code": "TV00029112", "brand_name": "海信", "model_name": "65E7Q", "screen_size_inch": 65, "price_band_in_size_tier": "mid_high"},
+        target={
+            "sku_code": "TV00029112",
+            "brand_name": "海信",
+            "model_name": "65E7Q",
+            "screen_size_inch": 65,
+            "price_band_in_size_tier": "mid_high",
+            "price_wavg": 4999,
+            "avg_weekly_sales_volume": 100,
+        },
         target_fact_brief={"sections": {}},
         top_competitors=[
             {
-                "candidate": {"sku_code": "TV00030001", "brand_name": "创维", "model_name": "65A7H PRO"},
+                "candidate": {
+                    "sku_code": "TV00030001",
+                    "brand_name": "创维",
+                    "model_name": "65A7H PRO",
+                    "price_wavg": 5600,
+                    "avg_weekly_sales_volume": 210,
+                },
                 "role_cn": "首选直接竞品",
                 "business_score": 0.82,
                 "replacement_pressure": {"type_cn": "价值替代压力"},
@@ -3707,9 +3728,6 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "markdown",
         "table",
         "hr",
-        "markdown",
-        "table",
-        "hr",
         "button",
     ]
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
@@ -3719,10 +3737,12 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert len(radar_values) == 6
     assert {row["dimension"] for row in radar_values} == {"购买池", "价值战场", "用户任务", "目标客群", "价值锚点", "市场验证"}
     assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
-    assert card["body"]["elements"][5]["content"] == "**竞品排序表**"
+    assert card["body"]["elements"][5]["content"] == "**竞品与市场表现**"
     assert card["body"]["elements"][6]["tag"] == "table"
-    assert card["body"]["elements"][8]["content"] == "**市场验证条形图**"
-    assert card["body"]["elements"][9]["tag"] == "table"
+    market_table = card["body"]["elements"][6]
+    assert market_table["rows"][0] == {"name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["price"] == "5,600元"
+    assert market_table["rows"][1]["sales"] == "210台"
     assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
