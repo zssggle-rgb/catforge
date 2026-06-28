@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 
 ReportMode = Literal["none", "markdown", "feishu-doc"]
+FeishuCardPublishStatus = Literal["disabled", "sent", "failed"]
 
 PRICE_BAND_ORDER = {
     "low": 0,
@@ -336,6 +337,25 @@ class ReportPublishResult:
     status: str
     url: str | None = None
     message_cn: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"status": self.status, "url": self.url, "message_cn": self.message_cn}
+
+
+@dataclass(frozen=True)
+class FeishuCardPublishResult:
+    status: FeishuCardPublishStatus
+    message_cn: str
+    message_id: str | None = None
+    chat_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "message_cn": self.message_cn,
+            "message_id": self.message_id,
+            "chat_id": self.chat_id,
+        }
 
 
 def build_competitor_answer(
@@ -4014,6 +4034,63 @@ def _publish_report(*, title: str, markdown: str, with_report: str) -> ReportPub
         return ReportPublishResult(status="failed", message_cn="飞书文档创建失败。")
 
 
+def publish_feishu_card_reply(
+    *,
+    card: dict[str, Any] | None,
+    reply_message_id: str | None = None,
+    reply_in_thread: bool = False,
+    idempotency_key: str | None = None,
+) -> FeishuCardPublishResult:
+    if not reply_message_id or not reply_message_id.strip():
+        return FeishuCardPublishResult(status="disabled", message_cn="未提供飞书消息 ID，未发送卡片。")
+    if not card:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：没有可发送的卡片内容。")
+    cli_bin = os.environ.get("CATFORGE_FEISHU_CLI_BIN") or shutil.which("lark-cli")
+    if not cli_bin:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未安装飞书 CLI。")
+    content = json.dumps(card, ensure_ascii=False, separators=(",", ":"))
+    command = [
+        cli_bin,
+        "im",
+        "+messages-reply",
+        "--message-id",
+        reply_message_id.strip(),
+        "--msg-type",
+        "interactive",
+        "--content",
+        content,
+        "--as",
+        os.environ.get("CATFORGE_FEISHU_IM_AS") or os.environ.get("CATFORGE_FEISHU_AS", "bot"),
+        "--format",
+        "json",
+    ]
+    if reply_in_thread:
+        command.append("--reply-in-thread")
+    if idempotency_key and idempotency_key.strip():
+        command.extend(["--idempotency-key", idempotency_key.strip()])
+    env = os.environ.copy()
+    cli_dir = os.path.dirname(cli_bin)
+    if cli_dir:
+        env["PATH"] = f"{cli_dir}:{env.get('PATH', '')}"
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=30, env=env)
+    except FileNotFoundError:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境找不到飞书 CLI。")
+    except subprocess.TimeoutExpired:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：飞书消息接口超时。")
+    except Exception:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败。")
+    if completed.returncode != 0:
+        return FeishuCardPublishResult(status="failed", message_cn=_feishu_im_failure_message(completed.stderr or completed.stdout))
+    message_id, chat_id = _extract_feishu_message_result(completed.stdout)
+    return FeishuCardPublishResult(
+        status="sent",
+        message_cn="已发送飞书竞品看板卡片。",
+        message_id=message_id,
+        chat_id=chat_id,
+    )
+
+
 def _publish_feishu_public_permission(*, cli_bin: str, url: str, env: dict[str, str]) -> dict[str, Any] | None:
     link_share_entity = os.environ.get("CATFORGE_FEISHU_LINK_SHARE_ENTITY", "").strip()
     if not link_share_entity:
@@ -4057,6 +4134,34 @@ def _extract_feishu_doc_token(url: str) -> tuple[str, str] | None:
         return None
     doc_type = {"sheets": "sheet"}.get(match.group(1), match.group(1))
     return match.group(2), doc_type
+
+
+def _extract_feishu_message_result(output: str) -> tuple[str | None, str | None]:
+    try:
+        payload = json.loads(output)
+    except Exception:
+        return None, None
+    message_id = _first_string_value(payload, ("message_id", "messageId", "id"))
+    chat_id = _first_string_value(payload, ("chat_id", "chatId"))
+    return message_id, chat_id
+
+
+def _first_string_value(payload: Any, keys: tuple[str, ...]) -> str | None:
+    if isinstance(payload, dict):
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        for value in payload.values():
+            found = _first_string_value(value, keys)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for item in payload:
+            found = _first_string_value(item, keys)
+            if found:
+                return found
+    return None
 
 
 def _env_bool(name: str, *, default: bool) -> bool:
@@ -4116,6 +4221,25 @@ def _feishu_failure_message(output: str) -> str:
     if "auth" in normalized or "login" in normalized or "user identity" in normalized:
         return "飞书文档创建失败：飞书用户身份未授权或授权已失效。"
     return "飞书文档创建失败：请检查飞书 CLI 配置、授权和网络连通性。"
+
+
+def _feishu_im_failure_message(output: str) -> str:
+    normalized = output.lower()
+    if "not found" in normalized or "no such file" in normalized:
+        return "飞书卡片发送失败：当前环境找不到飞书 CLI。"
+    if "not_configured" in normalized or "not configured" in normalized:
+        return "飞书卡片发送失败：API 容器未加载飞书 CLI 配置或密钥目录。请检查 CATFORGE_FEISHU_CONFIG_DIR 和 CATFORGE_FEISHU_DATA_DIR 挂载。"
+    if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
+        scopes = _extract_missing_scopes(output)
+        console_url = _extract_console_url(output)
+        scope_text = f"（缺少 {scopes}）" if scopes else ""
+        url_text = f" 请在飞书开发者后台开通后重试：{console_url}" if console_url else ""
+        return f"飞书卡片发送失败：飞书应用或用户缺少消息发送权限{scope_text}。{url_text}".strip()
+    if "invalid message" in normalized or "message_id" in normalized or "message id" in normalized:
+        return "飞书卡片发送失败：当前消息 ID 不可回复或已失效。"
+    if "auth" in normalized or "login" in normalized or "user identity" in normalized:
+        return "飞书卡片发送失败：飞书用户身份未授权或授权已失效。"
+    return "飞书卡片发送失败：请检查飞书 CLI 配置、机器人是否在会话中以及消息发送权限。"
 
 
 def _feishu_public_permission_failure_message(output: str) -> str:

@@ -587,9 +587,9 @@ class FeishuCardSender(Protocol):
 
 发送规则：
 
-1. `competitor-set --format json --answer-style xiaoao --with-report feishu-doc` 生成 `feishu_card_payload`。
-2. 飞书入口优先用 `msg_type=interactive` 发送卡片。
-3. 发送失败时降级发送 `short_answer`，不重跑竞品分析。
+1. `competitor-set --format text --answer-style xiaoao --with-report feishu-doc --feishu-reply-message-id <message_id> --feishu-card-only` 生成 `feishu_card_payload` 并直接用 `msg_type=interactive` 回复飞书卡片。
+2. `message_id` 来自 OpenClaw 飞书会话元数据；Skill 只负责传参，不解析或重组 `feishu_card_payload`。
+3. 发送失败时 CLI 降级输出 `short_answer`，不重跑竞品分析。
 4. 降级原因只写业务化提示，不暴露 token、HTTP 响应体、卡片 JSON 或接口错误。
 5. 非飞书入口继续使用 `--format text` 或 JSON 中的 `short_answer`。
 
@@ -655,6 +655,7 @@ class ReportPublishResult:
 | `CATFORGE_ANALYST_REPORT_PUBLISHER=none` | 不生成外部链接。 |
 | `CATFORGE_ANALYST_REPORT_PUBLISHER=feishu_cli` | 使用飞书 CLI。 |
 | `CATFORGE_FEISHU_AS=bot` | 205 默认使用 bot 身份创建佐证文档。 |
+| `CATFORGE_FEISHU_IM_AS=bot` | 可选；飞书卡片回复身份，缺省沿用 `CATFORGE_FEISHU_AS`。 |
 | `CATFORGE_FEISHU_NODE_DIR=/home/deploy/.openclaw/tools/node` | host 上 lark-cli 所在 Node 工具目录，Compose 挂载到容器 `/opt/openclaw-node`。 |
 | `CATFORGE_FEISHU_CONFIG_DIR=/home/deploy/.lark-cli` | host 上 lark-cli 配置目录，Compose 挂载到容器 `/root/.lark-cli`。 |
 | `CATFORGE_FEISHU_DATA_DIR=/home/deploy/.local/share/lark-cli` | host 上 lark-cli keychain/密钥存储目录，Compose 挂载到容器 `/root/.local/share/lark-cli`。缺失时 bot 会报 `not_configured` 或无法解密 app secret。 |
@@ -679,9 +680,14 @@ docker compose -f docker-compose.cloud.yml exec -T api \
   --product-category tv \
   --batch-id latest \
   --limit 10 \
-  --format json \
+  --format text \
   --answer-style xiaoao \
-  --with-report feishu-doc
+  --with-report feishu-doc \
+  --top-n 3 \
+  --max-chat-chars 600 \
+  --feishu-reply-message-id "<message_id>" \
+  --feishu-card-idempotency-key "competitor-card-<message_id>" \
+  --feishu-card-only
 ```
 
 ### 14.2 Skill 消费规则
@@ -690,8 +696,8 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 
 ```text
 result = run_cli(...)
-if status == ok and feishu_entrypoint and result.competitor_answer.feishu_card_payload:
-    send result.competitor_answer.feishu_card_payload
+if status == ok and feishu_entrypoint:
+    pass message_id to CLI and let CLI send the interactive card
 elif status == ok and result.competitor_answer.short_answer:
     send result.competitor_answer.short_answer exactly
 elif status == ambiguous:

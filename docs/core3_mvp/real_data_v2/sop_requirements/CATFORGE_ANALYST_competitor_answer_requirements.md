@@ -80,7 +80,7 @@
 
 1. 识别“竞品是谁”“为什么选第一款”“和谁竞争”“直接竞品有哪些”等竞品意图。
 2. 优先调用 CLI 的稳定竞品摘要命令。
-3. 在飞书入口优先发送 `feishu_card_payload`；如果卡片发送失败，再降级发送 `short_answer` 和 `report_url`。
+3. 在飞书入口把当前会话 `message_id` 传给 `competitor-set`，由 CLI 直接用 bot 发送 `feishu_card_payload`；如果卡片发送失败，再降级发送 `short_answer` 和 `report_url`。
 4. 在纯文本入口如果 CLI 返回 `short_answer`，必须原样发送，不得改写语气、重排名次或增删关键结论。
 5. 如果 CLI 返回 `report_url`，卡片和短摘要都必须提供完整报告入口。
 6. 如果 CLI 返回多候选 SKU，必须让用户二次选择；飞书入口可渲染为选择卡片。
@@ -425,7 +425,7 @@ TCL 65Q9L PRO 更像配置标杆型竞品，在画质、高刷、影音和游戏
 
 Skill 必须遵守：
 
-1. 在飞书入口，如果 CLI 返回 `feishu_card_payload` 且发送成功，优先发送卡片。
+1. 在飞书入口，Skill 不解析或拼装卡片 JSON，必须调用带 `--feishu-reply-message-id` 的稳定 CLI，由 CLI 使用 `msg_type=interactive` 回复卡片。
 2. 如果卡片发送失败或入口不支持卡片，且 `display_policy.send_short_answer_as_is = true`，直接发送 `short_answer`。
 3. 不把 `top_competitors` 重新组织成另一套口径。
 4. 不自行补充泛化市场常识。
