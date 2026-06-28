@@ -587,11 +587,13 @@ class FeishuCardSender(Protocol):
 
 发送规则：
 
-1. `competitor-set --format text --answer-style xiaoao --with-report feishu-doc --feishu-reply-message-id <message_id> --feishu-card-only` 生成 `feishu_card_payload` 并直接用 `msg_type=interactive` 回复飞书卡片。
+1. `competitor-set --format text --answer-style xiaoao --with-report feishu-doc --feishu-reply-message-id <message_id>` 生成 `feishu_card_payload` 并尝试用 `msg_type=interactive` 回复飞书卡片。
 2. `message_id` 来自 OpenClaw 飞书会话元数据；Skill 只负责传参，不解析或重组 `feishu_card_payload`。
-3. 发送失败时 CLI 降级输出 `short_answer`，不重跑竞品分析。
-4. 降级原因只写业务化提示，不暴露 token、HTTP 响应体、卡片 JSON 或接口错误。
+3. CLI 始终输出 `short_answer`；Skill 必须把 stdout 作为可见文本回复发送给用户，不能输出 `NO_REPLY`、空回复或只发心跳。
+4. 发送失败时不重跑竞品分析；降级原因只写业务化提示，不暴露 token、HTTP 响应体、卡片 JSON 或接口错误。
 5. 非飞书入口继续使用 `--format text` 或 JSON 中的 `short_answer`。
+
+JSON 2.0 卡片中的报告按钮必须直接作为 `body.elements` 中的 `button` 组件出现，使用 `behaviors: [{"type": "open_url", "default_url": "..."}]` 打开报告链接；不得使用 JSON 1.0 的 `tag: action` 包裹按钮。
 
 链接预览不是主回答路径。只有当用户主动发送 CatForge 报告链接、且系统需要自动展开该链接时，再用 `dashboard_payload` 生成链接预览响应。
 
@@ -686,8 +688,7 @@ docker compose -f docker-compose.cloud.yml exec -T api \
   --top-n 3 \
   --max-chat-chars 600 \
   --feishu-reply-message-id "<message_id>" \
-  --feishu-card-idempotency-key "competitor-card-<message_id>" \
-  --feishu-card-only
+  --feishu-card-idempotency-key "competitor-card-<message_id>"
 ```
 
 ### 14.2 Skill 消费规则
@@ -862,7 +863,8 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 | Dashboard payload | 只包含 Top 3，每个竞品都有价值战场、用户任务、目标客群三行重合结构。 |
 | Dashboard 业务语言 | 不包含 `BF_`、`TASK_`、`TG_`、表名或批次号。 |
 | Feishu card payload | 可 JSON 序列化，包含 header/body/config，消息体大小符合飞书卡片限制。 |
-| 卡片降级 | 发送失败时仍返回 `short_answer` 和 `report_url`，不暴露接口错误。 |
+| 卡片结构 | JSON 2.0 正文只使用 `body.elements` 组件；报告入口按钮使用 `button.behaviors.open_url`，不使用 `tag: action`。 |
+| 卡片降级 | 发送失败时仍返回 `short_answer` 和 `report_url`，不暴露接口错误，不产生空回复。 |
 | 飞书失败 | 仍返回短摘要，`report_status=failed`。 |
 | 模糊 SKU | Pro/非 Pro 同时命中时返回 `ambiguous`。 |
 | M12C 报告接入 | 竞品报告新增独立“卖点价值量化”章节，展示业务卖点标签、可比产品差异、本品可解释价差/销量差份额和置信度。 |
@@ -912,7 +914,7 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 - 不超过 600 字。
 - 只输出 Top 3 和飞书链接。
 - 不出现内部 code 和命令。
-- JSON 输出包含 `dashboard_payload` 和 `feishu_card_payload`；飞书入口能发送卡片，或失败后降级短摘要。
+- JSON 输出包含 `dashboard_payload` 和 `feishu_card_payload`；飞书入口能发送卡片，且无论卡片发送成功或失败都能看到短摘要。
 - 飞书链接可打开；如果当前 batch 找不到该 SKU，必须返回业务化边界提示。
 - 飞书报告的“四个产品横向详细对比”和各产品画像中必须同时出现“卖点画像”和“卖点价值量化”；若 latest 批次 M12C 未准备好，卖点价值量化章节必须显示“卖点价值量化待生成”。
 

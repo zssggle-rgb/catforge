@@ -584,7 +584,7 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
         "config": {
             "summary": {"content": title},
             "width_mode": "fill",
-            "wide_screen_mode": True,
+            "update_multi": True,
         },
         "header": {
             "template": "blue",
@@ -3924,13 +3924,19 @@ def _feishu_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] |
     if not report_url:
         return None
     return {
-        "tag": "action",
-        "actions": [
+        "tag": "button",
+        "element_id": "view_report",
+        "type": "primary",
+        "size": "medium",
+        "width": "fill",
+        "text": {"tag": "plain_text", "content": "查看完整报告"},
+        "behaviors": [
             {
-                "tag": "button",
-                "text": {"tag": "plain_text", "content": "查看完整报告"},
-                "type": "primary",
-                "url": report_url,
+                "type": "open_url",
+                "default_url": report_url,
+                "pc_url": report_url,
+                "ios_url": report_url,
+                "android_url": report_url,
             }
         ],
     }

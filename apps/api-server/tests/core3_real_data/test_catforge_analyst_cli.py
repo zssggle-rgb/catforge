@@ -3633,6 +3633,16 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     card_json = json.dumps(card, ensure_ascii=False)
     assert "查看完整报告" in card_json
     assert "https://my.feishu.cn/docx/ReportToken" in card_json
+    assert '"tag": "action"' not in card_json
+    report_button = card["body"]["elements"][-1]
+    assert report_button["tag"] == "button"
+    assert report_button["behaviors"][0] == {
+        "type": "open_url",
+        "default_url": "https://my.feishu.cn/docx/ReportToken",
+        "pc_url": "https://my.feishu.cn/docx/ReportToken",
+        "ios_url": "https://my.feishu.cn/docx/ReportToken",
+        "android_url": "https://my.feishu.cn/docx/ReportToken",
+    }
     assert "高端画质升级" in card_json
     assert "TV00030001" not in card_json
     assert len(card_json.encode("utf-8")) < 30_000

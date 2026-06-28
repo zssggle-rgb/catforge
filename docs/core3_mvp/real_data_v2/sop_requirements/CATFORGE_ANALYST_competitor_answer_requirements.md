@@ -80,7 +80,7 @@
 
 1. 识别“竞品是谁”“为什么选第一款”“和谁竞争”“直接竞品有哪些”等竞品意图。
 2. 优先调用 CLI 的稳定竞品摘要命令。
-3. 在飞书入口把当前会话 `message_id` 传给 `competitor-set`，由 CLI 直接用 bot 发送 `feishu_card_payload`；如果卡片发送失败，再降级发送 `short_answer` 和 `report_url`。
+3. 在飞书入口把当前会话 `message_id` 传给 `competitor-set`，由 CLI 尝试用 bot 发送 `feishu_card_payload`；无论卡片发送是否成功，本轮都必须把 CLI stdout 中的 `short_answer` 作为可见文本回复发送给用户。
 4. 在纯文本入口如果 CLI 返回 `short_answer`，必须原样发送，不得改写语气、重排名次或增删关键结论。
 5. 如果 CLI 返回 `report_url`，卡片和短摘要都必须提供完整报告入口。
 6. 如果 CLI 返回多候选 SKU，必须让用户二次选择；飞书入口可渲染为选择卡片。
@@ -353,11 +353,12 @@ TCL 65Q9L PRO 更像配置标杆型竞品，在画质、高刷、影音和游戏
 
 `feishu_card_payload` 必须是可序列化的飞书卡片 JSON 或卡片模板变量，不得要求小奥在 Skill 里自行拼组件。首版优先支持 raw JSON 2.0，后续样式稳定后可迁移为飞书卡片模板。
 
-飞书卡片失败时必须降级：
+飞书卡片失败时必须降级，且不能产生空回复：
 
 1. 保留同一次 CLI 生成的 `short_answer`。
 2. 保留 `report_url` 或“详细分析报告暂未生成”说明。
 3. 不暴露飞书接口错误、卡片 JSON 或回调细节。
+4. 禁止输出 `NO_REPLY`、空回复或只发送心跳。
 
 ### 7.5 详细飞书报告要求
 
@@ -425,8 +426,8 @@ TCL 65Q9L PRO 更像配置标杆型竞品，在画质、高刷、影音和游戏
 
 Skill 必须遵守：
 
-1. 在飞书入口，Skill 不解析或拼装卡片 JSON，必须调用带 `--feishu-reply-message-id` 的稳定 CLI，由 CLI 使用 `msg_type=interactive` 回复卡片。
-2. 如果卡片发送失败或入口不支持卡片，且 `display_policy.send_short_answer_as_is = true`，直接发送 `short_answer`。
+1. 在飞书入口，Skill 不解析或拼装卡片 JSON，必须调用带 `--feishu-reply-message-id` 的稳定 CLI，由 CLI 使用 `msg_type=interactive` 尝试回复卡片。
+2. 无论卡片是否发送成功，只要 CLI stdout 返回 `short_answer`，必须把它作为本轮可见文本回复发送给用户；禁止输出 `NO_REPLY` 或空回复。
 3. 不把 `top_competitors` 重新组织成另一套口径。
 4. 不自行补充泛化市场常识。
 5. 不暴露英文内部字段和技术模块。
@@ -483,7 +484,7 @@ Skill 必须遵守：
 - `dashboard_payload` 和 `feishu_card_payload` 不包含 `BF_`、`TASK_`、`TG_` 等内部 code。
 - `feishu_card_payload` 可 JSON 序列化，卡片消息体大小符合飞书限制。
 - 飞书报告生成失败时仍可返回短摘要。
-- 飞书卡片发送失败时仍可返回短摘要和报告链接，不暴露卡片错误。
+- 飞书卡片发送失败时仍可返回短摘要和报告链接，不暴露卡片错误，不产生空回复。
 - `--format text` 输出与 JSON 中 `short_answer` 一致。
 - 竞品详细报告必须把卖点画像和卖点价值量化拆开：卖点画像展示事实，卖点价值量化展示 M12C 的核心卖点商业价值、可比产品差异、本品可解释价差/销量差份额和业务标签。
 - M12C 缺失时报告明确提示“卖点价值量化待生成”，并用事实卖点/评论支撑作为兜底，不得伪造指数。
