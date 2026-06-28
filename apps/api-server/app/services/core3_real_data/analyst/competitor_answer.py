@@ -4213,7 +4213,8 @@ def _market_validation_score_from_text(value: str) -> int:
 def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[dict[str, Any]]) -> dict[str, Any]:
     rows = [
         {
-            "name": f"目标：{_dashboard_target_alias(target)}",
+            "rank": "目标",
+            "name": _dashboard_target_alias(target),
             "position": "被比较目标",
             "price": _format_dashboard_market_price((target.get("market") or {}).get("price")),
             "sales": _format_dashboard_market_sales((target.get("market") or {}).get("avg_weekly_sales_volume")),
@@ -4223,7 +4224,8 @@ def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[di
         market = item.get("market") or {}
         rows.append(
             {
-                "name": f"竞品{item.get('rank') or len(rows)}：{_dashboard_competitor_alias(item)}",
+                "rank": str(item.get("rank") or len(rows)),
+                "name": _dashboard_competitor_alias(item),
                 "position": f"{_dashboard_role_short(item)} / {_dashboard_pressure_short(item)} / {_dashboard_strength_short(item)}",
                 "price": _format_dashboard_market_price(market.get("price")),
                 "sales": _format_dashboard_market_sales(market.get("avg_weekly_sales_volume")),
@@ -4232,6 +4234,7 @@ def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[di
     return _feishu_table(
         element_id="competitor_market_table",
         columns=[
+            _feishu_text_column("rank", "#"),
             _feishu_text_column("name", "竞品/目标"),
             _feishu_text_column("position", "定位"),
             _feishu_text_column("price", "均价"),

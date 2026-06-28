@@ -3655,8 +3655,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert '"tag": "table"' in card_json
     market_table = card["body"]["elements"][9]
     assert market_table["element_id"] == "competitor_market_table"
-    assert market_table["rows"][0] == {"name": "目标：海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
-    assert market_table["rows"][1]["name"] == "竞品1：创维 65A7H PRO"
+    assert [column["display_name"] for column in market_table["columns"]] == ["#", "竞品/目标", "定位", "均价", "周均销量"]
+    assert market_table["rows"][0] == {"rank": "目标", "name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["rank"] == "1"
+    assert market_table["rows"][1]["name"] == "创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "4,700元"
     assert market_table["rows"][1]["sales"] == "75台"
     assert "购买池" in card_json
@@ -3748,8 +3750,10 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert card["body"]["elements"][5]["content"] == "**竞品市场验证**"
     assert card["body"]["elements"][6]["tag"] == "table"
     market_table = card["body"]["elements"][6]
-    assert market_table["rows"][0] == {"name": "目标：海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
-    assert market_table["rows"][1]["name"] == "竞品1：创维 65A7H PRO"
+    assert [column["display_name"] for column in market_table["columns"]] == ["#", "竞品/目标", "定位", "均价", "周均销量"]
+    assert market_table["rows"][0] == {"rank": "目标", "name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["rank"] == "1"
+    assert market_table["rows"][1]["name"] == "创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "5,600元"
     assert market_table["rows"][1]["sales"] == "210台"
     assert "业务拆解" not in card_json
