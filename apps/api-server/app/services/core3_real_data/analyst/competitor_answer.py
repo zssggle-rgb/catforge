@@ -4009,6 +4009,8 @@ def _feishu_failure_message(output: str) -> str:
     normalized = output.lower()
     if "not found" in normalized or "no such file" in normalized:
         return "飞书文档创建失败：当前环境找不到飞书 CLI。"
+    if "not_configured" in normalized or "not configured" in normalized:
+        return "飞书文档创建失败：API 容器未加载飞书 CLI 配置或密钥目录。请检查 CATFORGE_FEISHU_CONFIG_DIR 和 CATFORGE_FEISHU_DATA_DIR 挂载。"
     if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
         scopes = _extract_missing_scopes(output)
         console_url = _extract_console_url(output)

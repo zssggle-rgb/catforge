@@ -91,6 +91,25 @@ scripts/check-env.sh dev
 
 The check verifies SSH, Docker, Git, rsync, PostgreSQL service readiness, `/opt/catforge/.env`, and the API health endpoints when the app is deployed.
 
+## Feishu Report Publishing
+
+XiaoAo competitor answers can create Feishu evidence documents through the API
+container. On 205 this uses the deploy user's existing bot lark-cli
+configuration, mounted read-only into the container:
+
+```bash
+CATFORGE_ANALYST_REPORT_PUBLISHER=feishu_cli
+CATFORGE_FEISHU_AS=bot
+CATFORGE_FEISHU_NODE_DIR=/home/deploy/.openclaw/tools/node
+CATFORGE_FEISHU_CONFIG_DIR=/home/deploy/.lark-cli
+CATFORGE_FEISHU_DATA_DIR=/home/deploy/.local/share/lark-cli
+CATFORGE_FEISHU_LINK_SHARE_ENTITY=anyone_readable
+```
+
+`CATFORGE_FEISHU_CONFIG_DIR` alone is not enough. lark-cli stores the encrypted
+app secret under the data directory, so `CATFORGE_FEISHU_DATA_DIR` must also be
+mounted to `/root/.local/share/lark-cli` in the API container.
+
 ## Deploy
 
 ### Daily API hot-fix

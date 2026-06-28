@@ -646,7 +646,7 @@ class ReportPublishResult:
 实现：
 
 - `NoopReportPublisher`：本地和测试默认，不调用外部服务。
-- `FeishuCliReportPublisher`：通过 `lark-cli docs +create --api-version v2 --as user --doc-format markdown` 创建文档。
+- `FeishuCliReportPublisher`：通过 `lark-cli docs +create --api-version v2 --as <CATFORGE_FEISHU_AS> --doc-format markdown` 创建文档；205 默认使用 bot 身份。
 
 配置：
 
@@ -654,7 +654,11 @@ class ReportPublishResult:
 | --- | --- |
 | `CATFORGE_ANALYST_REPORT_PUBLISHER=none` | 不生成外部链接。 |
 | `CATFORGE_ANALYST_REPORT_PUBLISHER=feishu_cli` | 使用飞书 CLI。 |
-| `CATFORGE_FEISHU_AS=user` | 默认使用用户身份。 |
+| `CATFORGE_FEISHU_AS=bot` | 205 默认使用 bot 身份创建佐证文档。 |
+| `CATFORGE_FEISHU_NODE_DIR=/home/deploy/.openclaw/tools/node` | host 上 lark-cli 所在 Node 工具目录，Compose 挂载到容器 `/opt/openclaw-node`。 |
+| `CATFORGE_FEISHU_CONFIG_DIR=/home/deploy/.lark-cli` | host 上 lark-cli 配置目录，Compose 挂载到容器 `/root/.lark-cli`。 |
+| `CATFORGE_FEISHU_DATA_DIR=/home/deploy/.local/share/lark-cli` | host 上 lark-cli keychain/密钥存储目录，Compose 挂载到容器 `/root/.local/share/lark-cli`。缺失时 bot 会报 `not_configured` 或无法解密 app secret。 |
+| `CATFORGE_FEISHU_LINK_SHARE_ENTITY=anyone_readable` | 创建后将佐证文档设置为获得链接的人可阅读。 |
 
 飞书发布失败时：
 
