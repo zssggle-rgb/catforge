@@ -579,10 +579,10 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
         battlefield_chart_values = _dashboard_battlefield_chart_values(competitors)
         if battlefield_chart_values:
             elements.append({"tag": "hr"})
-            elements.append(_feishu_markdown("**价值战场重合结构**"))
+            elements.append(_feishu_markdown(_battlefield_chart_heading(battlefield_chart_values)))
             elements.append(_feishu_battlefield_overlap_chart(battlefield_chart_values))
         elements.append({"tag": "hr"})
-        elements.append(_feishu_markdown("**竞品与市场表现**"))
+        elements.append(_feishu_markdown("**竞品市场验证**"))
         elements.append(_feishu_competitor_market_table(target, competitors))
     action = _feishu_report_action(dashboard_payload)
     if action:
@@ -4098,13 +4098,36 @@ def _feishu_battlefield_overlap_chart(values: list[dict[str, Any]]) -> dict[str,
                 "style": {"fontSize": 11, "fontWeight": "500", "lineHeight": 14},
             },
             "axes": [
-                {"orient": "bottom", "min": 0, "max": 100, "title": {"visible": True, "text": "占总并集权重比例"}},
+                {"orient": "bottom", "min": 0, "max": 100, "title": {"visible": True, "text": "价值战场结构占比"}},
                 {"orient": "left", "label": {"visible": True}},
             ],
             "legends": {"visible": True, "orient": "bottom"},
             "tooltip": {"visible": True},
         },
     }
+
+
+def _battlefield_chart_heading(values: list[dict[str, Any]]) -> str:
+    segment_labels = {
+        "主战场重合": "主战场",
+        "辅战场重合": "辅战场",
+        "机会战场重合": "机会战场",
+        "错位/缺口": "错位/缺口",
+    }
+    parts: list[str] = []
+    for segment in ("主战场重合", "辅战场重合", "机会战场重合"):
+        names: list[str] = []
+        for row in values:
+            if row.get("segment") != segment:
+                continue
+            names.extend([name for name in str(row.get("battlefields") or "").split("、") if name])
+        compact_names = _compact_battlefield_names(_unique_texts(names), limit=3, separator="、")
+        if compact_names:
+            parts.append(f"{segment_labels[segment]}：{compact_names}")
+    if any(row.get("segment") == "错位/缺口" for row in values):
+        parts.append("错位/缺口")
+    detail = f"\n{'｜'.join(parts)}" if parts else ""
+    return f"**价值战场重合结构**{detail}"
 
 
 def _dashboard_battlefield_chart_values(competitors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -4133,13 +4156,15 @@ def _dashboard_battlefield_chart_values(competitors: list[dict[str, Any]]) -> li
 
 
 def _battlefield_chart_label(row: dict[str, Any], value: Decimal) -> str:
+    value_text = f"{value.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}"
+    if str(row.get("segment_cn") or "") != "错位/缺口":
+        return value_text
     names = [str(name) for name in row.get("battlefields_cn") or [] if name]
     compact_names = _compact_battlefield_names(names)
-    value_text = f"{value.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)}"
     return f"{compact_names} {value_text}" if compact_names else value_text
 
 
-def _compact_battlefield_names(names: list[str]) -> str:
+def _compact_battlefield_names(names: list[str], *, limit: int = 2, separator: str = "/") -> str:
     if not names:
         return ""
     display_names: list[str] = []
@@ -4164,8 +4189,8 @@ def _compact_battlefield_names(names: list[str]) -> str:
             display = f"{display}错位"
         if display and display not in display_names:
             display_names.append(display)
-    result = "/".join(display_names[:2])
-    if len(display_names) > 2:
+    result = separator.join(display_names[:limit])
+    if len(display_names) > limit:
         result += "等"
     return result
 
@@ -4188,7 +4213,7 @@ def _market_validation_score_from_text(value: str) -> int:
 def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[dict[str, Any]]) -> dict[str, Any]:
     rows = [
         {
-            "name": _dashboard_target_alias(target),
+            "name": f"目标：{_dashboard_target_alias(target)}",
             "position": "被比较目标",
             "price": _format_dashboard_market_price((target.get("market") or {}).get("price")),
             "sales": _format_dashboard_market_sales((target.get("market") or {}).get("avg_weekly_sales_volume")),
@@ -4198,7 +4223,7 @@ def _feishu_competitor_market_table(target: dict[str, Any], competitors: list[di
         market = item.get("market") or {}
         rows.append(
             {
-                "name": _dashboard_competitor_alias(item),
+                "name": f"竞品{item.get('rank') or len(rows)}：{_dashboard_competitor_alias(item)}",
                 "position": f"{_dashboard_role_short(item)} / {_dashboard_pressure_short(item)} / {_dashboard_strength_short(item)}",
                 "price": _format_dashboard_market_price(market.get("price")),
                 "sales": _format_dashboard_market_sales(market.get("avg_weekly_sales_volume")),

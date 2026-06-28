@@ -3637,18 +3637,26 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "多维评分雷达图" in card_json
     assert '"tag": "chart"' in card_json
     assert '"type": "radar"' in card_json
-    assert card["body"]["elements"][5]["content"] == "**价值战场重合结构**"
+    assert card["body"]["elements"][5]["content"].startswith("**价值战场重合结构**")
+    assert "主战场：高端画质" in card["body"]["elements"][5]["content"]
+    assert "辅战场：" in card["body"]["elements"][5]["content"]
+    assert "机会战场：" in card["body"]["elements"][5]["content"]
+    assert "错位/缺口：" not in card["body"]["elements"][5]["content"]
+    assert "错位/缺口" in card["body"]["elements"][5]["content"]
     battlefield_chart = card["body"]["elements"][6]
     assert battlefield_chart["chart_spec"]["label"]["position"] == "inside"
     assert battlefield_chart["chart_spec"]["label"]["formatter"] == "{label}"
+    assert battlefield_chart["chart_spec"]["axes"][0]["title"]["text"] == "价值战场结构占比"
     battlefield_values = battlefield_chart["chart_spec"]["data"]["values"]
     assert any(row["battlefields"] == "高端画质升级" for row in battlefield_values)
-    assert any("高端画质" in row["label"] for row in battlefield_values)
-    assert "竞品与市场表现" in card_json
+    assert all(re.fullmatch(r"\d+(?:\.\d)?", row["label"]) for row in battlefield_values if row["segment"] != "错位/缺口")
+    assert any("错位" in row["label"] for row in battlefield_values if row["segment"] == "错位/缺口")
+    assert "竞品市场验证" in card_json
     assert '"tag": "table"' in card_json
     market_table = card["body"]["elements"][9]
     assert market_table["element_id"] == "competitor_market_table"
-    assert market_table["rows"][0] == {"name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][0] == {"name": "目标：海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["name"] == "竞品1：创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "4,700元"
     assert market_table["rows"][1]["sales"] == "75台"
     assert "购买池" in card_json
@@ -3737,10 +3745,11 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert len(radar_values) == 6
     assert {row["dimension"] for row in radar_values} == {"购买池", "价值战场", "用户任务", "目标客群", "价值锚点", "市场验证"}
     assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
-    assert card["body"]["elements"][5]["content"] == "**竞品与市场表现**"
+    assert card["body"]["elements"][5]["content"] == "**竞品市场验证**"
     assert card["body"]["elements"][6]["tag"] == "table"
     market_table = card["body"]["elements"][6]
-    assert market_table["rows"][0] == {"name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][0] == {"name": "目标：海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][1]["name"] == "竞品1：创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "5,600元"
     assert market_table["rows"][1]["sales"] == "210台"
     assert "业务拆解" not in card_json
