@@ -2471,6 +2471,50 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "MiniLED" in text
 
 
+def test_sku_claim_value_text_formatter_keeps_unique_payment_potential_unquantified() -> None:
+    result = {
+        "target": {"brand": "海信", "model_name": "65E7Q"},
+        "result": {
+            "sku_claim_value": {
+                "claim_values": [
+                    {
+                        "claim_code": "tv_claim_chip_performance",
+                        "claim_name": "芯片/处理器性能",
+                        "claim_value_role": "unique_payment_potential",
+                        "business_claim_type_cn": "人无我有型支付价值卖点",
+                        "context_type": "battlefield",
+                        "context_code": "BF_PREMIUM_PICTURE_UPGRADE",
+                        "context_name": "高端画质升级战场",
+                        "supporting_dimensions": {
+                            "unique_payment_potential_scorecard": {
+                                "potential_level_cn": "高潜力",
+                                "no_amount_reason_cn": "同战场对照 SKU 不足。",
+                                "verification_condition_cn": "需要新增同战场对照样本后复核。",
+                            }
+                        },
+                        "pool_effect": {
+                            "pool_claim_price_delta_abs": 1180,
+                            "pool_claim_weekly_sales_delta_abs": 60,
+                        },
+                        "estimated_contribution": {
+                            "price_premium_abs": 0,
+                            "weekly_sales_lift_abs": 0,
+                        },
+                    }
+                ]
+            }
+        },
+    }
+
+    text = catforge_analyst.format_business_text(result)
+
+    assert "人无我有型支付价值卖点" in text
+    assert "芯片/处理器性能" in text
+    assert "当前对照不足，暂不量化金额" in text
+    assert "潜力判断：高潜力" in text
+    assert "战场可解释价差合计1180元" not in text
+
+
 def test_claim_value_report_keeps_specific_claims_with_battlefield_totals() -> None:
     shared_pool = {
         "pool_claim_price_delta_abs": 500,

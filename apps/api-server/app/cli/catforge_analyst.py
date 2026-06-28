@@ -1279,6 +1279,15 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
         for group in category_groups[:5]:
             sales_total = _format_volume(group["sales_total"])
             quantified = bool(group.get("battlefields")) and category not in _claim_value_cli_text_only_categories()
+            if category == "人无我有型支付价值卖点":
+                note = _claim_value_cli_unique_note(group)
+                lines.append(
+                    f"- {group['claim_name']}：本品在同战场具备稀缺卖点或关键参数优势，可能提高用户最高支付意愿；"
+                    f"当前对照不足，暂不量化金额；"
+                    f"覆盖价值战场：{'、'.join(group['battlefields'][:4]) if group['battlefields'] else '相关战场待补充'}。"
+                    f"{note}"
+                )
+                continue
             lines.append(
                 f"- {group['claim_name']}：战场可解释价差合计{(_format_money(group['price_total']) or '暂不量化') if quantified else '不作为正向量化'}；"
                 f"战场可解释销量合计{(f'{sales_total}台/周' if sales_total else '暂不量化') if quantified else '不作为正向量化'}；"
@@ -1332,6 +1341,29 @@ def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[s
     return "\n".join(lines)
 
 
+def _claim_value_cli_unique_note(group: dict[str, Any]) -> str:
+    for row in group.get("battlefield_rows") or []:
+        supporting = row.get("supporting_dimensions") or {}
+        scorecard = supporting.get("unique_payment_potential_scorecard") if isinstance(supporting, dict) else None
+        if not isinstance(scorecard, dict):
+            scorecard = ((row.get("scorecard") or {}).get("unique_payment_potential") or {}) if isinstance(row.get("scorecard"), dict) else {}
+        if not isinstance(scorecard, dict) or not scorecard:
+            continue
+        level = str(scorecard.get("potential_level_cn") or "").strip()
+        reason = str(scorecard.get("no_amount_reason_cn") or "").strip()
+        condition = str(scorecard.get("verification_condition_cn") or "").strip()
+        parts = []
+        if level:
+            parts.append(f"潜力判断：{level}")
+        if reason:
+            parts.append(f"不量化原因：{reason}")
+        if condition:
+            parts.append(f"验证条件：{condition}")
+        if parts:
+            return "".join(f"{part}。" for part in parts)
+    return ""
+
+
 def _sku_level_positive_context_lines(item: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     for context in [value for value in (item.get("context_values") or []) if isinstance(value, dict)][:3]:
@@ -1364,6 +1396,8 @@ def _sku_level_claim_value_sentence(category: str, price: Decimal, sales: Decima
         return f"价格溢价不一定显著，销量解释约{sales_text}"
     if category == "客户获得价值卖点":
         return f"更主要体现为用户觉得更值，当前可解释价差约{price_text}，销量解释约{sales_text}"
+    if category == "人无我有型支付价值卖点":
+        return "本品在同战场具备稀缺卖点或关键参数优势，可能提高用户最高支付意愿；当前对照不足，暂不量化金额"
     if category == "门槛卖点":
         return "属于购买入围门槛，有了不一定加价，缺失会削弱入围"
     if category == "待激活卖点":
@@ -1382,6 +1416,7 @@ def _claim_value_cli_category_order() -> list[str]:
         "高溢价卖点",
         "份额转化卖点",
         "客户获得价值卖点",
+        "人无我有型支付价值卖点",
         "门槛卖点",
         "待激活卖点",
         "厂家主张卖点",
@@ -1394,6 +1429,7 @@ def _claim_value_cli_category_order() -> list[str]:
 def _claim_value_cli_text_only_categories() -> set[str]:
     return {
         "待激活卖点",
+        "人无我有型支付价值卖点",
         "厂家主张卖点",
         "竞品拦截卖点",
         "价格压力卖点",
@@ -1725,6 +1761,7 @@ def _claim_role_cn(value: Any) -> str:
         "sales_driver_estimated": "份额转化卖点",
         "basic_threshold": "门槛卖点",
         "value_bundle_claim": "客户获得价值卖点",
+        "unique_payment_potential": "人无我有型支付价值卖点",
         "weak_user_perception_claim": "待激活卖点",
         "high_price_competitor_intercept": "竞品拦截卖点",
         "price_up_opportunity": "竞品拦截卖点",
