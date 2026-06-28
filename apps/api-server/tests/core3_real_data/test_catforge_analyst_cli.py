@@ -2541,7 +2541,7 @@ def test_m12c_target_baseline_not_dragged_down_by_high_sales_low_price_sku() -> 
 
     baseline = m12c_service._target_baseline(pool, markets, "target")
 
-    assert baseline["baseline_price"] == Decimal("5579.5000")
+    assert baseline["baseline_price"] == Decimal("5637.0000")
     assert "low-volume-hit" in baseline["comparison_sku_codes"]
     assert baseline["baseline_price"] > Decimal("5000.0000")
 

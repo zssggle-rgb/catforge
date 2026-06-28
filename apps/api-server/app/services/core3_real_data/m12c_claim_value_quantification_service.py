@@ -62,6 +62,15 @@ M12C_FORCE_THRESHOLD_CLAIM_CODES = {
     # If a later taxonomy splits out a scarce high-spec implementation, that new
     # claim can be measured separately instead of inheriting this threshold rule.
     "tv_claim_hdmi21_connectivity",
+    "tv_claim_miniled_display",
+}
+M12C_TIER_DIFFERENTIATED_CLAIM_CODES = {
+    "tv_claim_hdr_high_brightness",
+    "tv_claim_local_dimming",
+    "tv_claim_picture_engine_ai",
+    "tv_claim_chip_performance",
+    "tv_claim_wide_color_accuracy",
+    "tv_claim_refresh_rate",
 }
 
 M12C_CLAIM_TYPE_PREMIUM = "premium_payment_claim"
@@ -1150,6 +1159,7 @@ def _quantification_rows(
                 param_strength=param_strength,
                 comment_strength=comment_strength,
                 semantic_strength=semantic_strength,
+                battlefield_claim_relevance=battlefield_claim_relevance,
                 has_negative=comment.has_negative(pool.claim_code),
                 market_price=market.price,
             )
@@ -1546,6 +1556,7 @@ def _claim_role(
     param_strength: Decimal,
     comment_strength: Decimal,
     semantic_strength: Decimal,
+    battlefield_claim_relevance: Decimal = Decimal("1.0000"),
     has_negative: bool,
     market_price: Decimal | None = None,
 ) -> str:
@@ -1572,14 +1583,21 @@ def _claim_role(
     positive_price_value = (
         price_positive
         and amount_positive
+        and battlefield_claim_relevance >= Decimal("0.9000")
         and semantic_strength >= Decimal("0.5000")
         and max(param_strength, comment_strength) >= Decimal("0.6000")
         and pool.pool_relax_level != "L4"
         and pool.sample_status != "insufficient"
         and (pool.sample_status != "weak" or pool.pool_relax_level == "L3")
     )
+    if battlefield_claim_relevance < Decimal("0.9000"):
+        if sales_positive and max(comment_strength, param_strength) >= Decimal("0.6000"):
+            return M12C_ROLE_SALES
+        if param_strength >= Decimal("0.6000") or comment_strength >= Decimal("0.6000"):
+            return M12C_ROLE_WEAK_USER
+        return M12C_ROLE_BRAND
     if coverage_rate >= Decimal("0.7500"):
-        if positive_price_value:
+        if positive_price_value and pool.claim_code in M12C_TIER_DIFFERENTIATED_CLAIM_CODES:
             return M12C_ROLE_PREMIUM
         return M12C_ROLE_BASIC
     if pool.pool_relax_level == "L4":
@@ -2155,9 +2173,9 @@ def _direct_baseline_skus(
             sku,
         ),
     )
-    if len(ranked) <= 5:
-        return list(ranked)
-    return list(ranked[:5])
+    if len(ranked) >= 3:
+        return list(ranked[:3])
+    return list(ranked)
 
 
 def _weighted_median(value_weight_pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal:
