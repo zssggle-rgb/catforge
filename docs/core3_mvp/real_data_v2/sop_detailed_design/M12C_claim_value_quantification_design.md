@@ -801,6 +801,8 @@ main_supporting_battlefields = [
 
 业务摘要生成时必须优先使用 `claim_values` 的分战场明细进行分组，再计算 SKU 口径展示。`sku_level_claim_values` 只作为 JSON 兼容字段和报告索引；文本短答不得直接用 SKU 层“最高优先级分类”覆盖分战场明细，否则会把同一卖点在某个战场的短暂正向结果误写成整机口径高溢价。
 
+显示层处理样本标记时，`insufficient_comparison_group`、`sample_weak`、`sample_insufficient` 直接降级；`small_comparable_pool` 需要结合 `attribution_confidence` 判断，低于 0.75 才降级，高于该阈值的结果可作为可观测估计展示，但需保留样本提示。
+
 ### 11.1 用户默认看到的结果
 
 CLI 和 Skill 面向业务用户输出时，默认展示 SKU 整机口径的最终结果。分战场金额、战场权重、可比池和样本等级是结果依据，不是短答主结构。
