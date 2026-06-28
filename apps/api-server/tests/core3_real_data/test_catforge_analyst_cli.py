@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -3383,8 +3384,66 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "创维 65A7H PRO" in short_answer
     assert "小米 L65MC-SP" not in short_answer.split("详细分析报告")[0] or "价格贴身" in short_answer
     assert "详细分析报告暂未生成" in short_answer
+    dashboard = answer["dashboard_payload"]
+    assert dashboard["schema_version"] == "competitor_dashboard_v1"
+    assert dashboard["display_policy"]["main_answer"] == "feishu_card"
+    assert dashboard["competitors"][0]["name"] == "创维 65A7H PRO"
+    assert [row["dimension_cn"] for row in dashboard["competitors"][0]["overlap_rows"]] == ["价值战场", "用户任务", "目标客群"]
+    assert all(row["matched_points_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
+    assert all(row["impact_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
+    assert "高端画质升级" in dashboard["competitors"][0]["overlap_rows"][0]["matched_points_cn"]
+    card = answer["feishu_card_payload"]
+    card_json = json.dumps(card, ensure_ascii=False)
+    assert card["schema"] == "2.0"
+    assert card["config"]["summary"]["content"] == "海信 65E7Q 重点竞品看板"
+    assert "创维 65A7H PRO" in card_json
+    assert len(card_json.encode("utf-8")) < 30_000
+    for forbidden in ("BF_", "TG_", "TASK_", "core3_", "M03B"):
+        assert forbidden not in card_json
     for forbidden in ("CLI", "JSON", "M03B", "BF_", "TG_", "TASK_", "mid_high"):
         assert forbidden not in short_answer
+
+
+def test_competitor_dashboard_payload_and_feishu_card_include_report_action() -> None:
+    dashboard = competitor_answer.build_competitor_dashboard_payload(
+        target={"sku_code": "TV00029112", "brand_name": "海信", "model_name": "65E7Q", "screen_size_inch": 65, "price_band_in_size_tier": "mid_high"},
+        target_fact_brief={"sections": {}},
+        top_competitors=[
+            {
+                "candidate": {"sku_code": "TV00030001", "brand_name": "创维", "model_name": "65A7H PRO"},
+                "role_cn": "首选直接竞品",
+                "business_score": 0.82,
+                "replacement_pressure": {"type_cn": "价值替代压力"},
+                "shared_business_context": ["高端画质升级", "影院沉浸观影", "高端影音体验用户"],
+                "weighted_overlap": {"battlefield": 0.81, "user_task": 0.76, "target_group": 0.68},
+                "matched_dimensions": {
+                    "battlefield": ["高端画质升级", "智能互联体验"],
+                    "user_task": ["影院沉浸观影", "主机游戏娱乐"],
+                    "target_group": ["高端影音体验用户", "大屏换新升级用户"],
+                },
+                "value_anchor": {"shared_anchors": ["MiniLED", "高刷新率", "智能互联"]},
+                "market_validation": {"level": "strong", "summary_cn": "重叠在售周8周，候选周均销量约80台"},
+            }
+        ],
+        report_url="https://my.feishu.cn/docx/ReportToken",
+    )
+
+    competitor = dashboard["competitors"][0]
+    assert competitor["score_cn"] == "82分"
+    assert competitor["strength_cn"] == "强重合"
+    assert competitor["action_links"][0]["url"] == "https://my.feishu.cn/docx/ReportToken"
+    assert dashboard["report_evidence_links"] == [{"label": "完整竞品分析报告", "url": "https://my.feishu.cn/docx/ReportToken", "type": "report"}]
+    assert {row["dimension_cn"] for row in competitor["overlap_rows"]} == {"价值战场", "用户任务", "目标客群"}
+    assert all("重合" in row["strength_cn"] for row in competitor["overlap_rows"])
+    assert all("impact_cn" in row for row in competitor["overlap_rows"])
+
+    card = competitor_answer.render_feishu_card_payload(dashboard)
+    card_json = json.dumps(card, ensure_ascii=False)
+    assert "查看完整报告" in card_json
+    assert "https://my.feishu.cn/docx/ReportToken" in card_json
+    assert "高端画质升级" in card_json
+    assert "TV00030001" not in card_json
+    assert len(card_json.encode("utf-8")) < 30_000
 
 
 def test_competitor_set_text_format_is_business_facing() -> None:

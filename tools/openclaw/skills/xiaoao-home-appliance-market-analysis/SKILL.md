@@ -93,16 +93,22 @@ If `status` is not `ok`, follow the boundary rules below.
 
 Tooling hygiene:
 
-- For competitor-list questions, prefer the XiaoAo answer command and send its
-  `short_answer` directly. The CLI owns ranking and wording for this question;
-  do not rewrite it.
+- For competitor-list questions in a Feishu card-capable entrypoint, call the
+  XiaoAo answer command with `--format json` and send
+  `result.competitor_answer.feishu_card_payload` as the main answer. If card
+  sending is not available or fails, send
+  `result.competitor_answer.short_answer` exactly. The CLI owns ranking,
+  dashboard structure, and wording for this question; do not rewrite it.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format json --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600
 ```
 
+- In non-card chat channels, use the same command with `--format text` and send
+  the stable short answer directly.
+
 - Use stable CLI commands only. Do not run ad hoc heredocs, inline Python, jq pipelines, grep pipelines, or shell parsing scripts to create a business answer.
-- Do not post-process analyst JSON with Python, jq, grep, sed, awk, or shell pipelines for user-facing answers. If text output is available, use it directly.
+- Do not post-process analyst JSON with Python, jq, grep, sed, awk, or shell pipelines for user-facing answers. For Feishu cards, consume only the existing `feishu_card_payload`; for non-card channels, use text output directly.
 - If a command output is too large, rerun the stable CLI with narrower inputs or a smaller limit if the command supports it.
 - If a tool call fails after a previous successful CLI result already contains enough evidence, do not expose the failed tool call. Answer from the successful result and put only a clean limitation if needed.
 - If the primary CLI result itself fails and no usable evidence is available, give a concise business-facing failure message. Never paste raw command text, stdout/stderr, JSON parse errors, stack traces, or shell error messages into the final answer.
@@ -227,9 +233,12 @@ For "这款和谁比":
 
 1. `competitor-set`
 2. If the user asks for deeper reasoning, run `why-sales-diff` on the chosen pair.
-3. For the initial answer, call `competitor-set --format text --answer-style
-   xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600` and reuse
-   that answer directly. Do not parse JSON for this question.
+3. For the initial answer in a Feishu card-capable entrypoint, call
+   `competitor-set --format json --answer-style xiaoao --with-report
+   feishu-doc --top-n 3 --max-chat-chars 600` and send
+   `result.competitor_answer.feishu_card_payload`. If card sending is not
+   available or fails, send `result.competitor_answer.short_answer` exactly. In
+   non-card channels, call the same command with `--format text`.
 4. The CLI-generated Top 3 follows this business definition:
    首选竞品 = 同一购买池 × 主辅价值战场加权重合 × 主辅用户任务加权重合 ×
    主辅目标客群加权重合 × 关键价值锚点可替代 × 替代压力 × 市场验证.
@@ -241,8 +250,8 @@ For "这款和谁比":
    reason for selecting a competitor.
 7. Do not say "CLI order", "CatForge SOP order", or "competitor_score" in the
    final answer. Explain the order in market terms.
-8. If JSON was used because text output was unavailable and
-   `result.competitor_answer.display_policy.send_short_answer_as_is=true`, send
+8. If JSON was used and card sending fails while
+   `result.competitor_answer.display_policy.fallback_to_short_answer=true`, send
    `result.competitor_answer.short_answer` exactly. Do not rewrite the summary.
 
 For follow-up references such as "第一款", "第一名", "上面第一款", "它", "这款",

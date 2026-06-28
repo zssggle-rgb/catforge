@@ -373,6 +373,13 @@ def build_competitor_answer(
         report_url=publish_result.url,
         max_chat_chars=max_chat_chars,
     )
+    dashboard_payload = build_competitor_dashboard_payload(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=publish_result.url,
+    )
+    feishu_card_payload = render_feishu_card_payload(dashboard_payload)
     return {
         "short_answer": short_answer,
         "report_url": publish_result.url,
@@ -384,6 +391,8 @@ def build_competitor_answer(
             "url": publish_result.url,
             "status": publish_result.status,
         },
+        "dashboard_payload": dashboard_payload,
+        "feishu_card_payload": feishu_card_payload,
         "top_competitors": top_competitors,
         "candidate_buckets": buckets,
         "selection_policy_cn": [
@@ -393,6 +402,9 @@ def build_competitor_answer(
         ],
         "display_policy": {
             "send_short_answer_as_is": True,
+            "prefer_feishu_card": True,
+            "fallback_to_short_answer": True,
+            "report_as_evidence": True,
             "max_chat_chars": max_chat_chars,
             "hide_internal_fields": True,
         },
@@ -480,6 +492,81 @@ def render_short_answer(
     lines.append(_report_suffix(report_url))
     text = "".join(lines)
     return _compress_answer(text, target=target, top_competitors=top_competitors, report_url=report_url, max_chat_chars=max_chat_chars)
+
+
+def build_competitor_dashboard_payload(
+    *,
+    target: dict[str, Any],
+    target_fact_brief: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+    report_url: str | None,
+) -> dict[str, Any]:
+    """Build the business dashboard consumed by Feishu cards and XiaoAo."""
+
+    target_name = _display_name(target)
+    competitors = [
+        _dashboard_competitor_payload(index, item, report_url=report_url)
+        for index, item in enumerate(top_competitors[:3], start=1)
+    ]
+    report_links = _dashboard_report_links(report_url)
+    summary_cn = _dashboard_summary(target_name, competitors, target_fact_brief)
+    return {
+        "schema_version": "competitor_dashboard_v1",
+        "title": f"{target_name} 重点竞品看板",
+        "target": {
+            "sku_code": target.get("sku_code"),
+            "brand_name": target.get("brand_name"),
+            "model_name": target.get("model_name"),
+            "display_name": target_name,
+            "summary": _dashboard_target_summary(target, target_fact_brief),
+        },
+        "summary_cn": summary_cn,
+        "competitors": competitors,
+        "report_evidence_links": report_links,
+        "display_policy": {
+            "main_answer": "feishu_card",
+            "report_as_evidence": True,
+            "fallback_to_short_answer": True,
+            "link_preview_optional": True,
+        },
+    }
+
+
+def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, Any]:
+    """Render a Feishu interactive-card payload from the dashboard contract."""
+
+    title = str(dashboard_payload.get("title") or "重点竞品看板")
+    summary = str(dashboard_payload.get("summary_cn") or "")
+    target = dashboard_payload.get("target") or {}
+    elements: list[dict[str, Any]] = [
+        {
+            "tag": "markdown",
+            "content": f"**结论**\n{summary or '当前没有足够证据形成稳定重点竞品。'}",
+        }
+    ]
+    competitors = [item for item in dashboard_payload.get("competitors") or [] if isinstance(item, dict)]
+    for competitor in competitors[:3]:
+        elements.append({"tag": "hr"})
+        elements.append({"tag": "markdown", "content": _feishu_competitor_markdown(competitor)})
+    action = _feishu_report_action(dashboard_payload)
+    if action:
+        elements.append({"tag": "hr"})
+        elements.append(action)
+    card = {
+        "schema": "2.0",
+        "config": {
+            "summary": {"content": title},
+            "width_mode": "fill",
+            "wide_screen_mode": True,
+        },
+        "header": {
+            "template": "blue",
+            "title": {"tag": "plain_text", "content": title},
+            "subtitle": {"tag": "plain_text", "content": str(target.get("summary") or "")[:80]},
+        },
+        "body": {"elements": elements},
+    }
+    return _trim_feishu_card(card)
 
 
 def render_competitor_report(
@@ -3556,6 +3643,198 @@ def _select_top_competitors(enriched: list[dict[str, Any]], *, target: dict[str,
         if item not in selected and item["role"] != "excluded":
             selected.append(item)
     return selected[:top_n]
+
+
+def _dashboard_competitor_payload(index: int, item: dict[str, Any], *, report_url: str | None) -> dict[str, Any]:
+    candidate = item.get("candidate") or {}
+    name = _display_name(candidate)
+    overlap_rows = [
+        _dashboard_overlap_row(item, dimension_key="battlefield", dimension_cn="价值战场"),
+        _dashboard_overlap_row(item, dimension_key="user_task", dimension_cn="用户任务"),
+        _dashboard_overlap_row(item, dimension_key="target_group", dimension_cn="目标客群"),
+    ]
+    shared_anchors = (item.get("value_anchor") or {}).get("shared_anchors") or []
+    return {
+        "rank": index,
+        "sku_code": candidate.get("sku_code"),
+        "brand_name": candidate.get("brand_name"),
+        "model_name": candidate.get("model_name"),
+        "name": name,
+        "role_cn": item.get("role_cn") or ROLE_CN.get(str(item.get("role") or ""), "重点竞品"),
+        "pressure_cn": ((item.get("replacement_pressure") or {}).get("type_cn") or "替代压力待复核"),
+        "score_cn": _dashboard_score_cn(item.get("business_score")),
+        "strength_cn": _dashboard_strength_cn(item.get("business_score")),
+        "reason_cn": _dashboard_reason_cn(item),
+        "overlap_rows": overlap_rows,
+        "shared_anchors_cn": [str(value) for value in shared_anchors[:5] if value],
+        "market_validation_cn": (item.get("market_validation") or {}).get("summary_cn") or "市场验证待补充",
+        "evidence_refs": _dashboard_evidence_refs(item),
+        "action_links": _dashboard_action_links(report_url),
+    }
+
+
+def _dashboard_overlap_row(item: dict[str, Any], *, dimension_key: str, dimension_cn: str) -> dict[str, Any]:
+    overlap = item.get("weighted_overlap") or {}
+    matched_dimensions = item.get("matched_dimensions") or {}
+    matched = [str(value) for value in (matched_dimensions.get(dimension_key) or [])[:5] if value]
+    score = overlap.get(dimension_key)
+    return {
+        "dimension_cn": dimension_cn,
+        "strength_cn": _dashboard_strength_cn(score),
+        "score_cn": _dashboard_score_cn(score),
+        "matched_points_cn": matched or ["证据不足，需复核"],
+        "impact_cn": _dashboard_overlap_impact(dimension_cn, matched),
+    }
+
+
+def _dashboard_reason_cn(item: dict[str, Any]) -> str:
+    name = _display_name(item.get("candidate") or {})
+    role = item.get("role_cn") or "重点竞品"
+    pressure = (item.get("replacement_pressure") or {}).get("type_cn") or "替代压力"
+    context = _join_cn((item.get("shared_business_context") or [])[:4])
+    if context:
+        return f"{name}是{role}，在{context}上与目标 SKU 重合，主要形成{pressure}。"
+    return f"{name}是{role}，主要形成{pressure}，详细重合依据需查看报告佐证。"
+
+
+def _dashboard_overlap_impact(dimension_cn: str, matched_points: list[str]) -> str:
+    if not matched_points:
+        return f"{dimension_cn}证据不足，当前只能作为复核点，不能单独支撑核心竞品判断。"
+    points = _join_cn(matched_points[:3])
+    if dimension_cn == "价值战场":
+        return f"两款产品共同争夺{points}等价值诉求，用户会在同一购买池里横向比较。"
+    if dimension_cn == "用户任务":
+        return f"用户购买时要完成的核心任务集中在{points}，会影响同一批用户的最终候选清单。"
+    if dimension_cn == "目标客群":
+        return f"共同覆盖{points}，客群重叠会放大配置、价格和卖点表达的直接对比。"
+    return f"共同命中{points}，会提高同场比较概率。"
+
+
+def _dashboard_summary(target_name: str, competitors: list[dict[str, Any]], target_fact_brief: dict[str, Any]) -> str:
+    if not competitors:
+        return f"{target_name} 当前没有足够证据形成稳定重点竞品。"
+    first = competitors[0]
+    evidence_state = _target_evidence_state(target_fact_brief)
+    suffix = "" if evidence_state["semantic_verified"] else " 当前语义或评论验证不完整，排序需结合报告复核。"
+    return f"当前识别出 {len(competitors)} 个重点竞品，首选是{first.get('name')}；看板重点展示战场、任务和客群的重合结构。{suffix}".strip()
+
+
+def _dashboard_target_summary(target: dict[str, Any], target_fact_brief: dict[str, Any]) -> str:
+    sections = _fact_sections(target_fact_brief)
+    market_position = _market_position(sections)
+    size = _format_number(market_position.get("screen_size_inch") or target.get("screen_size_inch"))
+    band = PRICE_BAND_NAMES.get(str(market_position.get("price_band_in_size_tier") or target.get("price_band_in_size_tier")), "")
+    parts = []
+    if size:
+        parts.append(f"{size}寸")
+    if band:
+        parts.append(band)
+    return f"当前可观测线上样本内的{'、'.join(parts)}目标 SKU。" if parts else "当前可观测线上样本内的目标 SKU。"
+
+
+def _dashboard_score_cn(value: Any) -> str:
+    score = _decimal(value)
+    if score is None:
+        return "待复核"
+    return f"{(score * Decimal('100')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)}分"
+
+
+def _dashboard_strength_cn(value: Any) -> str:
+    score = _decimal(value)
+    if score is None:
+        return "待复核"
+    if score >= Decimal("0.75"):
+        return "强重合"
+    if score >= Decimal("0.55"):
+        return "中高重合"
+    if score >= Decimal("0.35"):
+        return "中重合"
+    if score > 0:
+        return "弱重合"
+    return "证据不足"
+
+
+def _dashboard_evidence_refs(item: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    if any((item.get("matched_dimensions") or {}).get(key) for key in ("battlefield", "user_task", "target_group")):
+        refs.append("语义证据")
+    if (item.get("value_anchor") or {}).get("shared_anchors"):
+        refs.append("参数卖点证据")
+    if (item.get("market_validation") or {}).get("level") != "weak":
+        refs.append("市场证据")
+    return refs or ["证据待复核"]
+
+
+def _dashboard_report_links(report_url: str | None) -> list[dict[str, Any]]:
+    if not report_url:
+        return []
+    return [{"label": "完整竞品分析报告", "url": report_url, "type": "report"}]
+
+
+def _dashboard_action_links(report_url: str | None) -> list[dict[str, Any]]:
+    links = [{"label": "查看重合依据", "section_code": "overlap_rows", "type": "section"}]
+    if report_url:
+        links.insert(0, {"label": "查看完整报告", "url": report_url, "type": "report"})
+    return links
+
+
+def _feishu_competitor_markdown(competitor: dict[str, Any]) -> str:
+    header = f"**{competitor.get('rank')}. {competitor.get('name')}**｜{competitor.get('role_cn')}｜{competitor.get('pressure_cn')}"
+    reason = str(competitor.get("reason_cn") or "")
+    rows = []
+    for row in competitor.get("overlap_rows") or []:
+        if not isinstance(row, dict):
+            continue
+        points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:4] if value])
+        rows.append(f"- {row.get('dimension_cn')}：{row.get('strength_cn')}，{points}。{row.get('impact_cn')}")
+    anchors = _join_cn([str(value) for value in (competitor.get("shared_anchors_cn") or [])[:5] if value])
+    market = str(competitor.get("market_validation_cn") or "")
+    detail = "\n".join(rows)
+    tail = []
+    if anchors:
+        tail.append(f"共同价值锚点：{anchors}")
+    if market:
+        tail.append(f"市场验证：{market}")
+    return "\n".join(part for part in [header, reason, detail, "\n".join(tail)] if part)
+
+
+def _feishu_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] | None:
+    links = dashboard_payload.get("report_evidence_links") or []
+    report_url = ""
+    for item in links:
+        if isinstance(item, dict) and str(item.get("url") or "").startswith("http"):
+            report_url = str(item["url"])
+            break
+    if not report_url:
+        return None
+    return {
+        "tag": "action",
+        "actions": [
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "查看完整报告"},
+                "type": "primary",
+                "url": report_url,
+            }
+        ],
+    }
+
+
+def _trim_feishu_card(card: dict[str, Any]) -> dict[str, Any]:
+    max_bytes = 30_000
+    if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) <= max_bytes:
+        return card
+    elements = list(((card.get("body") or {}).get("elements") or [])[:4])
+    compact = {**card, "body": {"elements": elements}}
+    if len(json.dumps(compact, ensure_ascii=False).encode("utf-8")) <= max_bytes:
+        return compact
+    summary = ((card.get("config") or {}).get("summary") or {}).get("content") or "重点竞品看板"
+    return {
+        "schema": "2.0",
+        "config": {"summary": {"content": summary}},
+        "header": card.get("header") or {},
+        "body": {"elements": [{"tag": "markdown", "content": "卡片内容过长，已降级为摘要。请查看短回答或完整报告。"}]},
+    }
 
 
 def _sort_key(item: dict[str, Any]) -> tuple[float, float, float, float]:

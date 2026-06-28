@@ -8,9 +8,10 @@
 
 1. 把竞品排序从“通用相似度”升级为“购买池 + 主辅语义重合 + 价值锚点替代 + 替代压力 + 市场验证”。
 2. 由 CLI 生成最终聊天摘要，避免 OpenClaw 解析大 JSON 后改写答案。
-3. 由 CLI 生成飞书详细报告，聊天中只放短结论和链接。
-4. Skill 只做路由、边界处理和原样转发，不做竞品计算。
-5. 所有测试不调用外部 LLM，不依赖真实飞书 API。
+3. 由 CLI 生成飞书卡片看板 payload，让飞书会话主回答直接展示 Top 3、重合结构和证据入口。
+4. 由 CLI 生成飞书详细报告，报告作为看板的佐证层，而不是主回答展现内容。
+5. Skill 只做路由、边界处理、卡片发送和降级转发，不做竞品计算或卡片拼装。
+6. 所有测试不调用外部 LLM，不依赖真实飞书 API。
 
 ## 2. 总体架构
 
@@ -27,16 +28,18 @@
        -> ClaimValueEvidenceAssembler
        -> CompetitorSelectionService
        -> CompetitorAnswerRenderer
+       -> CompetitorDashboardPayloadBuilder
+       -> FeishuCardRenderer
        -> CompetitorReportRenderer
        -> FeishuReportPublisher
-  -> short_answer + report_url
+  -> short_answer + dashboard_payload + feishu_card_payload + report_url
 ```
 
 职责边界：
 
 | 模块 | 职责 |
 | --- | --- |
-| Skill | 识别竞品意图，调用 CLI，发送 `short_answer`。 |
+| Skill | 识别竞品意图，调用 CLI，优先发送 `feishu_card_payload`，失败时发送 `short_answer`。 |
 | CLI | 参数解析、调用服务、输出 text/json。 |
 | CandidateBuilder | 生成购买池候选和扩展候选。 |
 | OverlapScorer | 计算价值战场、用户任务、目标客群的主辅加权重合。 |
@@ -45,8 +48,12 @@
 | ClaimValueEvidenceAssembler | 读取目标和候选 SKU 的 M12C 卖点价值量化，形成报告可直接展示的业务卖点标签、可比产品价格/销量差异、本品可解释价差/销量差份额、竞品拦截、补强建议和拖后腿卖点。 |
 | SelectionService | 汇总分数、排序、分桶、Top 3 选择。 |
 | AnswerRenderer | 生成 600 字以内业务摘要。 |
+| DashboardPayloadBuilder | 把 Top 3 结果裁剪成会话看板 payload，固定包含竞品角色、重合结构、价值锚点、市场验证和证据链接。 |
+| FeishuCardRenderer | 把 `dashboard_payload` 渲染成飞书卡片 JSON 2.0 或卡片模板变量；不做竞品计算。 |
 | ReportRenderer | 生成飞书 Markdown 报告内容。 |
 | FeishuReportPublisher | 创建飞书文档并返回链接；测试中用 mock。 |
+
+这不是新写一套竞品分析程序。新增部分只是展示适配层，必须复用 `competitor-set` 已经生成的排序、重合、价值锚点、替代压力、市场验证和报告链接。
 
 ## 3. CLI 接口设计
 
@@ -98,7 +105,7 @@ python -m app.cli.catforge_analyst competitor-set \
 
 ### 3.3 JSON 输出
 
-JSON 中保留结构化分析，供调试、验收和后续飞书卡片使用。
+JSON 中保留结构化分析，供调试、验收和飞书卡片发送使用。
 
 ```json
 {
@@ -118,6 +125,8 @@ JSON 中保留结构化分析，供调试、验收和后续飞书卡片使用。
       "short_answer": "...",
       "report_url": "https://...",
       "report_status": "created",
+      "dashboard_payload": {},
+      "feishu_card_payload": {},
       "top_competitors": [],
       "candidate_buckets": {
         "primary_direct": [],
@@ -130,6 +139,8 @@ JSON 中保留结构化分析，供调试、验收和后续飞书卡片使用。
       },
       "display_policy": {
         "send_short_answer_as_is": true,
+        "prefer_feishu_card": true,
+        "fallback_to_short_answer": true,
         "max_chat_chars": 600,
         "hide_internal_fields": true
       }
@@ -439,9 +450,154 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 {target_name} 的重点竞品建议看三款：{name1}、{name2} 和 {name3}。{name1} 是首选直接竞品，主要压力来自同一购买池内对核心成交理由的替代；{name2} 是强直接竞品，主要压力来自同价段配置和体验预期；{name3} 是{role3}，主要压力来自{pressure3}。详细分析报告见飞书链接：{report_url}
 ```
 
-## 12. 飞书报告生成设计
+## 12. 飞书卡片看板设计
 
-### 12.1 报告渲染
+### 12.1 看板生成原则
+
+`CompetitorDashboardPayloadBuilder` 从 `top_competitors` 裁剪出飞书会话主回答所需的最小业务结构。它只消费已排序结果，不重新计算竞品。
+
+看板必须遵守：
+
+- 主回答是卡片看板，飞书文档是佐证入口。
+- 第一屏必须看见目标 SKU、Top 3 竞品、角色和替代压力。
+- 重合强度必须拆成“价值战场 / 用户任务 / 目标客群”三行，每行同时展示百分比、命中点和成交影响。
+- 不展示内部字段、模块名、原始 code、批次号、表名或长 JSON。
+- 每张卡片只展示 Top 3，不展示全量候选池；全量候选和未选原因留在报告。
+- 卡片消息体必须控制在飞书卡片消息大小限制内，首版只使用摘要、三类重合行、价值锚点、市场验证和按钮。
+
+### 12.2 Dashboard payload
+
+`dashboard_payload` 是产品无关的业务看板结构，可供飞书卡片、前端看板或链接预览复用。
+
+```json
+{
+  "schema_version": "competitor_dashboard_v1",
+  "title": "海信 65E7Q 重点竞品看板",
+  "target": {
+    "display_name_cn": "海信 65E7Q",
+    "market_summary_cn": "65 寸高价带核心 SKU，均价 5,949 元，周均约 251 台"
+  },
+  "summary_cn": "建议重点关注 3 款竞品，分别代表价值替代、配置对标和价格下探分流。",
+  "competitors": [
+    {
+      "rank": 1,
+      "display_name_cn": "创维 65A7H PRO",
+      "role_cn": "首选直接竞品",
+      "pressure_cn": "价值替代压力",
+      "score_cn": "87 分",
+      "summary_cn": "同预算池内替代关系最完整，直接拦截目标 SKU 成交理由。",
+      "overlap_rows": [
+        {
+          "dimension_key": "battlefield",
+          "dimension_cn": "价值战场",
+          "strength_cn": "66%",
+          "matched_points_cn": ["高端画质", "智能互联", "游戏体育"],
+          "impact_cn": "争夺同一类付费场景"
+        },
+        {
+          "dimension_key": "user_task",
+          "dimension_cn": "用户任务",
+          "strength_cn": "65%",
+          "matched_points_cn": ["高端画质体验", "日常观影", "护眼观看"],
+          "impact_cn": "进入同一次购买任务比较"
+        },
+        {
+          "dimension_key": "target_group",
+          "dimension_cn": "目标客群",
+          "strength_cn": "86%",
+          "matched_points_cn": ["高端影音", "儿童家庭", "投屏互联"],
+          "impact_cn": "核心人群高度重合"
+        }
+      ],
+      "shared_anchors_cn": ["智能互联", "高端画质", "游戏流畅"],
+      "market_validation_cn": "周均约 217 台，具备真实分流能力",
+      "evidence_links": [
+        {"label_cn": "完整报告", "url": "https://..."},
+        {"label_cn": "评分依据", "url": "https://...#section-score"},
+        {"label_cn": "横向对比", "url": "https://...#section-compare"}
+      ],
+      "follow_up_actions": [
+        {"action": "analyze_competitor", "label_cn": "继续分析这款"}
+      ]
+    }
+  ],
+  "report_url": "https://..."
+}
+```
+
+字段生成规则：
+
+| 字段 | 来源 | 规则 |
+| --- | --- | --- |
+| `score_cn` | `business_score` | 四舍五入为整数分；如果展示会误导，可隐藏。 |
+| `overlap_rows[].strength_cn` | `weighted_overlap` | 转成百分比；缺失时显示“待验证”，不能写 0%。 |
+| `overlap_rows[].matched_points_cn` | `matched_dimensions` | 只取中文业务名，最多 4 个。 |
+| `overlap_rows[].impact_cn` | 固定模板 + 角色 | 价值战场写付费场景，用户任务写购买任务，目标客群写人群争夺。 |
+| `shared_anchors_cn` | `value_anchor.shared_anchors` | 最多 5 个，不列参数长清单。 |
+| `market_validation_cn` | `market_validation` | 周均销量用整数台，说明真实分流能力。 |
+| `evidence_links` | `report_url` + 锚点 | 首版至少提供完整报告；有章节锚点时再提供评分依据、横向对比。 |
+
+### 12.3 Feishu card payload
+
+`FeishuCardRenderer` 把 `dashboard_payload` 渲染为飞书卡片。首版优先 raw JSON 2.0：
+
+```json
+{
+  "schema": "2.0",
+  "config": {
+    "update_multi": true,
+    "width_mode": "fill",
+    "summary": {"content": "海信 65E7Q 重点竞品看板"}
+  },
+  "header": {
+    "title": {"tag": "plain_text", "content": "海信 65E7Q 重点竞品看板"},
+    "subtitle": {"tag": "plain_text", "content": "Top 3 竞品、重合结构和证据入口"},
+    "template": "blue"
+  },
+  "body": {
+    "elements": []
+  }
+}
+```
+
+卡片正文推荐顺序：
+
+1. `markdown`：一句话结论。
+2. `column_set` 或连续 `markdown`：Top 3 竞品摘要。
+3. 每个竞品下方展示三行重合结构：`价值战场`、`用户任务`、`目标客群`。
+4. `markdown`：共同价值锚点和市场验证。
+5. `button`：查看完整报告、查看评分依据、横向对比、继续分析这款。
+
+卡片限制：
+
+- 不在卡片中展示全量横向对比表、候选池列表和长证据矩阵。
+- 不使用图片上传作为首版依赖。
+- 不要求卡片模板先发布；raw JSON 2.0 可离线测试。
+- 后续样式稳定后，可以把 raw JSON 迁移为飞书卡片模板，`dashboard_payload` 保持不变。
+
+### 12.4 发送与降级
+
+飞书入口可以由小奥外层适配器或服务端消息发送器执行。推荐先实现为可选适配层：
+
+```python
+class FeishuCardSender(Protocol):
+    def send(self, receive_id_type: str, receive_id: str, card_payload: dict[str, Any]) -> FeishuSendResult:
+        ...
+```
+
+发送规则：
+
+1. `competitor-set --format json --answer-style xiaoao --with-report feishu-doc` 生成 `feishu_card_payload`。
+2. 飞书入口优先用 `msg_type=interactive` 发送卡片。
+3. 发送失败时降级发送 `short_answer`，不重跑竞品分析。
+4. 降级原因只写业务化提示，不暴露 token、HTTP 响应体、卡片 JSON 或接口错误。
+5. 非飞书入口继续使用 `--format text` 或 JSON 中的 `short_answer`。
+
+链接预览不是主回答路径。只有当用户主动发送 CatForge 报告链接、且系统需要自动展开该链接时，再用 `dashboard_payload` 生成链接预览响应。
+
+## 13. 飞书报告生成设计
+
+### 13.1 报告渲染
 
 `CompetitorReportRenderer` 生成 Markdown，交给发布器创建飞书文档。
 
@@ -467,7 +623,7 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 - SKU 在机会、拖后腿、厂家主张、评论观察等补充关系中没有销量分配时，显示“未分配销量，仅作机会或观察证据”。
 - 禁止在业务报告里输出“图谱空间待生成”“暂无该分类市场空间数据”等技术性错误提示。
 
-### 12.2 飞书发布器
+### 13.2 飞书发布器
 
 接口：
 
@@ -506,9 +662,9 @@ class ReportPublishResult:
 - `report_status = "failed"`。
 - 聊天摘要末尾写“详细分析报告暂未生成”，不暴露失败命令。
 
-## 13. Skill 设计
+## 14. Skill 设计
 
-### 13.1 固定路由
+### 14.1 固定路由
 
 `tools/openclaw/skills/xiaoao-home-appliance-market-analysis/SKILL.md` 的竞品问题路由改为：
 
@@ -524,13 +680,15 @@ docker compose -f docker-compose.cloud.yml exec -T api \
   --with-report feishu-doc
 ```
 
-### 13.2 Skill 消费规则
+### 14.2 Skill 消费规则
 
 伪代码：
 
 ```text
 result = run_cli(...)
-if status == ok and result.competitor_answer.short_answer:
+if status == ok and feishu_entrypoint and result.competitor_answer.feishu_card_payload:
+    send result.competitor_answer.feishu_card_payload
+elif status == ok and result.competitor_answer.short_answer:
     send result.competitor_answer.short_answer exactly
 elif status == ambiguous:
     ask user to choose candidate SKU
@@ -544,10 +702,11 @@ Skill 不再做：
 
 - 读取 `candidates` 后重新排序。
 - 把英文字段翻译成新结论。
+- 拼接飞书卡片组件。
 - 追加通用市场常识。
 - 把工具错误粘贴给用户。
 
-### 13.3 追问处理
+### 14.3 追问处理
 
 对于“第一款为什么选它”“分析第一名”等追问：
 
@@ -567,9 +726,9 @@ python -m app.cli.catforge_analyst competitor-explain \
 
 首版也可以由 `competitor-set` 在 JSON 中返回 `top_competitors[0].detail_answer`，供 Skill 直接使用。
 
-## 14. 数据结构设计
+## 15. 数据结构设计
 
-### 14.1 Top competitor item
+### 15.1 Top competitor item
 
 ```json
 {
@@ -608,7 +767,7 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-### 14.2 Claim value payload
+### 15.2 Claim value payload
 
 ```json
 {
@@ -633,7 +792,27 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-### 14.3 Report payload
+### 15.3 Dashboard and card payload
+
+```json
+{
+  "dashboard_payload": {
+    "schema_version": "competitor_dashboard_v1",
+    "title": "海信 65E7Q 重点竞品看板",
+    "competitors": []
+  },
+  "feishu_card_payload": {
+    "schema": "2.0",
+    "config": {"summary": {"content": "海信 65E7Q 重点竞品看板"}},
+    "header": {},
+    "body": {"elements": []}
+  }
+}
+```
+
+`dashboard_payload` 是业务语义层，`feishu_card_payload` 是展示层。测试和后续前端复用应优先断言 `dashboard_payload`，避免把业务规则锁死在飞书卡片组件结构里。
+
+### 15.4 Report payload
 
 ```json
 {
@@ -644,15 +823,17 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-## 15. 测试设计
+## 16. 测试设计
 
-### 15.1 单元测试
+### 16.1 单元测试
 
 新增测试文件建议：
 
 ```text
 apps/api-server/tests/core3_real_data/test_catforge_analyst_competitor_answer.py
 apps/api-server/tests/core3_real_data/test_competitor_role_weighted_overlap.py
+apps/api-server/tests/core3_real_data/test_competitor_dashboard_payload.py
+apps/api-server/tests/core3_real_data/test_feishu_card_renderer.py
 apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 ```
 
@@ -668,12 +849,16 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 | 短摘要长度 | 不超过 600 中文字符。 |
 | 短摘要安全 | 不包含内部模块、字段、命令、JSON。 |
 | text/json 一致 | `--format text` 等于 JSON `short_answer`。 |
+| Dashboard payload | 只包含 Top 3，每个竞品都有价值战场、用户任务、目标客群三行重合结构。 |
+| Dashboard 业务语言 | 不包含 `BF_`、`TASK_`、`TG_`、表名或批次号。 |
+| Feishu card payload | 可 JSON 序列化，包含 header/body/config，消息体大小符合飞书卡片限制。 |
+| 卡片降级 | 发送失败时仍返回 `short_answer` 和 `report_url`，不暴露接口错误。 |
 | 飞书失败 | 仍返回短摘要，`report_status=failed`。 |
 | 模糊 SKU | Pro/非 Pro 同时命中时返回 `ambiguous`。 |
 | M12C 报告接入 | 竞品报告新增独立“卖点价值量化”章节，展示业务卖点标签、可比产品差异、本品可解释价差/销量差份额和置信度。 |
 | M12C 缺失兜底 | 报告写“卖点价值量化待生成”，不伪造量化指标。 |
 
-### 15.2 集成测试
+### 16.2 集成测试
 
 使用固定 fixture 或测试数据库样本：
 
@@ -684,16 +869,17 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 
 不要求在单元测试中调用真实飞书。
 
-## 16. 部署与兼容
+## 17. 部署与兼容
 
-### 16.1 兼容策略
+### 17.1 兼容策略
 
 - 默认 `--answer-style raw` 保持现有输出兼容。
 - 小奥 Skill 使用 `--answer-style xiaoao`。
 - `--with-report none` 时不依赖飞书环境。
+- `dashboard_payload` 和 `feishu_card_payload` 只在 `--format json` 中消费；`--format text` 继续只输出短摘要。
 - 205 上若未配置飞书 CLI，仍可回答短摘要。
 
-### 16.2 205 部署后验收
+### 17.2 205 部署后验收
 
 验收命令：
 
@@ -715,10 +901,11 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 - 不超过 600 字。
 - 只输出 Top 3 和飞书链接。
 - 不出现内部 code 和命令。
+- JSON 输出包含 `dashboard_payload` 和 `feishu_card_payload`；飞书入口能发送卡片，或失败后降级短摘要。
 - 飞书链接可打开；如果当前 batch 找不到该 SKU，必须返回业务化边界提示。
 - 飞书报告的“四个产品横向详细对比”和各产品画像中必须同时出现“卖点画像”和“卖点价值量化”；若 latest 批次 M12C 未准备好，卖点价值量化章节必须显示“卖点价值量化待生成”。
 
-## 17. 后续扩展
+## 18. 后续扩展
 
 首版聚焦“竞品有哪些”和“为什么第一款是首选竞品”。后续可以扩展：
 
@@ -726,4 +913,5 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 2. `competitor-report --target feishu-base`：把详细矩阵写入飞书多维表格。
 3. 飞书卡片二次选择：当 SKU 模糊匹配时让用户点选。
 4. 不同品类的价值锚点配置：空调、洗衣机等按品类独立维护。
-5. 报告页面图表化：购买池散点、战场重合雷达、候选分桶矩阵。
+5. 链接预览：当用户发送 CatForge 报告链接时，复用 `dashboard_payload` 返回链接预览卡片。
+6. 报告页面图表化：购买池散点、战场重合雷达、候选分桶矩阵。
