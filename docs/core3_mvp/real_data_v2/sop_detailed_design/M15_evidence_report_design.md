@@ -849,11 +849,11 @@ on core3_report_review_issue(project_id, category_code, batch_id, target_sku_cod
 生成顺序：
 
 1. 顶部 `summary_cn` 先说明识别出几个核心竞品、是否有空槽、数据范围。
-2. 每个竞品用 `role_cn`、`pressure_cn` 和 `reason_cn` 建立第一判断。
-3. `overlap_rows` 固定展示价值战场、用户任务、目标客群三类重合；必要时可附加价格带、渠道、卖点价值。
-4. 每一行必须包含“重合在哪些点”和“为什么影响成交判断”。
+2. Top 3 竞品摘要只展示型号、业务角色、替代压力和重合强度。
+3. `overlap_rows` 在卡片上按价值战场、用户任务、目标客群三类横向汇总，不按竞品逐段展开。
+4. 每个维度行必须包含“重合在哪些点”和各竞品强弱，不把 `impact_cn` 的长解释句直接搬到首屏。
 5. `shared_anchors_cn` 只放用户能理解的产品锚点，不放内部 code。
-6. `market_validation_cn` 用价格、销量、渠道或时间窗口说明该竞品有现实比较条件。
+6. `market_validation_cn` 用价格、销量、渠道或时间窗口说明该竞品有现实比较条件，卡片中压缩为短语。
 7. `action_links` 放完整报告、证据矩阵、进一步分析入口。
 
 看板摘要不得：
@@ -862,6 +862,7 @@ on core3_report_review_issue(project_id, category_code, batch_id, target_sku_cod
 - 使用大段报告正文替代摘要。
 - 用单一“重合强度”数字替代重合结构。
 - 让飞书卡片适配层重新推导竞品结论。
+- 按每个竞品输出完整 `reason_cn + impact_cn` 段落，导致 IM 卡片首屏变成报告摘录。
 
 ## 13. 报告生成流程
 

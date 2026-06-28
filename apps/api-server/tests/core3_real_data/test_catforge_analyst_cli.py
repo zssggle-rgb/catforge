@@ -3472,11 +3472,18 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
     assert "## 重点竞品看板" in markdown
     assert markdown.index("## 重点竞品看板") < markdown.index("## 一、分析结论")
-    assert "| 排名 | 竞品 | 竞争角色 | 重合强度 | 替代压力 | 关键重合 |" in markdown
-    assert "### 看板 1：创维 65A7H PRO" in markdown
-    assert "- 价值战场：" in markdown
-    assert "- 用户任务：" in markdown
-    assert "- 目标客群：" in markdown
+    dashboard_section = markdown.split("## 一、分析结论", 1)[0]
+    assert "### 重点竞品 Top 3" in dashboard_section
+    assert "1. **创维 65A7H PRO**｜首选直接竞品｜" in dashboard_section
+    assert "### 业务拆解" in dashboard_section
+    assert "- **价值战场**：" in dashboard_section
+    assert "- **用户任务**：" in dashboard_section
+    assert "- **目标客群**：" in dashboard_section
+    assert "- **共同锚点**：" in dashboard_section
+    assert "- **市场验证**：" in dashboard_section
+    assert "### 看板 1" not in dashboard_section
+    assert "两款产品共同争夺" not in dashboard_section
+    assert "会影响同一批用户的最终候选清单" not in dashboard_section
     assert "## 一、分析结论" in markdown
     assert "## 二、分析过程" in markdown
     assert "### 2.1 候选 SKU 综合评分" in markdown
@@ -3588,7 +3595,15 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     card_json = json.dumps(card, ensure_ascii=False)
     assert card["schema"] == "2.0"
     assert card["config"]["summary"]["content"] == "海信 65E7Q 重点竞品看板"
+    assert [element["tag"] for element in card["body"]["elements"]] == ["markdown", "hr", "markdown", "hr", "markdown"]
     assert "创维 65A7H PRO" in card_json
+    assert "重点竞品 Top 3" in card_json
+    assert "业务拆解" in card_json
+    assert "价值战场" in card_json
+    assert "用户任务" in card_json
+    assert "目标客群" in card_json
+    assert "两款产品共同争夺" not in card_json
+    assert "会影响同一批用户的最终候选清单" not in card_json
     assert len(card_json.encode("utf-8")) < 30_000
     for forbidden in ("BF_", "TG_", "TASK_", "core3_", "M03B"):
         assert forbidden not in card_json
@@ -3634,6 +3649,12 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert "查看完整报告" in card_json
     assert "https://my.feishu.cn/docx/ReportToken" in card_json
     assert '"tag": "action"' not in card_json
+    assert [element["tag"] for element in card["body"]["elements"]] == ["markdown", "hr", "markdown", "hr", "markdown", "hr", "button"]
+    assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
+    assert card["body"]["elements"][2]["content"].startswith("**重点竞品 Top 3**")
+    assert card["body"]["elements"][4]["content"].startswith("**业务拆解**")
+    assert "两款产品共同争夺" not in card_json
+    assert "会影响同一批用户的最终候选清单" not in card_json
     report_button = card["body"]["elements"][-1]
     assert report_button["tag"] == "button"
     assert report_button["behaviors"][0] == {

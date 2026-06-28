@@ -564,18 +564,16 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
     """Render a Feishu interactive-card payload from the dashboard contract."""
 
     title = str(dashboard_payload.get("title") or "重点竞品看板")
-    summary = str(dashboard_payload.get("summary_cn") or "")
     target = dashboard_payload.get("target") or {}
-    elements: list[dict[str, Any]] = [
-        {
-            "tag": "markdown",
-            "content": f"**结论**\n{summary or '当前没有足够证据形成稳定重点竞品。'}",
-        }
-    ]
     competitors = [item for item in dashboard_payload.get("competitors") or [] if isinstance(item, dict)]
-    for competitor in competitors[:3]:
+    elements: list[dict[str, Any]] = [
+        _feishu_markdown(_dashboard_conclusion_markdown(dashboard_payload, competitors))
+    ]
+    if competitors:
         elements.append({"tag": "hr"})
-        elements.append({"tag": "markdown", "content": _feishu_competitor_markdown(competitor)})
+        elements.append(_feishu_competitor_board(competitors))
+        elements.append({"tag": "hr"})
+        elements.append(_feishu_markdown(_feishu_dimension_board(competitors)))
     action = _feishu_report_action(dashboard_payload)
     if action:
         elements.append({"tag": "hr"})
@@ -600,64 +598,27 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
 def render_competitor_dashboard_markdown(dashboard_payload: dict[str, Any]) -> list[str]:
     """Render the dashboard contract as the first screen of the evidence report."""
 
+    competitors = [item for item in dashboard_payload.get("competitors") or [] if isinstance(item, dict)]
     lines = [
         "## 重点竞品看板",
         "",
-        str(dashboard_payload.get("summary_cn") or "当前没有足够证据形成稳定重点竞品。"),
+        _dashboard_conclusion_markdown(dashboard_payload, competitors),
         "",
     ]
-    competitors = [item for item in dashboard_payload.get("competitors") or [] if isinstance(item, dict)]
     if not competitors:
         return lines
     lines.extend(
         [
-            "| 排名 | 竞品 | 竞争角色 | 重合强度 | 替代压力 | 关键重合 |",
-            "| ---: | --- | --- | --- | --- | --- |",
+            "### 重点竞品 Top 3",
+            "",
+            *_dashboard_competitor_board_lines(competitors),
+            "",
+            "### 业务拆解",
+            "",
+            *_dashboard_dimension_board_lines(competitors),
         ]
     )
-    for competitor in competitors[:3]:
-        lines.append(
-            "| "
-            + " | ".join(
-                [
-                    _markdown_cell(competitor.get("rank")),
-                    _markdown_cell(competitor.get("name")),
-                    _markdown_cell(competitor.get("role_cn")),
-                    _markdown_cell(competitor.get("strength_cn")),
-                    _markdown_cell(competitor.get("pressure_cn")),
-                    _markdown_cell(_dashboard_overlap_summary(competitor)),
-                ]
-            )
-            + " |"
-        )
-    for competitor in competitors[:3]:
-        lines.extend(["", f"### 看板 {competitor.get('rank')}：{competitor.get('name')}", ""])
-        reason = str(competitor.get("reason_cn") or "").strip()
-        if reason:
-            lines.append(f"- 判断：{reason}")
-        for row in competitor.get("overlap_rows") or []:
-            if not isinstance(row, dict):
-                continue
-            points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:4] if value]) or "证据待复核"
-            lines.append(f"- {row.get('dimension_cn')}：{row.get('strength_cn')}；重合点：{points}；{row.get('impact_cn')}")
-        anchors = _join_cn([str(value) for value in (competitor.get("shared_anchors_cn") or [])[:5] if value])
-        market = str(competitor.get("market_validation_cn") or "").strip()
-        if anchors:
-            lines.append(f"- 共同价值锚点：{anchors}")
-        if market:
-            lines.append(f"- 市场验证：{market}")
     return lines
-
-
-def _dashboard_overlap_summary(competitor: dict[str, Any]) -> str:
-    parts: list[str] = []
-    for row in competitor.get("overlap_rows") or []:
-        if not isinstance(row, dict):
-            continue
-        points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:2] if value])
-        if points:
-            parts.append(f"{row.get('dimension_cn')}：{points}")
-    return "；".join(parts) if parts else "重合证据待复核"
 
 
 def render_competitor_report(
@@ -3895,24 +3856,131 @@ def _dashboard_action_links(report_url: str | None) -> list[dict[str, Any]]:
     return links
 
 
-def _feishu_competitor_markdown(competitor: dict[str, Any]) -> str:
-    header = f"**{competitor.get('rank')}. {competitor.get('name')}**｜{competitor.get('role_cn')}｜{competitor.get('pressure_cn')}"
-    reason = str(competitor.get("reason_cn") or "")
-    rows = []
-    for row in competitor.get("overlap_rows") or []:
-        if not isinstance(row, dict):
-            continue
-        points = _join_cn([str(value) for value in (row.get("matched_points_cn") or [])[:4] if value])
-        rows.append(f"- {row.get('dimension_cn')}：{row.get('strength_cn')}，{points}。{row.get('impact_cn')}")
-    anchors = _join_cn([str(value) for value in (competitor.get("shared_anchors_cn") or [])[:5] if value])
-    market = str(competitor.get("market_validation_cn") or "")
-    detail = "\n".join(rows)
-    tail = []
+def _feishu_markdown(content: str) -> dict[str, Any]:
+    return {"tag": "markdown", "content": content}
+
+
+def _dashboard_conclusion_markdown(dashboard_payload: dict[str, Any], competitors: list[dict[str, Any]]) -> str:
+    target = dashboard_payload.get("target") or {}
+    target_name = str(target.get("display_name") or "目标 SKU")
+    if not competitors:
+        return f"**结论：{target_name} 当前没有稳定重点竞品**\n缺少可支撑看板的 Top 3 竞品结果，请查看报告证据缺口。"
+    first = competitors[0]
+    other_parts = [
+        f"{_dashboard_competitor_alias(item)}偏{_dashboard_role_short(item)}"
+        for item in competitors[1:3]
+        if isinstance(item, dict)
+    ]
+    tail = f"；另外，{'、'.join(other_parts)}。" if other_parts else "。"
+    return (
+        f"**结论：优先盯 {_dashboard_competitor_alias(first)}**\n"
+        f"{_dashboard_competitor_alias(first)}与{target_name}在战场、任务和客群三层重合最完整，"
+        f"会形成{first.get('pressure_cn') or '替代压力'}{tail}"
+    )
+
+
+def _feishu_competitor_board(competitors: list[dict[str, Any]]) -> dict[str, Any]:
+    lines = ["**重点竞品 Top 3**", *_dashboard_competitor_board_lines(competitors)]
+    return _feishu_markdown("\n".join(lines))
+
+
+def _dashboard_competitor_board_lines(competitors: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for item in competitors[:3]:
+        lines.append(
+            f"{item.get('rank')}. **{_dashboard_competitor_alias(item)}**"
+            f"｜{item.get('role_cn') or '重点竞品'}"
+            f"｜{item.get('pressure_cn') or '替代压力待复核'}"
+            f"｜{item.get('strength_cn') or '强度待复核'}"
+        )
+    return lines
+
+
+def _feishu_dimension_board(competitors: list[dict[str, Any]]) -> str:
+    lines = ["**业务拆解**", *_dashboard_dimension_board_lines(competitors)]
+    return "\n".join(lines)
+
+
+def _dashboard_dimension_board_lines(competitors: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    for dimension in ("价值战场", "用户任务", "目标客群"):
+        points = _dashboard_dimension_points(competitors, dimension)
+        strengths = _dashboard_dimension_strengths(competitors, dimension)
+        lines.append(f"- **{dimension}**：{points}；{strengths}")
+    anchors = _dashboard_shared_anchors(competitors)
     if anchors:
-        tail.append(f"共同价值锚点：{anchors}")
+        lines.append(f"- **共同锚点**：{anchors}")
+    market = _dashboard_market_validation(competitors)
     if market:
-        tail.append(f"市场验证：{market}")
-    return "\n".join(part for part in [header, reason, detail, "\n".join(tail)] if part)
+        lines.append(f"- **市场验证**：{market}")
+    return lines
+
+
+def _dashboard_dimension_points(competitors: list[dict[str, Any]], dimension_cn: str) -> str:
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for item in competitors[:3]:
+        row = _dashboard_dimension_row(item, dimension_cn)
+        for point in row.get("matched_points_cn") or []:
+            point_text = str(point).strip()
+            if not point_text or point_text == "证据不足，需复核":
+                continue
+            if point_text not in counts:
+                order.append(point_text)
+            counts[point_text] = counts.get(point_text, 0) + 1
+    ranked = sorted(order, key=lambda value: (-counts[value], order.index(value)))
+    return _join_cn(ranked[:4]) or "证据待复核"
+
+
+def _dashboard_dimension_strengths(competitors: list[dict[str, Any]], dimension_cn: str) -> str:
+    parts: list[str] = []
+    for item in competitors[:3]:
+        row = _dashboard_dimension_row(item, dimension_cn)
+        strength = str(row.get("strength_cn") or "待复核").replace("重合", "")
+        parts.append(f"{_dashboard_competitor_alias(item)}{strength}")
+    return " / ".join(parts)
+
+
+def _dashboard_dimension_row(competitor: dict[str, Any], dimension_cn: str) -> dict[str, Any]:
+    for row in competitor.get("overlap_rows") or []:
+        if isinstance(row, dict) and row.get("dimension_cn") == dimension_cn:
+            return row
+    return {}
+
+
+def _dashboard_shared_anchors(competitors: list[dict[str, Any]]) -> str:
+    anchors: list[str] = []
+    for item in competitors[:3]:
+        for anchor in item.get("shared_anchors_cn") or []:
+            anchor_text = str(anchor).strip()
+            if anchor_text and anchor_text not in anchors:
+                anchors.append(anchor_text)
+    return _join_cn(anchors[:5])
+
+
+def _dashboard_market_validation(competitors: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for item in competitors[:3]:
+        market = _compact_market_validation(str(item.get("market_validation_cn") or ""))
+        if market:
+            parts.append(f"{_dashboard_competitor_alias(item)} {market}")
+    return "；".join(parts)
+
+
+def _compact_market_validation(value: str) -> str:
+    match = re.search(r"重叠在售周(?P<weeks>[\d.]+)周.*?周均销量约(?P<sales>[\d.]+)台", value)
+    if match:
+        return f"重叠{match.group('weeks')}周，周均{match.group('sales')}台"
+    return value.strip()
+
+
+def _dashboard_competitor_alias(competitor: dict[str, Any]) -> str:
+    return str(competitor.get("name") or competitor.get("model_name") or "竞品")
+
+
+def _dashboard_role_short(competitor: dict[str, Any]) -> str:
+    role = str(competitor.get("role_cn") or "重点竞品")
+    return role.replace("竞品", "")
 
 
 def _feishu_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] | None:
