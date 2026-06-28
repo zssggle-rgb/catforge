@@ -1340,12 +1340,7 @@ def _claim_value_display_category(row: dict[str, Any]) -> str:
 
 def _claim_value_has_weak_sample_flag(row: dict[str, Any]) -> bool:
     flags = {str(item) for item in (row.get("quality_flags") or row.get("quality_flags_json") or [])}
-    if flags & {"insufficient_comparison_group", "sample_weak", "sample_insufficient"}:
-        return True
-    if "small_comparable_pool" in flags:
-        confidence = _decimal(row.get("attribution_confidence"))
-        return confidence is None or confidence < Decimal("0.7500")
-    return False
+    return bool(flags & {"insufficient_comparison_group", "sample_weak", "sample_insufficient"})
 
 
 def _claim_value_has_strong_fact_evidence(row: dict[str, Any]) -> bool:

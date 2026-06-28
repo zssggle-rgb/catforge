@@ -2423,7 +2423,7 @@ def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
                 "contribution_share_in_sku": 0.15,
             },
             "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 1.0, "semantic": 0.8},
-            "quality_flags": ["small_comparable_pool"],
+            "quality_flags": ["sample_weak"],
             "attribution_confidence": 0.63,
             "reason_cn": "HDMI2.1 连接 被判为样本不足；所在可比池有卖点组相对对照组价格差异约 427 元，周均销量差异约 34.3 台。",
         }
