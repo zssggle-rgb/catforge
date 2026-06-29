@@ -2538,6 +2538,28 @@ def test_sku_claim_value_uses_query_only_for_sku_resolution() -> None:
     }
 
 
+def test_sku_claim_value_xiaoao_returns_dashboard_and_feishu_card_payload() -> None:
+    session = make_session()
+    result = catforge_analyst.sku_claim_value(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        query="海信 65E7Q",
+        answer_style="xiaoao",
+        with_report="none",
+        limit=200,
+    )
+
+    answer = result["result"]["claim_value_answer"]
+    assert answer["dashboard_payload"]["schema_version"] == "claim_value_dashboard_v1"
+    assert answer["dashboard_payload"]["display_policy"]["main_answer"] == "feishu_card"
+    assert answer["feishu_card_payload"]["schema"] == "2.0"
+    assert answer["report"]["status"] == "disabled"
+    assert "short_answer" in answer
+
+
 def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     session = make_session()
     result = catforge_analyst.sku_claim_value(
@@ -2918,6 +2940,7 @@ def test_m12c_relaxed_pool_uses_five_tier_before_sample_insufficient() -> None:
         context_skus=set(markets),
         markets=markets,
         claims=claims,
+        param_profiles={},
         claim_code="tv_claim_brightness_hdr",
         exact_size_tier="size_65",
         size_tier="large_60_69",

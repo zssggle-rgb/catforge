@@ -1047,18 +1047,33 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     reply_message_id = getattr(args, "feishu_reply_message_id", None)
     if not reply_message_id:
         return
-    competitor_answer = (result.get("result") or {}).get("competitor_answer") or {}
+    payload = result.get("result") or {}
+    competitor_answer = payload.get("competitor_answer") or {}
+    claim_value_answer = payload.get("claim_value_answer") or {}
+    answer_key = ""
+    card = None
+    if competitor_answer.get("feishu_card_payload"):
+        answer_key = "competitor_answer"
+        card = competitor_answer.get("feishu_card_payload")
+    elif claim_value_answer.get("feishu_card_payload"):
+        answer_key = "claim_value_answer"
+        card = claim_value_answer.get("feishu_card_payload")
+    else:
+        return
     delivery = competitor_answer_renderer.publish_feishu_card_reply(
-        card=competitor_answer.get("feishu_card_payload"),
+        card=card,
         reply_message_id=reply_message_id,
         reply_in_thread=bool(getattr(args, "feishu_reply_in_thread", False)),
         idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
     )
+    delivery_payload = delivery.to_dict()
+    if answer_key == "claim_value_answer" and delivery_payload.get("status") == "sent":
+        delivery_payload["message_cn"] = "已发送飞书用户卖点价值看板卡片。"
     if not isinstance(result.get("result"), dict):
         result["result"] = {}
-    if not isinstance(result["result"].get("competitor_answer"), dict):
-        result["result"]["competitor_answer"] = {}
-    result["result"]["competitor_answer"]["feishu_card_delivery"] = delivery.to_dict()
+    if not isinstance(result["result"].get(answer_key), dict):
+        result["result"][answer_key] = {}
+    result["result"][answer_key]["feishu_card_delivery"] = delivery_payload
 
 
 def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only: bool = False) -> None:
@@ -1072,7 +1087,7 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
             print(delivery_text)
             return
     if feishu_card_only:
-        print("未发送飞书竞品看板卡片：缺少发送结果。")
+        print("未发送飞书看板卡片：缺少发送结果。")
         return
     business_text = format_business_text(result)
     if business_text:
@@ -1089,13 +1104,17 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
 
 
 def _feishu_card_delivery(result: dict[str, Any]) -> dict[str, Any]:
-    competitor_answer = (result.get("result") or {}).get("competitor_answer") or {}
-    delivery = competitor_answer.get("feishu_card_delivery")
+    payload = result.get("result") or {}
+    competitor_answer = payload.get("competitor_answer") or {}
+    claim_value_answer = payload.get("claim_value_answer") or {}
+    delivery = competitor_answer.get("feishu_card_delivery") or claim_value_answer.get("feishu_card_delivery")
     return delivery if isinstance(delivery, dict) else {}
 
 
 def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
-    competitor_answer = (result.get("result") or {}).get("competitor_answer") or {}
+    payload = result.get("result") or {}
+    competitor_answer = payload.get("competitor_answer") or {}
+    claim_value_answer = payload.get("claim_value_answer") or {}
     delivery = _feishu_card_delivery(result)
     if delivery.get("status") == "sent":
         return str(delivery.get("message_cn") or "已发送飞书竞品看板卡片。")
@@ -1104,8 +1123,8 @@ def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
     if delivery.get("status") == "failed":
         return "飞书卡片发送失败。"
     if delivery.get("status"):
-        return "未发送飞书竞品看板卡片。"
-    return str(competitor_answer.get("short_answer") or "")
+        return "未发送飞书看板卡片。"
+    return str(competitor_answer.get("short_answer") or claim_value_answer.get("short_answer") or "")
 
 
 def format_business_text(result: dict[str, Any]) -> str:

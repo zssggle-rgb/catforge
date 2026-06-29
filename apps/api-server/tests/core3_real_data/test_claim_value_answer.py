@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from app.services.core3_real_data.analyst.claim_value_answer import build_claim_value_answer, render_claim_value_report
+import json
+
+from app.services.core3_real_data.analyst.claim_value_answer import (
+    build_claim_value_answer,
+    build_claim_value_dashboard_payload,
+    render_claim_value_dashboard_markdown,
+    render_claim_value_feishu_card_payload,
+    render_claim_value_report,
+)
 
 
 def _target() -> dict:
@@ -182,6 +190,10 @@ def test_render_claim_value_report_separates_premium_and_threshold_claims() -> N
     markdown = render_claim_value_report(title="海信 65E7Q 用户卖点价值分析报告", target=_target(), payload=_payload())
 
     assert "# 海信 65E7Q 用户卖点价值分析报告" in markdown
+    assert "## 用户卖点价值看板" in markdown
+    assert "### Top 卖点价值" in markdown
+    assert "| HDR/高亮画质 | 高溢价卖点 | 高端画质升级战场 | 约41元 | 参数强、评论强、市场承接成立。 |" in markdown
+    assert "HDMI2.1 连接 | 门槛卖点" not in markdown.split("### Top 卖点价值", 1)[1].split("### 价值战场来源", 1)[0]
     assert "## 二、本品已成立卖点价值总榜" in markdown
     assert "| HDR/高亮画质 | 本品已成立卖点 | 高溢价卖点 | 高端画质升级战场 | 领先优势（91分）；关键参数：declared_brightness_nit_or_band=5200（领先优势） | 41元 | 3.7台/周 |" in markdown
     assert "| 芯片/处理器性能 | 本品已成立卖点 | 人无我有型支付价值卖点 | 高端画质升级战场 | 领先优势（92分）；关键参数：processor_chip_model=MT9655（领先优势） | 不作为正向量化 | 不作为正向量化 |" in markdown
@@ -203,6 +215,98 @@ def test_render_claim_value_report_separates_premium_and_threshold_claims() -> N
     assert "可解释金额和可解释销量是基于可比市场池、价值战场权重和证据强度得到的解释性分摊" in markdown
 
 
+def test_build_claim_value_dashboard_payload_groups_claims() -> None:
+    dashboard = build_claim_value_dashboard_payload(
+        target=_target(),
+        payload=_payload(),
+        report_url="https://my.feishu.cn/docx/ClaimValueReport",
+    )
+
+    assert dashboard["schema_version"] == "claim_value_dashboard_v1"
+    assert dashboard["title"] == "海信 65E7Q 用户卖点价值看板"
+    assert dashboard["display_policy"]["main_answer"] == "feishu_card"
+    assert dashboard["report_evidence_links"] == [
+        {"label": "查看完整报告", "url": "https://my.feishu.cn/docx/ClaimValueReport", "type": "report"}
+    ]
+    structure = {row["category"]: row for row in dashboard["claim_structure"]}
+    assert structure["高溢价卖点"]["count"] == 1
+    assert structure["人无我有型支付价值卖点"]["count"] == 1
+    assert structure["门槛卖点"]["count"] == 1
+    assert structure["待激活卖点"]["count"] == 1
+    assert structure["竞品拦截卖点"]["count"] == 1
+
+    top_names = [row["claim_name"] for row in dashboard["top_claims"]]
+    assert top_names == ["HDR/高亮画质", "芯片/处理器性能"]
+    assert "HDMI2.1 连接" not in top_names
+    assert "杜比/影音认证" not in top_names
+    assert dashboard["top_claims"][0]["explainable_amount_cn"] == "约41元"
+    assert dashboard["top_claims"][0]["explainable_sales_cn"] == "约3.7台/周"
+    assert dashboard["top_claims"][1]["explainable_amount_cn"] == "高潜力（82分）"
+    assert dashboard["top_claims"][1]["explainable_sales_cn"] == "暂不量化"
+    assert dashboard["battlefield_sources"] == [
+        {
+            "battlefield_name": "高端画质升级战场",
+            "positive_claims": ["HDR/高亮画质"],
+            "amount_sum_cn": "约41元",
+            "sales_lift_sum_cn": "约3.7台/周",
+            "amount_sum": 41.0,
+            "sales_lift_sum": 3.7,
+        }
+    ]
+
+
+def test_claim_value_dashboard_hides_raw_pool_delta() -> None:
+    dashboard = build_claim_value_dashboard_payload(target=_target(), payload=_payload(), report_url="https://my.feishu.cn/docx/ClaimValueReport")
+    dashboard_markdown = "\n".join(render_claim_value_dashboard_markdown(dashboard))
+    card = render_claim_value_feishu_card_payload(dashboard)
+    card_json = json.dumps(card, ensure_ascii=False)
+    visible = dashboard_markdown + "\n" + card_json
+
+    assert "1964元" not in visible
+    assert "1533元" not in visible
+    assert "可比池价格差异" not in visible
+    assert "pool_claim_price_delta" not in visible
+    assert "价值分 84" not in visible
+
+
+def test_render_claim_value_feishu_card_payload_contains_report_button() -> None:
+    dashboard = build_claim_value_dashboard_payload(
+        target=_target(),
+        payload=_payload(),
+        report_url="https://my.feishu.cn/docx/ClaimValueReport",
+    )
+
+    card = render_claim_value_feishu_card_payload(dashboard)
+    card_json = json.dumps(card, ensure_ascii=False)
+
+    assert card["schema"] == "2.0"
+    assert card["config"]["summary"]["content"] == "海信 65E7Q 用户卖点价值看板"
+    assert [element["tag"] for element in card["body"]["elements"]] == [
+        "markdown",
+        "hr",
+        "markdown",
+        "chart",
+        "hr",
+        "markdown",
+        "table",
+        "hr",
+        "markdown",
+        "table",
+        "hr",
+        "markdown",
+        "hr",
+        "button",
+    ]
+    assert "查看完整报告" in card_json
+    assert "https://my.feishu.cn/docx/ClaimValueReport" in card_json
+    assert "HDR/高亮画质" in card_json
+    assert "HDMI2.1 连接" in card_json
+    top_table = card["body"]["elements"][6]
+    assert top_table["element_id"] == "claim_value_top_claims"
+    top_claim_names = [row["claim"] for row in top_table["rows"]]
+    assert top_claim_names == ["HDR/高亮画质", "芯片/处理器性能"]
+
+
 def test_build_claim_value_answer_writes_markdown_file(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("CATFORGE_ANALYST_REPORT_DIR", str(tmp_path))
 
@@ -216,8 +320,11 @@ def test_build_claim_value_answer_writes_markdown_file(monkeypatch, tmp_path) ->
     report = answer["report"]
     assert report["status"] == "markdown_ready"
     assert report["markdown_path"]
+    assert answer["dashboard_payload"]["schema_version"] == "claim_value_dashboard_v1"
+    assert answer["feishu_card_payload"]["schema"] == "2.0"
     assert f"详细报告：{report['markdown_path']}" in answer["short_answer"]
     saved = tmp_path.joinpath(report["markdown_path"].split("/")[-1]).read_text(encoding="utf-8")
+    assert "## 用户卖点价值看板" in saved
     assert "HDR/高亮画质" in saved
     assert answer["markdown"] == saved
 

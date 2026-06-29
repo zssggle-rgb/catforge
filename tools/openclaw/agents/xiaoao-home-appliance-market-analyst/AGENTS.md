@@ -169,14 +169,20 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ### 问哪些卖点支撑用户选择或溢价
 
-如果用户问的是宽口径 SKU 用户卖点价值，例如“海信 65E7Q 的用户卖点价值是什么”“某 SKU 的卖点支付价值有哪些”“这款产品的卖点价值是什么”，必须直接运行稳定文本命令：
+如果用户问的是宽口径 SKU 用户卖点价值，例如“海信 65E7Q 的用户卖点价值是什么”“某 SKU 的卖点支付价值有哪些”“这款产品的卖点价值是什么”，必须直接运行稳定命令。飞书卡片入口优先发送用户卖点价值看板卡片，不能请求 JSON 后自行改写结论：
 
 ```bash
 cd /opt/catforge
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query "<用户给出的型号或 SKU>" --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
 ```
 
-拿到文本输出后直接发送给用户。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用多个分析命令，也不要把输出重新扩写成更长报告。这类飞书聊天答案必须控制在一次工具调用和一段业务回答内。成功时必须包含飞书文档链接；如果飞书发布暂不可用，只能说明“详细报告链接暂时不可用”，禁止把服务器本地 Markdown 路径发给用户。
+飞书卡片入口在上面命令后追加：
+
+```bash
+--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
+```
+
+拿到文本输出后直接发送给用户。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用多个分析命令，也不要把输出重新扩写成更长报告。这类飞书聊天答案必须控制在一次工具调用内。卡片会展示卖点价值结构、Top 卖点、价值战场来源、待激活和风险提示，并提供飞书详细报告按钮；如果飞书发布暂不可用，只能说明“详细报告链接暂时不可用”，禁止把服务器本地 Markdown 路径发给用户。
 
 用 `premium-claim-drivers`，需要量化时继续用 `sku-claim-value`、`claim-contribution`、`claim-value-space` 或 `claim-value-compare`。把卖点分为：
 
