@@ -303,10 +303,9 @@ def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
     for battlefield, items in sorted(grouped.items()):
         lines.append(f"### {battlefield}")
         lines.append("")
-        lines.append("| 卖点 | 业务分类 | 可比池价格差异 | 可比池销量差异 | 本品可解释金额 | 本品可解释销量 |")
-        lines.append("| --- | --- | ---: | ---: | ---: | ---: |")
+        lines.append("| 卖点 | 业务分类 | 本品可解释金额/潜力等级 | 本品可解释销量 | 参数竞争力 | 证据说明 |")
+        lines.append("| --- | --- | ---: | ---: | --- | --- |")
         for row in _sort_detail_rows(items)[:12]:
-            pool_effect = row.get("pool_effect") or {}
             sku_excess = row.get("sku_excess_explanation") or row.get("estimated_contribution") or {}
             unique_row = _category(row) == "人无我有型支付价值卖点"
             lines.append(
@@ -315,14 +314,16 @@ def _battlefield_breakdown_lines(rows: list[dict[str, Any]]) -> list[str]:
                     [
                         _md(row.get("claim_name") or row.get("claim_code") or "未命名卖点"),
                         _md(_category(row)),
-                        _md("对照不足，不展示组间价差" if unique_row else (_money(pool_effect.get("pool_claim_price_delta_abs")) or "无稳定差异")),
-                        _md("对照不足，不展示组间销量差异" if unique_row else ((_volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) + "台/周") if _volume(pool_effect.get("pool_claim_weekly_sales_delta_abs")) else "无稳定差异")),
-                        _md("暂不量化" if unique_row else (_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "不作为正向分摊")),
+                        _md(_unique_potential_text(row) if unique_row else (_money(sku_excess.get("sku_excess_price_explained_abs") or sku_excess.get("price_premium_abs")) or "不作为正向分摊")),
                         _md("暂不量化" if unique_row else ((_volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) + "台/周") if _volume(sku_excess.get("sku_excess_weekly_sales_explained_abs") or sku_excess.get("weekly_sales_lift_abs")) else "不作为正向分摊")),
+                        _md(_parameter_competitiveness_label(row)),
+                        _md(row.get("evidence_summary_cn") or _claim_type_meaning(_category(row))),
                     ]
                 )
                 + " |"
             )
+        lines.append("")
+        lines.append("说明：本表展示分摊到本品卖点的业务解释结果，不展示有卖点组与对照组的原始可比池价差。原始组间差只作为评分和复核输入，不能直接理解为单个卖点带来的溢价。")
         lines.append("")
     return lines
 
@@ -505,6 +506,17 @@ def _unique_scorecard(row: dict[str, Any]) -> dict[str, Any]:
     if not candidates:
         return {}
     return max(candidates, key=lambda item: _decimal(item.get("total_score")) or Decimal("0"))
+
+
+def _unique_potential_text(row: dict[str, Any]) -> str:
+    scorecard = _unique_scorecard(row)
+    potential = str(scorecard.get("potential_level_cn") or "").strip()
+    score = _decimal(scorecard.get("total_score"))
+    if potential and score is not None:
+        return f"{potential}（{score.quantize(Decimal('1'), rounding=ROUND_HALF_UP)}分）"
+    if potential:
+        return potential
+    return "暂不量化"
 
 
 def _key_param_labels(snapshot: dict[str, Any]) -> list[str]:

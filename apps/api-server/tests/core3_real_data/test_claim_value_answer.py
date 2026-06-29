@@ -189,6 +189,13 @@ def test_render_claim_value_report_separates_premium_and_threshold_claims() -> N
     assert "高潜力（82分）" in markdown
     assert "目标 SKU 是有卖点组唯一样本" in markdown
     assert "| HDMI2.1 连接 | 本品已成立卖点 | 门槛卖点 | 游戏体育流畅战场 | 基础门槛（45分）；关键参数：hdmi21_flag=True（基础门槛） | 不作为正向量化 | 不作为正向量化 |" in markdown
+    assert "| 卖点 | 业务分类 | 本品可解释金额/潜力等级 | 本品可解释销量 | 参数竞争力 | 证据说明 |" in markdown
+    assert "| HDR/高亮画质 | 高溢价卖点 | 41元 | 3.7台/周 |" in markdown
+    assert "| 芯片/处理器性能 | 人无我有型支付价值卖点 | 高潜力（82分） | 暂不量化 |" in markdown
+    assert "可比池价格差异" not in markdown
+    assert "1964元" not in markdown
+    assert "1533元" not in markdown
+    assert "原始组间差只作为评分和复核输入" in markdown
     assert "参数竞争力：亮度参数在同战场可比池中领先" in markdown
     assert "## 七、竞品拦截与机会缺口" in markdown
     assert "AI 大模型/智能能力" in markdown
