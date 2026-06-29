@@ -14,7 +14,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from statistics import median
 from typing import Any, Iterable, Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 
 from app.models import entities
 from app.services.core3_real_data.constants import (
@@ -810,7 +810,7 @@ class M12CRepository(Core3BaseRepository):
         reused_count = 0
         updated_count = 0
         for payload in payloads:
-            existing = self._find_existing(model_cls, payload, unique_fields)
+            existing = self._find_existing_by_primary_key(model_cls, payload) or self._find_existing(model_cls, payload, unique_fields)
             if existing is None:
                 record = model_cls(**payload)
                 self.db.add(record)
@@ -829,6 +829,15 @@ class M12CRepository(Core3BaseRepository):
             records.append(existing)
             updated_count += 1
         return M12CWriteResult(tuple(records), created_count=created_count, reused_count=reused_count, updated_count=updated_count)
+
+    def _find_existing_by_primary_key(self, model_cls: Any, payload: Mapping[str, Any]) -> Any | None:
+        primary_keys = [column.key for column in inspect(model_cls).primary_key]
+        if not primary_keys or any(payload.get(key) in {None, ""} for key in primary_keys):
+            return None
+        stmt = select(model_cls)
+        for field in primary_keys:
+            stmt = stmt.where(getattr(model_cls, field) == payload.get(field))
+        return self.db.execute(stmt.limit(1)).scalar_one_or_none()
 
     def _find_existing(self, model_cls: Any, payload: Mapping[str, Any], unique_fields: tuple[str, ...]) -> Any | None:
         stmt = select(model_cls)
