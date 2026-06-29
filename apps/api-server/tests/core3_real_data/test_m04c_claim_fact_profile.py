@@ -80,6 +80,7 @@ def seed_foundation(session: Session) -> None:
                 "hdr_support_flag": {"normalized_value": True, "value_presence": "present"},
                 "declared_brightness_nit_or_band": {"normalized_value": 800, "numeric_value": 800, "value_presence": "present"},
                 "declared_refresh_rate_hz": {"normalized_value": 144, "numeric_value": 144, "value_presence": "present"},
+                "processor_chip_model": {"normalized_value": "信芯 AI画质芯片 H6", "value_text": "信芯 AI画质芯片 H6", "value_presence": "present"},
                 "ai_capability_flag": {"normalized_value": True, "value_presence": "present"},
                 "ai_model_name": {"normalized_value": "星海大模型", "value_text": "星海大模型", "value_presence": "present"},
                 "voice_recognition_flag": {"normalized_value": True, "value_presence": "present"},
@@ -280,6 +281,62 @@ def test_m04c_runner_generates_claim_fact_profile_and_service_separation():
     session.commit()
     assert len(session.execute(select(entities.Core3SkuClaimFactProfile)).scalars().all()) == 1
     assert len(session.execute(select(entities.Core3SkuClaimFact)).scalars().all()) == result.summary_json["claim_fact_count"]
+
+
+def test_m04c_marks_dolby_hdr_only_as_generic_support_gate():
+    session = make_session()
+    session.add(promo_evidence("ev_claim_dolby", "杜比视界 HDR10 影院音画"))
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    dolby_fact = session.execute(
+        select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.claim_code == "tv_claim_dolby_audio_video")
+    ).scalar_one()
+    assert dolby_fact.param_support_level == "broad_generic_support"
+    assert dolby_fact.primary_supporting_param_codes == []
+    assert dolby_fact.generic_support_param_codes == ["hdr_support_flag"]
+    assert dolby_fact.wtp_input_guard == "blocked_generic_param"
+
+
+def test_m04c_groups_same_source_chip_and_picture_engine_claims():
+    session = make_session()
+    text = "信芯 AI画质芯片 H6 画质引擎"
+    session.add(promo_evidence("ev_claim_chip_picture", text))
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    facts = {
+        fact.claim_code: fact
+        for fact in session.execute(
+            select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.clean_claim_text == text)
+        ).scalars()
+    }
+    chip = facts["tv_claim_chip_performance"]
+    picture_engine = facts["tv_claim_picture_engine_ai"]
+    assert chip.same_source_param_group_id
+    assert chip.same_source_param_group_id == picture_engine.same_source_param_group_id
+    assert chip.canonical_claim_code == "tv_claim_chip_performance"
+    assert picture_engine.canonical_claim_code == "tv_claim_chip_performance"
+    assert chip.wtp_input_guard == "eligible_strong_param"
+    assert picture_engine.wtp_input_guard == "eligible_strong_param"
 
 
 def test_m04c_insight_queries_claim_profile_taxonomy_and_coverage():

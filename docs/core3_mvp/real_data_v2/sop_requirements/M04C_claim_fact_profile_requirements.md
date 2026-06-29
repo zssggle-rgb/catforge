@@ -21,6 +21,8 @@ M04C 解决的问题是：
 
 M04C 不判断卖点是否溢价，不读取评论正负反馈，不判断用户任务、目标客群、价值战场或竞品结论。
 
+M04C 必须为后续用户卖点支付价值分析提供更细的事实门槛：不仅要说明“卖点是否被参数支撑”，还要说明“参数支撑是否专属、是否可比较、是否只是泛参数”。例如 `杜比/影音认证` 不能只因为 `HDR=true` 就被认为具备可支撑用户支付价值的强参数事实；`HDR` 可以作为高端画质池的基础门槛，但不能证明杜比认证本身具有独占支付价值。
+
 ## 1. 模块拆分
 
 | 子能力 | 生命周期 | 职责 |
@@ -110,6 +112,9 @@ TV 首版 taxonomy 来源于 205 当前 TV 卖点数据：
 - 标准卖点命中清单。
 - 具体原始卖点文本。
 - 每个卖点的参数支撑状态。
+- 每个卖点的参数支撑等级：强专属支撑、泛参数支撑、弱间接支撑、无支撑、不适用。
+- 每个卖点的关键参数是否可比较，例如数值型、档位型、布尔型、文本型号型、认证型。
+- 同一原始卖点或同一核心参数支撑多个标准卖点时的同源同参分组。
 - 每个维度的卖点位置。
 - 服务履约、行业背书、内容权益等非产品主卖点隔离信息。
 - 缺失、冲突、低置信和复核项。
@@ -132,6 +137,12 @@ promo_evidence_ids
 param_support_status
 supporting_param_codes
 supporting_param_values
+param_support_level
+param_support_specificity
+primary_supporting_param_codes
+source_claim_group_id
+same_source_param_group_id
+wtp_input_guard
 param_evidence_ids
 fact_claim_flag
 service_separate_flag
@@ -140,6 +151,16 @@ review_required
 ```
 
 其中 `fact_claim_flag=true` 只表示“该卖点作为产品事实有参数支撑”。它不表示溢价成立，也不表示消费者认可。
+
+`wtp_input_guard` 不是 M04C 对溢价的判断，只是给 M12C 的事实门槛信号。它只回答“该卖点是否具备进入用户支付价值分析的参数事实基础”：
+
+| `wtp_input_guard` | 含义 | M12C 默认处理 |
+| --- | --- | --- |
+| `eligible_strong_param` | 卖点有专属、强相关、可比较的参数支撑 | 可进入用户支付价值候选 |
+| `eligible_key_param_advantage` | 卖点文本不一定完整，但关键参数显著支撑该价值 | 可作为待激活或人无我有候选 |
+| `blocked_generic_param` | 只由泛参数支撑，不能证明该卖点本身 | 不得进入用户支付价值；可把泛参数本身作为门槛判断 |
+| `blocked_no_param` | 无参数支撑或参数未知 | 不得进入用户支付价值；仅保留宣传/待验证 |
+| `not_product_wtp_scope` | 服务、内容权益、价格补贴、行业背书等非产品参数卖点 | 不进入产品用户支付价值 |
 
 ### 4.4 卖点位置覆盖 SKU 清单
 
@@ -261,6 +282,56 @@ M04C-B 对每个标准卖点输出 `param_support_status`：
 | 摄像头 | 摄像头参数支撑；缺失不自动判否，除非 taxonomy 明确 false-by-absence |
 | 无广告系统 | 参数表通常无硬件支撑，首版按 `param_unknown` 或系统类辅助支撑处理 |
 | 安装送装 | `not_param_applicable`，服务履约隔离 |
+
+### 6.1 参数支撑等级
+
+`param_support_status` 只能说明有无支撑，不能直接说明能否进入用户支付价值分析。M04C-B 必须进一步输出 `param_support_level`：
+
+| 等级 | 定义 | 示例 | 是否可进入 M12C 用户支付价值分析 |
+| --- | --- | --- | --- |
+| `strong_specific_support` | 卖点由专属、强相关、可比较的参数支撑 | 5200nits 支撑高亮；1920 分区支撑控光；MT9655 支撑芯片 | 是 |
+| `strong_numeric_or_tier_support` | 卖点背后有数值或档位参数，能与同池竞品比较 | 亮度、分区数、刷新率、色域、接口数量 | 是 |
+| `broad_generic_support` | 只由宽泛参数支撑，参数不能证明具体卖点 | 用 `HDR=true` 支撑“杜比认证” | 否 |
+| `weak_indirect_support` | 参数间接相关，但不能独立证明该卖点 | 用 AI 大模型支撑所有智能体验 | 默认否，可进待激活 |
+| `no_param_support` | 没有参数、参数未知或参数冲突 | 只有宣传文本 | 否 |
+| `not_param_applicable` | 行业背书、内容权益、服务履约等不适用参数 | 销量背书、送装售后 | 否 |
+
+泛参数保护规则：
+
+```text
+如果某个标准卖点只被泛参数支撑，
+则该标准卖点不能作为 M12C 的高溢价、人无我有或份额转化候选。
+M12C 可以把该泛参数本身放入门槛判断，
+但不能把泛参数解释成具体认证、芯片、专利或高阶能力。
+```
+
+示例：
+
+| 标准卖点 | 当前参数支撑 | M04C 判断 | 下游解释 |
+| --- | --- | --- | --- |
+| 杜比/影音认证 | 只有 `hdr_support_flag=true` | `broad_generic_support` | HDR 可作为基础门槛；杜比认证本身待验证 |
+| 芯片/处理器性能 | `processor_chip_model=MT9655` | `strong_specific_support` | 可进入芯片性能用户支付价值候选 |
+| 画质芯片/AI 画质引擎 | 同样由 `processor_chip_model=MT9655` 与 AI 参数支撑 | `strong_specific_support`，但与芯片卖点同源同参 | 下游必须合并为一个价值理由，不能重复计价 |
+
+### 6.2 同源同参分组
+
+同一条原始卖点文本可能命中多个标准卖点，同一组核心参数也可能支撑多个标准卖点。M04C-B 必须输出分组，避免 M12C 重复放大同一价值。
+
+分组规则：
+
+| 分组 | 触发条件 | 输出字段 |
+| --- | --- | --- |
+| 同源卖点组 | 多个标准卖点来自同一条原始卖点文本或同一个 `promo_evidence_id` | `source_claim_group_id` |
+| 同参支撑组 | 多个标准卖点的核心支撑参数高度重合 | `same_source_param_group_id` |
+| 价值理由代表卖点 | 同组中最适合业务展示的主卖点 | `canonical_claim_code`、`canonical_claim_name` |
+
+例如海信 65E7Q 的“信芯 AI 画质芯片 H6 超频版”同时命中：
+
+- `芯片/处理器性能`
+- `画质芯片/AI 画质引擎`
+- 可能还支撑 `分区控光` 的控光精度表达
+
+M04C 可以保留多条标准卖点事实，但必须标记它们属于同一 `same_source_param_group_id`。M12C 在用户支付价值展示中应合并为“信芯 AI 画质芯片 H6 带来的画质处理与系统性能优势”，不能把它们当作多个独立用户支付价值卖点重复计价。
 
 ## 7. 缺失和冲突口径
 

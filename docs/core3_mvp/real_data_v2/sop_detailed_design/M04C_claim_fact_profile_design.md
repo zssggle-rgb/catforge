@@ -12,6 +12,8 @@
 
 M04C 是 SKU 事实层的新模块族，用标准卖点 taxonomy 生成 SKU 卖点事实画像。它是确定性画像模块，不依赖既有 M04a/M04b 激活结果，不读取评论，不判断溢价。
 
+M04C 不判断用户是否愿意付费，但必须为 M12C 提供可用的事实门槛：卖点是否由具体参数支撑、是否只是泛参数支撑、是否与其他标准卖点来自同一条原始卖点或同一组核心参数。没有这些门槛，后续会把“杜比/影音认证 + HDR”误判为独占支付价值，也会把“芯片/处理器性能”和“画质芯片/AI 画质引擎”重复计价。
+
 ## 2. 模块职责
 
 ### 2.1 必须回答的问题
@@ -41,7 +43,7 @@ M04C 不回答：
 M04C-A taxonomy 生成/发布
   1. 读取某品类全部结构化卖点
   2. 归纳标准卖点、维度、子类、位置规则
-  3. 关联 M03B 标准参数，定义参数支撑规则
+  3. 关联 M03B 标准参数，定义参数支撑规则、泛参数保护和同源同参策略
   4. 人工复核并发布 taxonomy version
 
 M04C-B SKU 卖点画像生成
@@ -50,9 +52,10 @@ M04C-B SKU 卖点画像生成
   3. 读取清洗后的 promo evidence
   4. 读取 M03B SKU 参数画像
   5. 匹配 SKU 卖点事实明细
-  6. 计算参数支撑状态
-  7. 计算 claimed_position 与 supported_position
-  8. 写入 SKU 卖点画像、维度位置和覆盖索引
+  6. 计算参数支撑状态、参数支撑等级和用户支付价值输入门槛
+  7. 计算同源同参分组和业务代表卖点
+  8. 计算 claimed_position 与 supported_position
+  9. 写入 SKU 卖点画像、维度位置和覆盖索引
 ```
 
 ## 4. Taxonomy 设计
@@ -96,6 +99,11 @@ M04C-B SKU 卖点画像生成
 | `required_param_support` | 必要参数支撑规则 |
 | `optional_param_support` | 辅助参数支撑规则 |
 | `support_policy` | 参数支撑策略 |
+| `param_support_level_policy` | 参数支撑等级策略，定义具体支撑、泛参数支撑、弱间接支撑等 |
+| `generic_support_param_codes` | 只能提供泛化支撑的参数，例如用 HDR 支撑杜比认证 |
+| `wtp_input_guard_policy` | 给 M12C 的输入门槛策略 |
+| `same_source_param_group_policy` | 同一原始卖点或同一核心参数支撑多个标准卖点时的合并策略 |
+| `canonical_claim_policy` | 同源同参时的业务代表卖点选择策略 |
 | `downstream_usage_policy` | 下游可用性 |
 | `review_notes` | 人工复核说明 |
 
@@ -148,6 +156,50 @@ M04C-B SKU 卖点画像生成
 | `required_any` | 任一必要参数满足即 supported |
 | `weighted` | 按规则权重合成支撑分 |
 | `not_applicable` | 行业背书、服务、内容等不做参数支撑 |
+
+### 4.4 参数支撑等级和用户支付价值输入门槛
+
+`param_support_status` 只说明参数规则是否满足，不能直接说明该卖点是否可进入 M12C 用户支付价值分析。M04C 必须额外输出 `param_support_level` 和 `wtp_input_guard`。
+
+| `param_support_level` | 定义 | 示例 | M12C 处理 |
+| --- | --- | --- | --- |
+| `strong_specific_support` | 有专属、明确、可解释的参数支撑 | 画质芯片卖点由芯片型号、AI 画质能力支撑 | 可进入用户支付价值候选 |
+| `strong_numeric_or_tier_support` | 有数值或档位参数支撑，并可在同池比较 | 高亮卖点由 5200nits 支撑 | 可进入用户支付价值候选 |
+| `broad_generic_support` | 只有宽泛参数支撑，不能证明具体卖点 | 用 `HDR=true` 支撑“杜比/影音认证” | 不得作为该具体卖点进入用户支付价值；泛参数本身可进入门槛判断 |
+| `weak_indirect_support` | 参数只间接关联，不能独立证明卖点 | 用系统参数间接支撑“系统顺滑” | 默认待验证 |
+| `no_param_support` | 没有可用参数支撑 | 只有营销文案 | 厂家主张或待验证 |
+| `not_param_applicable` | 内容权益、服务、销量背书等不适用产品参数 | 会员权益、送装服务 | 不进入产品用户支付价值 |
+
+`wtp_input_guard` 只回答“该卖点是否具备进入 M12C 的事实基础”，不回答“是否溢价”。
+
+| `wtp_input_guard` | 触发条件 | M12C 默认处理 |
+| --- | --- | --- |
+| `eligible_strong_param` | `strong_specific_support` 或 `strong_numeric_or_tier_support` | 可进入战场、门槛、参数竞争力和用户支付价值判断 |
+| `eligible_key_param_advantage` | 卖点表达弱，但关键参数明显强 | 可作为待激活或人无我有候选 |
+| `blocked_generic_param` | 只被泛参数支撑 | 具体卖点不得进入用户支付价值；泛参数本身按门槛处理 |
+| `blocked_no_param` | 无参数支撑，且不属于参数不适用 | 厂家主张，不分配金额 |
+| `not_product_wtp_scope` | 服务、物流、安装、售后、内容权益等 | 排除产品支付价值分析 |
+
+泛参数保护示例：
+
+| 标准卖点 | 当前可见支撑 | M04C 输出 | 业务含义 |
+| --- | --- | --- | --- |
+| 杜比/影音认证 | 只有 `hdr_support_flag=true` | `broad_generic_support` + `blocked_generic_param` | HDR 可以作为高端画质门槛；杜比认证本身不能被 HDR 证明 |
+| HDR/高亮画质 | `hdr_support_flag=true`，亮度参数缺失 | `broad_generic_support` 或 `weak_indirect_support` | 基础 HDR 可入门槛，不能直接判高溢价 |
+| HDR/高亮画质 | `brightness_nits=5200` | `strong_numeric_or_tier_support` + `eligible_strong_param` | 可进入 M12C 参数竞争力比较 |
+
+### 4.5 同源同参合并策略
+
+一条原始卖点文本可能命中多个标准卖点，同一组核心参数也可能支撑多个标准卖点。M04C 必须输出分组，避免 M12C 重复计算同一价值。
+
+| 字段 | 含义 |
+| --- | --- |
+| `source_claim_group_id` | 同一条原始卖点文本命中的标准卖点分组 |
+| `same_source_param_group_id` | 同一组核心参数支撑的标准卖点分组 |
+| `canonical_claim_code` | 该组对外展示和用户支付价值计算优先使用的代表卖点 |
+| `canonical_claim_name` | 代表卖点中文名 |
+
+示例：海信 65E7Q 的“信芯 AI 画质芯片 H6 超频版”可能同时命中“芯片/处理器性能”和“画质芯片/AI 画质引擎”。M04C 可以保留两条标准卖点事实，但必须把它们标记到同一 `same_source_param_group_id`，并给出代表卖点。M12C 后续只能把它们作为一个业务价值理由分析，不能把同一个芯片参数拆成两个独立高溢价卖点。
 
 ## 5. 输出数据模型
 
@@ -215,11 +267,20 @@ project_id + category_code + product_category + batch_id + sku_code + taxonomy_v
 | `match_score` | numeric | 是 | 文本匹配分 |
 | `param_support_status` | text | 是 | supported/partial/unknown/conflicted 等 |
 | `param_support_score` | numeric | 是 | 参数支撑分 |
+| `param_support_level` | text | 是 | strong_specific_support/broad_generic_support/no_param_support 等 |
+| `param_support_specificity` | text | 是 | specific/numeric_tier/generic/indirect/none/not_applicable |
 | `supporting_param_codes` | jsonb | 是 | 支撑参数 |
+| `primary_supporting_param_codes` | jsonb | 是 | 对该卖点最关键的参数 |
+| `generic_support_param_codes` | jsonb | 是 | 只能提供泛化支撑的参数 |
 | `supporting_param_values` | jsonb | 是 | 参数值快照 |
 | `missing_param_codes` | jsonb | 是 | 缺失参数 |
 | `param_conflict_json` | jsonb | 是 | 冲突说明 |
 | `param_evidence_ids` | jsonb | 是 | 参数 evidence |
+| `source_claim_group_id` | text | 否 | 同一原始卖点文本命中的分组 |
+| `same_source_param_group_id` | text | 否 | 同一核心参数支撑的分组 |
+| `canonical_claim_code` | text | 否 | 同组业务代表卖点 |
+| `canonical_claim_name` | text | 否 | 同组业务代表卖点中文名 |
+| `wtp_input_guard` | text | 是 | eligible_strong_param/blocked_generic_param 等 |
 | `fact_claim_flag` | boolean | 是 | 是否产品事实卖点 |
 | `service_separate_flag` | boolean | 是 | 是否服务隔离 |
 | `authority_flag` | boolean | 是 | 是否行业/认证背书 |
@@ -388,6 +449,85 @@ claim_kind in ('product_function', 'experience_scene')
 and param_support_status in ('supported', 'partially_supported')
 and service_separate_flag = false
 ```
+
+### 6.4.1 参数支撑等级判定
+
+参数支撑状态之后必须继续判定参数支撑等级：
+
+```python
+def classify_param_support_level(claim, support_status, matched_params):
+    if claim.claim_kind in {"service", "content", "authority"} and claim.support_policy == "not_applicable":
+        return "not_param_applicable"
+    if support_status in {"unsupported", "param_unknown"} and not matched_params:
+        return "no_param_support"
+    if matched_params.only_generic_params(claim.generic_support_param_codes):
+        return "broad_generic_support"
+    if matched_params.has_numeric_or_tier_core_param():
+        return "strong_numeric_or_tier_support"
+    if matched_params.has_specific_core_param():
+        return "strong_specific_support"
+    if matched_params.has_indirect_param():
+        return "weak_indirect_support"
+    return "no_param_support"
+```
+
+`wtp_input_guard` 映射：
+
+| 参数支撑等级 | 默认 `wtp_input_guard` |
+| --- | --- |
+| `strong_specific_support` | `eligible_strong_param` |
+| `strong_numeric_or_tier_support` | `eligible_strong_param` |
+| `broad_generic_support` | `blocked_generic_param` |
+| `weak_indirect_support` | `blocked_no_param`，可按 taxonomy 配置放宽为待激活 |
+| `no_param_support` | `blocked_no_param` |
+| `not_param_applicable` | `not_product_wtp_scope` |
+
+注意：`fact_claim_flag=true` 和 `wtp_input_guard=eligible_strong_param` 不是同一个概念。一个卖点可以是事实卖点，但如果只有泛参数支撑，M12C 仍不得把该具体卖点作为高溢价或人无我有候选。
+
+### 6.4.2 泛参数保护规则
+
+泛参数保护用于处理“参数能证明基础能力，但不能证明具体认证或高阶能力”的场景。
+
+规则：
+
+1. 如果标准卖点只由 `generic_support_param_codes` 支撑，则 `param_support_level=broad_generic_support`。
+2. 具体标准卖点的 `wtp_input_guard=blocked_generic_param`。
+3. 泛参数本身可以作为 M12C 门槛判断输入，例如基础 HDR、基础高刷、基础 HDMI2.1。
+4. 具体认证、芯片、专利、生态或高阶能力不能被泛参数替代证明。
+
+示例：
+
+| 卖点 | 可见参数 | 结果 |
+| --- | --- | --- |
+| 杜比/影音认证 | 只有 HDR | 杜比为 `blocked_generic_param`；HDR 可作为高端画质基础门槛 |
+| HDMI2.1 连接 | 只有是否具备 HDMI2.1 | 可作为游戏战场门槛；没有接口数量/带宽/VRR/ALLM 时不得稳定高溢价 |
+| 高刷新率 | 只有 120Hz/144Hz | 在游戏池多为门槛；若 300Hz 等档位领先，参数档位可继续进入 M12C |
+
+### 6.4.3 同源同参分组
+
+M04C-B 在生成 `core3_sku_claim_fact` 时必须同时做两类分组：
+
+```text
+source_claim_group_id:
+  同一 sku_code + 同一原始卖点 evidence_id 命中的标准卖点
+
+same_source_param_group_id:
+  同一 sku_code + 同一核心参数集合支撑的标准卖点
+```
+
+代表卖点选择顺序：
+
+1. taxonomy 中显式配置 `canonical_claim_policy`。
+2. 优先选择更贴近用户价值表达的卖点，例如“画质芯片/AI 画质引擎”优先于泛化“芯片/处理器性能”。
+3. 如果一个卖点同时服务多个战场，保留多条战场映射，但用户支付价值计算仍以同组代表卖点为主。
+
+输出要求：
+
+| 场景 | M04C 输出 | M12C 预期使用 |
+| --- | --- | --- |
+| 同一原始卖点命中多个标准卖点 | 多条 fact，带同一 `source_claim_group_id` | 作为一个业务证据组解释 |
+| 同一参数支撑多个标准卖点 | 多条 fact，带同一 `same_source_param_group_id` | 合并为一个用户价值理由，不重复计价 |
+| 卖点名称不同但参数证据不同 | 不合并 | 分别进入 M12C 判断 |
 
 ### 6.5 维度位置计算
 
@@ -654,6 +794,10 @@ GET  /api/mvp/core3/v2/projects/{project_id}/batches/{batch_id}/claim-position-c
 | param support supported | 参数支撑成立 |
 | param support unknown | 参数缺失不判否 |
 | param conflict requires review | 参数冲突复核 |
+| param support level broad generic | 只有泛参数支撑时输出 `broad_generic_support` |
+| wtp input guard blocks generic claim | 泛参数支撑的具体卖点输出 `blocked_generic_param` |
+| dolby cannot be supported only by hdr | 杜比/影音认证不能只凭 HDR 成为用户支付价值可用卖点 |
+| same source param group merges chip claims | 芯片/画质芯片同源同参时输出同一分组和代表卖点 |
 | claimed position can differ from supported position | 宣称位置和支撑位置分离 |
 | coverage aggregates SKU lists | 覆盖索引正确 |
 

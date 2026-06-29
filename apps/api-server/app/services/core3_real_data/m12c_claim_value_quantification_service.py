@@ -108,6 +108,19 @@ M12C_PARAM_LEVEL_PARITY = "parity_threshold"
 M12C_PARAM_LEVEL_WEAK = "weak_or_missing"
 M12C_PARAM_LEVEL_SPARSE = "sparse_unknown"
 
+M04C_PARAM_SUPPORT_STRONG_SPECIFIC = "strong_specific_support"
+M04C_PARAM_SUPPORT_STRONG_NUMERIC = "strong_numeric_or_tier_support"
+M04C_PARAM_SUPPORT_BROAD_GENERIC = "broad_generic_support"
+M04C_PARAM_SUPPORT_WEAK_INDIRECT = "weak_indirect_support"
+M04C_PARAM_SUPPORT_NO_PARAM = "no_param_support"
+M04C_WTP_GUARD_ELIGIBLE = "eligible_strong_param"
+M04C_WTP_GUARD_BLOCKED_GENERIC = "blocked_generic_param"
+M04C_WTP_GUARD_BLOCKED_NO_PARAM = "blocked_no_param"
+M04C_WTP_GUARD_NOT_SCOPE = "not_product_wtp_scope"
+M04C_WTP_GUARD_UNKNOWN = "unknown"
+M12C_POSITIVE_WTP_GUARDS = {M04C_WTP_GUARD_ELIGIBLE}
+M12C_BLOCKED_WTP_GUARDS = {M04C_WTP_GUARD_BLOCKED_GENERIC, M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE}
+
 M12C_TARGET_FACT_CLAIM = "target_fact_claim"
 M12C_TARGET_PARAM_CAPABILITY = "target_param_capability"
 M12C_COMPETITOR_GAP = "competitor_opportunity_gap"
@@ -216,6 +229,17 @@ class ClaimState:
     fact_claim_flag: bool
     service_separate_flag: bool
     evidence_ids: tuple[str, ...]
+    param_support_level: str = M04C_PARAM_SUPPORT_NO_PARAM
+    param_support_specificity: str = ""
+    primary_supporting_param_codes: tuple[str, ...] = ()
+    generic_support_param_codes: tuple[str, ...] = ()
+    source_claim_group_id: str | None = None
+    same_source_param_group_id: str | None = None
+    canonical_claim_code: str | None = None
+    canonical_claim_name: str | None = None
+    wtp_input_guard: str = M04C_WTP_GUARD_UNKNOWN
+    member_claim_codes: tuple[str, ...] = ()
+    member_claim_names: tuple[str, ...] = ()
 
     @property
     def is_supported(self) -> bool:
@@ -223,11 +247,20 @@ class ClaimState:
         return self.fact_claim_flag and not self.service_separate_flag and status not in {"unsupported", "not_supported", "missing"}
 
     @property
+    def payment_value_eligible(self) -> bool:
+        return _effective_wtp_input_guard(self) in M12C_POSITIVE_WTP_GUARDS
+
+    @property
     def param_support_strength(self) -> Decimal:
         status = self.param_support_status.lower()
+        guard = _effective_wtp_input_guard(self)
+        if guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
+            return Decimal("0.4500")
+        if guard in {M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE}:
+            return Decimal("0.1500")
         if status in {"supported", "strong_supported", "fact_supported"}:
             return Decimal("1.0000")
-        if status in {"partial_supported", "weak_supported", "unknown"}:
+        if status in {"partially_supported", "partial_supported", "weak_supported", "unknown"}:
             return Decimal("0.6000")
         if status in {"param_unknown", "missing"}:
             return Decimal("0.3500")
@@ -259,6 +292,26 @@ class CommentState:
 
     def has_negative(self, claim_code: str) -> bool:
         return claim_code in self.contradicted_claim_codes
+
+
+def _comment_support_strength(comment: CommentState, claim: ClaimState | None, pool: "ClaimPool") -> Decimal:
+    claim_codes = _claim_code_family(claim, pool)
+    if any(code in comment.contradicted_claim_codes for code in claim_codes):
+        return Decimal("0.1500")
+    if any(code in comment.supported_claim_codes for code in claim_codes):
+        return Decimal("1.0000")
+    return Decimal("0.4500")
+
+
+def _comment_has_negative(comment: CommentState, claim: ClaimState | None, pool: "ClaimPool") -> bool:
+    return any(code in comment.contradicted_claim_codes for code in _claim_code_family(claim, pool))
+
+
+def _claim_code_family(claim: ClaimState | None, pool: "ClaimPool") -> tuple[str, ...]:
+    codes: list[str] = [pool.claim_code, *pool.member_claim_codes]
+    if claim:
+        codes.extend([claim.claim_code, *(claim.member_claim_codes or ())])
+    return _unique_tuple(codes)
 
 
 @dataclass(frozen=True)
@@ -314,6 +367,7 @@ class ClaimPool:
     relaxation_path: tuple[dict[str, Any], ...]
     pool_relax_level: str = "L0"
     baseline_price_method: str = "weighted_median_excluding_target"
+    member_claim_codes: tuple[str, ...] = ()
 
 
 class M12CRepository(Core3BaseRepository):
@@ -346,11 +400,13 @@ class M12CRepository(Core3BaseRepository):
         )
         result: dict[str, dict[str, ClaimState]] = defaultdict(dict)
         for row in self.db.execute(stmt).scalars():
-            existing = result[row.sku_code].get(row.claim_code)
+            guard = _row_wtp_input_guard(row)
+            canonical_claim_code = _row_canonical_claim_code(row)
+            canonical_claim_name = _row_canonical_claim_name(row)
             state = ClaimState(
                 sku_code=row.sku_code,
-                claim_code=row.claim_code,
-                claim_name=row.claim_name,
+                claim_code=canonical_claim_code,
+                claim_name=canonical_claim_name,
                 claim_dimension=row.claim_dimension or "",
                 claim_subtype=row.claim_subtype or "",
                 claim_kind=row.claim_kind or "",
@@ -362,9 +418,23 @@ class M12CRepository(Core3BaseRepository):
                 fact_claim_flag=bool(row.fact_claim_flag),
                 service_separate_flag=bool(row.service_separate_flag),
                 evidence_ids=tuple(str(item) for item in (row.evidence_ids or [])),
+                param_support_level=_row_param_support_level(row),
+                param_support_specificity=str(getattr(row, "param_support_specificity", "") or ""),
+                primary_supporting_param_codes=tuple(str(item) for item in (getattr(row, "primary_supporting_param_codes", None) or [])),
+                generic_support_param_codes=tuple(str(item) for item in (getattr(row, "generic_support_param_codes", None) or [])),
+                source_claim_group_id=getattr(row, "source_claim_group_id", None),
+                same_source_param_group_id=getattr(row, "same_source_param_group_id", None),
+                canonical_claim_code=canonical_claim_code,
+                canonical_claim_name=canonical_claim_name,
+                wtp_input_guard=guard,
+                member_claim_codes=(str(row.claim_code),),
+                member_claim_names=(str(row.claim_name),),
             )
+            existing = result[row.sku_code].get(canonical_claim_code)
             if existing is None or state.confidence > existing.confidence:
-                result[row.sku_code][row.claim_code] = state
+                result[row.sku_code][canonical_claim_code] = _merge_claim_states(existing, state)
+            elif existing is not None:
+                result[row.sku_code][canonical_claim_code] = _merge_claim_states(existing, state)
         return dict(result)
 
     def list_param_states(self, *, batch_id: str, product_category: str) -> dict[str, ParamProfileState]:
@@ -940,9 +1010,11 @@ def _build_pools(
     dimension_names: Mapping[tuple[str, str], str],
 ) -> list[ClaimPool]:
     claims_by_code: dict[str, str] = {}
+    members_by_code: dict[str, tuple[str, ...]] = {}
     for claim_map in claims.values():
         for state in claim_map.values():
             claims_by_code.setdefault(state.claim_code, state.claim_name)
+            members_by_code[state.claim_code] = _unique_tuple((*members_by_code.get(state.claim_code, ()), *state.member_claim_codes, state.claim_code))
     contexts: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for sku, market in markets.items():
         for context_type, context_code, context_name, _ in semantics[sku].contexts:
@@ -996,6 +1068,7 @@ def _build_pools(
                         quality_flags=tuple(quality_flags),
                         relaxation_path=relaxation_path,
                         pool_relax_level=pool_relax_level,
+                        member_claim_codes=members_by_code.get(claim_code, (claim_code,)),
                     )
                 )
     return pools
@@ -1106,6 +1179,138 @@ def _split_claim_groups(sku_codes: Sequence[str], claims: Mapping[str, Mapping[s
         else:
             without_skus.append(sku)
     return with_skus, without_skus, unknown_skus
+
+
+def _row_wtp_input_guard(row: entities.Core3SkuClaimFact) -> str:
+    guard = str(getattr(row, "wtp_input_guard", "") or "").strip()
+    if guard and guard != M04C_WTP_GUARD_UNKNOWN:
+        return guard
+    claim_code = str(row.claim_code or "")
+    supporting_codes = {str(item) for item in (row.supporting_param_codes or [])}
+    primary_codes = {str(item) for item in (getattr(row, "primary_supporting_param_codes", None) or [])}
+    if claim_code == "tv_claim_dolby_audio_video" and supporting_codes and not primary_codes and supporting_codes.issubset({"hdr_support_flag"}):
+        return M04C_WTP_GUARD_BLOCKED_GENERIC
+    status = str(row.param_support_status or "").lower()
+    if bool(row.service_separate_flag) or status == "not_param_applicable":
+        return M04C_WTP_GUARD_NOT_SCOPE
+    if status in {"supported", "partially_supported", "strong_supported", "fact_supported"}:
+        return M04C_WTP_GUARD_ELIGIBLE
+    return M04C_WTP_GUARD_BLOCKED_NO_PARAM
+
+
+def _row_param_support_level(row: entities.Core3SkuClaimFact) -> str:
+    level = str(getattr(row, "param_support_level", "") or "").strip()
+    if level and level != "unknown":
+        return level
+    guard = _row_wtp_input_guard(row)
+    if guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
+        return M04C_PARAM_SUPPORT_BROAD_GENERIC
+    if guard == M04C_WTP_GUARD_ELIGIBLE:
+        return M04C_PARAM_SUPPORT_STRONG_SPECIFIC
+    if guard == M04C_WTP_GUARD_NOT_SCOPE:
+        return M04C_PARAM_SUPPORT_NO_PARAM
+    return M04C_PARAM_SUPPORT_NO_PARAM
+
+
+def _row_canonical_claim_code(row: entities.Core3SkuClaimFact) -> str:
+    return str(getattr(row, "canonical_claim_code", "") or row.claim_code or "")
+
+
+def _row_canonical_claim_name(row: entities.Core3SkuClaimFact) -> str:
+    return str(getattr(row, "canonical_claim_name", "") or row.claim_name or "")
+
+
+def _merge_claim_states(existing: ClaimState | None, incoming: ClaimState) -> ClaimState:
+    if existing is None:
+        return incoming
+    primary = incoming if incoming.confidence >= existing.confidence else existing
+    other = existing if primary is incoming else incoming
+    supporting_snapshot = dict(other.supporting_param_snapshot or {})
+    supporting_snapshot.update(dict(primary.supporting_param_snapshot or {}))
+    primary_codes = _unique_tuple((*existing.primary_supporting_param_codes, *incoming.primary_supporting_param_codes))
+    generic_codes = _unique_tuple((*existing.generic_support_param_codes, *incoming.generic_support_param_codes))
+    supporting_codes = _unique_tuple((*primary_codes, *existing.supporting_param_codes, *incoming.supporting_param_codes))
+    return ClaimState(
+        sku_code=primary.sku_code,
+        claim_code=primary.canonical_claim_code or primary.claim_code,
+        claim_name=primary.canonical_claim_name or primary.claim_name,
+        claim_dimension=primary.claim_dimension,
+        claim_subtype=primary.claim_subtype,
+        claim_kind=primary.claim_kind,
+        param_support_status=_strongest_support_status(existing.param_support_status, incoming.param_support_status),
+        supporting_param_codes=supporting_codes,
+        supporting_param_snapshot=supporting_snapshot,
+        match_score=max(existing.match_score, incoming.match_score),
+        confidence=max(existing.confidence, incoming.confidence),
+        fact_claim_flag=existing.fact_claim_flag or incoming.fact_claim_flag,
+        service_separate_flag=existing.service_separate_flag and incoming.service_separate_flag,
+        evidence_ids=_unique_tuple((*existing.evidence_ids, *incoming.evidence_ids)),
+        param_support_level=_strongest_param_support_level(existing.param_support_level, incoming.param_support_level),
+        param_support_specificity=primary.param_support_specificity or other.param_support_specificity,
+        primary_supporting_param_codes=primary_codes,
+        generic_support_param_codes=generic_codes,
+        source_claim_group_id=primary.source_claim_group_id or other.source_claim_group_id,
+        same_source_param_group_id=primary.same_source_param_group_id or other.same_source_param_group_id,
+        canonical_claim_code=primary.canonical_claim_code or primary.claim_code,
+        canonical_claim_name=primary.canonical_claim_name or primary.claim_name,
+        wtp_input_guard=_strongest_wtp_guard(existing.wtp_input_guard, incoming.wtp_input_guard),
+        member_claim_codes=_unique_tuple((*existing.member_claim_codes, *incoming.member_claim_codes)),
+        member_claim_names=_unique_tuple((*existing.member_claim_names, *incoming.member_claim_names)),
+    )
+
+
+def _effective_wtp_input_guard(claim: ClaimState | None) -> str:
+    if claim is None:
+        return M04C_WTP_GUARD_BLOCKED_NO_PARAM
+    guard = str(claim.wtp_input_guard or "").strip()
+    if guard and guard != M04C_WTP_GUARD_UNKNOWN:
+        return guard
+    if claim.claim_code == "tv_claim_dolby_audio_video" and not claim.primary_supporting_param_codes and set(claim.supporting_param_codes).issubset({"hdr_support_flag"}):
+        return M04C_WTP_GUARD_BLOCKED_GENERIC
+    if claim.service_separate_flag:
+        return M04C_WTP_GUARD_NOT_SCOPE
+    if claim.param_support_status.lower() in {"supported", "partially_supported", "strong_supported", "fact_supported"}:
+        return M04C_WTP_GUARD_ELIGIBLE
+    return M04C_WTP_GUARD_BLOCKED_NO_PARAM
+
+
+def _strongest_wtp_guard(*guards: str) -> str:
+    priority = {
+        M04C_WTP_GUARD_ELIGIBLE: 4,
+        M04C_WTP_GUARD_BLOCKED_GENERIC: 3,
+        M04C_WTP_GUARD_BLOCKED_NO_PARAM: 2,
+        M04C_WTP_GUARD_NOT_SCOPE: 1,
+        M04C_WTP_GUARD_UNKNOWN: 0,
+    }
+    return max((guard or M04C_WTP_GUARD_UNKNOWN for guard in guards), key=lambda item: priority.get(item, 0))
+
+
+def _strongest_param_support_level(*levels: str) -> str:
+    priority = {
+        M04C_PARAM_SUPPORT_STRONG_NUMERIC: 5,
+        M04C_PARAM_SUPPORT_STRONG_SPECIFIC: 4,
+        M04C_PARAM_SUPPORT_BROAD_GENERIC: 3,
+        M04C_PARAM_SUPPORT_WEAK_INDIRECT: 2,
+        M04C_PARAM_SUPPORT_NO_PARAM: 1,
+    }
+    return max((level or M04C_PARAM_SUPPORT_NO_PARAM for level in levels), key=lambda item: priority.get(item, 0))
+
+
+def _strongest_support_status(*statuses: str) -> str:
+    priority = {"supported": 4, "partially_supported": 3, "param_unknown": 2, "not_param_applicable": 1, "unsupported_by_param": 0}
+    return max((status or "param_unknown" for status in statuses), key=lambda item: priority.get(item, 0))
+
+
+def _unique_tuple(values: Iterable[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return tuple(result)
 
 
 def _pool_and_metric_rows(
@@ -1227,6 +1432,8 @@ def _quantification_rows(
             claim = claims.get(sku, {}).get(pool.claim_code)
             has_claim = bool(claim and claim.is_supported)
             comment = comments.get(sku, _empty_comment(sku))
+            comment_strength = _comment_support_strength(comment, claim, pool)
+            has_negative = _comment_has_negative(comment, claim, pool)
             sku_battlefield_strength = semantics[sku].support_strength(pool.context_type, pool.context_code)
             battlefield_weight = semantics[sku].allocation_weight(pool.context_type, pool.context_code)
             battlefield_claim_relevance = _battlefield_claim_relevance_strength(pool, claim)
@@ -1244,7 +1451,6 @@ def _quantification_rows(
             )
             param_strength = max(claim.param_support_strength if claim else Decimal("0.0000"), parameter_competitiveness_strength)
             claim_strength = _claim_evidence_strength(claim) if claim else Decimal("0.0000")
-            comment_strength = comment.support_strength(pool.claim_code)
             source_type = _claim_source_type(
                 has_claim=has_claim,
                 parameter_competitiveness=parameter_competitiveness,
@@ -1282,7 +1488,7 @@ def _quantification_rows(
                 battlefield_claim_relevance=battlefield_claim_relevance,
                 parameter_competitiveness=parameter_competitiveness,
                 source_type=source_type,
-                has_negative=comment.has_negative(pool.claim_code),
+                has_negative=has_negative,
                 market_price=market.price,
             )
             if source_type == M12C_COMPETITOR_GAP and role not in OPPORTUNITY_ROLES:
@@ -1295,7 +1501,7 @@ def _quantification_rows(
                 param_strength=param_strength,
                 comment_strength=comment_strength,
                 semantic_strength=semantic_strength,
-                has_negative=comment.has_negative(pool.claim_code),
+                has_negative=has_negative,
                 market_position=market_position,
                 market_acceptance=market_acceptance,
                 parameter_competitiveness=parameter_competitiveness,
@@ -1378,6 +1584,13 @@ def _quantification_rows(
                     "business_claim_type": business_claim_type,
                     "business_claim_type_cn": business_claim_type_cn,
                     "business_claim_type_definition_cn": _business_claim_type_meaning_cn(business_claim_type),
+                    "canonical_claim_code": claim.canonical_claim_code if claim else pool.claim_code,
+                    "canonical_claim_name": claim.canonical_claim_name if claim else pool.claim_name,
+                    "member_claim_codes": list(_claim_code_family(claim, pool)),
+                    "wtp_input_guard": parameter_competitiveness.get("wtp_input_guard") or _effective_wtp_input_guard(claim),
+                    "param_support_level": parameter_competitiveness.get("param_support_level") or (claim.param_support_level if claim else ""),
+                    "primary_supporting_param_codes": list(claim.primary_supporting_param_codes if claim else ()),
+                    "generic_support_param_codes": list(claim.generic_support_param_codes if claim else ()),
                     "claim_value_score": scorecard["total_score"],
                     "scorecard": scorecard,
                     "market_position_type": market_position["type"],
@@ -1423,7 +1636,7 @@ def _quantification_rows(
                         [
                             *pool.quality_flags,
                             *amount_basis.get("quality_flags", ()),
-                            *(["comment_negative"] if comment.has_negative(pool.claim_code) else []),
+                            *(["comment_negative"] if has_negative else []),
                         ]
                     )
                 ],
@@ -1748,6 +1961,50 @@ def _claim_parameter_competitiveness(
     comments: Mapping[str, CommentState],
     param_profiles: Mapping[str, ParamProfileState],
 ) -> dict[str, Any]:
+    wtp_input_guard = _effective_wtp_input_guard(claim)
+    if claim is not None and wtp_input_guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
+        support_param_codes = _claim_support_param_codes(claim, pool.claim_code)
+        return {
+            "support_param_codes": list(support_param_codes),
+            "support_param_count": len(support_param_codes),
+            "target_has_supporting_param": bool(support_param_codes),
+            "key_param_results": [],
+            "claim_label_coverage_rate": 0.0,
+            "differentiated_param_coverage_rate": 0.0,
+            "overall_parameter_competitiveness_score": 45.0,
+            "overall_parameter_competitiveness_level": M12C_PARAM_LEVEL_PARITY,
+            "overall_parameter_competitiveness_level_cn": _parameter_level_cn(M12C_PARAM_LEVEL_PARITY),
+            "dimension_scores": {
+                "parameter_truth_score": 45.0,
+                "pool_position_score": 0.0,
+                "direct_competitor_gap_score": 0.0,
+                "param_comment_perception_score": 0.0,
+                "formula_cn": "该卖点只有泛参数支撑，只能作为入围门槛，不能进入支付价值金额分配。",
+            },
+            "sparse_sample_flag": False,
+            "wtp_input_guard": wtp_input_guard,
+            "param_support_level": claim.param_support_level,
+            "downgrade_reason_cn": "该卖点只有泛参数支撑，不能作为高溢价或人无我有支付价值依据。",
+            "explanation_cn": "泛支撑参数只能证明基础能力存在，不能证明该具体卖点成立。",
+        }
+    if claim is not None and wtp_input_guard in {M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE}:
+        return {
+            "support_param_codes": list(_claim_support_param_codes(claim, pool.claim_code)),
+            "support_param_count": len(_claim_support_param_codes(claim, pool.claim_code)),
+            "target_has_supporting_param": False,
+            "key_param_results": [],
+            "claim_label_coverage_rate": 0.0,
+            "differentiated_param_coverage_rate": 0.0,
+            "overall_parameter_competitiveness_score": 0.0,
+            "overall_parameter_competitiveness_level": M12C_PARAM_LEVEL_WEAK,
+            "overall_parameter_competitiveness_level_cn": _parameter_level_cn(M12C_PARAM_LEVEL_WEAK),
+            "dimension_scores": {},
+            "sparse_sample_flag": False,
+            "wtp_input_guard": wtp_input_guard,
+            "param_support_level": claim.param_support_level,
+            "downgrade_reason_cn": "该卖点缺少具体参数支撑，不进入支付价值量化。",
+            "explanation_cn": "缺少可比较的具体参数，不能作为用户支付价值依据。",
+        }
     support_param_codes = _claim_support_param_codes(claim, pool.claim_code)
     target_entries: list[dict[str, Any]] = []
     param_results: list[dict[str, Any]] = []
@@ -1763,7 +2020,7 @@ def _claim_parameter_competitiveness(
         ]
         param_results.append(_single_param_competitiveness(param_code=param_code, target_entry=target_entry, pool_entries=pool_entries))
 
-    comment_strength = comments.get(target_sku, _empty_comment(target_sku)).support_strength(pool.claim_code)
+    comment_strength = _comment_support_strength(comments.get(target_sku, _empty_comment(target_sku)), claim, pool)
     claim_label_coverage_rate = Decimal(len(pool.with_claim_skus)) / Decimal(max(len(pool.sku_codes), 1))
     if not support_param_codes:
         level = M12C_PARAM_LEVEL_WEAK
@@ -1801,6 +2058,8 @@ def _claim_parameter_competitiveness(
         "overall_parameter_competitiveness_level_cn": _parameter_level_cn(level),
         "dimension_scores": dimension_scores,
         "sparse_sample_flag": sparse_flag,
+        "wtp_input_guard": wtp_input_guard,
+        "param_support_level": claim.param_support_level if claim else "",
         "downgrade_reason_cn": downgrade_reason,
         "explanation_cn": _parameter_competitiveness_explanation(level, param_results, downgrade_reason),
     }
@@ -1808,6 +2067,10 @@ def _claim_parameter_competitiveness(
 
 def _claim_support_param_codes(claim: ClaimState | None, claim_code: str) -> tuple[str, ...]:
     ordered: list[str] = []
+    for code in (claim.primary_supporting_param_codes if claim else ()):
+        text = str(code).strip()
+        if text and not text.startswith("_") and text not in ordered:
+            ordered.append(text)
     for code in (claim.supporting_param_codes if claim else ()):
         text = str(code).strip()
         if text and not text.startswith("_") and text not in ordered:
@@ -2345,6 +2608,11 @@ def _claim_role(
 ) -> str:
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
+    wtp_input_guard = str((parameter_competitiveness or {}).get("wtp_input_guard") or "")
+    if has_claim and wtp_input_guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
+        return M12C_ROLE_BASIC
+    if has_claim and wtp_input_guard in {M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE}:
+        return M12C_ROLE_BRAND
     param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
     param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
     if parameter_competitiveness is None:
@@ -2773,6 +3041,11 @@ def _business_claim_type(
     market_type = str((market_position or {}).get("type") or "")
     param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
     param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE
+    wtp_input_guard = str((parameter_competitiveness or {}).get("wtp_input_guard") or "")
+    if wtp_input_guard == M04C_WTP_GUARD_BLOCKED_GENERIC and role != M12C_ROLE_DRAG:
+        return M12C_CLAIM_TYPE_THRESHOLD
+    if wtp_input_guard in {M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE} and role != M12C_ROLE_DRAG:
+        return M12C_CLAIM_TYPE_BRAND
     if role == M12C_ROLE_UNIQUE:
         return M12C_CLAIM_TYPE_UNIQUE
     if role == M12C_ROLE_PREMIUM and parameter_competitiveness is not None:

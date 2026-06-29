@@ -60,6 +60,26 @@ SUPPORT_UNSUPPORTED = "unsupported_by_param"
 SUPPORT_UNKNOWN = "param_unknown"
 SUPPORT_NOT_APPLICABLE = "not_param_applicable"
 
+PARAM_SUPPORT_STRONG_SPECIFIC = "strong_specific_support"
+PARAM_SUPPORT_STRONG_NUMERIC = "strong_numeric_or_tier_support"
+PARAM_SUPPORT_BROAD_GENERIC = "broad_generic_support"
+PARAM_SUPPORT_WEAK_INDIRECT = "weak_indirect_support"
+PARAM_SUPPORT_NO_PARAM = "no_param_support"
+PARAM_SUPPORT_NOT_APPLICABLE = "not_param_applicable"
+
+PARAM_SPECIFICITY_SPECIFIC = "specific_param"
+PARAM_SPECIFICITY_NUMERIC_TIER = "numeric_or_tier_param"
+PARAM_SPECIFICITY_GENERIC = "generic_param"
+PARAM_SPECIFICITY_WEAK = "weak_indirect_param"
+PARAM_SPECIFICITY_NONE = "no_param"
+PARAM_SPECIFICITY_NOT_APPLICABLE = "not_applicable"
+
+WTP_GUARD_ELIGIBLE_STRONG_PARAM = "eligible_strong_param"
+WTP_GUARD_BLOCKED_GENERIC_PARAM = "blocked_generic_param"
+WTP_GUARD_BLOCKED_NO_PARAM = "blocked_no_param"
+WTP_GUARD_NOT_PRODUCT_SCOPE = "not_product_wtp_scope"
+WTP_GUARD_UNKNOWN = "unknown"
+
 POSITION_CLAIMED = "claimed"
 POSITION_SUPPORTED = "supported"
 INPUT_SOURCE_AUTO = "auto"
@@ -77,10 +97,14 @@ class M04CClaimDefinition:
     claim_kind: str
     patterns: tuple[str, ...]
     support_param_codes: tuple[str, ...] = ()
+    primary_support_param_codes: tuple[str, ...] = ()
+    generic_support_param_codes: tuple[str, ...] = ()
     support_keywords: tuple[str, ...] = ()
     negative_patterns: tuple[str, ...] = ()
     support_required: bool = True
     service_separate: bool = False
+    canonical_claim_code: str | None = None
+    canonical_claim_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -200,6 +224,8 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             "brightness_hdr",
             ("\\bhdr\\b", "xdr", "杜比视界", "高亮", "峰值亮度", "尼特", "nits?"),
             support_param_codes=("hdr_support_flag", "declared_brightness_nit_or_band"),
+            primary_support_param_codes=("declared_brightness_nit_or_band",),
+            generic_support_param_codes=("hdr_support_flag",),
             support_keywords=("hdr", "xdr", "亮度", "nit", "尼特", "dolby vision", "杜比视界"),
         ),
         _claim(
@@ -227,7 +253,10 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             "picture_engine",
             ("画质芯片", "画质引擎", "ai画质", "图像处理", "ai调校"),
             support_param_codes=("processor_chip_model", "ai_capability_flag", "ai_model_capability_flag"),
+            primary_support_param_codes=("processor_chip_model",),
             support_keywords=("画质", "ai", "芯片"),
+            canonical_claim_code="tv_claim_chip_performance",
+            canonical_claim_name="芯片/处理器性能",
         ),
         _claim(
             "tv_claim_eye_care_display",
@@ -317,6 +346,7 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             "certification",
             ("杜比", "dolby", "dts", "hdr10"),
             support_param_codes=("hdr_support_flag",),
+            generic_support_param_codes=("hdr_support_flag",),
             support_keywords=("dolby", "杜比", "dts", "hdr10"),
         ),
         _claim(
@@ -380,6 +410,7 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             "chip",
             ("芯片", "四核", "cpu", "处理器", "主频"),
             support_param_codes=("processor_chip_model", "processor_vendor", "cpu_core_count", "cpu_frequency_ghz"),
+            primary_support_param_codes=("processor_chip_model", "processor_vendor", "cpu_core_count", "cpu_frequency_ghz"),
             support_keywords=("芯片", "cpu", "处理器", "core", "ghz"),
         ),
         _claim(
@@ -1272,6 +1303,7 @@ class M04CProfileBuilder:
                     )
                 )
 
+        _assign_fact_groups(sku_code, facts, self.taxonomy.claims_by_code)
         positions = self._build_positions(sku_code, model_name, facts)
         profile = M04CWritePayload(
             self._profile_payload(
@@ -1354,9 +1386,18 @@ class M04CProfileBuilder:
             "match_type": "taxonomy_keyword",
             "match_score": Decimal("1.0000"),
             "param_support_status": support["status"],
+            "param_support_level": support["param_support_level"],
+            "param_support_specificity": support["param_support_specificity"],
             "supporting_param_codes": support["supporting_param_codes"],
+            "primary_supporting_param_codes": support["primary_supporting_param_codes"],
+            "generic_support_param_codes": support["generic_support_param_codes"],
             "supporting_param_snapshot_json": support["snapshot"],
             "support_explanation": support["explanation"],
+            "source_claim_group_id": None,
+            "same_source_param_group_id": None,
+            "canonical_claim_code": claim.canonical_claim_code or claim.claim_code,
+            "canonical_claim_name": claim.canonical_claim_name or claim.claim_name,
+            "wtp_input_guard": support["wtp_input_guard"],
             "fact_claim_flag": fact_claim_flag,
             "service_separate_flag": claim.service_separate,
             "evidence_ids": evidence_ids,
@@ -1625,11 +1666,15 @@ def _claim(
     patterns: Sequence[str],
     *,
     support_param_codes: Sequence[str] = (),
+    primary_support_param_codes: Sequence[str] = (),
+    generic_support_param_codes: Sequence[str] = (),
     support_keywords: Sequence[str] = (),
     negative_patterns: Sequence[str] = (),
     support_required: bool = True,
     service_separate: bool = False,
     claim_kind: str = "product_experience",
+    canonical_claim_code: str | None = None,
+    canonical_claim_name: str | None = None,
 ) -> M04CClaimDefinition:
     return M04CClaimDefinition(
         claim_code=claim_code,
@@ -1639,10 +1684,90 @@ def _claim(
         claim_kind=claim_kind,
         patterns=tuple(patterns),
         support_param_codes=tuple(support_param_codes),
+        primary_support_param_codes=tuple(primary_support_param_codes),
+        generic_support_param_codes=tuple(generic_support_param_codes),
         support_keywords=tuple(support_keywords),
         negative_patterns=tuple(negative_patterns),
         support_required=support_required,
         service_separate=service_separate,
+        canonical_claim_code=canonical_claim_code,
+        canonical_claim_name=canonical_claim_name,
+    )
+
+
+def _assign_fact_groups(sku_code: str, facts: Sequence[M04CWritePayload], claims_by_code: Mapping[str, M04CClaimDefinition]) -> None:
+    by_param_group: dict[tuple[str, tuple[str, ...]], list[dict[str, Any]]] = defaultdict(list)
+    for fact in facts:
+        payload = fact.payload
+        source_key = str(payload.get("source_claim_key") or "")
+        payload["source_claim_group_id"] = stable_hash(
+            {"sku_code": sku_code, "source_claim_key": source_key},
+            version="m04c-source-claim-group-v1",
+        )
+        primary_codes = tuple(sorted(str(code) for code in (payload.get("primary_supporting_param_codes") or []) if str(code).strip()))
+        if primary_codes:
+            payload["same_source_param_group_id"] = stable_hash(
+                {"sku_code": sku_code, "source_claim_key": source_key, "primary_param_codes": primary_codes},
+                version="m04c-source-param-group-v1",
+            )
+            by_param_group[(source_key, primary_codes)].append(payload)
+        else:
+            payload["same_source_param_group_id"] = None
+            payload["canonical_claim_code"] = payload["claim_code"]
+            payload["canonical_claim_name"] = payload["claim_name"]
+
+    for _, group_payloads in by_param_group.items():
+        canonical_code = _canonical_claim_for_param_group(group_payloads)
+        claim_def = claims_by_code.get(canonical_code)
+        canonical_name = claim_def.claim_name if claim_def else str(group_payloads[0].get("claim_name") or "")
+        for payload in group_payloads:
+            payload["canonical_claim_code"] = canonical_code
+            payload["canonical_claim_name"] = canonical_name
+
+    for fact in facts:
+        _refresh_fact_hash(fact.payload)
+
+
+def _canonical_claim_for_param_group(group_payloads: Sequence[Mapping[str, Any]]) -> str:
+    claim_codes = {str(payload.get("claim_code") or "") for payload in group_payloads}
+    priority = (
+        "tv_claim_chip_performance",
+        "tv_claim_picture_engine_ai",
+        "tv_claim_hdr_high_brightness",
+        "tv_claim_local_dimming",
+        "tv_claim_high_refresh_rate",
+    )
+    if len(claim_codes) == 1:
+        return next(iter(claim_codes))
+    for claim_code in priority:
+        if claim_code in claim_codes:
+            return claim_code
+    return sorted(claim_codes)[0]
+
+
+def _refresh_fact_hash(payload: dict[str, Any]) -> None:
+    payload["fact_hash"] = stable_hash(
+        {
+            "sku_code": payload.get("sku_code"),
+            "source_claim_key": payload.get("source_claim_key"),
+            "claim_code": payload.get("claim_code"),
+            "claim_text": payload.get("clean_claim_text"),
+            "param_support_status": payload.get("param_support_status"),
+            "param_support_level": payload.get("param_support_level"),
+            "param_support_specificity": payload.get("param_support_specificity"),
+            "supporting_param_codes": payload.get("supporting_param_codes"),
+            "primary_supporting_param_codes": payload.get("primary_supporting_param_codes"),
+            "generic_support_param_codes": payload.get("generic_support_param_codes"),
+            "source_claim_group_id": payload.get("source_claim_group_id"),
+            "same_source_param_group_id": payload.get("same_source_param_group_id"),
+            "canonical_claim_code": payload.get("canonical_claim_code"),
+            "canonical_claim_name": payload.get("canonical_claim_name"),
+            "wtp_input_guard": payload.get("wtp_input_guard"),
+            "fact_claim_flag": payload.get("fact_claim_flag"),
+            "taxonomy_version": payload.get("taxonomy_version"),
+            "rule_version": payload.get("rule_version"),
+        },
+        version=M04C_FACT_HASH_VERSION,
     )
 
 
@@ -1660,22 +1785,37 @@ def _param_support(claim: M04CClaimDefinition, profile: entities.Core3SkuParamPr
     if claim.service_separate:
         return {
             "status": SUPPORT_NOT_APPLICABLE,
+            "param_support_level": PARAM_SUPPORT_NOT_APPLICABLE,
+            "param_support_specificity": PARAM_SPECIFICITY_NOT_APPLICABLE,
             "supporting_param_codes": [],
+            "primary_supporting_param_codes": [],
+            "generic_support_param_codes": [],
             "snapshot": {},
+            "wtp_input_guard": WTP_GUARD_NOT_PRODUCT_SCOPE,
             "explanation": "服务履约类卖点单独标记，不进入商品事实卖点。",
         }
     if not claim.support_required:
         return {
             "status": SUPPORT_NOT_APPLICABLE,
+            "param_support_level": PARAM_SUPPORT_NOT_APPLICABLE,
+            "param_support_specificity": PARAM_SPECIFICITY_NOT_APPLICABLE,
             "supporting_param_codes": [],
+            "primary_supporting_param_codes": [],
+            "generic_support_param_codes": [],
             "snapshot": {},
+            "wtp_input_guard": WTP_GUARD_NOT_PRODUCT_SCOPE,
             "explanation": "该卖点属于价格/市场表达，M04C 不用参数判断其事实性。",
         }
     if profile is None:
         return {
             "status": SUPPORT_UNKNOWN,
+            "param_support_level": PARAM_SUPPORT_NO_PARAM,
+            "param_support_specificity": PARAM_SPECIFICITY_NONE,
             "supporting_param_codes": list(claim.support_param_codes),
+            "primary_supporting_param_codes": list(claim.primary_support_param_codes or ()),
+            "generic_support_param_codes": list(claim.generic_support_param_codes or ()),
             "snapshot": {},
+            "wtp_input_guard": WTP_GUARD_BLOCKED_NO_PARAM,
             "explanation": "缺少该 SKU 的 M03B 参数画像，无法判断参数支撑。",
         }
     param_values = profile.param_values_json or {}
@@ -1691,34 +1831,96 @@ def _param_support(claim: M04CClaimDefinition, profile: entities.Core3SkuParamPr
             elif _entry_is_known_false(entry):
                 known_false_codes.append(code)
     if supported_codes:
+        primary_codes, generic_codes = _split_primary_and_generic_support_codes(claim, supported_codes)
+        if primary_codes:
+            param_support_level = PARAM_SUPPORT_STRONG_NUMERIC if any(_numeric_or_tier_param_code(code) for code in primary_codes) else PARAM_SUPPORT_STRONG_SPECIFIC
+            param_support_specificity = PARAM_SPECIFICITY_NUMERIC_TIER if param_support_level == PARAM_SUPPORT_STRONG_NUMERIC else PARAM_SPECIFICITY_SPECIFIC
+            wtp_input_guard = WTP_GUARD_ELIGIBLE_STRONG_PARAM
+        elif generic_codes:
+            param_support_level = PARAM_SUPPORT_BROAD_GENERIC
+            param_support_specificity = PARAM_SPECIFICITY_GENERIC
+            wtp_input_guard = WTP_GUARD_BLOCKED_GENERIC_PARAM
+        else:
+            param_support_level = PARAM_SUPPORT_WEAK_INDIRECT
+            param_support_specificity = PARAM_SPECIFICITY_WEAK
+            wtp_input_guard = WTP_GUARD_BLOCKED_NO_PARAM
         status = SUPPORT_SUPPORTED if len(supported_codes) == len(claim.support_param_codes) or len(supported_codes) >= 2 else SUPPORT_PARTIAL
+        if wtp_input_guard == WTP_GUARD_BLOCKED_GENERIC_PARAM:
+            explanation = f"参数画像中 {', '.join(generic_codes)} 只能证明基础能力存在，不能直接支撑该卖点的支付价值。"
+        else:
+            explanation = f"参数画像中 {', '.join(supported_codes)} 与卖点匹配。"
         return {
             "status": status,
+            "param_support_level": param_support_level,
+            "param_support_specificity": param_support_specificity,
             "supporting_param_codes": supported_codes,
+            "primary_supporting_param_codes": primary_codes,
+            "generic_support_param_codes": generic_codes,
             "snapshot": snapshot,
-            "explanation": f"参数画像中 {', '.join(supported_codes)} 与卖点匹配。",
+            "wtp_input_guard": wtp_input_guard,
+            "explanation": explanation,
         }
     profile_text = _normalize_claim_text(param_values)
     if claim.support_keywords and any(_normalize_claim_text(keyword) in profile_text for keyword in claim.support_keywords):
         return {
             "status": SUPPORT_PARTIAL,
+            "param_support_level": PARAM_SUPPORT_WEAK_INDIRECT,
+            "param_support_specificity": PARAM_SPECIFICITY_WEAK,
             "supporting_param_codes": list(claim.support_param_codes),
+            "primary_supporting_param_codes": [],
+            "generic_support_param_codes": [],
             "snapshot": snapshot,
+            "wtp_input_guard": WTP_GUARD_BLOCKED_NO_PARAM,
             "explanation": "参数画像文本中出现相关关键词，但未能定位到完整标准参数字段。",
         }
     if known_false_codes:
         return {
             "status": SUPPORT_UNSUPPORTED,
+            "param_support_level": PARAM_SUPPORT_NO_PARAM,
+            "param_support_specificity": PARAM_SPECIFICITY_NONE,
             "supporting_param_codes": known_false_codes,
+            "primary_supporting_param_codes": [],
+            "generic_support_param_codes": [],
             "snapshot": snapshot,
+            "wtp_input_guard": WTP_GUARD_BLOCKED_NO_PARAM,
             "explanation": f"参数画像中 {', '.join(known_false_codes)} 明确为否或 0，与卖点不一致。",
         }
     return {
         "status": SUPPORT_UNKNOWN,
+        "param_support_level": PARAM_SUPPORT_NO_PARAM,
+        "param_support_specificity": PARAM_SPECIFICITY_NONE,
         "supporting_param_codes": list(claim.support_param_codes),
+        "primary_supporting_param_codes": [],
+        "generic_support_param_codes": list(claim.generic_support_param_codes or ()),
         "snapshot": snapshot,
+        "wtp_input_guard": WTP_GUARD_BLOCKED_NO_PARAM,
         "explanation": "参数画像缺少可判断该卖点的标准参数或参数值未知。",
     }
+
+
+def _split_primary_and_generic_support_codes(claim: M04CClaimDefinition, supported_codes: Sequence[str]) -> tuple[list[str], list[str]]:
+    generic_set = {str(code) for code in claim.generic_support_param_codes}
+    explicit_primary = {str(code) for code in claim.primary_support_param_codes}
+    primary_codes: list[str] = []
+    generic_codes: list[str] = []
+    for code in supported_codes:
+        text = str(code)
+        if text in generic_set and text not in explicit_primary:
+            generic_codes.append(text)
+        else:
+            primary_codes.append(text)
+    if explicit_primary:
+        primary_codes = [code for code in primary_codes if code in explicit_primary]
+    return primary_codes, generic_codes
+
+
+def _numeric_or_tier_param_code(param_code: str) -> bool:
+    text = param_code.lower()
+    return (
+        any(token in text for token in ("count", "ratio", "percent", "pct", "hz", "nit", "brightness", "zone", "frequency", "core", "gb", "grade", "index"))
+        or text.endswith("_mm")
+        or text.endswith("_w")
+    )
 
 
 def _entry_supports_claim(param_code: str, entry: Mapping[str, Any], claim: M04CClaimDefinition) -> bool:
