@@ -144,6 +144,10 @@ def build_claim_value_dashboard_payload(
     structure_rows = _dashboard_claim_structure(target_rows + gap_rows)
     battlefield_sources = _dashboard_battlefield_sources(_target_claim_rows(detail_rows))
     activation_and_risk = _dashboard_activation_and_risk(target_rows=target_rows, gap_rows=gap_rows)
+    metrics = _dashboard_value_metrics(top_claims=top_claims, structure=structure_rows)
+    value_ladder = _dashboard_value_ladder(top_claims)
+    role_cards = _dashboard_role_cards(top_claims=top_claims, activation_and_risk=activation_and_risk)
+    action_suggestions = _dashboard_action_suggestions(top_claims=top_claims, role_cards=role_cards)
     links = [{"label": "查看完整报告", "url": report_url, "type": "report"}] if report_url else []
     title = f"{_display_name(target)} 用户卖点价值看板"
     return {
@@ -157,10 +161,14 @@ def build_claim_value_dashboard_payload(
             "market_summary": _target_market_summary(target),
         },
         "summary_cn": _dashboard_summary_cn(_display_name(target), top_claims, activation_and_risk),
+        "value_metrics": metrics,
+        "value_ladder": value_ladder,
+        "role_cards": role_cards,
         "claim_structure": structure_rows,
         "top_claims": top_claims,
         "battlefield_sources": battlefield_sources,
         "activation_and_risk": activation_and_risk,
+        "action_suggestions": action_suggestions,
         "report_evidence_links": links,
         "display_policy": {
             "main_answer": "feishu_card",
@@ -176,27 +184,30 @@ def render_claim_value_feishu_card_payload(dashboard_payload: dict[str, Any]) ->
     title = str(dashboard_payload.get("title") or "用户卖点价值看板")
     target = dashboard_payload.get("target") or {}
     top_claims = [row for row in dashboard_payload.get("top_claims") or [] if isinstance(row, dict)]
-    structure = [row for row in dashboard_payload.get("claim_structure") or [] if isinstance(row, dict)]
-    battlefield_sources = [row for row in dashboard_payload.get("battlefield_sources") or [] if isinstance(row, dict)]
-    risks = [row for row in dashboard_payload.get("activation_and_risk") or [] if isinstance(row, dict)]
+    metrics = [row for row in dashboard_payload.get("value_metrics") or [] if isinstance(row, dict)]
+    ladder = [row for row in dashboard_payload.get("value_ladder") or [] if isinstance(row, dict)]
+    role_cards = [row for row in dashboard_payload.get("role_cards") or [] if isinstance(row, dict)]
+    action_suggestions = [row for row in dashboard_payload.get("action_suggestions") or [] if isinstance(row, dict)]
     elements: list[dict[str, Any]] = [
         _feishu_markdown(_dashboard_card_conclusion(dashboard_payload)),
     ]
-    if structure:
+    if metrics:
+        elements.append(_feishu_metric_columns(metrics))
+    if ladder:
         elements.append({"tag": "hr"})
-        elements.append(_feishu_markdown("**卖点价值结构**"))
-        elements.append(_feishu_claim_structure_chart(structure, str(target.get("display_name") or "目标 SKU")))
+        elements.append(_feishu_markdown("**用户支付价值阶梯**"))
+        elements.append(_feishu_value_ladder(ladder))
+    if role_cards:
+        elements.append({"tag": "hr"})
+        elements.append(_feishu_markdown("**卖点角色分层**"))
+        elements.extend(_feishu_role_quadrants(role_cards))
     if top_claims:
         elements.append({"tag": "hr"})
-        elements.append(_feishu_markdown("**Top 卖点价值**"))
-        elements.append(_feishu_top_claims_table(top_claims))
-    if battlefield_sources:
+        elements.append(_feishu_markdown("**Top 3 用户支付价值卖点**"))
+        elements.extend(_feishu_top_claim_cards(top_claims[:3]))
+    if action_suggestions:
         elements.append({"tag": "hr"})
-        elements.append(_feishu_markdown("**价值战场来源**"))
-        elements.append(_feishu_battlefield_source_table(battlefield_sources))
-    if risks:
-        elements.append({"tag": "hr"})
-        elements.append(_feishu_markdown(_dashboard_risk_markdown(risks)))
+        elements.append(_feishu_markdown(_dashboard_action_markdown(action_suggestions)))
     action = _feishu_report_action(dashboard_payload)
     if action:
         elements.append({"tag": "hr"})
@@ -686,6 +697,122 @@ def _dashboard_activation_and_risk(*, target_rows: list[dict[str, Any]], gap_row
     return result
 
 
+def _dashboard_value_metrics(*, top_claims: list[dict[str, Any]], structure: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    positive_count = sum(int(row.get("count") or 0) for row in structure if row.get("category") in POSITIVE_CATEGORIES)
+    pending_count = sum(
+        int(row.get("count") or 0)
+        for row in structure
+        if row.get("category") in {"待激活卖点", "厂家主张卖点", "样本不足待复核"}
+    )
+    positive_amounts = [
+        _decimal(row.get("amount_value")) or Decimal("0")
+        for row in top_claims
+        if row.get("business_type") in POSITIVE_CATEGORIES and (_decimal(row.get("amount_value")) or Decimal("0")) > 0
+    ]
+    max_amount = max(positive_amounts) if positive_amounts else Decimal("0")
+    return [
+        {
+            "label": "已兑现支付价值",
+            "value": f"{positive_count} 个卖点" if positive_count else "暂无稳定量化",
+            "note": "能抬高用户心理价位或支撑同价销量。",
+        },
+        {
+            "label": "最高单项支付价值",
+            "value": _approx_money(max_amount) if max_amount > 0 else "暂不量化",
+            "note": "来自同战场、同价格带可比验证。",
+        },
+        {
+            "label": "待激活价值点",
+            "value": f"{pending_count} 个卖点" if pending_count else "暂无",
+            "note": "有事实基础，但用户感知或市场承接不足。",
+        },
+    ]
+
+
+def _dashboard_value_ladder(top_claims: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
+    rows = [
+        row
+        for row in top_claims
+        if row.get("business_type") in POSITIVE_CATEGORIES and (_decimal(row.get("amount_value")) or Decimal("0")) > 0
+    ]
+    rows = sorted(rows, key=lambda row: -(_decimal(row.get("amount_value")) or Decimal("0")))[:limit]
+    return [
+        {
+            "claim_name": row.get("claim_name"),
+            "value": row.get("explainable_amount_cn") or "暂不量化",
+            "contexts": [str(item) for item in (row.get("main_contexts") or [])[:2] if item],
+        }
+        for row in rows
+    ]
+
+
+def _dashboard_role_cards(*, top_claims: list[dict[str, Any]], activation_and_risk: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    positive_names = [str(row.get("claim_name")) for row in top_claims if row.get("business_type") in POSITIVE_CATEGORIES and row.get("claim_name")]
+    unique_names = [
+        str(row.get("claim_name"))
+        for row in top_claims
+        if row.get("business_type") == "人无我有型支付价值卖点" and row.get("claim_name")
+    ]
+
+    def activation_names(*categories: str) -> list[str]:
+        names: list[str] = []
+        for category in categories:
+            row = next((item for item in activation_and_risk if item.get("category") == category), None)
+            if row:
+                names.extend(str(item) for item in (row.get("claims") or []) if item)
+        return _unique_texts(names)
+
+    threshold_names = activation_names("门槛卖点")
+    pending_names = _unique_texts(unique_names + activation_names("待激活卖点", "厂家主张卖点", "样本不足待复核"))
+    risk_names = activation_names("竞品拦截卖点", "价格压力卖点")
+    return [
+        {
+            "title": "支付价值卖点",
+            "subtitle": "用户愿意为它多付或更愿意成交",
+            "claims": positive_names[:4],
+            "empty_text": "暂无稳定量化卖点",
+        },
+        {
+            "title": "入围门槛卖点",
+            "subtitle": "有助于进入候选清单，不单独解释加价",
+            "claims": threshold_names[:4],
+            "empty_text": "暂无明显门槛项",
+        },
+        {
+            "title": "待激活卖点",
+            "subtitle": "有产品事实或表达，需要强化用户感知",
+            "claims": pending_names[:4],
+            "empty_text": "暂无待激活项",
+        },
+        {
+            "title": "竞品拦截点",
+            "subtitle": "竞品更强或本品表达弱，影响转化",
+            "claims": risk_names[:4],
+            "empty_text": "暂无明显拦截点",
+        },
+    ]
+
+
+def _dashboard_action_suggestions(*, top_claims: list[dict[str, Any]], role_cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    role_by_title = {str(row.get("title") or ""): row for row in role_cards}
+    positive = [str(item) for item in role_by_title.get("支付价值卖点", {}).get("claims") or []]
+    threshold = [str(item) for item in role_by_title.get("入围门槛卖点", {}).get("claims") or []]
+    pending = [str(item) for item in role_by_title.get("待激活卖点", {}).get("claims") or []]
+    risks = [str(item) for item in role_by_title.get("竞品拦截点", {}).get("claims") or []]
+    actions: list[dict[str, Any]] = []
+    if positive:
+        actions.append({"label": "主推", "text": f"围绕{_join_cn(positive[:3])}建立核心成交理由。"})
+    if threshold:
+        actions.append({"label": "证明", "text": f"{_join_cn(threshold[:3])}作为配置证明，不单独承担溢价解释。"})
+    if pending:
+        actions.append({"label": "激活", "text": f"把{_join_cn(pending[:3])}绑定到真实观看、游戏或画质体验，补强用户感知。"})
+    if risks:
+        actions.append({"label": "防守", "text": f"针对{_join_cn(risks[:3])}准备竞品对比和导购解释。"})
+    if not actions and top_claims:
+        actions.append({"label": "观察", "text": "当前卖点价值证据偏弱，建议先补充评论和同战场可比样本。"})
+    return actions[:4]
+
+
 def _dashboard_summary_cn(target_name: str, top_claims: list[dict[str, Any]], risks: list[dict[str, Any]]) -> str:
     positive = [row for row in top_claims if row.get("business_type") in POSITIVE_CATEGORIES]
     unique = [row for row in top_claims if row.get("business_type") == "人无我有型支付价值卖点"]
@@ -789,6 +916,110 @@ def _target_market_summary(target: dict[str, Any]) -> str:
 
 def _feishu_markdown(content: str) -> dict[str, Any]:
     return {"tag": "markdown", "content": content}
+
+
+def _feishu_metric_columns(metrics: list[dict[str, Any]]) -> dict[str, Any]:
+    return _feishu_column_set(
+        [
+            _feishu_column(
+                f"**{metric.get('label') or ''}**\n\n**{metric.get('value') or ''}**\n\n{metric.get('note') or ''}",
+                weight=1,
+            )
+            for metric in metrics[:3]
+        ]
+    )
+
+
+def _feishu_value_ladder(ladder: list[dict[str, Any]]) -> dict[str, Any]:
+    columns = [
+        _feishu_column("**市场基准**\n\n同尺寸 / 同价带 / 同战场\n\n用户支付价值起点", weight=1)
+    ]
+    for row in ladder[:3]:
+        context = "、".join(str(item) for item in (row.get("contexts") or [])[:2]) or "相关战场"
+        columns.append(
+            _feishu_column(
+                f"**{row.get('value') or '暂不量化'}**\n\n{row.get('claim_name') or '未命名卖点'}\n\n成立场景：{context}",
+                weight=1,
+            )
+        )
+    return _feishu_column_set(columns)
+
+
+def _feishu_role_quadrants(role_cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for start in range(0, min(len(role_cards), 4), 2):
+        pair = role_cards[start : start + 2]
+        rows.append(
+            _feishu_column_set(
+                [
+                    _feishu_column(
+                        _role_card_markdown(card),
+                        weight=1,
+                    )
+                    for card in pair
+                ]
+            )
+        )
+    return rows
+
+
+def _feishu_top_claim_cards(top_claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    elements: list[dict[str, Any]] = []
+    for row in top_claims:
+        context = "、".join(str(item) for item in (row.get("main_contexts") or [])[:2]) or "相关战场待复核"
+        value = row.get("explainable_amount_cn") or row.get("potential_cn") or "暂不量化"
+        evidence = row.get("evidence_cn") or "证据待补充"
+        elements.append(
+            _feishu_markdown(
+                "\n".join(
+                    [
+                        f"**{row.get('rank')}. {row.get('claim_name') or '未命名卖点'}**",
+                        f"支付价值：{value}｜分类：{row.get('business_type') or '待复核'}",
+                        f"成立场景：{context}",
+                        f"证据：{evidence}",
+                    ]
+                )
+            )
+        )
+    return elements
+
+
+def _feishu_column_set(columns: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "tag": "column_set",
+        "flex_mode": "none",
+        "background_style": "default",
+        "columns": columns,
+    }
+
+
+def _feishu_column(content: str, *, weight: int = 1) -> dict[str, Any]:
+    return {
+        "tag": "column",
+        "width": "weighted",
+        "weight": weight,
+        "vertical_align": "top",
+        "elements": [_feishu_markdown(content)],
+    }
+
+
+def _role_card_markdown(card: dict[str, Any]) -> str:
+    claims = [str(item) for item in (card.get("claims") or [])[:4] if item]
+    claim_text = "\n".join(f"- {item}" for item in claims) if claims else str(card.get("empty_text") or "暂无")
+    return "\n".join(
+        [
+            f"**{card.get('title') or ''}**",
+            str(card.get("subtitle") or ""),
+            claim_text,
+        ]
+    )
+
+
+def _dashboard_action_markdown(actions: list[dict[str, Any]]) -> str:
+    lines = ["**建议动作**"]
+    for item in actions[:4]:
+        lines.append(f"- {item.get('label') or '建议'}：{item.get('text') or ''}")
+    return "\n".join(lines)
 
 
 def _feishu_claim_structure_chart(structure: list[dict[str, Any]], target_name: str) -> dict[str, Any]:

@@ -283,28 +283,39 @@ def test_render_claim_value_feishu_card_payload_contains_report_button() -> None
     assert card["config"]["summary"]["content"] == "海信 65E7Q 用户卖点价值看板"
     assert [element["tag"] for element in card["body"]["elements"]] == [
         "markdown",
+        "column_set",
         "hr",
         "markdown",
-        "chart",
+        "column_set",
         "hr",
         "markdown",
-        "table",
+        "column_set",
+        "column_set",
         "hr",
         "markdown",
-        "table",
+        "markdown",
+        "markdown",
         "hr",
         "markdown",
         "hr",
         "button",
     ]
+    assert "用户支付价值阶梯" in card_json
+    assert "卖点角色分层" in card_json
+    assert "Top 3 用户支付价值卖点" in card_json
+    assert "建议动作" in card_json
+    assert "已兑现支付价值" in card_json
+    assert "市场基准" in card_json
+    assert "chart" not in card_json
+    assert "table" not in card_json
     assert "查看完整报告" in card_json
     assert "https://my.feishu.cn/docx/ClaimValueReport" in card_json
     assert "HDR/高亮画质" in card_json
     assert "HDMI2.1 连接" in card_json
-    top_table = card["body"]["elements"][6]
-    assert top_table["element_id"] == "claim_value_top_claims"
-    top_claim_names = [row["claim"] for row in top_table["rows"]]
-    assert top_claim_names == ["HDR/高亮画质", "芯片/处理器性能"]
+    assert "1. HDR/高亮画质" in card_json
+    assert "2. 芯片/处理器性能" in card_json
+    assert "支付价值：约41元" in card_json
+    assert "支付价值：高潜力（82分）" in card_json
 
 
 def test_build_claim_value_answer_writes_markdown_file(monkeypatch, tmp_path) -> None:
