@@ -39,7 +39,7 @@ def test_m12c_support_param_codes_filters_internal_fields() -> None:
     assert support_codes[0] == "declared_brightness_nit_or_band"
 
 
-def test_m12c_target_only_with_claim_becomes_unique_payment_potential() -> None:
+def test_m12c_single_claim_group_can_quantify_with_relaxed_thresholds() -> None:
     pool = m12c_service.ClaimPool(
         claim_code="tv_claim_chip_performance",
         claim_name="芯片/处理器性能",
@@ -48,12 +48,12 @@ def test_m12c_target_only_with_claim_becomes_unique_payment_potential() -> None:
         context_name="高端画质升级战场",
         size_tier="large_60_69",
         price_band_group="high_with_adjacent",
-        sku_codes=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        sku_codes=("sku-a", "sku-b", "sku-c"),
         with_claim_skus=("sku-a",),
-        without_claim_skus=("sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        without_claim_skus=("sku-b", "sku-c"),
         unknown_skus=(),
-        sample_status="weak",
-        quality_flags=("small_comparable_pool",),
+        sample_status="sufficient",
+        quality_flags=(),
         relaxation_path=(),
         pool_relax_level="L2",
     )
@@ -92,15 +92,104 @@ def test_m12c_target_only_with_claim_becomes_unique_payment_potential() -> None:
         comment_strength=Decimal("0.6500"),
         semantic_strength=Decimal("0.9500"),
         has_negative=False,
-        market_position={"type": "payment_unverified", "summary_cn": "价格和销量暂未验证支付价值"},
+        market_position={"type": "premium_accepted", "summary_cn": "价格较高且销量不弱"},
         parameter_competitiveness=competitiveness,
     )
 
-    assert role == m12c_service.M12C_ROLE_UNIQUE
-    assert m12c_service._business_claim_type(role, metric, scorecard, parameter_competitiveness=competitiveness) == m12c_service.M12C_CLAIM_TYPE_UNIQUE
+    assert role == m12c_service.M12C_ROLE_PREMIUM
+    assert (
+        m12c_service._business_claim_type(
+            role,
+            metric,
+            scorecard,
+            market_position={"type": "premium_accepted"},
+            parameter_competitiveness=competitiveness,
+        )
+        == m12c_service.M12C_CLAIM_TYPE_PREMIUM
+    )
     basis = m12c_service._amount_quantification_basis(pool, "sku-a")
-    assert basis["amount_quantification_ready"] is False
-    assert "目标 SKU 是有卖点组唯一样本" in basis["no_amount_reason_cn"]
+    assert basis["amount_quantification_ready"] is True
+    assert basis["sample_grade"] == "可量化，比较组单样本"
+    assert "single_sku_comparison_group" in basis["quality_flags"]
+
+
+def test_m12c_numeric_claim_pool_splits_by_param_tier_before_claim_presence() -> None:
+    markets = {
+        sku: m12c_service.MarketState(
+            sku_code=sku,
+            brand_name="brand",
+            model_name=sku,
+            size_tier="large_60_69",
+            exact_size_tier="65",
+            price_band="high",
+            price=price,
+            sales_volume_total=Decimal("100"),
+            sales_amount_total=price * Decimal("100"),
+            avg_weekly_sales_volume=Decimal("10"),
+            avg_weekly_sales_amount=price * Decimal("10"),
+            active_week_count=10,
+            window_start_week=2601,
+            window_end_week=2624,
+        )
+        for sku, price in {
+            "sku-high": Decimal("6000"),
+            "sku-mid": Decimal("5500"),
+            "sku-low": Decimal("5000"),
+        }.items()
+    }
+    claim_code = "tv_claim_hdr_high_brightness"
+    claims = {
+        sku: {
+            claim_code: m12c_service.ClaimState(
+                sku_code=sku,
+                claim_code=claim_code,
+                claim_name="HDR/高亮画质",
+                claim_dimension="picture_quality",
+                claim_subtype="brightness",
+                claim_kind="product_experience",
+                param_support_status="supported",
+                supporting_param_codes=("declared_brightness_nit_or_band",),
+                supporting_param_snapshot={},
+                match_score=Decimal("1.0000"),
+                confidence=Decimal("0.9000"),
+                fact_claim_flag=True,
+                service_separate_flag=False,
+                evidence_ids=(f"ev-{sku}",),
+                param_support_level=m12c_service.M04C_PARAM_SUPPORT_STRONG_NUMERIC,
+                primary_supporting_param_codes=("declared_brightness_nit_or_band",),
+                wtp_input_guard=m12c_service.M04C_WTP_GUARD_ELIGIBLE,
+            )
+        }
+        for sku in markets
+    }
+    param_profiles = {
+        "sku-high": m12c_service.ParamProfileState("sku-high", {"declared_brightness_nit_or_band": {"normalized_value": 5200}}, ("p1",)),
+        "sku-mid": m12c_service.ParamProfileState("sku-mid", {"declared_brightness_nit_or_band": {"normalized_value": 4000}}, ("p2",)),
+        "sku-low": m12c_service.ParamProfileState("sku-low", {"declared_brightness_nit_or_band": {"normalized_value": 3000}}, ("p3",)),
+    }
+    semantics = {
+        sku: m12c_service.SemanticState(
+            sku_code=sku,
+            contexts=(("battlefield", "BF_PREMIUM_PICTURE_UPGRADE", "高端画质升级战场", "primary"),),
+        )
+        for sku in markets
+    }
+
+    pools = m12c_service._build_pools(
+        markets=markets,
+        claims=claims,
+        semantics=semantics,
+        dimension_names={("battlefield", "BF_PREMIUM_PICTURE_UPGRADE"): "高端画质升级战场"},
+        param_profiles=param_profiles,
+    )
+
+    pool = next(item for item in pools if item.claim_code == claim_code)
+    assert pool.comparison_basis == "numeric_param_tier"
+    assert pool.comparison_param_code == "declared_brightness_nit_or_band"
+    assert pool.comparison_threshold_value == "4000.0000"
+    assert set(pool.with_claim_skus) == {"sku-high", "sku-mid"}
+    assert set(pool.without_claim_skus) == {"sku-low"}
+    assert pool.sample_status == "sufficient"
 
 
 def test_m12c_blocked_generic_claim_is_threshold_not_premium() -> None:

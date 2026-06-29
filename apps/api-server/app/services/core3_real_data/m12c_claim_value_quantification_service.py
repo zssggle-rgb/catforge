@@ -54,9 +54,9 @@ M12C_ROLE_UNIQUE = "unique_payment_potential"
 
 POSITIVE_ROLES = {M12C_ROLE_PREMIUM, M12C_ROLE_SALES, M12C_ROLE_VALUE_BUNDLE}
 OPPORTUNITY_ROLES = {M12C_ROLE_OPPORTUNITY, M12C_ROLE_HIGH_PRICE_INTERCEPT, M12C_ROLE_PRICE_UP}
-MIN_POOL_SKU_COUNT = 6
-MIN_WEAK_POOL_SKU_COUNT = 4
-MIN_GROUP_SKU_COUNT = 2
+MIN_POOL_SKU_COUNT = 3
+MIN_WEAK_POOL_SKU_COUNT = 3
+MIN_GROUP_SKU_COUNT = 1
 M12C_PREMIUM_MIN_SALES_RATIO = Decimal("0.7000")
 M12C_PREMIUM_MIN_REVENUE_RATIO = Decimal("1.0000")
 M12C_PREMIUM_REVENUE_BACKUP_MIN_SALES_RATIO = Decimal("0.6000")
@@ -172,6 +172,22 @@ M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "dolby_atmos_flag": ("dolby_atmos_flag", "dolby_atmos", "杜比全景声"),
     "screen_size_inch": ("screen_size_inch", "screen_size", "尺寸"),
     "speaker_output_power_w": ("speaker_output_power_w", "speaker_power_w", "音响功率"),
+}
+
+M12C_NUMERIC_GROUP_PARAM_LABELS: dict[str, str] = {
+    "declared_brightness_nit_or_band": "亮度",
+    "local_dimming_zone_count": "控光分区",
+    "declared_refresh_rate_hz": "刷新率",
+    "native_refresh_rate_hz": "刷新率",
+    "refresh_rate_hz": "刷新率",
+    "processor_chip_model": "芯片型号",
+    "cpu_core_count": "CPU 核心数",
+    "cpu_frequency_ghz": "CPU 频率",
+    "color_gamut_ratio": "色域",
+    "wide_color_gamut_pct": "色域",
+    "color_gamut_percent": "色域",
+    "hdmi_2_1_port_count": "HDMI2.1 接口数",
+    "speaker_output_power_w": "音响功率",
 }
 
 
@@ -368,6 +384,23 @@ class ClaimPool:
     pool_relax_level: str = "L0"
     baseline_price_method: str = "weighted_median_excluding_target"
     member_claim_codes: tuple[str, ...] = ()
+    comparison_basis: str = "claim_presence"
+    comparison_param_code: str | None = None
+    comparison_threshold_value: str | None = None
+    comparison_group_label_cn: str = "有卖点组"
+    control_group_label_cn: str = "对照组"
+
+
+@dataclass(frozen=True)
+class ClaimGroupSplit:
+    with_skus: tuple[str, ...]
+    without_skus: tuple[str, ...]
+    unknown_skus: tuple[str, ...]
+    comparison_basis: str
+    comparison_param_code: str | None = None
+    comparison_threshold_value: str | None = None
+    comparison_group_label_cn: str = "有卖点组"
+    control_group_label_cn: str = "对照组"
 
 
 class M12CRepository(Core3BaseRepository):
@@ -864,7 +897,13 @@ class M12CClaimValueQuantificationService:
         param_profiles = {sku: param_profiles_all[sku] for sku in sorted(comparable_skus) if sku in param_profiles_all}
         comments = {sku: comments_all.get(sku, _empty_comment(sku)) for sku in sorted(comparable_skus)}
         semantics = {sku: semantics_all[sku] for sku in sorted(comparable_skus)}
-        pools = _build_pools(markets=markets, claims=claims, semantics=semantics, dimension_names=dimension_names)
+        pools = _build_pools(
+            markets=markets,
+            claims=claims,
+            semantics=semantics,
+            dimension_names=dimension_names,
+            param_profiles=param_profiles,
+        )
         pool_rows, metric_rows, metric_by_pool = _pool_and_metric_rows(
             pools=pools,
             markets=markets,
@@ -1008,6 +1047,7 @@ def _build_pools(
     claims: Mapping[str, Mapping[str, ClaimState]],
     semantics: Mapping[str, SemanticState],
     dimension_names: Mapping[tuple[str, str], str],
+    param_profiles: Mapping[str, ParamProfileState],
 ) -> list[ClaimPool]:
     claims_by_code: dict[str, str] = {}
     members_by_code: dict[str, tuple[str, ...]] = {}
@@ -1039,6 +1079,7 @@ def _build_pools(
                     context_skus=context_skus,
                     markets=markets,
                     claims=claims,
+                    param_profiles=param_profiles,
                     claim_code=claim_code,
                     exact_size_tier=exact_size_tier,
                     size_tier=size_tier,
@@ -1046,7 +1087,23 @@ def _build_pools(
                 )
                 if relaxed is None:
                     continue
-                final_size_tier, final_price_band, pool_relax_level, sku_codes, with_skus, without_skus, unknown_skus, sample_status, quality_flags, relaxation_path = relaxed
+                (
+                    final_size_tier,
+                    final_price_band,
+                    pool_relax_level,
+                    sku_codes,
+                    with_skus,
+                    without_skus,
+                    unknown_skus,
+                    sample_status,
+                    quality_flags,
+                    relaxation_path,
+                    comparison_basis,
+                    comparison_param_code,
+                    comparison_threshold_value,
+                    comparison_group_label_cn,
+                    control_group_label_cn,
+                ) = relaxed
                 pool_key = (claim_code, context_type, context_code, final_size_tier, final_price_band)
                 if pool_key in seen_keys:
                     continue
@@ -1069,6 +1126,11 @@ def _build_pools(
                         relaxation_path=relaxation_path,
                         pool_relax_level=pool_relax_level,
                         member_claim_codes=members_by_code.get(claim_code, (claim_code,)),
+                        comparison_basis=comparison_basis,
+                        comparison_param_code=comparison_param_code,
+                        comparison_threshold_value=comparison_threshold_value,
+                        comparison_group_label_cn=comparison_group_label_cn,
+                        control_group_label_cn=control_group_label_cn,
                     )
                 )
     return pools
@@ -1080,11 +1142,12 @@ def _relaxed_pool_for_claim(
     context_skus: set[str],
     markets: Mapping[str, MarketState],
     claims: Mapping[str, Mapping[str, ClaimState]],
+    param_profiles: Mapping[str, ParamProfileState],
     claim_code: str,
     exact_size_tier: str,
     size_tier: str,
     price_band: str,
-) -> tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...]] | None:
+) -> tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...], str, str | None, str | None, str, str] | None:
     levels = [
         ("L0", context_skus, exact_size_tier, (price_band,), "同战场、同具体尺寸、同价格带。"),
         ("L1", context_skus, size_tier, (price_band,), "同战场、同五档尺寸段、同价格带。"),
@@ -1093,11 +1156,11 @@ def _relaxed_pool_for_claim(
         ("L4", all_skus, size_tier, tuple(_adjacent_price_bands(price_band)), "同五档尺寸段、相邻价格带，不限定价值战场；仅用于门槛和待验证。"),
     ]
     path: list[dict[str, Any]] = []
-    fallback: tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...]] | None = None
+    fallback: tuple[str, str, str, tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], str, list[str], tuple[dict[str, Any], ...], str, str | None, str | None, str, str] | None = None
     for level, candidate_skus, size_scope, price_scope, reason in levels:
         sku_codes = tuple(sorted(_filter_pool_skus(candidate_skus, markets, size_scope, price_scope, exact_scope=(level == "L0"))))
-        with_skus, without_skus, unknown_skus = _split_claim_groups(sku_codes, claims, claim_code)
-        sample_status, quality_flags = _sample_status(len(sku_codes), len(with_skus), len(without_skus))
+        split = _split_claim_or_numeric_groups(sku_codes, claims, param_profiles, claim_code)
+        sample_status, quality_flags = _sample_status(len(sku_codes), len(split.with_skus), len(split.without_skus))
         price_scope_label = price_band if level in {"L0", "L1"} else _price_scope_label(price_band, price_scope)
         final_size = exact_size_tier if level == "L0" else size_tier
         path_item = {
@@ -1106,9 +1169,14 @@ def _relaxed_pool_for_claim(
             "size_scope": final_size,
             "price_scope": price_scope_label,
             "pool_sku_count": len(sku_codes),
-            "with_claim_sku_count": len(with_skus),
-            "without_claim_sku_count": len(without_skus),
+            "with_claim_sku_count": len(split.with_skus),
+            "without_claim_sku_count": len(split.without_skus),
             "sample_status": sample_status,
+            "comparison_basis": split.comparison_basis,
+            "comparison_param_code": split.comparison_param_code,
+            "comparison_threshold_value": split.comparison_threshold_value,
+            "comparison_group_label_cn": split.comparison_group_label_cn,
+            "control_group_label_cn": split.control_group_label_cn,
         }
         path.append(path_item)
         result = (
@@ -1116,12 +1184,17 @@ def _relaxed_pool_for_claim(
             price_scope_label,
             level,
             sku_codes,
-            tuple(sorted(with_skus)),
-            tuple(sorted(without_skus)),
-            tuple(sorted(unknown_skus)),
+            split.with_skus,
+            split.without_skus,
+            split.unknown_skus,
             sample_status,
             quality_flags,
             tuple(path),
+            split.comparison_basis,
+            split.comparison_param_code,
+            split.comparison_threshold_value,
+            split.comparison_group_label_cn,
+            split.control_group_label_cn,
         )
         if fallback is None and sku_codes:
             fallback = result
@@ -1137,12 +1210,17 @@ def _relaxed_pool_for_claim(
                 price_scope_label,
                 level,
                 sku_codes,
-                tuple(sorted(with_skus)),
-                tuple(sorted(without_skus)),
-                tuple(sorted(unknown_skus)),
+                split.with_skus,
+                split.without_skus,
+                split.unknown_skus,
                 sample_status,
                 quality_flags,
                 tuple(path),
+                split.comparison_basis,
+                split.comparison_param_code,
+                split.comparison_threshold_value,
+                split.comparison_group_label_cn,
+                split.control_group_label_cn,
             )
             return result
     return fallback
@@ -1179,6 +1257,98 @@ def _split_claim_groups(sku_codes: Sequence[str], claims: Mapping[str, Mapping[s
         else:
             without_skus.append(sku)
     return with_skus, without_skus, unknown_skus
+
+
+def _split_claim_or_numeric_groups(
+    sku_codes: Sequence[str],
+    claims: Mapping[str, Mapping[str, ClaimState]],
+    param_profiles: Mapping[str, ParamProfileState],
+    claim_code: str,
+) -> ClaimGroupSplit:
+    numeric_split = _split_numeric_param_groups(sku_codes, claims, param_profiles, claim_code)
+    if numeric_split is not None:
+        return numeric_split
+    with_skus, without_skus, unknown_skus = _split_claim_groups(sku_codes, claims, claim_code)
+    return ClaimGroupSplit(
+        with_skus=tuple(sorted(with_skus)),
+        without_skus=tuple(sorted(without_skus)),
+        unknown_skus=tuple(sorted(unknown_skus)),
+        comparison_basis="claim_presence",
+        comparison_group_label_cn="有卖点组",
+        control_group_label_cn="对照组",
+    )
+
+
+def _split_numeric_param_groups(
+    sku_codes: Sequence[str],
+    claims: Mapping[str, Mapping[str, ClaimState]],
+    param_profiles: Mapping[str, ParamProfileState],
+    claim_code: str,
+) -> ClaimGroupSplit | None:
+    if not sku_codes:
+        return None
+    for param_code in _numeric_group_candidate_params(sku_codes, claims, claim_code):
+        values: list[tuple[str, Decimal]] = []
+        unknown_skus: list[str] = []
+        for sku in sku_codes:
+            claim_state = claims.get(sku, {}).get(claim_code)
+            entry = _param_entry(param_profiles, claim_state, sku, param_code)
+            numeric_value = _decimal_param_value(entry.get("normalized_value")) if entry else None
+            if numeric_value is None:
+                unknown_skus.append(sku)
+                continue
+            values.append((sku, _q4(numeric_value)))
+        if len(values) < MIN_POOL_SKU_COUNT or len({value for _, value in values}) < 2:
+            continue
+        numeric_values = [value for _, value in values]
+        threshold = _median(numeric_values)
+        if threshold is None:
+            continue
+        high_skus = [sku for sku, value in values if value >= threshold]
+        low_skus = [sku for sku, value in values if value < threshold]
+        if not high_skus or not low_skus:
+            max_value = max(numeric_values)
+            high_skus = [sku for sku, value in values if value == max_value]
+            low_skus = [sku for sku, value in values if value < max_value]
+            threshold = max_value
+        if len(high_skus) < MIN_GROUP_SKU_COUNT or len(low_skus) < MIN_GROUP_SKU_COUNT:
+            continue
+        label = M12C_NUMERIC_GROUP_PARAM_LABELS.get(param_code, param_code)
+        threshold_text = str(_q4(threshold))
+        return ClaimGroupSplit(
+            with_skus=tuple(sorted(high_skus)),
+            without_skus=tuple(sorted(low_skus)),
+            unknown_skus=tuple(sorted(unknown_skus)),
+            comparison_basis="numeric_param_tier",
+            comparison_param_code=param_code,
+            comparison_threshold_value=threshold_text,
+            comparison_group_label_cn=f"{label}高档组",
+            control_group_label_cn=f"{label}低档组",
+        )
+    return None
+
+
+def _numeric_group_candidate_params(sku_codes: Sequence[str], claims: Mapping[str, Mapping[str, ClaimState]], claim_code: str) -> tuple[str, ...]:
+    ordered: list[str] = []
+    for sku in sku_codes:
+        claim = claims.get(sku, {}).get(claim_code)
+        for param_code in (claim.primary_supporting_param_codes if claim else ()):
+            _append_numeric_candidate_param(ordered, param_code)
+        for param_code in (claim.supporting_param_codes if claim else ()):
+            _append_numeric_candidate_param(ordered, param_code)
+    for param_code in M12C_CLAIM_PARAM_FALLBACKS.get(claim_code, ()):
+        _append_numeric_candidate_param(ordered, param_code)
+    return tuple(ordered)
+
+
+def _append_numeric_candidate_param(target: list[str], param_code: str) -> None:
+    text = str(param_code or "").strip()
+    if not text or text.startswith("_"):
+        return
+    if text.endswith("_flag") or text in {"hdr_support_flag", "hdmi21_flag", "low_blue_light_flag", "flicker_free_flag", "high_color_gamut_flag", "quantum_dot_flag", "dolby_vision_flag", "dolby_atmos_flag"}:
+        return
+    if text not in target:
+        target.append(text)
 
 
 def _row_wtp_input_guard(row: entities.Core3SkuClaimFact) -> str:
@@ -1361,7 +1531,11 @@ def _pool_and_metric_rows(
             "unknown_claim_sku_codes_json": list(pool.unknown_skus),
             "relaxation_path_json": list(pool.relaxation_path),
             "sample_status": pool.sample_status,
-            "quality_flags_json": list(pool.quality_flags),
+            "quality_flags_json": [
+                *pool.quality_flags,
+                f"comparison_basis:{pool.comparison_basis}",
+                *([f"comparison_param:{pool.comparison_param_code}"] if pool.comparison_param_code else []),
+            ],
             "rule_version": rule_version,
             "input_fingerprint": stable_hash({"pool": pool.__dict__}, version="m12c-pool-input-v1"),
             "is_current": True,
@@ -1389,7 +1563,11 @@ def _pool_and_metric_rows(
             "price_band_group": pool.price_band_group,
             **metric,
             "business_summary_cn": _metric_summary_cn(pool, metric),
-            "quality_flags_json": list(pool.quality_flags),
+            "quality_flags_json": [
+                *pool.quality_flags,
+                f"comparison_basis:{pool.comparison_basis}",
+                *([f"comparison_param:{pool.comparison_param_code}"] if pool.comparison_param_code else []),
+            ],
             "rule_version": rule_version,
             "is_current": True,
         }
@@ -1430,7 +1608,10 @@ def _quantification_rows(
                 continue
             market = markets[sku]
             claim = claims.get(sku, {}).get(pool.claim_code)
-            has_claim = bool(claim and claim.is_supported)
+            fact_claim_present = bool(claim and claim.is_supported)
+            has_claim = fact_claim_present
+            if pool.comparison_basis == "numeric_param_tier":
+                has_claim = fact_claim_present and sku in pool.with_claim_skus
             comment = comments.get(sku, _empty_comment(sku))
             comment_strength = _comment_support_strength(comment, claim, pool)
             has_negative = _comment_has_negative(comment, claim, pool)
@@ -1574,7 +1755,8 @@ def _quantification_rows(
                     "context_code": pool.context_code,
                     "context_name": pool.context_name,
                     "target_has_claim": source_type != M12C_COMPETITOR_GAP,
-                    "target_fact_claim_flag": has_claim,
+                    "target_fact_claim_flag": fact_claim_present,
+                    "target_qualifies_comparison_group": has_claim,
                     "claim_source_type": source_type,
                     "claim_source_type_cn": _source_type_cn(source_type),
                     "semantic_support_strength": float(semantic_strength),
@@ -1600,6 +1782,13 @@ def _quantification_rows(
                         "pool_sku_count": len(pool.sku_codes),
                         "with_claim_sku_count": len(pool.with_claim_skus),
                         "without_claim_sku_count": len(pool.without_claim_skus),
+                        "comparison_basis": pool.comparison_basis,
+                        "comparison_param_code": pool.comparison_param_code,
+                        "comparison_threshold_value": pool.comparison_threshold_value,
+                        "comparison_group_label_cn": pool.comparison_group_label_cn,
+                        "control_group_label_cn": pool.control_group_label_cn,
+                        "fact_claim_present": fact_claim_present,
+                        "target_in_comparison_group": sku in pool.with_claim_skus,
                         "sample_status": pool.sample_status,
                         "target_price": float(_q4(market.price)),
                         "target_weekly_sales": float(_q6(market.avg_weekly_sales_volume)),
@@ -2438,19 +2627,20 @@ def _amount_quantification_basis(pool: ClaimPool, target_sku: str) -> dict[str, 
         reasons.append("可比池样本状态不足，不能稳定量化。")
         quality_flags.append("sample_not_sufficient_for_amount")
     if len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT:
-        reasons.append("有卖点组少于 2 个 SKU，不能形成稳定卖点组。")
+        reasons.append(f"{pool.comparison_group_label_cn}没有有效 SKU，不能形成比较组。")
         quality_flags.append("with_claim_group_too_small")
     if len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT:
-        reasons.append("对照组少于 2 个 SKU，不能形成稳定对照组。")
+        reasons.append(f"{pool.control_group_label_cn}没有有效 SKU，不能形成对照组。")
         quality_flags.append("without_claim_group_too_small")
-    if target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
-        reasons.append("目标 SKU 是有卖点组唯一样本，不能用组间价差量化本品卖点金额。")
-        quality_flags.append("target_only_with_claim_sample")
     if "l4_threshold_only" in pool.quality_flags:
         reasons.append("L4 兜底池只能用于门槛或待验证判断。")
         quality_flags.append("l4_threshold_only_no_amount")
     ready = not reasons
-    sample_grade = "可量化" if ready else ("本品孤例/无有效对照" if "target_only_with_claim_sample" in quality_flags else "对照样本不足")
+    if ready and target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
+        sample_grade = "可量化，比较组单样本"
+        quality_flags.append("single_sku_comparison_group")
+    else:
+        sample_grade = "可量化" if ready else "对照样本不足"
     return {
         "amount_quantification_ready": ready,
         "sample_grade": sample_grade,
@@ -2583,11 +2773,11 @@ def _unique_competitor_gap_score(pool: ClaimPool, target_sku: str, coverage_rate
 
 def _unique_competitor_gap_reason(pool: ClaimPool, target_sku: str, coverage_rate: Decimal) -> str:
     if target_sku in pool.with_claim_skus and len(pool.with_claim_skus) <= 1:
-        return "目标 SKU 是同战场有卖点组的唯一样本，说明竞品缺少可直接对照的同类表达。"
+        return f"目标 SKU 是同战场{pool.comparison_group_label_cn}的唯一样本，说明竞品缺少可直接对照的同类表达。"
     if len(pool.with_claim_skus) < MIN_GROUP_SKU_COUNT:
-        return "同战场有卖点组样本过少，卖点具备稀缺性，但不能量化金额。"
+        return f"同战场{pool.comparison_group_label_cn}样本过少，卖点具备稀缺性，但不能量化金额。"
     if len(pool.without_claim_skus) < MIN_GROUP_SKU_COUNT:
-        return "同战场缺少稳定对照组，不能判断组间价差。"
+        return f"同战场缺少稳定{pool.control_group_label_cn}，不能判断组间价差。"
     return f"同战场约 {float(_q4(coverage_rate * Decimal('100'))):.0f}% SKU 具备该卖点，差异性需要继续验证。"
 
 
@@ -3516,9 +3706,10 @@ def _business_value_meaning_cn(role: str, metric: Mapping[str, Any]) -> str:
 def _metric_summary_cn(pool: ClaimPool, metric: Mapping[str, Any]) -> str:
     return (
         f"{pool.claim_name} 在 {pool.context_name} / {pool.size_tier} / {pool.price_band_group} 可比池中，"
-        f"有卖点组 {len(pool.with_claim_skus)} 个 SKU，对照组 {len(pool.without_claim_skus)} 个 SKU；"
-        f"可比池卖点价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
-        f"可比池卖点周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。"
+        f"{pool.comparison_group_label_cn} {len(pool.with_claim_skus)} 个 SKU，"
+        f"{pool.control_group_label_cn} {len(pool.without_claim_skus)} 个 SKU；"
+        f"可比池组间价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
+        f"组间周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。"
     )
 
 
@@ -3544,7 +3735,8 @@ def _quant_reason_cn(pool: ClaimPool, role: str, metric: Mapping[str, Any]) -> s
             "当前只说明该卖点可能提高用户最高支付意愿，不使用组间价差量化金额。"
         )
     return (
-        f"{pool.claim_name} 被判为{role_cn}；所在可比池有卖点组相对对照组价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
+        f"{pool.claim_name} 被判为{role_cn}；所在可比池{pool.comparison_group_label_cn}相对{pool.control_group_label_cn}"
+        f"价格差异约 {_fmt_money(metric['price_premium_abs'])} 元，"
         f"周均销量差异约 {_fmt_num(metric['weekly_sales_lift_abs'])} 台。该数值是组间可观测差异，不是单一卖点因果贡献。"
     )
 
