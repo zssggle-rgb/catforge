@@ -169,11 +169,7 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst premium-claim-drivers --query 65E7Q --product-category tv --batch-id latest --format json
 ```
 
-```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
-```
-
-Feishu card entry for broad SKU claim-value questions:
+For broad SKU claim-value questions in Feishu, use only the full card command below. The `<message_id>` is the current inbound Feishu message id from the prompt metadata. Do not use the non-card text command in Feishu conversations.
 
 ```bash
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600 --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
@@ -293,7 +289,7 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. `sku-claim-value --format text --answer-style xiaoao --with-report feishu-doc --limit 200 --max-chat-chars 600` if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". In Feishu card entry, append `--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` and send the command output directly. Do not parse JSON. The visible answer should be the card sending status; the card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
+1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. Send the command output directly. Do not parse JSON. The visible answer should be the card sending status; the card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
 2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
 3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
 4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.
@@ -481,10 +477,10 @@ Check a battlefield space:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst ask "高端画质升级战场有哪些SKU？" --product-category tv --batch-id latest --format json
 ```
 
-Check claim-value quantification:
+Check claim-value quantification from a shell only. In Feishu chat replies, use the card command from the fixed SOP section instead:
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format json --answer-style xiaoao --with-report none
 ```
 
 Check claim contribution:
