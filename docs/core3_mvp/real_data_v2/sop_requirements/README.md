@@ -58,6 +58,7 @@
 18. [M12C 卖点价值量化与贡献归因](M12C_claim_value_quantification_requirements.md)
 19. [CatForge Analyst 与小奥家电市场分析专家](CATFORGE_ANALYST_xiaoao_agent_requirements.md)
     - [CatForge Analyst 竞品问答 CLI 与小奥 Skill](CATFORGE_ANALYST_competitor_answer_requirements.md)
+    - [CatForge Analyst 单品低销量诊断](CATFORGE_ANALYST_low_sales_diagnosis_requirements.md)
 20. [M08 SKU 综合信号画像](M08_sku_signal_profile_requirements.md)
 21. [M08.4 评论原生业务维度发现](M08_4_comment_native_dimension_discovery_requirements.md)
     - [M08.6 参数-卖点-评论分层产品锚点校准](M08_6_product_anchor_evidence_layer_requirements.md)

@@ -40,6 +40,7 @@ SOP_COMMANDS = {
     "premium-claim-drivers",
     "battlefield-space",
     "battlefield-opportunity",
+    "low-sales-diagnosis",
     "sku-business-brief",
 }
 
@@ -146,7 +147,7 @@ class CatForgeAnalystService:
         routed_command = route.command
         routed_ability = get_ability(routed_command)
         merged_kwargs = merge_route_kwargs(explicit_kwargs=kwargs, extracted_kwargs=route.extracted_params)
-        if routed_command not in {"competitor-set", "sku-claim-value"}:
+        if routed_command not in {"competitor-set", "sku-claim-value", "low-sales-diagnosis"}:
             for presentation_key in ("answer_style", "with_report", "top_n", "max_chat_chars", "report_title"):
                 merged_kwargs.pop(presentation_key, None)
         result = self.dispatch(routed_command, context, **merged_kwargs)
@@ -177,6 +178,12 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
     routing_params = merge_route_kwargs(explicit_kwargs=explicit_params or {}, extracted_kwargs=extracted_params)
     is_competitor_question = bool(re.search(r"竞品|竞争|和谁.*比|和谁竞争|对手|比较对象", normalized))
     is_sales_diff_question = bool(re.search(r"为什么|销量差|卖得好|卖得差|比.*好|比.*差", normalized))
+    is_low_sales_question = bool(
+        re.search(
+            r"卖不好|卖不动|销量低|销量不好|销量不行|提升销量|怎么卖|问题在哪|原因.*销量|销量.*原因|价值棒|价格是不是太高|卖点不行",
+            normalized,
+        )
+    )
     command = "sku-business-brief"
     matched_rule = "fallback_sku_business_brief"
     confidence = "low"
@@ -209,10 +216,14 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
         command = "competitor-set"
         matched_rule = "competitor_set"
         confidence = "high" if _has_sku_target(routing_params) else "medium"
-    elif is_sales_diff_question:
+    elif is_sales_diff_question and routing_params.get("candidate_sku_code"):
         command = "why-sales-diff"
         matched_rule = "sales_difference"
-        confidence = "high" if routing_params.get("candidate_sku_code") else "medium"
+        confidence = "high"
+    elif is_low_sales_question:
+        command = "low-sales-diagnosis"
+        matched_rule = "low_sales_diagnosis"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
     elif is_competitor_question:
         command = "competitor-set"
         matched_rule = "competitor_set"

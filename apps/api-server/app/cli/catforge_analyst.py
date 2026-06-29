@@ -59,6 +59,7 @@ SOP_COMMAND_ORDER = (
     "premium-claim-drivers",
     "battlefield-space",
     "battlefield-opportunity",
+    "low-sales-diagnosis",
     "sku-business-brief",
 )
 
@@ -880,6 +881,46 @@ def semantic_dimension_space(
     )
 
 
+def low_sales_diagnosis(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+    answer_style: str = "raw",
+    with_report: str = "none",
+    top_n: int = 3,
+    max_chat_chars: int = 800,
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="low-sales-diagnosis",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+        answer_style=answer_style,
+        with_report=with_report,
+        top_n=top_n,
+        max_chat_chars=max_chat_chars,
+        report_title=report_title,
+    )
+
+
 def answer_natural_language(
     db: Session,
     *,
@@ -1081,6 +1122,11 @@ def format_business_text(result: dict[str, Any]) -> str:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:
         return _format_why_sales_diff_text(result)
+    low_sales_answer = payload.get("low_sales_answer") or {}
+    if low_sales_answer.get("short_answer"):
+        return str(low_sales_answer["short_answer"])
+    if "low_sales_diagnosis" in payload:
+        return _format_low_sales_diagnosis_text(result)
     if "sku_claim_value" in payload:
         return _format_sku_claim_value_text(result)
     if "claim_contribution" in payload:
@@ -1257,6 +1303,69 @@ def _format_why_sales_diff_text(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_low_sales_diagnosis_text(result: dict[str, Any]) -> str:
+    target = result.get("target") or {}
+    payload = ((result.get("result") or {}).get("low_sales_diagnosis") or {})
+    target_name = _brand_model(target)
+    sales_status = payload.get("sales_status") or {}
+    status = str(sales_status.get("status") or "uncertain")
+    basis = str(sales_status.get("basis_cn") or "").strip()
+    status_line = {
+        "weak": f"{target_name} 在当前可比线上样本中属于相对偏弱。",
+        "not_weak": f"{target_name} 在当前可比线上样本中不属于明显低销量 SKU。",
+        "mixed": f"{target_name} 的销量表现是混合状态，对部分竞品偏弱、对部分竞品不弱。",
+        "uncertain": f"当前样本不足以判断 {target_name} 是否真的卖得弱。",
+    }.get(status, f"当前样本不足以判断 {target_name} 是否真的卖得弱。")
+    if basis:
+        status_line = f"{status_line}{basis}"
+
+    reasons = [row for row in payload.get("reason_ranking") or [] if isinstance(row, dict)]
+    reason_chunks = []
+    for row in reasons[:3]:
+        name = str(row.get("reason_name_cn") or "").strip()
+        root_cause = str(row.get("root_cause_cn") or row.get("summary_cn") or "").strip("。")
+        observation = _low_sales_cli_observation(row).strip("。")
+        decision = str(row.get("decision_implication_cn") or "").strip("。")
+        parts = []
+        if root_cause:
+            parts.append(root_cause)
+        if observation:
+            parts.append(f"证据：{observation}")
+        if decision:
+            parts.append(f"决策含义：{decision}")
+        if name and parts:
+            reason_chunks.append(f"{name}：{'；'.join(parts)}")
+        elif parts:
+            reason_chunks.append("；".join(parts))
+
+    actions = payload.get("action_plan") or {}
+    action_chunks = []
+    for key in ("short_term_actions", "mid_term_actions"):
+        for row in [item for item in actions.get(key) or [] if isinstance(item, dict)][:2]:
+            summary = str(row.get("summary_cn") or "").strip("。")
+            if summary:
+                action_chunks.append(summary)
+        if action_chunks:
+            break
+
+    lines = [status_line]
+    if reason_chunks:
+        lines.append(f"主要诊断优先看：{'；'.join(reason_chunks)}。")
+    if action_chunks:
+        lines.append(f"建议先做：{'；'.join(action_chunks)}。")
+    lines.append("当前不能判断广告、库存、促销和毛利原因，因为缺少对应数据。")
+    limitations = [_sanitize_business_limitation(item) for item in result.get("limitations") or [] if item]
+    limitations = [item for item in limitations if item]
+    if limitations:
+        lines.append(f"补充限制：{'；'.join(str(item) for item in limitations[:3])}。")
+    return "\n".join(lines)
+
+
+def _low_sales_cli_observation(row: dict[str, Any]) -> str:
+    points = [str(item).strip() for item in row.get("observation_points") or row.get("detail_points") or [] if str(item).strip()]
+    return points[0] if points else ""
+
+
 def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
     target = result.get("target") or {}
     payload = ((result.get("result") or {}).get("sku_claim_value") or {})
@@ -1311,8 +1420,10 @@ def _format_sku_claim_value_text(result: dict[str, Any]) -> str:
 
 def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines = [f"{_brand_model(target)} 的用户卖点支付价值分析："]
+    target_rows = [row for row in rows if _claim_value_cli_target_has_claim(row)]
+    gap_rows = [row for row in rows if not _claim_value_cli_target_has_claim(row)]
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
+    for row in target_rows:
         category = str(row.get("business_claim_type_cn") or "未分类卖点")
         grouped.setdefault(category, []).append(row)
     positive_categories = {"高溢价卖点", "份额转化卖点", "客户获得价值卖点"}
@@ -1337,6 +1448,13 @@ def _format_sku_level_claim_value_text(target: dict[str, Any], rows: list[dict[s
             if category in positive_categories:
                 for detail in _sku_level_positive_context_lines(item):
                     lines.append(detail)
+    competitor_gaps = [row for row in gap_rows if str(row.get("business_claim_type_cn") or "") == "竞品拦截卖点"]
+    if competitor_gaps:
+        lines.append("竞品拦截/机会缺口（非本品当前已成立卖点）：")
+        for item in competitor_gaps[:5]:
+            claim_name = str(item.get("claim_name") or item.get("claim_code") or "未命名方向")
+            contexts = "、".join(str(value) for value in (item.get("main_contexts") or [])[:4]) or "相关价值战场"
+            lines.append(f"- {claim_name}：{contexts}。")
     lines.append("说明：以上为 SKU 层汇总结果，计算时先在单个价值战场内判断卖点支付价值，再按战场相关度汇总；用户任务、目标客群和整体市场池作为解释证据，不直接重复累加。")
     return "\n".join(lines)
 
@@ -1362,6 +1480,20 @@ def _claim_value_cli_unique_note(group: dict[str, Any]) -> str:
         if parts:
             return "".join(f"{part}。" for part in parts)
     return ""
+
+
+def _claim_value_cli_target_has_claim(row: dict[str, Any]) -> bool:
+    if "target_has_claim" in row:
+        return bool(row.get("target_has_claim"))
+    if str(row.get("claim_source_type") or "") == "competitor_opportunity_gap":
+        return False
+    if str(row.get("business_claim_type_cn") or "") == "竞品拦截卖点":
+        return False
+    evidence = row.get("evidence_strength") or {}
+    claim_strength = _decimal(evidence.get("claim")) or Decimal("0")
+    if claim_strength > 0:
+        return True
+    return True
 
 
 def _sku_level_positive_context_lines(item: dict[str, Any]) -> list[str]:

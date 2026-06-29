@@ -195,6 +195,15 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         status="implemented",
     ),
     AbilityDefinition(
+        code="low-sales-diagnosis",
+        ability_type="sop",
+        description_cn="分析单 SKU 是否相对卖得弱，并按价值棒理论解释价格、用户愿付价值、卖点、竞品、战场客群和评论风险。",
+        required_inputs=("sku_code|query",),
+        optional_inputs=("limit", "top_n", "diagnosis_depth", "with_report"),
+        source_modules=("M01", "M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C"),
+        status="implemented",
+    ),
+    AbilityDefinition(
         code="sku-business-brief",
         ability_type="sop",
         description_cn="生成单 SKU 面向业务用户的综合画像和市场位置摘要。",

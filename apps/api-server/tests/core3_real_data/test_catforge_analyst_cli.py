@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -1533,6 +1534,92 @@ def seed_weekly_market(session: Session) -> None:
             )
 
 
+def upsert_weekly_market_point(
+    session: Session,
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    week: int,
+    volume: Decimal,
+    price: Decimal,
+) -> None:
+    row = session.execute(
+        select(entities.Core3CleanMarketWeekly)
+        .where(entities.Core3CleanMarketWeekly.batch_id == BATCH_ID)
+        .where(entities.Core3CleanMarketWeekly.sku_code == sku_code)
+        .where(entities.Core3CleanMarketWeekly.period_week_index == week)
+    ).scalar_one_or_none()
+    amount = volume * price
+    if row is not None:
+        row.sales_volume = volume
+        row.sales_amount = amount
+        row.avg_price = price
+        row.record_status = "active"
+        row.quality_status = "ok"
+        return
+    session.add(
+        entities.Core3CleanMarketWeekly(
+            clean_market_id=f"clean-market-{sku_code}-{week}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            source_pk=f"{sku_code}-{week}",
+            source_row_id=f"week_sales_data:{sku_code}:{week}",
+            source_operation_type="insert",
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            period_raw=f"26W{week:02d}",
+            period_type="week",
+            period_year_hint=2026,
+            period_week_index=week,
+            period_parse_status="parsed",
+            channel_type="online",
+            platform_type="test_platform",
+            sales_volume=volume,
+            sales_amount=amount,
+            avg_price=price,
+            price_check_status="ok",
+            clean_record_key=f"market:{sku_code}:{week}",
+            clean_hash=f"hash-clean-{sku_code}-{week}",
+            clean_version="m01_clean_v1",
+            hash_version="m00_row_hash_v1",
+            record_status="active",
+            quality_status="ok",
+        )
+    )
+
+
+def seed_low_sales_pairwise_window(session: Session, *, target_volume: Decimal, competitor_volume: Decimal) -> None:
+    for week in range(1, 5):
+        upsert_weekly_market_point(
+            session,
+            sku_code="TV00029112",
+            model_name="65E7Q",
+            brand_name="海信",
+            week=week,
+            volume=target_volume,
+            price=Decimal("4999"),
+        )
+        for sku_code, model_name, brand_name, price in [
+            ("TV00030001", "65E7Q Pro", "海信", Decimal("6999")),
+            ("TV00040001", "65A7H PRO", "创维", Decimal("4700")),
+            ("TV00040002", "L65MC-SP", "小米", Decimal("5010")),
+            ("TV00040003", "65Q9L PRO", "TCL", Decimal("4650")),
+        ]:
+            upsert_weekly_market_point(
+                session,
+                sku_code=sku_code,
+                model_name=model_name,
+                brand_name=brand_name,
+                week=week,
+                volume=competitor_volume,
+                price=price,
+            )
+    session.commit()
+
+
 def seed_semantic_space(session: Session) -> None:
     session.add(
         entities.Core3SemanticMarketDimensionSummary(
@@ -2383,8 +2470,10 @@ def test_list_abilities_returns_agent_contract() -> None:
     codes = {item["code"] for item in result["result"]["abilities"]}
     assert "competitor-set" in codes
     assert "why-sales-diff" in codes
+    assert "low-sales-diagnosis" in codes
     by_code = {item["code"]: item for item in result["result"]["abilities"]}
     assert by_code["competitor-set"]["status"] == "implemented"
+    assert by_code["low-sales-diagnosis"]["status"] == "implemented"
     assert by_code["sku-business-brief"]["status"] == "implemented"
 
 
@@ -3507,6 +3596,205 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
     assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
 
 
+def test_low_sales_diagnosis_returns_value_stick_structure_and_limits() -> None:
+    session = make_session()
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        answer_style="xiaoao",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["low_sales_diagnosis"]
+    assert payload["sales_status"]["status"] == "uncertain"
+    assert set(payload["value_stick_summary"]) == {
+        "customer_wtp",
+        "price_capture",
+        "competitor_alternative",
+        "product_line_cannibalization",
+        "evidence_risk",
+        "enterprise_side",
+    }
+    assert payload["value_stick_summary"]["enterprise_side"]["status"] == "not_supported"
+    assert payload["product_line_cannibalization_summary"]["status"] in {"unknown", "possible"}
+    assert payload["reason_ranking"]
+    assert payload["reason_ranking"][0]["detail_points"]
+    assert payload["reason_ranking"][0]["value_stick_effect_cn"]
+    assert payload["reason_ranking"][0]["observation_points"]
+    assert payload["reason_ranking"][0]["root_cause_cn"]
+    assert payload["reason_ranking"][0]["decision_implication_cn"]
+    assert payload["reason_ranking"][0]["validation_cn"]
+    assert payload["action_plan"]["high_cost_actions"]
+    assert any("广告" in item and "库存" in item and "促销" in item and "毛利" in item for item in payload["not_supported_reasons"])
+    assert "当前不能判断广告、库存、促销和毛利原因" in result["result"]["low_sales_answer"]["short_answer"]
+
+
+def test_low_sales_diagnosis_marks_weak_when_overlap_competitors_outsell_target() -> None:
+    session = make_session()
+    seed_low_sales_pairwise_window(session, target_volume=Decimal("80"), competitor_volume=Decimal("200"))
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        top_n=5,
+    )
+
+    payload = result["result"]["low_sales_diagnosis"]
+    assert payload["sales_status"]["status"] == "weak"
+    assert payload["sales_status"]["comparison_count"] >= 2
+    assert payload["sales_status"]["weak_against_count"] >= 2
+    detail_text = " ".join(point for reason in payload["reason_ranking"] for point in reason.get("detail_points") or [])
+    root_cause_text = " ".join(str(reason.get("root_cause_cn") or "") for reason in payload["reason_ranking"])
+    decision_text = " ".join(str(reason.get("decision_implication_cn") or "") for reason in payload["reason_ranking"])
+    specific_reason = next((reason for reason in payload["reason_ranking"] if reason["reason_type"] == "specific_competitor_value_gap"), None)
+    assert "重点竞品" in detail_text
+    assert "重叠周" in detail_text
+    assert "不是竞品卖得好" in root_cause_text or "有效价格" in root_cause_text or "购买任务" in root_cause_text
+    assert "决策" not in root_cause_text
+    assert "测试" in decision_text or "定位" in decision_text or "价格带" in decision_text
+    assert payload["claim_compare_summary"]["competitor_with_candidate_advantage_count"] >= 1
+    assert payload["claim_compare_summary"]["top_competitor_claim_gaps"]
+    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["claim_name"] == "壁画贴墙"
+    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["candidate_market_signal_cn"].startswith("市场观测：")
+    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["candidate_parameter_level_cn"].startswith("参数口径：")
+    assert specific_reason is not None
+    assert specific_reason["rank"] == 1
+    assert "壁画贴墙" in " ".join(specific_reason["observation_points"])
+    assert payload["reason_ranking"][0]["reason_type"] in {
+        "specific_competitor_value_gap",
+        "price_value_mismatch",
+        "weak_customer_wtp",
+        "claim_not_activated",
+        "competitor_intercept",
+        "battlefield_target_mismatch",
+        "same_brand_cannibalization",
+        "experience_or_evidence_risk",
+    }
+
+
+def test_low_sales_diagnosis_does_not_force_problem_when_target_is_not_weak() -> None:
+    session = make_session()
+    seed_low_sales_pairwise_window(session, target_volume=Decimal("220"), competitor_volume=Decimal("120"))
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        top_n=5,
+    )
+
+    payload = result["result"]["low_sales_diagnosis"]
+    assert payload["sales_status"]["status"] == "not_weak"
+    assert payload["sales_status"]["not_weak_against_count"] >= 2
+
+
+def test_low_sales_diagnosis_detects_same_brand_low_price_cannibalization() -> None:
+    session = make_session()
+    seed_market_profile(
+        session,
+        sku_code="TV00050001",
+        model_name="65E7Q Basic",
+        brand_name="海信",
+        size=65,
+        price=Decimal("3999"),
+        volume=Decimal("2400"),
+        price_band="mid",
+    )
+    seed_low_sales_pairwise_window(session, target_volume=Decimal("80"), competitor_volume=Decimal("200"))
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        top_n=5,
+    )
+
+    payload = result["result"]["low_sales_diagnosis"]
+    summary = payload["product_line_cannibalization_summary"]
+    assert summary["status"] == "possible"
+    assert summary["candidate_count"] >= 1
+    assert summary["candidates"][0]["sku_code"] == "TV00050001"
+    reason = next((row for row in payload["reason_ranking"] if row["reason_type"] == "same_brand_cannibalization"), None)
+    assert reason is not None
+    assert reason["severity"] in {"medium", "high"}
+    assert "同品牌" in reason["root_cause_cn"]
+    assert payload["value_stick_summary"]["product_line_cannibalization"]["status"] == "possible"
+
+
+def test_low_sales_diagnosis_text_is_business_facing() -> None:
+    session = make_session()
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        answer_style="xiaoao",
+    )
+
+    text = catforge_analyst.format_business_text(result)
+    assert "当前不能判断广告、库存、促销和毛利原因" in text
+    assert "主要诊断优先看" in text
+    assert "决策含义" in text
+    assert "同尺寸池" in text or "重点竞品" in text or "重叠周" in text
+    assert "M07" not in text
+    assert "M12C" not in text
+    assert "JSON" not in text
+    assert "强销量卖点" not in text
+    assert "强溢价卖点" not in text
+    assert "一定能追平" not in text
+    assert "必然提升销量" not in text
+    assert "卖点比过竞品就能赶上" not in text
+
+
+def test_low_sales_diagnosis_markdown_report_renders_business_sections() -> None:
+    session = make_session()
+    result = catforge_analyst.low_sales_diagnosis(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        answer_style="xiaoao",
+        with_report="markdown",
+    )
+
+    answer = result["result"]["low_sales_answer"]
+    markdown = answer["markdown"]
+    report_path = Path(answer["report"]["markdown_path"])
+    try:
+        assert report_path.exists()
+        assert "## 三、价值棒拆解" in markdown
+        assert "## 五、重点竞品购买锚点差距" in markdown
+        assert "## 八、同品牌产品线分流" in markdown
+        assert "事实证据" in markdown
+        assert "真正原因" in markdown
+        assert "决策含义" in markdown
+        assert "## 九、动作建议" in markdown
+        assert "M07" not in markdown
+        assert "M12C" not in markdown
+        assert "强销量卖点" not in markdown
+        assert "强溢价卖点" not in markdown
+        assert "一定能追平" not in markdown
+        assert "必然提升销量" not in markdown
+        assert "卖点比过竞品就能赶上" not in markdown
+    finally:
+        report_path.unlink(missing_ok=True)
+
+
 def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
     class FakeAtomicHandlers:
         def __init__(self) -> None:
@@ -4180,6 +4468,42 @@ def test_ask_routes_pairwise_sales_diff_from_sku_codes() -> None:
     assert result["routing"]["extracted_params"]["sku_code"] == "TV00029112"
     assert result["routing"]["extracted_params"]["candidate_sku_code"] == "TV00030001"
     assert result["result"]["why_sales_diff"]["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+
+
+def test_ask_routes_single_sku_low_sales_question_to_low_sales_diagnosis() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="TV00029112 为什么卖不好？",
+        answer_style="xiaoao",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "low-sales-diagnosis"
+    assert result["routing"]["matched_rule"] == "low_sales_diagnosis"
+    assert result["routing"]["extracted_params"]["sku_code"] == "TV00029112"
+    assert result["result"]["low_sales_diagnosis"]["sales_status"]["status"] == "uncertain"
+    assert "当前不能判断广告、库存、促销和毛利原因" in result["result"]["low_sales_answer"]["short_answer"]
+
+
+def test_ask_routes_value_stick_problem_question_to_low_sales_diagnosis() -> None:
+    session = make_session()
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="按照价值棒理论看 TV00029112 问题在哪？",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "low-sales-diagnosis"
+    assert result["result"]["low_sales_diagnosis"]["value_stick_summary"]["enterprise_side"]["status"] == "not_supported"
 
 
 def test_ask_routes_battlefield_space_from_chinese_name() -> None:
