@@ -259,6 +259,162 @@ def test_m12c_blocked_generic_claim_is_threshold_not_premium() -> None:
     )
 
 
+def test_m12c_eye_care_requires_strict_eye_care_params_before_positive_value() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_eye_care_display",
+        claim_name="护眼显示",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c"),
+        with_claim_skus=("sku-a",),
+        without_claim_skus=("sku-b", "sku-c"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+    )
+    claim = m12c_service.ClaimState(
+        sku_code="sku-a",
+        claim_code="tv_claim_eye_care_display",
+        claim_name="护眼显示",
+        claim_dimension="picture_quality",
+        claim_subtype="eye_care",
+        claim_kind="product_experience",
+        param_support_status="supported",
+        supporting_param_codes=("hdr_support_flag", "declared_brightness_nit_or_band", "declared_refresh_rate_hz"),
+        supporting_param_snapshot={},
+        match_score=Decimal("1.0000"),
+        confidence=Decimal("0.9000"),
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=("ev-eye",),
+        param_support_level=m12c_service.M04C_PARAM_SUPPORT_STRONG_NUMERIC,
+        primary_supporting_param_codes=("declared_brightness_nit_or_band",),
+        wtp_input_guard=m12c_service.M04C_WTP_GUARD_ELIGIBLE,
+    )
+    assert "declared_brightness_nit_or_band" not in m12c_service._claim_support_param_codes(claim, "tv_claim_eye_care_display")
+    competitiveness = m12c_service._claim_parameter_competitiveness(
+        pool=pool,
+        target_sku="sku-a",
+        claim=claim,
+        claims={"sku-a": {"tv_claim_eye_care_display": claim}},
+        comments={"sku-a": m12c_service.CommentState("sku-a", ("tv_claim_eye_care_display",), (), 8, 0, Decimal("0.9000"))},
+        param_profiles={
+            "sku-a": m12c_service.ParamProfileState(
+                "sku-a",
+                {"hdr_support_flag": True, "declared_brightness_nit_or_band": 5200, "declared_refresh_rate_hz": 300},
+                (),
+            )
+        },
+    )
+    assert competitiveness["target_has_supporting_param"] is False
+    assert competitiveness["overall_parameter_competitiveness_level"] == m12c_service.M12C_PARAM_LEVEL_WEAK
+
+    role = m12c_service._claim_role(
+        target_sku="sku-a",
+        has_claim=True,
+        metric={
+            "price_premium_abs": Decimal("500.0000"),
+            "weekly_sales_lift_abs": Decimal("20.000000"),
+            "weekly_sales_amount_lift_abs": Decimal("100000.000000"),
+            "effect_confidence": Decimal("0.9000"),
+        },
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("0.9000"),
+        semantic_strength=Decimal("1.0000"),
+        battlefield_claim_relevance=Decimal("1.0000"),
+        parameter_competitiveness=competitiveness,
+        has_negative=False,
+    )
+    assert role == m12c_service.M12C_ROLE_BRAND
+
+
+def test_m12c_scene_context_claim_never_becomes_positive_value() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_theater_scene",
+        claim_name="影院/观影场景",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c"),
+        with_claim_skus=("sku-a",),
+        without_claim_skus=("sku-b", "sku-c"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+    )
+    role = m12c_service._claim_role(
+        target_sku="sku-a",
+        has_claim=True,
+        metric={
+            "price_premium_abs": Decimal("500.0000"),
+            "weekly_sales_lift_abs": Decimal("20.000000"),
+            "weekly_sales_amount_lift_abs": Decimal("100000.000000"),
+            "effect_confidence": Decimal("0.9000"),
+        },
+        pool=pool,
+        param_strength=Decimal("1.0000"),
+        comment_strength=Decimal("1.0000"),
+        semantic_strength=Decimal("1.0000"),
+        battlefield_claim_relevance=Decimal("1.0000"),
+        parameter_competitiveness={"wtp_input_guard": m12c_service.M04C_WTP_GUARD_NOT_SCOPE},
+        has_negative=False,
+    )
+    assert role == m12c_service.M12C_ROLE_BRAND
+    assert role not in m12c_service.POSITIVE_ROLES
+
+
+def test_m12c_hdr_numeric_display_uses_brightness_value_reason() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_hdr_high_brightness",
+        claim_name="HDR/高亮画质",
+        context_type="battlefield",
+        context_code="BF_PREMIUM_PICTURE_UPGRADE",
+        context_name="高端画质升级战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b", "sku-c"),
+        with_claim_skus=("sku-a",),
+        without_claim_skus=("sku-b", "sku-c"),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        comparison_basis="numeric_param_tier",
+        comparison_param_code="declared_brightness_nit_or_band",
+    )
+    claim = m12c_service.ClaimState(
+        sku_code="sku-a",
+        claim_code="tv_claim_hdr_high_brightness",
+        claim_name="HDR/高亮画质",
+        claim_dimension="picture_quality",
+        claim_subtype="brightness",
+        claim_kind="product_experience",
+        param_support_status="supported",
+        supporting_param_codes=("declared_brightness_nit_or_band",),
+        supporting_param_snapshot={},
+        match_score=Decimal("1.0000"),
+        confidence=Decimal("0.9000"),
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=("ev-hdr",),
+    )
+    name = m12c_service._claim_business_display_name(
+        pool,
+        claim,
+        "sku-a",
+        {"sku-a": m12c_service.ParamProfileState("sku-a", {"declared_brightness_nit_or_band": {"normalized_value": 5200}}, ())},
+    )
+    assert name == "5200nits 高亮档位"
+
+
 def test_m12c_merges_same_canonical_claim_states() -> None:
     chip = m12c_service.ClaimState(
         sku_code="sku-a",

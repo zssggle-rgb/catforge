@@ -503,7 +503,26 @@ def classify_param_support_level(claim, support_status, matched_params):
 | HDMI2.1 连接 | 只有是否具备 HDMI2.1 | 可作为游戏战场门槛；没有接口数量/带宽/VRR/ALLM 时不得稳定高溢价 |
 | 高刷新率 | 只有 120Hz/144Hz | 在游戏池多为门槛；若 300Hz 等档位领先，参数档位可继续进入 M12C |
 
-### 6.4.3 同源同参分组
+### 6.4.3 场景表达和专属参数保护
+
+M04C taxonomy 必须区分“产品能力卖点”和“用户场景表达”。场景表达可以帮助 M09C/M10C/M11C 判断用户任务、目标客群和价值战场，但不能被 M12C 当作可分配金额的产品卖点。
+
+| 标准卖点/表达 | M04C taxonomy 配置 | M12C 使用方式 |
+| --- | --- | --- |
+| 影院/观影场景 | `claim_scope=scene_context`，`wtp_input_guard=not_product_wtp_scope` 或 `blocked_no_param` | 只进入任务/战场解释，不进入高溢价、份额转化或金额分配 |
+| 客厅观影、家庭观影 | `claim_scope=scene_context` | 只作为用户任务/目标客群证据 |
+| 护眼显示 | `claim_scope=product_capability`，专属参数只允许低蓝光、无频闪、护眼认证、抗反光等 | 不得用 HDR、亮度、刷新率支撑护眼支付价值 |
+| HDR/高亮画质 | 拆成基础 HDR 和高亮档位两类支撑 | 基础 HDR 走门槛；亮度数值进入 M12C 参数档位比较 |
+| 杜比/影音认证 | 专属认证或音频硬件为强支撑；HDR 为泛支撑 | 只有 HDR 时不得进入用户支付价值候选 |
+
+实现要求：
+
+1. `supporting_param_codes` 可以保留所有可解释参数，但 `primary_supporting_param_codes` 必须只放专属或核心参数。
+2. `generic_support_param_codes` 必须显式列出只能提供泛化证明的参数，例如用 `hdr_support_flag` 支撑杜比认证。
+3. 对护眼、杜比、芯片、认证、生态类卖点，M04C-B 生成事实时必须优先检查专属参数；如果只有泛参数，`wtp_input_guard` 必须降级。
+4. 对场景表达，M04C 可以保留卖点事实和原文证据，但必须向 M12C 暴露“不可正向金额量化”的范围信号。
+
+### 6.4.4 同源同参分组
 
 M04C-B 在生成 `core3_sku_claim_fact` 时必须同时做两类分组：
 

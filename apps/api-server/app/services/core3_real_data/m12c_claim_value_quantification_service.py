@@ -67,6 +67,13 @@ M12C_FORCE_THRESHOLD_CLAIM_CODES = {
     "tv_claim_hdmi21_connectivity",
     "tv_claim_miniled_display",
 }
+M12C_SCENE_CONTEXT_CLAIM_CODES = {
+    "tv_claim_theater_scene",
+}
+M12C_STRICT_SUPPORT_PARAM_CODES: dict[str, tuple[str, ...]] = {
+    "tv_claim_eye_care_display": ("low_blue_light_flag", "flicker_free_flag", "eye_care_certification", "anti_glare_flag"),
+    "tv_claim_dolby_audio_video": ("dolby_vision_flag", "dolby_atmos_flag", "speaker_output_power_w"),
+}
 M12C_TIER_DIFFERENTIATED_CLAIM_CODES = {
     "tv_claim_hdr_high_brightness",
     "tv_claim_local_dimming",
@@ -136,9 +143,9 @@ M12C_CLAIM_PARAM_FALLBACKS: dict[str, tuple[str, ...]] = {
     "tv_claim_gaming_low_latency": ("declared_refresh_rate_hz", "hdmi_2_1_port_count", "hdmi21_flag", "hdmi_version_mix"),
     "tv_claim_hdmi21_connectivity": ("hdmi_2_1_port_count", "hdmi21_flag", "hdmi_version_mix"),
     "tv_claim_miniled_display": ("mini_led_flag", "mini_led_type", "display_tech_class", "declared_brightness_nit_or_band", "local_dimming_zone_count"),
-    "tv_claim_eye_care_display": ("low_blue_light_flag", "flicker_free_flag", "eye_care_certification"),
+    "tv_claim_eye_care_display": ("low_blue_light_flag", "flicker_free_flag", "eye_care_certification", "anti_glare_flag"),
     "tv_claim_dolby_audio_video": ("dolby_vision_flag", "dolby_atmos_flag", "hdr_support_flag"),
-    "tv_claim_theater_scene": ("screen_size_inch", "declared_brightness_nit_or_band", "speaker_output_power_w", "dolby_atmos_flag"),
+    "tv_claim_theater_scene": (),
 }
 
 M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
@@ -168,6 +175,7 @@ M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "low_blue_light_flag": ("low_blue_light_flag", "low_blue_flag", "低蓝光"),
     "flicker_free_flag": ("flicker_free_flag", "no_flicker_flag", "无频闪"),
     "eye_care_certification": ("eye_care_certification", "eye_care_cert", "护眼认证"),
+    "anti_glare_flag": ("anti_glare_flag", "anti_reflection_flag", "抗反光", "防眩光"),
     "dolby_vision_flag": ("dolby_vision_flag", "dolby_vision", "杜比视界"),
     "dolby_atmos_flag": ("dolby_atmos_flag", "dolby_atmos", "杜比全景声"),
     "screen_size_inch": ("screen_size_inch", "screen_size", "尺寸"),
@@ -1329,14 +1337,23 @@ def _split_numeric_param_groups(
 
 
 def _numeric_group_candidate_params(sku_codes: Sequence[str], claims: Mapping[str, Mapping[str, ClaimState]], claim_code: str) -> tuple[str, ...]:
+    if claim_code in M12C_SCENE_CONTEXT_CLAIM_CODES:
+        return ()
+    strict_codes = set(M12C_STRICT_SUPPORT_PARAM_CODES.get(claim_code, ()))
     ordered: list[str] = []
     for sku in sku_codes:
         claim = claims.get(sku, {}).get(claim_code)
         for param_code in (claim.primary_supporting_param_codes if claim else ()):
+            if strict_codes and param_code not in strict_codes:
+                continue
             _append_numeric_candidate_param(ordered, param_code)
         for param_code in (claim.supporting_param_codes if claim else ()):
+            if strict_codes and param_code not in strict_codes:
+                continue
             _append_numeric_candidate_param(ordered, param_code)
     for param_code in M12C_CLAIM_PARAM_FALLBACKS.get(claim_code, ()):
+        if strict_codes and param_code not in strict_codes:
+            continue
         _append_numeric_candidate_param(ordered, param_code)
     return tuple(ordered)
 
@@ -1578,6 +1595,68 @@ def _pool_and_metric_rows(
     return pool_rows, metric_rows, metrics_by_pool
 
 
+def _claim_business_display_name(
+    pool: ClaimPool,
+    claim: ClaimState | None,
+    sku_code: str,
+    param_profiles: Mapping[str, ParamProfileState],
+) -> str:
+    if pool.claim_code in M12C_SCENE_CONTEXT_CLAIM_CODES:
+        return f"{pool.claim_name}（场景证据）"
+    if pool.comparison_basis == "numeric_param_tier":
+        value_label = _target_param_display_value(pool.comparison_param_code or "", claim, sku_code, param_profiles)
+        if pool.claim_code == "tv_claim_hdr_high_brightness" and pool.comparison_param_code == "declared_brightness_nit_or_band":
+            return f"{value_label} 高亮档位" if value_label else "高亮参数优势"
+        if pool.claim_code in {"tv_claim_high_refresh_rate", "tv_claim_refresh_rate"} and pool.comparison_param_code in {
+            "declared_refresh_rate_hz",
+            "native_refresh_rate_hz",
+            "refresh_rate_hz",
+        }:
+            return f"{value_label} 高阶刷新率" if value_label else "高阶刷新率档位"
+        if pool.claim_code == "tv_claim_local_dimming" and pool.comparison_param_code == "local_dimming_zone_count":
+            return f"{value_label} 分区控光" if value_label else "高分区控光"
+        if pool.claim_code == "tv_claim_wide_color_accuracy" and pool.comparison_param_code in {
+            "color_gamut_ratio",
+            "wide_color_gamut_pct",
+            "color_gamut_percent",
+        }:
+            return f"{value_label} 色彩表现" if value_label else "高色域/色彩还原"
+    return claim.canonical_claim_name if claim and claim.canonical_claim_name else pool.claim_name
+
+
+def _target_param_display_value(
+    param_code: str,
+    claim: ClaimState | None,
+    sku_code: str,
+    param_profiles: Mapping[str, ParamProfileState],
+) -> str:
+    if not param_code:
+        return ""
+    entry = _param_entry(param_profiles, claim, sku_code, param_code)
+    if not entry:
+        return ""
+    value = _decimal_param_value(entry.get("normalized_value"))
+    if value is None:
+        raw_value = entry.get("normalized_value")
+        return str(raw_value).strip() if raw_value is not None else ""
+    if param_code == "declared_brightness_nit_or_band":
+        return f"{int(value)}nits"
+    if param_code in {"declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"}:
+        return f"{int(value)}Hz"
+    if param_code == "local_dimming_zone_count":
+        return f"{int(value)}"
+    if param_code in {"color_gamut_ratio", "wide_color_gamut_pct", "color_gamut_percent"}:
+        return f"{_format_decimal_for_label(value)}%"
+    return _format_decimal_for_label(value)
+
+
+def _format_decimal_for_label(value: Decimal) -> str:
+    rounded = _q4(value)
+    if rounded == rounded.to_integral_value():
+        return str(int(rounded))
+    return format(rounded.normalize(), "f").rstrip("0").rstrip(".")
+
+
 def _quantification_rows(
     *,
     pools: Sequence[ClaimPool],
@@ -1674,6 +1753,7 @@ def _quantification_rows(
             )
             if source_type == M12C_COMPETITOR_GAP and role not in OPPORTUNITY_ROLES:
                 continue
+            display_claim_name = _claim_business_display_name(pool, claim, sku, param_profiles)
             scorecard = _claim_value_scorecard(
                 pool=pool,
                 role=role,
@@ -1733,7 +1813,7 @@ def _quantification_rows(
                 "brand_name": market.brand_name,
                 "model_name": market.model_name,
                 "claim_code": pool.claim_code,
-                "claim_name": pool.claim_name,
+                "claim_name": display_claim_name,
                 "claim_dimension": claim.claim_dimension if claim else "",
                 "claim_value_role": role,
                 "context_type": pool.context_type,
@@ -1766,6 +1846,8 @@ def _quantification_rows(
                     "business_claim_type": business_claim_type,
                     "business_claim_type_cn": business_claim_type_cn,
                     "business_claim_type_definition_cn": _business_claim_type_meaning_cn(business_claim_type),
+                    "standard_claim_name": pool.claim_name,
+                    "business_display_name": display_claim_name,
                     "canonical_claim_code": claim.canonical_claim_code if claim else pool.claim_code,
                     "canonical_claim_name": claim.canonical_claim_name if claim else pool.claim_name,
                     "member_claim_codes": list(_claim_code_family(claim, pool)),
@@ -2150,6 +2232,25 @@ def _claim_parameter_competitiveness(
     comments: Mapping[str, CommentState],
     param_profiles: Mapping[str, ParamProfileState],
 ) -> dict[str, Any]:
+    if pool.claim_code in M12C_SCENE_CONTEXT_CLAIM_CODES:
+        return {
+            "support_param_codes": [],
+            "support_param_count": 0,
+            "target_has_supporting_param": False,
+            "key_param_results": [],
+            "claim_label_coverage_rate": 0.0,
+            "differentiated_param_coverage_rate": 0.0,
+            "overall_parameter_competitiveness_score": 0.0,
+            "overall_parameter_competitiveness_level": M12C_PARAM_LEVEL_WEAK,
+            "overall_parameter_competitiveness_level_cn": _parameter_level_cn(M12C_PARAM_LEVEL_WEAK),
+            "dimension_scores": {},
+            "sparse_sample_flag": False,
+            "wtp_input_guard": M04C_WTP_GUARD_NOT_SCOPE,
+            "param_support_level": M04C_PARAM_SUPPORT_NO_PARAM,
+            "eligibility_type": "scene_context_evidence",
+            "downgrade_reason_cn": "该表达是用户场景或任务证据，不是可分配金额的产品卖点。",
+            "explanation_cn": "场景表达只能解释用户任务、目标客群和价值战场，不能作为高溢价或销量贡献卖点。",
+        }
     wtp_input_guard = _effective_wtp_input_guard(claim)
     if claim is not None and wtp_input_guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
         support_param_codes = _claim_support_param_codes(claim, pool.claim_code)
@@ -2173,6 +2274,7 @@ def _claim_parameter_competitiveness(
             "sparse_sample_flag": False,
             "wtp_input_guard": wtp_input_guard,
             "param_support_level": claim.param_support_level,
+            "eligibility_type": "threshold_capability",
             "downgrade_reason_cn": "该卖点只有泛参数支撑，不能作为高溢价或人无我有支付价值依据。",
             "explanation_cn": "泛支撑参数只能证明基础能力存在，不能证明该具体卖点成立。",
         }
@@ -2191,6 +2293,7 @@ def _claim_parameter_competitiveness(
             "sparse_sample_flag": False,
             "wtp_input_guard": wtp_input_guard,
             "param_support_level": claim.param_support_level,
+            "eligibility_type": "not_product_value_scope" if wtp_input_guard == M04C_WTP_GUARD_NOT_SCOPE else "certification_or_brand_claim_needs_specific_proof",
             "downgrade_reason_cn": "该卖点缺少具体参数支撑，不进入支付价值量化。",
             "explanation_cn": "缺少可比较的具体参数，不能作为用户支付价值依据。",
         }
@@ -2249,22 +2352,32 @@ def _claim_parameter_competitiveness(
         "sparse_sample_flag": sparse_flag,
         "wtp_input_guard": wtp_input_guard,
         "param_support_level": claim.param_support_level if claim else "",
+        "eligibility_type": "quantifiable_product_claim" if target_entries else "certification_or_brand_claim_needs_specific_proof",
         "downgrade_reason_cn": downgrade_reason,
         "explanation_cn": _parameter_competitiveness_explanation(level, param_results, downgrade_reason),
     }
 
 
 def _claim_support_param_codes(claim: ClaimState | None, claim_code: str) -> tuple[str, ...]:
+    if claim_code in M12C_SCENE_CONTEXT_CLAIM_CODES:
+        return ()
+    strict_codes = set(M12C_STRICT_SUPPORT_PARAM_CODES.get(claim_code, ()))
     ordered: list[str] = []
     for code in (claim.primary_supporting_param_codes if claim else ()):
         text = str(code).strip()
+        if strict_codes and text not in strict_codes:
+            continue
         if text and not text.startswith("_") and text not in ordered:
             ordered.append(text)
     for code in (claim.supporting_param_codes if claim else ()):
         text = str(code).strip()
+        if strict_codes and text not in strict_codes:
+            continue
         if text and not text.startswith("_") and text not in ordered:
             ordered.append(text)
     for code in M12C_CLAIM_PARAM_FALLBACKS.get(claim_code, ()):
+        if strict_codes and code not in strict_codes:
+            continue
         if code and not code.startswith("_") and code not in ordered:
             ordered.append(code)
     return tuple(ordered)
@@ -2796,12 +2909,21 @@ def _claim_role(
     source_type: str = M12C_TARGET_FACT_CLAIM,
     market_price: Decimal | None = None,
 ) -> str:
+    if pool.claim_code in M12C_SCENE_CONTEXT_CLAIM_CODES:
+        return M12C_ROLE_BRAND if has_claim else M12C_ROLE_SAMPLE
     if has_negative or (has_claim and param_strength <= Decimal("0.2000")):
         return M12C_ROLE_DRAG
     wtp_input_guard = str((parameter_competitiveness or {}).get("wtp_input_guard") or "")
     if has_claim and wtp_input_guard == M04C_WTP_GUARD_BLOCKED_GENERIC:
         return M12C_ROLE_BASIC
     if has_claim and wtp_input_guard in {M04C_WTP_GUARD_BLOCKED_NO_PARAM, M04C_WTP_GUARD_NOT_SCOPE}:
+        return M12C_ROLE_BRAND
+    if (
+        has_claim
+        and pool.claim_code in M12C_STRICT_SUPPORT_PARAM_CODES
+        and parameter_competitiveness is not None
+        and not bool(parameter_competitiveness.get("target_has_supporting_param"))
+    ):
         return M12C_ROLE_BRAND
     param_level = str((parameter_competitiveness or {}).get("overall_parameter_competitiveness_level") or "")
     param_sparse = bool((parameter_competitiveness or {}).get("sparse_sample_flag")) or param_level == M12C_PARAM_LEVEL_SPARSE

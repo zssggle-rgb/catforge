@@ -307,6 +307,59 @@ def test_m04c_marks_dolby_hdr_only_as_generic_support_gate():
     assert dolby_fact.wtp_input_guard == "blocked_generic_param"
 
 
+def test_m04c_eye_care_does_not_borrow_hdr_brightness_or_refresh_params():
+    session = make_session()
+    session.add(promo_evidence("ev_claim_eye_care", "护眼低蓝光舒适观看"))
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    eye_care_fact = session.execute(
+        select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.claim_code == "tv_claim_eye_care_display")
+    ).scalar_one()
+    assert eye_care_fact.param_support_level == "no_param_support"
+    assert eye_care_fact.primary_supporting_param_codes == []
+    assert set(eye_care_fact.supporting_param_codes) == {
+        "low_blue_light_flag",
+        "flicker_free_flag",
+        "eye_care_certification",
+        "anti_glare_flag",
+    }
+    assert eye_care_fact.wtp_input_guard == "blocked_no_param"
+
+
+def test_m04c_theater_scene_is_fact_evidence_but_not_product_wtp_scope():
+    session = make_session()
+    session.add(promo_evidence("ev_claim_theater", "影院级观影体验"))
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    theater_fact = session.execute(
+        select(entities.Core3SkuClaimFact).where(entities.Core3SkuClaimFact.claim_code == "tv_claim_theater_scene")
+    ).scalar_one()
+    assert theater_fact.fact_claim_flag is True
+    assert theater_fact.claim_kind == "scene_context"
+    assert theater_fact.primary_supporting_param_codes == []
+    assert theater_fact.wtp_input_guard == "not_product_wtp_scope"
+
+
 def test_m04c_groups_same_source_chip_and_picture_engine_claims():
     session = make_session()
     text = "信芯 AI画质芯片 H6 画质引擎"

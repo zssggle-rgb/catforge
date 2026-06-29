@@ -264,7 +264,8 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             "picture_quality",
             "eye_care",
             ("护眼", "低蓝光", "无频闪", "莱茵"),
-            support_param_codes=("hdr_support_flag", "declared_brightness_nit_or_band", "declared_refresh_rate_hz"),
+            support_param_codes=("low_blue_light_flag", "flicker_free_flag", "eye_care_certification", "anti_glare_flag"),
+            primary_support_param_codes=("low_blue_light_flag", "flicker_free_flag", "eye_care_certification", "anti_glare_flag"),
             support_keywords=("护眼", "低蓝光", "莱茵", "无频闪"),
         ),
         _claim(
@@ -366,6 +367,8 @@ def tv_claim_taxonomy_v0_1() -> M04CClaimTaxonomy:
             ("影院", "imax", "电影", "观影"),
             support_param_codes=("screen_size_inch", "hdr_support_flag", "declared_brightness_nit_or_band"),
             support_keywords=("影院", "imax", "电影", "观影"),
+            claim_kind="scene_context",
+            support_required=False,
         ),
         _claim(
             "tv_claim_slim_body",
@@ -1793,6 +1796,18 @@ def _param_support(claim: M04CClaimDefinition, profile: entities.Core3SkuParamPr
             "snapshot": {},
             "wtp_input_guard": WTP_GUARD_NOT_PRODUCT_SCOPE,
             "explanation": "服务履约类卖点单独标记，不进入商品事实卖点。",
+        }
+    if claim.claim_kind == "scene_context":
+        return {
+            "status": SUPPORT_PARTIAL,
+            "param_support_level": PARAM_SUPPORT_NOT_APPLICABLE,
+            "param_support_specificity": PARAM_SPECIFICITY_NOT_APPLICABLE,
+            "supporting_param_codes": [],
+            "primary_supporting_param_codes": [],
+            "generic_support_param_codes": [],
+            "snapshot": {},
+            "wtp_input_guard": WTP_GUARD_NOT_PRODUCT_SCOPE,
+            "explanation": "该表达属于用户场景或任务证据，可支撑用户任务和价值战场判断，但不作为产品卖点支付价值金额对象。",
         }
     if not claim.support_required:
         return {

@@ -175,6 +175,62 @@ numeric_param_tier
 
 例如 `HDR/高亮画质` 必须优先按 `declared_brightness_nit_or_band` 切分亮度高档组和亮度低档组。不能把 5 个都写了 HDR/高亮的 SKU 作为“有卖点组”，再拿 1 个没写 HDR 的 SKU 做对照。
 
+### 3.4 产品卖点可量化资格网关
+
+在 `ClaimAnalysisUnit` 进入 `ClaimValueReasonGroup` 之前，必须先生成 `ClaimQuantificationEligibility`。这个网关不判断“是否高溢价”，只判断“这个表达是否能作为产品用户支付价值对象参与量化”。
+
+```text
+ClaimQuantificationEligibility
+- claim_code
+- claim_name
+- business_claim_name
+- eligibility_type
+  - quantifiable_product_claim
+  - threshold_capability
+  - scene_context_evidence
+  - certification_or_brand_claim_needs_specific_proof
+  - broad_claim_needs_param_decomposition
+  - not_product_value_scope
+- allowed_positive_value_types
+- blocked_positive_value_types
+- required_specific_param_codes
+- generic_param_codes
+- scene_task_codes
+- business_rule_reason_cn
+- report_display_name_cn
+```
+
+资格网关的执行顺序：
+
+```text
+read M04C claim fact
+-> check service/product scope
+-> check scene_context claim list
+-> check strict specific param list
+-> split broad claim into parameter/tier reason if possible
+-> classify threshold candidate by battlefield pool coverage
+-> pass only quantifiable_product_claim or numeric/tier reason to scorecard
+```
+
+默认规则表：
+
+| 标准卖点 | 网关规则 | 允许进入正向量化的条件 | 报告名称 |
+| --- | --- | --- | --- |
+| `tv_claim_theater_scene` | `scene_context_evidence` | 不允许进入正向金额和销量分配 | 影院观影场景，只作为战场/任务证据 |
+| `tv_claim_hdr_high_brightness` | 基础 HDR 与高亮档位拆分 | 只有 `declared_brightness_nit_or_band`、HDR 格式、控光或色彩参数形成差异时允许 | `5200nits 高亮档位`、`高亮参数优势` |
+| `tv_claim_eye_care_display` | 严格专属参数 | 低蓝光、无频闪、护眼认证、抗反光或明确长看舒适评论成立 | `护眼舒适能力` |
+| `tv_claim_dolby_audio_video` | 严格认证/音频事实 | 杜比、DTS、IMAX、音响功率、声道、Atmos 等专属事实成立 | `影音认证与音频体验` |
+| `tv_claim_hdmi21_connectivity` | 默认门槛 | 只有接口数量、带宽、VRR/ALLM 组合形成差异时可升级 | `游戏连接完整性` |
+| 芯片/画质芯片相关卖点 | 同源同参合并 | 芯片型号、AI 画质能力、系统流畅评论或游戏/画质战场证据成立 | `画质芯片/处理器能力` |
+
+实现硬约束：
+
+1. `scene_context_evidence` 的 `allowed_positive_value_types` 必须为空，不得进入 `premium_driver_estimated`、`sales_driver_estimated`、`customer_value_gain` 或 `price_pressure`。
+2. `threshold_capability` 默认只能输出 `basic_threshold`。如果背后存在数值参数差异，必须生成新的 `numeric_param_tier` 业务理由，不能复用基础卖点名。
+3. `broad_claim_needs_param_decomposition` 必须下钻到 `ClaimParameterEvidence` 后再进入评分；不能直接用宽泛卖点名打分。
+4. `certification_or_brand_claim_needs_specific_proof` 如果只有泛参数支撑，必须输出厂家主张或待验证，不能输出人无我有。
+5. `report_display_name_cn` 必须是业务语言。短答和报告优先使用该字段，避免把 `HDR/高亮画质` 这种混合标准名误写成“HDR 高溢价”。
+
 ## 4. 核心数据结构
 
 ### 4.1 `SkuClaimValueContext`
@@ -1469,6 +1525,9 @@ catforge_analyst claim-value report \
 20. 同一 `source_claim_group_id` 或 `same_source_param_group_id` 的标准卖点必须合并为一个 `ClaimValueReasonGroup` 后再评分和量化。
 21. 杜比/影音认证只有 HDR 泛参数支撑时，应输出为厂家认证表达或待验证；HDR 在同池普遍具备时归入门槛。
 22. 芯片/处理器性能和画质芯片/AI 画质引擎如果同源同参，应只产生一个合并后的芯片价值理由。
+23. 影院/观影场景、客厅观影、家庭观影等场景表达必须输出为任务/战场证据，不得进入任何正向金额、销量或价格压力分配。
+24. 护眼显示只能由低蓝光、无频闪、护眼认证、抗反光或明确长看舒适评论支撑；只有 HDR、亮度或刷新率时必须降级。
+25. `HDR/高亮画质` 在报告中必须按证据拆名：基础 HDR 显示为门槛，高亮数值优势显示为 `5200nits 高亮档位` 等业务价值理由。
 
 验收用例必须包含海信 65E7Q：
 
@@ -1483,6 +1542,8 @@ catforge_analyst claim-value report \
 | 市场承接系数 | 能拆成销量承接、销额承接、评论验证、样本可靠性四项 |
 | 杜比/影音认证 | 只有 HDR 支撑时不进入人无我有或高溢价；HDR 作为门槛 |
 | 芯片相关卖点 | 同源同参合并展示，不能重复计算两个金额 |
+| 影院/观影场景 | 只作为影院沉浸观影任务和高端画质战场证据，不出现在高溢价卖点列表 |
+| 护眼显示 | 无低蓝光、无频闪、护眼认证或抗反光证据时，不得借亮度/HDR/刷新率进入高溢价 |
 
 集成验收：
 
