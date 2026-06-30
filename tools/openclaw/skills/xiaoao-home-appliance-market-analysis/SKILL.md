@@ -103,7 +103,7 @@ Tooling hygiene:
   question; do not rewrite it.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600 --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "competitor-card-<message_id>" --feishu-card-only
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst competitor-set --query 65E7Q --product-category tv --batch-id latest --limit 10 --format text --answer-style xiaoao --with-report feishu-doc --top-n 3 --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "competitor-card-<message_id>" --feishu-card-only
 ```
 
 - In non-card chat channels, use the same command with `--format text` and send
@@ -169,10 +169,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst premium-claim-drivers --query 65E7Q --product-category tv --batch-id latest --format json
 ```
 
-For broad SKU claim-value questions in Feishu, use only the full card command below. The `<message_id>` is the current inbound Feishu message id from the prompt metadata. Do not use the non-card text command in Feishu conversations.
+For broad SKU claim-value questions in Feishu, use only the full card command below. The `<chat_id>` and `<message_id>` are the current inbound Feishu chat id and message id from the prompt metadata. Keep both parameters: `--feishu-chat-id` sends the dashboard as a visible main-chat card, while `--feishu-reply-message-id` remains a fallback. Do not use the non-card text command in Feishu conversations.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600 --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
 ```
 
 ```bash
@@ -240,10 +240,10 @@ For "这款和谁比":
 3. For the initial answer in a Feishu card-capable entrypoint, call
    `competitor-set --format text --answer-style xiaoao --with-report
    feishu-doc --top-n 3 --max-chat-chars 600 --feishu-reply-message-id
-   "<message_id>" --feishu-card-idempotency-key
-   "competitor-card-<message_id>" --feishu-card-only`. The `message_id` comes from the current
-   Feishu conversation metadata. The CLI attempts to send the interactive card
-   directly and prints only the card delivery status. Send that stdout to the
+   "<message_id>" --feishu-chat-id "<chat_id>" --feishu-card-idempotency-key
+   "competitor-card-<message_id>" --feishu-card-only`. The `chat_id` and `message_id`
+   come from the current Feishu conversation metadata. The CLI attempts to send
+   the interactive card directly to the main chat and prints only the card delivery status. Send that stdout to the
    user as the visible reply so delivery failures are visible. In non-card
    channels, call the same command with `--format text`.
 4. The CLI-generated Top 3 follows this business definition:
@@ -289,7 +289,7 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. Return the CLI stdout exactly; on success it should be a short Chinese card delivery status. Do not parse JSON. The card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
+1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. Return the CLI stdout exactly; on success it should be a short Chinese card delivery status. Do not parse JSON. The card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
 2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
 3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
 4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.

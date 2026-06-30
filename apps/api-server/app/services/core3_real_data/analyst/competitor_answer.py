@@ -4651,6 +4651,77 @@ def publish_feishu_card_reply(
     )
 
 
+def publish_feishu_card_message(
+    *,
+    card: dict[str, Any] | None,
+    chat_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> FeishuCardPublishResult:
+    destination = _normalize_feishu_card_destination(chat_id)
+    if destination is None:
+        return FeishuCardPublishResult(status="disabled", message_cn="未提供飞书会话 ID，未发送卡片。")
+    if not card:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：没有可发送的卡片内容。")
+    cli_bin = os.environ.get("CATFORGE_FEISHU_CLI_BIN") or shutil.which("lark-cli")
+    if not cli_bin:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未安装飞书 CLI。")
+    content = json.dumps(card, ensure_ascii=False, separators=(",", ":"))
+    command = [
+        cli_bin,
+        "im",
+        "+messages-send",
+        "--msg-type",
+        "interactive",
+        "--content",
+        content,
+        "--as",
+        os.environ.get("CATFORGE_FEISHU_IM_AS") or os.environ.get("CATFORGE_FEISHU_AS", "bot"),
+        "--format",
+        "json",
+    ]
+    if destination["kind"] == "chat":
+        command.extend(["--chat-id", destination["value"]])
+    else:
+        command.extend(["--user-id", destination["value"]])
+    normalized_idempotency_key = _feishu_idempotency_key(idempotency_key)
+    if normalized_idempotency_key:
+        command.extend(["--idempotency-key", normalized_idempotency_key])
+    env = os.environ.copy()
+    cli_dir = os.path.dirname(cli_bin)
+    if cli_dir:
+        env["PATH"] = f"{cli_dir}:{env.get('PATH', '')}"
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=30, env=env)
+    except FileNotFoundError:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境找不到飞书 CLI。")
+    except subprocess.TimeoutExpired:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书消息接口超时。")
+    except Exception:
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败。")
+    if completed.returncode != 0:
+        return FeishuCardPublishResult(status="failed", message_cn=_feishu_im_failure_message(completed.stderr or completed.stdout))
+    message_id, sent_chat_id = _extract_feishu_message_result(completed.stdout)
+    return FeishuCardPublishResult(
+        status="sent",
+        message_cn="已发送飞书竞品看板卡片。",
+        message_id=message_id,
+        chat_id=sent_chat_id or (destination["value"] if destination["kind"] == "chat" else None),
+    )
+
+
+def _normalize_feishu_card_destination(value: str | None) -> dict[str, str] | None:
+    if not value or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.startswith("user:"):
+        normalized = normalized.split(":", 1)[1].strip()
+    if normalized.startswith("oc_"):
+        return {"kind": "chat", "value": normalized}
+    if normalized.startswith("ou_"):
+        return {"kind": "user", "value": normalized}
+    return {"kind": "chat", "value": normalized}
+
+
 def _publish_feishu_public_permission(*, cli_bin: str, url: str, env: dict[str, str]) -> dict[str, Any] | None:
     link_share_entity = os.environ.get("CATFORGE_FEISHU_LINK_SHARE_ENTITY", "").strip()
     if not link_share_entity:

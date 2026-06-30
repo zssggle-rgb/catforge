@@ -78,6 +78,40 @@ def test_feishu_card_reply_publisher_shortens_long_idempotency_key(monkeypatch) 
     assert len(key) <= 50
 
 
+def test_feishu_card_message_publisher_sends_interactive_direct_message(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"data": {"message_id": "om_sent", "chat_id": "oc_chat"}}),
+            stderr="",
+        )
+
+    monkeypatch.setenv("CATFORGE_FEISHU_CLI_BIN", "/opt/openclaw-node/bin/lark-cli")
+    monkeypatch.setenv("CATFORGE_FEISHU_AS", "bot")
+    monkeypatch.setattr(competitor_answer.subprocess, "run", fake_run)
+
+    result = competitor_answer.publish_feishu_card_message(
+        card={"schema": "2.0", "body": {"elements": []}},
+        chat_id="user:ou_user",
+        idempotency_key="card-om_original",
+    )
+
+    assert result.status == "sent"
+    assert result.message_id == "om_sent"
+    assert result.chat_id == "oc_chat"
+    command = calls[0][0]
+    assert command[:3] == ["/opt/openclaw-node/bin/lark-cli", "im", "+messages-send"]
+    assert command[command.index("--user-id") + 1] == "ou_user"
+    assert command[command.index("--msg-type") + 1] == "interactive"
+    assert command[command.index("--as") + 1] == "bot"
+    assert command[command.index("--idempotency-key") + 1] == "card-om_original"
+    assert json.loads(command[command.index("--content") + 1])["schema"] == "2.0"
+
+
 def test_feishu_card_reply_failure_message_is_business_safe(monkeypatch) -> None:
     def fake_run(command, **kwargs):
         return subprocess.CompletedProcess(
@@ -166,6 +200,7 @@ def test_attach_feishu_card_delivery_supports_claim_value_answer(monkeypatch) ->
         result,
         Namespace(
             feishu_reply_message_id="om_original",
+            feishu_chat_id=None,
             feishu_reply_in_thread=False,
             feishu_card_idempotency_key="claim-value-card-om_original",
         ),
@@ -182,6 +217,60 @@ def test_attach_feishu_card_delivery_supports_claim_value_answer(monkeypatch) ->
     delivery = result["result"]["claim_value_answer"]["feishu_card_delivery"]
     assert delivery["status"] == "sent"
     assert delivery["message_cn"] == "已发送飞书用户卖点价值看板卡片。"
+
+
+def test_attach_feishu_card_delivery_prefers_main_chat_message(monkeypatch) -> None:
+    reply_calls: list[dict[str, object]] = []
+    message_calls: list[dict[str, object]] = []
+
+    def fake_publish_feishu_card_reply(**kwargs):
+        reply_calls.append(kwargs)
+        return competitor_answer.FeishuCardPublishResult(
+            status="sent",
+            message_cn="已发送飞书竞品看板卡片。",
+            message_id="om_reply",
+        )
+
+    def fake_publish_feishu_card_message(**kwargs):
+        message_calls.append(kwargs)
+        return competitor_answer.FeishuCardPublishResult(
+            status="sent",
+            message_cn="已发送飞书竞品看板卡片。",
+            message_id="om_sent",
+            chat_id="oc_chat",
+        )
+
+    monkeypatch.setattr(competitor_answer, "publish_feishu_card_reply", fake_publish_feishu_card_reply)
+    monkeypatch.setattr(competitor_answer, "publish_feishu_card_message", fake_publish_feishu_card_message)
+    result = {
+        "result": {
+            "claim_value_answer": {
+                "feishu_card_payload": {"schema": "2.0", "body": {"elements": []}},
+            }
+        }
+    }
+
+    catforge_analyst.attach_feishu_card_delivery(
+        result,
+        Namespace(
+            feishu_chat_id="user:ou_user",
+            feishu_reply_message_id="om_original",
+            feishu_reply_in_thread=False,
+            feishu_card_idempotency_key="claim-value-card-om_original",
+        ),
+    )
+
+    assert reply_calls == []
+    assert message_calls == [
+        {
+            "card": {"schema": "2.0", "body": {"elements": []}},
+            "chat_id": "user:ou_user",
+            "idempotency_key": "claim-value-card-om_original",
+        }
+    ]
+    delivery = result["result"]["claim_value_answer"]["feishu_card_delivery"]
+    assert delivery["status"] == "sent"
+    assert delivery["message_id"] == "om_sent"
 
 
 def test_text_output_prefers_feishu_card_delivery_status(capsys) -> None:

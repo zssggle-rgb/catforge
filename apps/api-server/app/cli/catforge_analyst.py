@@ -209,6 +209,7 @@ def add_answer_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--top-n", type=int, default=3)
     parser.add_argument("--max-chat-chars", type=int, default=600)
     parser.add_argument("--report-title")
+    parser.add_argument("--feishu-chat-id", help="Feishu chat_id or direct user open_id to send the generated card in the main chat.")
     parser.add_argument("--feishu-reply-message-id", help="Feishu message_id to reply with the generated competitor card.")
     parser.add_argument("--feishu-reply-in-thread", action="store_true", help="Send the Feishu card as a thread reply.")
     parser.add_argument("--feishu-card-idempotency-key", help="Optional idempotency key for Feishu card reply.")
@@ -1044,8 +1045,9 @@ def _context_mentions_ac(kwargs: dict[str, Any]) -> bool:
 
 
 def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace) -> None:
+    chat_id = getattr(args, "feishu_chat_id", None)
     reply_message_id = getattr(args, "feishu_reply_message_id", None)
-    if not reply_message_id:
+    if not chat_id and not reply_message_id:
         return
     payload = result.get("result") or {}
     competitor_answer = payload.get("competitor_answer") or {}
@@ -1060,12 +1062,19 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
         card = claim_value_answer.get("feishu_card_payload")
     else:
         return
-    delivery = competitor_answer_renderer.publish_feishu_card_reply(
-        card=card,
-        reply_message_id=reply_message_id,
-        reply_in_thread=bool(getattr(args, "feishu_reply_in_thread", False)),
-        idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
-    )
+    if chat_id:
+        delivery = competitor_answer_renderer.publish_feishu_card_message(
+            card=card,
+            chat_id=chat_id,
+            idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
+        )
+    else:
+        delivery = competitor_answer_renderer.publish_feishu_card_reply(
+            card=card,
+            reply_message_id=reply_message_id,
+            reply_in_thread=bool(getattr(args, "feishu_reply_in_thread", False)),
+            idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
+        )
     delivery_payload = delivery.to_dict()
     if answer_key == "claim_value_answer" and delivery_payload.get("status") == "sent":
         delivery_payload["message_cn"] = "已发送飞书用户卖点价值看板卡片。"
