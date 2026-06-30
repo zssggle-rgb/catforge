@@ -199,7 +199,7 @@ def test_text_output_prefers_feishu_card_delivery_status(capsys) -> None:
     assert capsys.readouterr().out.strip() == "已发送飞书竞品看板卡片。"
 
 
-def test_feishu_card_only_success_outputs_no_reply(capsys) -> None:
+def test_feishu_card_only_success_outputs_delivery_status(capsys) -> None:
     result = {
         "result": {
             "claim_value_answer": {
@@ -211,7 +211,7 @@ def test_feishu_card_only_success_outputs_no_reply(capsys) -> None:
 
     catforge_analyst.emit_result(result, "text", feishu_card_only=True)
 
-    assert capsys.readouterr().out.strip() == "NO_REPLY"
+    assert capsys.readouterr().out.strip() == "已发送飞书用户卖点价值看板卡片。"
 
 
 def test_feishu_card_only_without_delivery_does_not_fallback_to_short_answer(capsys) -> None:

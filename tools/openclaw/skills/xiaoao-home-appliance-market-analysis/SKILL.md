@@ -97,8 +97,8 @@ Tooling hygiene:
   XiaoAo answer command with the current conversation `message_id` and let the
   CLI attempt to send the interactive card directly. Do not parse JSON or send
   the card payload yourself. Always send the CLI stdout as the visible user
-  reply, but stdout is only the card delivery status in this path. Do not emit
-  `NO_REPLY`, an empty reply, or only a heartbeat. The CLI owns ranking,
+  reply, but stdout is only the card delivery status in this path. The visible
+  reply must be a short Chinese delivery status, never an empty reply or only a heartbeat. The CLI owns ranking,
   dashboard structure, wording, report link, and card delivery for this
   question; do not rewrite it.
 
@@ -144,7 +144,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 | --- | --- | --- | --- |
 | "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Use XiaoAo answer mode. Selection priority is same purchase pool, role-weighted value battlefield overlap, role-weighted user task overlap, role-weighted target group overlap, substitutable value anchors, replacement pressure, then sales as market validation only. |
 | "A 为什么比 B 卖得好/差", "销量差异原因" | `why-sales-diff` | `sku_code` and `candidate_sku_code` | Explain a pairwise sales difference. If only one SKU is provided, run `competitor-set` first and ask the user to confirm the comparison SKU if needed. |
-| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sku-claim-value` | `sku_code` or `query` | Broad SKU-level claim-value question. In Feishu card entry, call the stable XiaoAo card command with `--with-report feishu-doc --feishu-card-only`; when the command prints `NO_REPLY`, return exactly `NO_REPLY` and do not add visible explanatory text. The business answer is the claim-value dashboard card. Do not request JSON, do not run jq/grep/Python post-processing, and do not make multiple exploratory tool calls. |
+| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sku-claim-value` | `sku_code` or `query` | Broad SKU-level claim-value question. In Feishu card entry, call the stable XiaoAo card command with `--with-report feishu-doc --feishu-card-only`; return the CLI stdout exactly. The business answer is the claim-value dashboard card and the visible stdout should be a short Chinese card delivery status. Do not request JSON, do not run jq/grep/Python post-processing, and do not make multiple exploratory tool calls. |
 | "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. This SOP now uses quantified claim-value and contribution results when available. |
 | "某个卖点值多少钱", "某卖点贡献多少销量" | `claim-value-space` | claim name/code, optional dimension | Return observable price premium, weekly-sales lift, weekly-amount lift, pool sample status, and confidence. |
 | "某 SKU 卖得好靠哪些卖点" | `claim-contribution` | `sku_code` or `query` | Explain SKU excess price/sales/amount performance by Top claim contributors. |
@@ -289,7 +289,7 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. If the command prints `NO_REPLY`, return exactly `NO_REPLY` and do not add visible explanatory text. Do not parse JSON. The card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
+1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. Return the CLI stdout exactly; on success it should be a short Chinese card delivery status. Do not parse JSON. The card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
 2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
 3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
 4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.

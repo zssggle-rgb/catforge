@@ -1082,9 +1082,6 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
         return
     card_delivery = _feishu_card_delivery(result)
     if card_delivery:
-        if feishu_card_only and card_delivery.get("status") == "sent":
-            print("NO_REPLY")
-            return
         delivery_text = format_feishu_card_delivery_text(result)
         if delivery_text:
             print(delivery_text)
