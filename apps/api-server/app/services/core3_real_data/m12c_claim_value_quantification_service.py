@@ -199,6 +199,8 @@ M12C_NUMERIC_GROUP_PARAM_LABELS: dict[str, str] = {
 }
 
 M12C_REFRESH_PARAM_CODES = {"declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"}
+M12C_REFRESH_CLAIM_CODES = {"tv_claim_refresh_rate", "tv_claim_high_refresh_rate"}
+M12C_REFRESH_HIGH_COVERAGE_THRESHOLD = Decimal("0.7500")
 
 
 def _refresh_rate_business_tier(value: Decimal) -> tuple[int, str, str]:
@@ -2504,8 +2506,76 @@ def _single_param_competitiveness(*, param_code: str, target_entry: Mapping[str,
     known_values = [entry.get("normalized_value") for entry in pool_entries if not _missing_value(entry.get("normalized_value"))]
     sample_count = len(known_values)
     if not _boolean_like_param(param_code, target_value) and numeric_target is not None and numeric_values:
+        if param_code in M12C_REFRESH_PARAM_CODES:
+            return _refresh_param_competitiveness(param_code, target_entry, numeric_target, numeric_values)
         return _numeric_param_competitiveness(param_code, target_entry, numeric_target, numeric_values)
     return _categorical_param_competitiveness(param_code, target_entry, known_values, sample_count)
+
+
+def _refresh_param_competitiveness(param_code: str, target_entry: Mapping[str, Any], target_value: Decimal, pool_values: Sequence[Decimal]) -> dict[str, Any]:
+    sorted_values = sorted(pool_values)
+    sample_count = len(sorted_values)
+    target_order, target_tier_code, target_tier_label = _refresh_rate_business_tier(target_value)
+    median_value = _median(sorted_values) or Decimal("0")
+    max_value = max(sorted_values) if sorted_values else Decimal("0")
+    if sample_count < 3:
+        level = M12C_PARAM_LEVEL_SPARSE
+        score = Decimal("58")
+        target_tier_coverage = Decimal("0")
+        lower_tier_count = 0
+        higher_tier_count = 0
+        reason = "可比池中刷新率样本不足，保留观察但不能强判。"
+    else:
+        tiered = [_refresh_rate_business_tier(value) for value in sorted_values]
+        tier_orders = [order for order, _, _ in tiered]
+        max_order = max(tier_orders)
+        target_tier_count = sum(1 for order in tier_orders if order == target_order)
+        lower_tier_count = sum(1 for order in tier_orders if order < target_order)
+        higher_tier_count = sum(1 for order in tier_orders if order > target_order)
+        target_tier_coverage = _q4(Decimal(target_tier_count) / Decimal(sample_count))
+        if higher_tier_count:
+            level = M12C_PARAM_LEVEL_WEAK
+            score = Decimal("32")
+            reason = "同战场可比池中存在更高刷新档，本品刷新率不能支撑高溢价。"
+        elif lower_tier_count == 0:
+            level = M12C_PARAM_LEVEL_PARITY
+            score = Decimal("52")
+            reason = f"可比池全部处于{target_tier_label}，只能作为入围能力，不单独量化溢价。"
+        elif target_order == max_order and target_tier_coverage >= M12C_REFRESH_HIGH_COVERAGE_THRESHOLD:
+            level = M12C_PARAM_LEVEL_PARITY
+            score = Decimal("56")
+            reason = f"同战场多数 SKU 已处于{target_tier_label}，该刷新档更接近基础门槛，不单独承接高额溢价。"
+        elif target_order == max_order and target_tier_coverage >= Decimal("0.4000"):
+            level = M12C_PARAM_LEVEL_STRONG
+            score = Decimal("72")
+            reason = f"本品处于{target_tier_label}，相对低刷新档有跨档优势，但需要结合评论和市场验证。"
+        elif target_order == max_order:
+            level = M12C_PARAM_LEVEL_LEADING
+            score = Decimal("84")
+            reason = f"本品处于{target_tier_label}，在同战场可比池中相对稀缺，可支撑差异化支付价值。"
+        else:
+            level = M12C_PARAM_LEVEL_PARITY
+            score = Decimal("50")
+            reason = "本品刷新率接近同战场主流档位，更接近入围门槛。"
+    return {
+        "param_code": param_code,
+        "source_param_code": target_entry.get("source_param_code"),
+        "target_value": _json_value(target_entry.get("normalized_value")),
+        "target_numeric_value": float(_q4(target_value)),
+        "target_business_tier_code": target_tier_code,
+        "target_business_tier_label_cn": target_tier_label,
+        "target_tier_coverage_rate": float(_q4(target_tier_coverage)),
+        "lower_tier_sku_count": lower_tier_count,
+        "higher_tier_sku_count": higher_tier_count,
+        "sample_count": sample_count,
+        "pool_median": float(_q4(median_value)),
+        "pool_max": float(_q4(max_value)),
+        "pool_percentile": 0.0,
+        "score": float(_q4(score)),
+        "level": level,
+        "level_cn": _parameter_level_cn(level),
+        "reason_cn": reason,
+    }
 
 
 def _numeric_param_competitiveness(param_code: str, target_entry: Mapping[str, Any], target_value: Decimal, pool_values: Sequence[Decimal]) -> dict[str, Any]:
@@ -2965,6 +3035,15 @@ def _unique_competitor_gap_reason(pool: ClaimPool, target_sku: str, coverage_rat
     return f"同战场约 {float(_q4(coverage_rate * Decimal('100'))):.0f}% SKU 具备该卖点，差异性需要继续验证。"
 
 
+def _is_refresh_high_coverage_threshold(pool: ClaimPool, coverage_rate: Decimal) -> bool:
+    return (
+        pool.claim_code in M12C_REFRESH_CLAIM_CODES
+        and pool.comparison_basis == "numeric_param_tier"
+        and (pool.comparison_param_code or "") in M12C_REFRESH_PARAM_CODES
+        and coverage_rate >= M12C_REFRESH_HIGH_COVERAGE_THRESHOLD
+    )
+
+
 def _claim_role(
     *,
     target_sku: str,
@@ -3057,6 +3136,8 @@ def _claim_role(
             return M12C_ROLE_WEAK_USER
         return M12C_ROLE_BRAND
     if coverage_rate >= Decimal("0.7500"):
+        if _is_refresh_high_coverage_threshold(pool, coverage_rate):
+            return M12C_ROLE_BASIC
         if positive_price_value and pool.claim_code in M12C_TIER_DIFFERENTIATED_CLAIM_CODES:
             return M12C_ROLE_PREMIUM
         return M12C_ROLE_BASIC

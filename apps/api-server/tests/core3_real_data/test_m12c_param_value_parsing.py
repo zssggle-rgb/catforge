@@ -275,6 +275,28 @@ def test_m12c_refresh_rate_same_business_tier_does_not_split_300_vs_288() -> Non
     assert split.control_group_label_cn == "同档内无低刷新对照"
 
 
+def test_m12c_refresh_rate_parameter_competitiveness_treats_300_and_288_as_same_tier() -> None:
+    result = m12c_service._single_param_competitiveness(
+        param_code="declared_refresh_rate_hz",
+        target_entry={"normalized_value": 300},
+        pool_entries=[
+            {"normalized_value": 300},
+            {"normalized_value": 300},
+            {"normalized_value": 288},
+            {"normalized_value": 288},
+            {"normalized_value": 288},
+            {"normalized_value": 240},
+            {"normalized_value": 144},
+        ],
+    )
+
+    assert result["target_business_tier_code"] == "refresh_advanced_240_300"
+    assert result["target_business_tier_label_cn"] == "240/288/300Hz 超高刷档"
+    assert result["target_tier_coverage_rate"] >= 0.75
+    assert result["level"] == m12c_service.M12C_PARAM_LEVEL_PARITY
+    assert "基础门槛" in result["reason_cn"]
+
+
 def test_m12c_refresh_rate_display_uses_business_tier_not_exact_300hz_amount_label() -> None:
     pool = m12c_service.ClaimPool(
         claim_code="tv_claim_high_refresh_rate",
@@ -320,6 +342,58 @@ def test_m12c_refresh_rate_display_uses_business_tier_not_exact_300hz_amount_lab
 
     assert name == "240/288/300Hz 超高刷档"
     assert "300Hz 高阶刷新率" not in name
+
+
+def test_m12c_high_coverage_refresh_rate_is_threshold_not_premium_even_with_positive_price_delta() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_high_refresh_rate",
+        claim_name="高刷新率",
+        context_type="battlefield",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+        context_name="游戏体育流畅战场",
+        size_tier="large_60_69",
+        price_band_group="mid_high_with_adjacent",
+        sku_codes=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f", "sku-g"),
+        with_claim_skus=("sku-a", "sku-b", "sku-c", "sku-d", "sku-e", "sku-f"),
+        without_claim_skus=("sku-g",),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        pool_relax_level="L2",
+        comparison_basis="numeric_param_tier",
+        comparison_param_code="declared_refresh_rate_hz",
+        comparison_threshold_value="refresh_advanced_240_300",
+        comparison_group_label_cn="240/288/300Hz 超高刷档组",
+        control_group_label_cn="低刷新档组",
+    )
+    metric = {
+        "price_premium_abs": Decimal("689.4150"),
+        "weekly_sales_lift_abs": Decimal("-4.979166"),
+        "weekly_sales_amount_lift_abs": Decimal("216294.492292"),
+        "effect_confidence": Decimal("0.8050"),
+    }
+    competitiveness = {
+        "wtp_input_guard": m12c_service.M04C_WTP_GUARD_ELIGIBLE,
+        "overall_parameter_competitiveness_level": m12c_service.M12C_PARAM_LEVEL_LEADING,
+        "overall_parameter_competitiveness_score": 96,
+        "sparse_sample_flag": False,
+    }
+
+    role = m12c_service._claim_role(
+        target_sku="sku-a",
+        has_claim=True,
+        metric=metric,
+        pool=pool,
+        param_strength=Decimal("0.9600"),
+        comment_strength=Decimal("1.0000"),
+        semantic_strength=Decimal("1.0000"),
+        battlefield_claim_relevance=Decimal("1.0000"),
+        parameter_competitiveness=competitiveness,
+        has_negative=False,
+    )
+
+    assert role == m12c_service.M12C_ROLE_BASIC
 
 
 def test_m12c_blocked_generic_claim_is_threshold_not_premium() -> None:
