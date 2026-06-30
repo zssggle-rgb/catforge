@@ -192,6 +192,136 @@ def test_m12c_numeric_claim_pool_splits_by_param_tier_before_claim_presence() ->
     assert pool.sample_status == "sufficient"
 
 
+def test_m12c_refresh_rate_numeric_pool_uses_business_tiers_not_median() -> None:
+    claim_code = "tv_claim_high_refresh_rate"
+    claims = {
+        sku: {
+            claim_code: m12c_service.ClaimState(
+                sku_code=sku,
+                claim_code=claim_code,
+                claim_name="高刷新率",
+                claim_dimension="motion_gaming",
+                claim_subtype="refresh_rate",
+                claim_kind="product_experience",
+                param_support_status="supported",
+                supporting_param_codes=("declared_refresh_rate_hz",),
+                supporting_param_snapshot={},
+                match_score=Decimal("1.0000"),
+                confidence=Decimal("0.9000"),
+                fact_claim_flag=True,
+                service_separate_flag=False,
+                evidence_ids=(f"ev-{sku}",),
+                param_support_level=m12c_service.M04C_PARAM_SUPPORT_STRONG_NUMERIC,
+                primary_supporting_param_codes=("declared_refresh_rate_hz",),
+                wtp_input_guard=m12c_service.M04C_WTP_GUARD_ELIGIBLE,
+            )
+        }
+        for sku in ("sku-300", "sku-288", "sku-144")
+    }
+    param_profiles = {
+        "sku-300": m12c_service.ParamProfileState("sku-300", {"declared_refresh_rate_hz": {"normalized_value": 300}}, ()),
+        "sku-288": m12c_service.ParamProfileState("sku-288", {"declared_refresh_rate_hz": {"normalized_value": 288}}, ()),
+        "sku-144": m12c_service.ParamProfileState("sku-144", {"declared_refresh_rate_hz": {"normalized_value": 144}}, ()),
+    }
+
+    split = m12c_service._split_numeric_param_groups(tuple(param_profiles), claims, param_profiles, claim_code)
+
+    assert split is not None
+    assert split.comparison_basis == "numeric_param_tier"
+    assert split.comparison_threshold_value == "refresh_advanced_240_300"
+    assert split.comparison_group_label_cn == "240/288/300Hz 超高刷档组"
+    assert set(split.with_skus) == {"sku-300", "sku-288"}
+    assert set(split.without_skus) == {"sku-144"}
+
+
+def test_m12c_refresh_rate_same_business_tier_does_not_split_300_vs_288() -> None:
+    claim_code = "tv_claim_high_refresh_rate"
+    claims = {
+        sku: {
+            claim_code: m12c_service.ClaimState(
+                sku_code=sku,
+                claim_code=claim_code,
+                claim_name="高刷新率",
+                claim_dimension="motion_gaming",
+                claim_subtype="refresh_rate",
+                claim_kind="product_experience",
+                param_support_status="supported",
+                supporting_param_codes=("declared_refresh_rate_hz",),
+                supporting_param_snapshot={},
+                match_score=Decimal("1.0000"),
+                confidence=Decimal("0.9000"),
+                fact_claim_flag=True,
+                service_separate_flag=False,
+                evidence_ids=(f"ev-{sku}",),
+                param_support_level=m12c_service.M04C_PARAM_SUPPORT_STRONG_NUMERIC,
+                primary_supporting_param_codes=("declared_refresh_rate_hz",),
+                wtp_input_guard=m12c_service.M04C_WTP_GUARD_ELIGIBLE,
+            )
+        }
+        for sku in ("sku-300", "sku-288-a", "sku-288-b")
+    }
+    param_profiles = {
+        "sku-300": m12c_service.ParamProfileState("sku-300", {"declared_refresh_rate_hz": {"normalized_value": 300}}, ()),
+        "sku-288-a": m12c_service.ParamProfileState("sku-288-a", {"declared_refresh_rate_hz": {"normalized_value": 288}}, ()),
+        "sku-288-b": m12c_service.ParamProfileState("sku-288-b", {"declared_refresh_rate_hz": {"normalized_value": 288}}, ()),
+    }
+
+    split = m12c_service._split_numeric_param_groups(tuple(param_profiles), claims, param_profiles, claim_code)
+
+    assert split is not None
+    assert split.comparison_threshold_value == "refresh_advanced_240_300"
+    assert set(split.with_skus) == {"sku-300", "sku-288-a", "sku-288-b"}
+    assert split.without_skus == ()
+    assert split.control_group_label_cn == "同档内无低刷新对照"
+
+
+def test_m12c_refresh_rate_display_uses_business_tier_not_exact_300hz_amount_label() -> None:
+    pool = m12c_service.ClaimPool(
+        claim_code="tv_claim_high_refresh_rate",
+        claim_name="高刷新率",
+        context_type="battlefield",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+        context_name="游戏体育流畅战场",
+        size_tier="large_60_69",
+        price_band_group="high",
+        sku_codes=("sku-a", "sku-b"),
+        with_claim_skus=("sku-a",),
+        without_claim_skus=("sku-b",),
+        unknown_skus=(),
+        sample_status="sufficient",
+        quality_flags=(),
+        relaxation_path=(),
+        comparison_basis="numeric_param_tier",
+        comparison_param_code="declared_refresh_rate_hz",
+    )
+    claim = m12c_service.ClaimState(
+        sku_code="sku-a",
+        claim_code="tv_claim_high_refresh_rate",
+        claim_name="高刷新率",
+        claim_dimension="motion_gaming",
+        claim_subtype="refresh_rate",
+        claim_kind="product_experience",
+        param_support_status="supported",
+        supporting_param_codes=("declared_refresh_rate_hz",),
+        supporting_param_snapshot={},
+        match_score=Decimal("1.0000"),
+        confidence=Decimal("0.9000"),
+        fact_claim_flag=True,
+        service_separate_flag=False,
+        evidence_ids=("ev-refresh",),
+    )
+
+    name = m12c_service._claim_business_display_name(
+        pool,
+        claim,
+        "sku-a",
+        {"sku-a": m12c_service.ParamProfileState("sku-a", {"declared_refresh_rate_hz": {"normalized_value": 300}}, ())},
+    )
+
+    assert name == "240/288/300Hz 超高刷档"
+    assert "300Hz 高阶刷新率" not in name
+
+
 def test_m12c_blocked_generic_claim_is_threshold_not_premium() -> None:
     pool = m12c_service.ClaimPool(
         claim_code="tv_claim_dolby_audio_video",

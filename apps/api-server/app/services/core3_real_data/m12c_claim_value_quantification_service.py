@@ -198,6 +198,19 @@ M12C_NUMERIC_GROUP_PARAM_LABELS: dict[str, str] = {
     "speaker_output_power_w": "音响功率",
 }
 
+M12C_REFRESH_PARAM_CODES = {"declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"}
+
+
+def _refresh_rate_business_tier(value: Decimal) -> tuple[int, str, str]:
+    normalized = _q4(value)
+    if normalized < Decimal("120"):
+        return 0, "refresh_standard_below_120", "普通刷新档"
+    if normalized < Decimal("240"):
+        return 1, "refresh_high_120_144", "120/144Hz 高刷档"
+    if normalized <= Decimal("300"):
+        return 2, "refresh_advanced_240_300", "240/288/300Hz 超高刷档"
+    return 3, "refresh_extreme_above_300", "300Hz以上超高刷档"
+
 
 @dataclass(frozen=True)
 class M12CWriteResult:
@@ -1317,6 +1330,9 @@ def _split_numeric_param_groups(
             values.append((sku, _q4(numeric_value)))
         if len(values) < MIN_POOL_SKU_COUNT or len({value for _, value in values}) < 2:
             continue
+        business_tier_split = _split_business_tier_param_groups(param_code, values, unknown_skus)
+        if business_tier_split is not None:
+            return business_tier_split
         numeric_values = [value for _, value in values]
         threshold = _median(numeric_values)
         if threshold is None:
@@ -1343,6 +1359,35 @@ def _split_numeric_param_groups(
             control_group_label_cn=f"{label}低档组",
         )
     return None
+
+
+def _split_business_tier_param_groups(param_code: str, values: Sequence[tuple[str, Decimal]], unknown_skus: Sequence[str]) -> ClaimGroupSplit | None:
+    if param_code not in M12C_REFRESH_PARAM_CODES:
+        return None
+    tiered = [(sku, value, *_refresh_rate_business_tier(value)) for sku, value in values]
+    tier_orders = sorted({order for _, _, order, _, _ in tiered})
+    if not tier_orders:
+        return None
+    max_order = tier_orders[-1]
+    max_tier_code = next(code for _, _, order, code, _ in tiered if order == max_order)
+    max_tier_label = next(label for _, _, order, _, label in tiered if order == max_order)
+    high_skus = [sku for sku, _, order, _, _ in tiered if order == max_order]
+    low_skus = [sku for sku, _, order, _, _ in tiered if order < max_order]
+    if len(tier_orders) == 1:
+        high_skus = [sku for sku, _, _, _, _ in tiered]
+        low_skus = []
+    if len(high_skus) < MIN_GROUP_SKU_COUNT:
+        return None
+    return ClaimGroupSplit(
+        with_skus=tuple(sorted(high_skus)),
+        without_skus=tuple(sorted(low_skus)),
+        unknown_skus=tuple(sorted(unknown_skus)),
+        comparison_basis="numeric_param_tier",
+        comparison_param_code=param_code,
+        comparison_threshold_value=max_tier_code,
+        comparison_group_label_cn=f"{max_tier_label}组",
+        control_group_label_cn="低刷新档组" if low_skus else "同档内无低刷新对照",
+    )
 
 
 def _numeric_group_candidate_params(sku_codes: Sequence[str], claims: Mapping[str, Mapping[str, ClaimState]], claim_code: str) -> tuple[str, ...]:
@@ -1621,7 +1666,8 @@ def _claim_business_display_name(
             "native_refresh_rate_hz",
             "refresh_rate_hz",
         }:
-            return f"{value_label} 高阶刷新率" if value_label else "高阶刷新率档位"
+            tier_label = _target_refresh_tier_display(pool.comparison_param_code or "", claim, sku_code, param_profiles)
+            return tier_label or "高刷档位"
         if pool.claim_code == "tv_claim_local_dimming" and pool.comparison_param_code == "local_dimming_zone_count":
             return f"{value_label} 分区控光" if value_label else "高分区控光"
         if pool.claim_code == "tv_claim_wide_color_accuracy" and pool.comparison_param_code in {
@@ -1631,6 +1677,22 @@ def _claim_business_display_name(
         }:
             return f"{value_label} 色彩表现" if value_label else "高色域/色彩还原"
     return claim.canonical_claim_name if claim and claim.canonical_claim_name else pool.claim_name
+
+
+def _target_refresh_tier_display(
+    param_code: str,
+    claim: ClaimState | None,
+    sku_code: str,
+    param_profiles: Mapping[str, ParamProfileState],
+) -> str:
+    if param_code not in M12C_REFRESH_PARAM_CODES:
+        return ""
+    entry = _param_entry(param_profiles, claim, sku_code, param_code)
+    value = _decimal_param_value(entry.get("normalized_value")) if entry else None
+    if value is None:
+        return ""
+    _, _, label = _refresh_rate_business_tier(value)
+    return label
 
 
 def _target_param_display_value(
