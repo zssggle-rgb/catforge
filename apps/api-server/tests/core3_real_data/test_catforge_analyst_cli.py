@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -4110,7 +4111,14 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "hr",
         "markdown",
         "table",
+        "hr",
+        "button",
     ]
+    compare_button = card["body"]["elements"][-1]
+    assert compare_button["element_id"] == "view_product_compare"
+    assert compare_button["text"]["content"] == "查看详细对比结果"
+    compare_query = parse_qs(urlsplit(compare_button["behaviors"][0]["default_url"]).query)
+    assert compare_query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
     assert "创维 65A7H PRO" in card_json
     assert "多维评分雷达图" in card_json
     assert '"tag": "chart"' in card_json
@@ -4218,6 +4226,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "table",
         "hr",
         "button",
+        "button",
     ]
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
@@ -4239,7 +4248,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
-    report_button = card["body"]["elements"][-1]
+    report_button = card["body"]["elements"][-2]
     assert report_button["tag"] == "button"
     assert report_button["behaviors"][0] == {
         "type": "open_url",
@@ -4248,9 +4257,74 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "ios_url": "https://my.feishu.cn/docx/ReportToken",
         "android_url": "https://my.feishu.cn/docx/ReportToken",
     }
+    compare_button = card["body"]["elements"][-1]
+    assert compare_button["tag"] == "button"
+    assert compare_button["element_id"] == "view_product_compare"
+    assert compare_button["text"]["content"] == "查看详细对比结果"
+    compare_url = compare_button["behaviors"][0]["default_url"]
+    compare_parts = urlsplit(compare_url)
+    compare_query = parse_qs(compare_parts.query)
+    assert compare_parts.scheme == "https"
+    assert compare_parts.netloc == "hisense2.avc-mr.com"
+    assert compare_parts.path == "/encyclopedia"
+    assert compare_query["source"] == ["catforge_competitor_card"]
+    assert compare_query["view"] == ["compare"]
+    assert compare_query["category"] == ["tv"]
+    assert compare_query["models"] == ["海信 65E7Q,创维 65A7H PRO"]
+    assert compare_query["model"] == ["海信 65E7Q", "创维 65A7H PRO"]
+    assert compare_query["model_names"] == ["65E7Q,65A7H PRO"]
+    assert compare_query["brands"] == ["海信,创维"]
+    assert compare_query["target"] == ["海信 65E7Q"]
     assert "高端画质升级" in competitor["overlap_rows"][0]["matched_points_cn"]
     assert "TV00030001" not in card_json
     assert len(card_json.encode("utf-8")) < 30_000
+
+
+def test_competitor_product_compare_link_carries_top_three_model_names() -> None:
+    def competitor(sku_code: str, brand_name: str, model_name: str, score: float) -> dict[str, object]:
+        return {
+            "candidate": {
+                "sku_code": sku_code,
+                "brand_name": brand_name,
+                "model_name": model_name,
+                "price_wavg": 5000,
+                "avg_weekly_sales_volume": 100,
+            },
+            "role_cn": "重点竞品",
+            "business_score": score,
+            "replacement_pressure": {"type_cn": "价值替代压力"},
+            "shared_business_context": ["大屏家庭影院"],
+            "weighted_overlap": {"battlefield": score, "user_task": score, "target_group": score},
+            "matched_dimensions": {
+                "battlefield": ["大屏家庭影院"],
+                "user_task": ["影院沉浸观影"],
+                "target_group": ["大屏换新升级用户"],
+            },
+            "value_anchor": {"shared_anchors": ["MiniLED"]},
+            "market_validation": {"level": "strong", "summary_cn": "重叠在售周8周，候选周均销量约80台"},
+        }
+
+    dashboard = competitor_answer.build_competitor_dashboard_payload(
+        target={"sku_code": "TV00029112", "brand_name": "海信", "model_name": "65E7Q", "category_code": "TV"},
+        target_fact_brief={"sections": {}},
+        top_competitors=[
+            competitor("TV00040001", "创维", "65A7H PRO", 0.91),
+            competitor("TV00040002", "TCL", "65Q9L PRO", 0.86),
+            competitor("TV00040003", "创维", "65A6F ULTRA", 0.78),
+            competitor("TV00040004", "小米", "65S Pro", 0.72),
+        ],
+        report_url=None,
+    )
+
+    link = dashboard["product_compare_link"]
+    assert link["label"] == "查看详细对比结果"
+    query = parse_qs(urlsplit(link["url"]).query)
+    assert query["models"] == ["海信 65E7Q,创维 65A7H PRO,TCL 65Q9L PRO,创维 65A6F ULTRA"]
+    assert query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
+    assert query["model_names"] == ["65E7Q,65A7H PRO,65Q9L PRO,65A6F ULTRA"]
+    assert query["brands"] == ["海信,创维,TCL,创维"]
+    assert "小米 65S Pro" not in link["url"]
+    assert "TV000400" not in link["url"]
 
 
 def test_competitor_set_text_format_is_business_facing() -> None:

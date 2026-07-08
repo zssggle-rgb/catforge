@@ -15,6 +15,7 @@ from hashlib import sha256
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 ReportMode = Literal["none", "markdown", "feishu-doc"]
@@ -147,6 +148,8 @@ ROLE_CN = {
     "scenario_alternative": "场景替代竞品",
     "excluded": "排除候选",
 }
+
+DEFAULT_PRODUCT_ENCYCLOPEDIA_URL = "https://hisense2.avc-mr.com/"
 
 CLAIM_LABELS_CN = {
     "tv_claim_ai_large_model": "AI 大模型/智能能力",
@@ -538,6 +541,7 @@ def build_competitor_dashboard_payload(
         for index, item in enumerate(top_competitors[:3], start=1)
     ]
     report_links = _dashboard_report_links(report_url)
+    product_compare_link = _dashboard_product_compare_link(target, competitors)
     summary_cn = _dashboard_summary(target_name, competitors, target_fact_brief)
     return {
         "schema_version": "competitor_dashboard_v1",
@@ -553,6 +557,7 @@ def build_competitor_dashboard_payload(
         "summary_cn": summary_cn,
         "competitors": competitors,
         "report_evidence_links": report_links,
+        "product_compare_link": product_compare_link,
         "display_policy": {
             "main_answer": "feishu_card",
             "report_as_evidence": True,
@@ -588,6 +593,11 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
     if action:
         elements.append({"tag": "hr"})
         elements.append(action)
+    compare_action = _feishu_product_compare_action(dashboard_payload)
+    if compare_action:
+        if not action:
+            elements.append({"tag": "hr"})
+        elements.append(compare_action)
     card = {
         "schema": "2.0",
         "config": {
@@ -3982,6 +3992,64 @@ def _dashboard_report_links(report_url: str | None) -> list[dict[str, Any]]:
     return [{"label": "完整竞品分析报告", "url": report_url, "type": "report"}]
 
 
+def _dashboard_product_compare_link(target: dict[str, Any], competitors: list[dict[str, Any]]) -> dict[str, Any] | None:
+    url = _product_encyclopedia_compare_url(target, competitors)
+    if not url:
+        return None
+    return {"label": "查看详细对比结果", "url": url, "type": "product_compare"}
+
+
+def _product_encyclopedia_compare_url(target: dict[str, Any], competitors: list[dict[str, Any]]) -> str | None:
+    selected_competitors = [item for item in competitors[:3] if _dashboard_competitor_alias(item)]
+    if not selected_competitors:
+        return None
+    base_url = os.getenv("CATFORGE_PRODUCT_ENCYCLOPEDIA_URL", DEFAULT_PRODUCT_ENCYCLOPEDIA_URL).strip()
+    if not base_url:
+        return None
+    target_name = _dashboard_target_alias(target)
+    display_names = [target_name, *[_dashboard_competitor_alias(item) for item in selected_competitors]]
+    model_names = [str(target.get("model_name") or ""), *[str(item.get("model_name") or "") for item in selected_competitors]]
+    model_names = [value for value in model_names if value]
+    brand_names = [str(target.get("brand_name") or ""), *[str(item.get("brand_name") or "") for item in selected_competitors]]
+    brand_names = [value for value in brand_names if value]
+    query_items: list[tuple[str, str]] = [
+        ("source", "catforge_competitor_card"),
+        ("view", "compare"),
+        ("category", _product_encyclopedia_category(target)),
+        ("models", ",".join(display_names)),
+    ]
+    query_items.extend(("model", name) for name in display_names)
+    if model_names:
+        query_items.append(("model_names", ",".join(model_names)))
+    if brand_names:
+        query_items.append(("brands", ",".join(brand_names)))
+    if target_name:
+        query_items.append(("target", target_name))
+    return _url_with_encyclopedia_path(base_url, query_items)
+
+
+def _url_with_encyclopedia_path(base_url: str, query_items: list[tuple[str, str]]) -> str:
+    parts = urlsplit(base_url if "://" in base_url else f"https://{base_url}")
+    path = parts.path.rstrip("/")
+    if not path.endswith("/encyclopedia"):
+        path = f"{path}/encyclopedia" if path else "/encyclopedia"
+    existing_query = parse_qsl(parts.query, keep_blank_values=True)
+    query = urlencode([*existing_query, *query_items])
+    return urlunsplit((parts.scheme, parts.netloc, path, query, parts.fragment))
+
+
+def _product_encyclopedia_category(target: dict[str, Any]) -> str:
+    category = str(target.get("product_category") or target.get("category_code") or "").strip().lower()
+    if category in {"tv", "fridge"}:
+        return category
+    if category in {"ac", "air", "air_conditioner"}:
+        return "air"
+    sku_code = str(target.get("sku_code") or "").upper()
+    if sku_code.startswith("AC"):
+        return "air"
+    return "tv"
+
+
 def _dashboard_action_links(report_url: str | None) -> list[dict[str, Any]]:
     links = [{"label": "查看重合依据", "section_code": "overlap_rows", "type": "section"}]
     if report_url:
@@ -4476,20 +4544,44 @@ def _feishu_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] |
             break
     if not report_url:
         return None
+    return _feishu_open_url_button(
+        element_id="view_report",
+        text="查看完整报告",
+        url=report_url,
+        button_type="primary",
+    )
+
+
+def _feishu_product_compare_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] | None:
+    link = dashboard_payload.get("product_compare_link") or {}
+    if not isinstance(link, dict):
+        return None
+    url = str(link.get("url") or "")
+    if not url.startswith("http"):
+        return None
+    return _feishu_open_url_button(
+        element_id="view_product_compare",
+        text=str(link.get("label") or "查看详细对比结果"),
+        url=url,
+        button_type="default",
+    )
+
+
+def _feishu_open_url_button(*, element_id: str, text: str, url: str, button_type: str) -> dict[str, Any]:
     return {
         "tag": "button",
-        "element_id": "view_report",
-        "type": "primary",
+        "element_id": element_id,
+        "type": button_type,
         "size": "medium",
         "width": "fill",
-        "text": {"tag": "plain_text", "content": "查看完整报告"},
+        "text": {"tag": "plain_text", "content": text},
         "behaviors": [
             {
                 "type": "open_url",
-                "default_url": report_url,
-                "pc_url": report_url,
-                "ios_url": report_url,
-                "android_url": report_url,
+                "default_url": url,
+                "pc_url": url,
+                "ios_url": url,
+                "android_url": url,
             }
         ],
     }
