@@ -11,6 +11,7 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -81,6 +82,7 @@ LLM_MODE_AUTO = "auto"
 LLM_MODE_REQUIRED = "required"
 LLM_MODE_OFF = "off"
 M05C_DEFAULT_LLM_BATCH_SIZE = 20
+M05C_DEFAULT_LLM_PARALLELISM = 3
 M05C_DEFAULT_LLM_MODEL = "deepseek-v4-pro"
 M05C_DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
 
@@ -825,7 +827,11 @@ class M05CLlmConfig:
                 or os.getenv("OPENAI_MODEL")
                 or M05C_DEFAULT_LLM_MODEL
             ),
-            timeout_seconds=float(os.getenv("CATFORGE_M05C_LLM_TIMEOUT_SECONDS") or "90"),
+            timeout_seconds=float(
+                os.getenv("CATFORGE_M05C_LLM_TIMEOUT_SECONDS")
+                or os.getenv("CATFORGE_LLM_TIMEOUT_SECONDS")
+                or "90"
+            ),
         )
 
 
@@ -917,10 +923,12 @@ class M05CCommentClassifier:
         taxonomy: M05CCommentTaxonomy,
         llm_mode: str,
         llm_batch_size: int,
+        llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
     ) -> None:
         self.taxonomy = taxonomy
         self.llm_mode = _normalize_llm_mode(llm_mode)
         self.llm_batch_size = max(int(llm_batch_size or M05C_DEFAULT_LLM_BATCH_SIZE), 1)
+        self.llm_parallelism = max(int(llm_parallelism or M05C_DEFAULT_LLM_PARALLELISM), 1)
         self.subdimensions_by_code = taxonomy.subdimensions_by_code
 
     def classify_sku(
@@ -959,9 +967,24 @@ class M05CCommentClassifier:
         client = M05CLlmClient(config)
         llm_annotations: dict[str, M05CLlmAnnotation] = {}
         items = self._llm_items(sku_code, records, rule_annotations)
+        item_batches = _chunks(items, self.llm_batch_size)
         try:
-            for batch in _chunks(items, self.llm_batch_size):
-                for annotation in client.annotate_batch(taxonomy=self.taxonomy, items=batch):
+            effective_parallelism = min(self.llm_parallelism, len(item_batches)) if item_batches else 0
+            if effective_parallelism <= 1:
+                batch_results = [
+                    client.annotate_batch(taxonomy=self.taxonomy, items=batch)
+                    for batch in item_batches
+                ]
+            else:
+                with ThreadPoolExecutor(max_workers=effective_parallelism) as executor:
+                    futures = [
+                        executor.submit(client.annotate_batch, taxonomy=self.taxonomy, items=batch)
+                        for batch in item_batches
+                    ]
+                    batch_results = [future.result() for future in as_completed(futures)]
+
+            for annotations in batch_results:
+                for annotation in annotations:
                     valid_codes = tuple(code for code in annotation.subdimension_codes if code in self.subdimensions_by_code)
                     llm_annotations[annotation.source_comment_key] = M05CLlmAnnotation(
                         source_comment_key=annotation.source_comment_key,
@@ -979,6 +1002,8 @@ class M05CCommentClassifier:
                     "llm_mode": self.llm_mode,
                     "llm_called": True,
                     "llm_item_count": len(items),
+                    "llm_request_count": len(item_batches),
+                    "llm_parallelism": self.llm_parallelism,
                     "rule_item_count": len(rule_annotations),
                     "llm_error": str(exc),
                 },
@@ -999,6 +1024,9 @@ class M05CCommentClassifier:
                 "llm_model": config.model,
                 "llm_base_url": _redact_base_url(config.base_url),
                 "llm_item_count": len(items),
+                "llm_request_count": len(item_batches),
+                "llm_parallelism": self.llm_parallelism,
+                "effective_llm_parallelism": min(self.llm_parallelism, len(item_batches)) if item_batches else 0,
                 "llm_annotation_count": len(llm_annotations),
                 "rule_item_count": len(rule_annotations),
                 "merged_annotation_count": len(merged),
@@ -1286,6 +1314,7 @@ class M05CRunner:
             max_sentences_per_sku=int(target.metadata.get("max_sentences_per_sku") or 500),
             llm_mode=str(target.metadata.get("llm_mode") or LLM_MODE_AUTO),
             llm_batch_size=int(target.metadata.get("llm_batch_size") or M05C_DEFAULT_LLM_BATCH_SIZE),
+            llm_parallelism=int(target.metadata.get("llm_parallelism") or M05C_DEFAULT_LLM_PARALLELISM),
             force_rebuild=bool(target.metadata.get("force_rebuild")),
             build_coverage=bool(target.metadata.get("build_coverage", True)),
         )
@@ -1305,6 +1334,7 @@ class M05CRunner:
         max_sentences_per_sku: int = 500,
         llm_mode: str = LLM_MODE_AUTO,
         llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+        llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
         force_rebuild: bool = False,
         build_coverage: bool = True,
     ) -> Core3ModuleRunResultSchema:
@@ -1335,6 +1365,7 @@ class M05CRunner:
                     max_sentences_per_sku=max_sentences_per_sku,
                     llm_mode=llm_mode,
                     llm_batch_size=llm_batch_size,
+                    llm_parallelism=llm_parallelism,
                     force_rebuild=force_rebuild,
                     build_coverage=build_coverage,
                 )
@@ -1371,6 +1402,7 @@ class M05CRunner:
             "max_sentences_per_sku": max_sentences_per_sku,
             "llm_mode": _normalize_llm_mode(llm_mode),
             "llm_batch_size": llm_batch_size,
+            "llm_parallelism": llm_parallelism,
             "build_coverage": build_coverage,
             **service_result.summary,
         }
@@ -1498,6 +1530,7 @@ class M05CService:
         max_sentences_per_sku: int = 500,
         llm_mode: str = LLM_MODE_AUTO,
         llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+        llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
         force_rebuild: bool = False,
         build_coverage: bool = True,
     ) -> M05CServiceResult:
@@ -1529,6 +1562,7 @@ class M05CService:
             rule_version=rule_version,
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
+            llm_parallelism=llm_parallelism,
         ).build(records, param_profiles, claim_facts, build_coverage=build_coverage)
         repository = M05CCommentFactRepository(self.context)
         if force_rebuild:
@@ -1723,6 +1757,7 @@ class M05CProfileBuilder:
         rule_version: str = CORE3_M05C_TV_RULE_VERSION,
         llm_mode: str = LLM_MODE_AUTO,
         llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+        llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
     ) -> None:
         self.project_id = project_id
         self.category_code = category_code
@@ -1733,6 +1768,7 @@ class M05CProfileBuilder:
         self.rule_version = rule_version
         self.llm_mode = _normalize_llm_mode(llm_mode)
         self.llm_batch_size = max(int(llm_batch_size or M05C_DEFAULT_LLM_BATCH_SIZE), 1)
+        self.llm_parallelism = max(int(llm_parallelism or M05C_DEFAULT_LLM_PARALLELISM), 1)
 
     def build(
         self,
@@ -1753,10 +1789,19 @@ class M05CProfileBuilder:
         matched_sentence_keys: set[str] = set()
         service_sentence_keys: set[str] = set()
         contradiction_count = 0
-        classifier = M05CCommentClassifier(taxonomy=self.taxonomy, llm_mode=self.llm_mode, llm_batch_size=self.llm_batch_size)
+        classifier = M05CCommentClassifier(
+            taxonomy=self.taxonomy,
+            llm_mode=self.llm_mode,
+            llm_batch_size=self.llm_batch_size,
+            llm_parallelism=self.llm_parallelism,
+        )
         llm_warnings: list[str] = []
         llm_stats: Counter[str] = Counter()
-        llm_detail_stats: dict[str, Any] = {"llm_mode": self.llm_mode, "llm_batch_size": self.llm_batch_size}
+        llm_detail_stats: dict[str, Any] = {
+            "llm_mode": self.llm_mode,
+            "llm_batch_size": self.llm_batch_size,
+            "llm_parallelism": self.llm_parallelism,
+        }
 
         for sku_code in sorted(records_by_sku):
             classification = classifier.classify_sku(sku_code, records_by_sku[sku_code])

@@ -76,6 +76,7 @@ from app.services.core3_real_data.m05c_comment_fact_profile_service import (
     LLM_MODE_OFF,
     LLM_MODE_REQUIRED,
     M05C_DEFAULT_LLM_BATCH_SIZE,
+    M05C_DEFAULT_LLM_PARALLELISM,
     M05CRunner,
 )
 from app.services.core3_real_data.m09c_user_task_service import M09CRunner
@@ -201,6 +202,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_sentences_per_sku=args.max_sentences_per_sku,
                     llm_mode=args.llm_mode,
                     llm_batch_size=args.llm_batch_size,
+                    llm_parallelism=args.llm_parallelism,
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
                 )
@@ -218,6 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_sentences_per_sku=args.max_sentences_per_sku,
                     llm_mode=args.llm_mode,
                     llm_batch_size=args.llm_batch_size,
+                    llm_parallelism=args.llm_parallelism,
                     force_rebuild=args.force_rebuild,
                     parallelism=args.parallelism,
                     limit=args.limit,
@@ -304,6 +307,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_sentences_per_sku=args.max_sentences_per_sku,
                     llm_mode=args.llm_mode,
                     llm_batch_size=args.llm_batch_size,
+                    llm_parallelism=args.llm_parallelism,
                     force_rebuild=args.force_rebuild,
                     coverage_mode=args.coverage_mode,
                     comment_parallelism=args.comment_parallelism,
@@ -392,6 +396,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of comment sentences per LLM request.",
     )
     run_comment.add_argument(
+        "--llm-parallelism",
+        type=int,
+        default=M05C_DEFAULT_LLM_PARALLELISM,
+        help="Number of LLM requests to run concurrently within one SKU.",
+    )
+    run_comment.add_argument(
         "--coverage-mode",
         choices=(
             COMMENT_COVERAGE_AUTO,
@@ -442,6 +452,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=M05C_DEFAULT_LLM_BATCH_SIZE,
         help="Number of comment sentences per LLM request.",
+    )
+    run_comment_batch.add_argument(
+        "--llm-parallelism",
+        type=int,
+        default=M05C_DEFAULT_LLM_PARALLELISM,
+        help="Number of LLM requests to run concurrently within each SKU worker.",
     )
     run_comment_batch.add_argument(
         "--parallelism",
@@ -667,6 +683,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comment sentences per LLM request when routed to comment fact generation.",
     )
     ask.add_argument(
+        "--llm-parallelism",
+        type=int,
+        default=M05C_DEFAULT_LLM_PARALLELISM,
+        help="LLM request concurrency within one SKU when routed to comment fact generation.",
+    )
+    ask.add_argument(
         "--comment-parallelism",
         type=int,
         default=DEFAULT_COMMENT_BATCH_PARALLELISM,
@@ -741,6 +763,7 @@ def answer_natural_language(
     max_sentences_per_sku: int = 500,
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
     coverage_mode: str = COMMENT_COVERAGE_AUTO,
     comment_parallelism: int = DEFAULT_COMMENT_BATCH_PARALLELISM,
     comment_batch_limit: int | None = None,
@@ -838,6 +861,7 @@ def answer_natural_language(
                 max_sentences_per_sku=max_sentences_per_sku,
                 llm_mode=llm_mode,
                 llm_batch_size=llm_batch_size,
+                llm_parallelism=llm_parallelism,
                 force_rebuild=force_rebuild,
                 parallelism=comment_parallelism,
                 limit=comment_batch_limit,
@@ -857,6 +881,7 @@ def answer_natural_language(
             max_sentences_per_sku=max_sentences_per_sku,
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
+            llm_parallelism=llm_parallelism,
             force_rebuild=force_rebuild,
             coverage_mode=coverage_mode,
         )
@@ -1283,6 +1308,7 @@ def run_comment_profile(
     max_sentences_per_sku: int = 500,
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
     force_rebuild: bool = False,
     coverage_mode: str = COMMENT_COVERAGE_AUTO,
 ) -> dict[str, Any]:
@@ -1290,6 +1316,8 @@ def run_comment_profile(
         raise CatForgePipelineError("M05C 每个 SKU 的评论句子读取上限必须大于 0。")
     if llm_batch_size <= 0:
         raise CatForgePipelineError("M05C LLM 批大小必须大于 0。")
+    if llm_parallelism <= 0:
+        raise CatForgePipelineError("M05C LLM 并发数必须大于 0。")
     config = product_category_config(product_category)
     if not config.get("comment_taxonomy_version") or not config.get(
         "comment_rule_version"
@@ -1325,6 +1353,7 @@ def run_comment_profile(
             max_sentences_per_sku=max_sentences_per_sku,
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
+            llm_parallelism=llm_parallelism,
             force_rebuild=force_rebuild,
             build_coverage=build_coverage,
         )
@@ -1359,6 +1388,7 @@ def run_comment_profile(
         "max_sentences_per_sku": max_sentences_per_sku,
         "llm_mode": llm_mode,
         "llm_batch_size": llm_batch_size,
+        "llm_parallelism": llm_parallelism,
         "coverage_mode": coverage_mode,
         "taxonomy_version": config["comment_taxonomy_version"],
         "rule_version": config["comment_rule_version"],
@@ -1384,6 +1414,7 @@ def run_comment_profile_batch(
     max_sentences_per_sku: int = 500,
     llm_mode: str = LLM_MODE_AUTO,
     llm_batch_size: int = M05C_DEFAULT_LLM_BATCH_SIZE,
+    llm_parallelism: int = M05C_DEFAULT_LLM_PARALLELISM,
     force_rebuild: bool = False,
     parallelism: int = DEFAULT_COMMENT_BATCH_PARALLELISM,
     limit: int | None = None,
@@ -1395,6 +1426,8 @@ def run_comment_profile_batch(
         raise CatForgePipelineError("M05C 每个 SKU 的评论句子读取上限必须大于 0。")
     if llm_batch_size <= 0:
         raise CatForgePipelineError("M05C LLM 批大小必须大于 0。")
+    if llm_parallelism <= 0:
+        raise CatForgePipelineError("M05C LLM 并发数必须大于 0。")
     if parallelism <= 0:
         raise CatForgePipelineError("M05C 并发 worker 数必须大于 0。")
     if limit is not None and limit <= 0:
@@ -1444,6 +1477,7 @@ def run_comment_profile_batch(
                         max_sentences_per_sku=max_sentences_per_sku,
                         llm_mode=llm_mode,
                         llm_batch_size=llm_batch_size,
+                        llm_parallelism=llm_parallelism,
                         force_rebuild=force_rebuild,
                         rerun_existing=rerun_existing,
                     )
@@ -1466,6 +1500,7 @@ def run_comment_profile_batch(
                         max_sentences_per_sku=max_sentences_per_sku,
                         llm_mode=llm_mode,
                         llm_batch_size=llm_batch_size,
+                        llm_parallelism=llm_parallelism,
                         force_rebuild=force_rebuild,
                         rerun_existing=rerun_existing,
                     ): sku_code
@@ -1504,6 +1539,7 @@ def run_comment_profile_batch(
             max_sentences_per_sku=max_sentences_per_sku,
             llm_mode=LLM_MODE_OFF,
             llm_batch_size=llm_batch_size,
+            llm_parallelism=llm_parallelism,
             force_rebuild=True,
             coverage_mode=COMMENT_COVERAGE_REBUILD_ONLY,
         )
@@ -1548,6 +1584,7 @@ def run_comment_profile_batch(
         "max_sentences_per_sku": max_sentences_per_sku,
         "llm_mode": llm_mode,
         "llm_batch_size": llm_batch_size,
+        "llm_parallelism": llm_parallelism,
         "candidate_sku_count": len(plan["candidate_sku_codes"]),
         "existing_profile_sku_count": len(plan["existing_profile_sku_codes"]),
         "pending_sku_count_before_limit": len(plan["pending_sku_codes_before_limit"]),
@@ -1602,6 +1639,7 @@ def run_comment_profile_batch_worker(
     max_sentences_per_sku: int,
     llm_mode: str,
     llm_batch_size: int,
+    llm_parallelism: int,
     force_rebuild: bool,
     rerun_existing: bool,
 ) -> dict[str, Any]:
@@ -1635,6 +1673,7 @@ def run_comment_profile_batch_worker(
                 max_sentences_per_sku=max_sentences_per_sku,
                 llm_mode=llm_mode,
                 llm_batch_size=llm_batch_size,
+                llm_parallelism=llm_parallelism,
                 force_rebuild=force_rebuild,
                 coverage_mode=COMMENT_COVERAGE_SKIP,
             )

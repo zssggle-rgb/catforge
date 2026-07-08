@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import threading
+import time
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,7 +23,16 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_TV_TAXONOMY_VERSION,
     Core3SourceBatchStatus,
 )
-from app.services.core3_real_data.m05c_comment_fact_profile_service import M05CRunner, _parse_llm_json_object
+from app.services.core3_real_data.m05c_comment_fact_profile_service import (
+    M05CCommentClassifier,
+    M05CCommentRecord,
+    M05CLlmAnnotation,
+    M05CLlmClient,
+    M05CLlmConfig,
+    M05CRunner,
+    tv_comment_fact_taxonomy_v0_1,
+    _parse_llm_json_object,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -86,6 +97,67 @@ def test_m05c_llm_json_parser_accepts_common_model_wrappers():
     assert array_payload["items"][0]["source_comment_key"] == "a"
     assert facts_payload["items"][0]["source_comment_key"] == "b"
     assert fenced_payload["items"][0]["source_comment_key"] == "c"
+
+
+def test_m05c_classifier_uses_bounded_parallel_llm_chunks(monkeypatch):
+    monkeypatch.setattr(
+        M05CLlmConfig,
+        "from_env",
+        classmethod(lambda cls: cls(base_url="https://llm.example", api_key="test-key", model="test-model")),
+    )
+
+    active_call_count = 0
+    max_active_call_count = 0
+    call_sizes: list[int] = []
+    lock = threading.Lock()
+
+    def fake_annotate_batch(self, *, taxonomy, items):
+        nonlocal active_call_count, max_active_call_count
+        with lock:
+            active_call_count += 1
+            max_active_call_count = max(max_active_call_count, active_call_count)
+            call_sizes.append(len(items))
+        time.sleep(0.02)
+        annotations = [
+            M05CLlmAnnotation(
+                source_comment_key=str(item["source_comment_key"]),
+                subdimension_codes=("picture_clarity_resolution",),
+                polarity="positive",
+                confidence=0.9,
+            )
+            for item in items
+        ]
+        with lock:
+            active_call_count -= 1
+        return annotations
+
+    monkeypatch.setattr(M05CLlmClient, "annotate_batch", fake_annotate_batch)
+
+    records = [
+        M05CCommentRecord(
+            sku_code=SKU_CODE,
+            model_name="75X-Test",
+            brand_name="创维",
+            comment_text=f"第{index}条评论",
+            evidence_id=f"comment-{index}",
+            sentence_seq=index,
+        )
+        for index in range(1, 7)
+    ]
+
+    result = M05CCommentClassifier(
+        taxonomy=tv_comment_fact_taxonomy_v0_1(),
+        llm_mode="required",
+        llm_batch_size=2,
+        llm_parallelism=3,
+    ).classify_sku(SKU_CODE, records)
+
+    assert sorted(call_sizes) == [2, 2, 2]
+    assert max_active_call_count > 1
+    assert result.stats["llm_request_count"] == 3
+    assert result.stats["llm_parallelism"] == 3
+    assert result.stats["effective_llm_parallelism"] == 3
+    assert result.stats["llm_annotation_count"] == 6
 
 
 def seed_foundation(session: Session) -> None:
