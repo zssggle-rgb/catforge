@@ -20,11 +20,16 @@ from app.models import entities
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_AC_RULE_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M10C_AC_RULE_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
@@ -37,6 +42,27 @@ from app.services.core3_real_data.repositories import Core3BaseRepository, Core3
 ANALYSIS_POPULATION_READY = "claim_value_ready"
 ANALYSIS_POPULATION_READY_WITH_COMMENT = "claim_value_ready_with_comment"
 MARKET_WINDOW_FULL_OBSERVED = "full_observed_window"
+
+M12C_PRODUCT_CATEGORY_INPUT_RULES: dict[str, dict[str, str]] = {
+    "TV": {
+        "param_rule_version": CORE3_M03B_RULE_VERSION,
+        "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
+        "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "user_task_rule_version": CORE3_M09C_TV_RULE_VERSION,
+        "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
+        "battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
+        "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
+    },
+    "AC": {
+        "param_rule_version": CORE3_M03B_AC_RULE_VERSION,
+        "claim_rule_version": CORE3_M04C_AC_RULE_VERSION,
+        "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
+        "user_task_rule_version": CORE3_M09C_AC_RULE_VERSION,
+        "target_group_rule_version": CORE3_M10C_AC_RULE_VERSION,
+        "battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
+        "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
+    },
+}
 
 M12C_ROLE_PREMIUM = "premium_driver_estimated"
 M12C_ROLE_SALES = "sales_driver_estimated"
@@ -146,6 +172,15 @@ M12C_CLAIM_PARAM_FALLBACKS: dict[str, tuple[str, ...]] = {
     "tv_claim_eye_care_display": ("low_blue_light_flag", "flicker_free_flag", "eye_care_certification", "anti_glare_flag"),
     "tv_claim_dolby_audio_video": ("dolby_vision_flag", "dolby_atmos_flag", "hdr_support_flag"),
     "tv_claim_theater_scene": (),
+    "ac_claim_energy_efficiency_apf": ("energy_efficiency_ratio", "energy_grade_normalized", "inverter_flag"),
+    "ac_claim_large_airflow_coverage": ("airflow_volume_m3h", "horsepower_hp", "installation_type"),
+    "ac_claim_fast_cooling_heating": ("cooling_capacity_w", "heating_capacity_w", "horsepower_hp", "heat_cool_mode"),
+    "ac_claim_soft_wind_no_direct": ("comfort_airflow_flag", "airflow_volume_m3h"),
+    "ac_claim_self_cleaning": ("self_cleaning_flag",),
+    "ac_claim_purification_antibacterial": ("purification_flag",),
+    "ac_claim_smart_app_voice_iot": ("wifi_control_flag", "voice_control_flag", "smart_sensing_flag"),
+    "ac_claim_installation_space_design": ("installation_type", "indoor_unit_dimensions_mm", "product_type_combo"),
+    "ac_claim_fresh_air": ("fresh_air_flag",),
 }
 
 M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
@@ -180,6 +215,24 @@ M12C_PARAM_ALIASES: dict[str, tuple[str, ...]] = {
     "dolby_atmos_flag": ("dolby_atmos_flag", "dolby_atmos", "杜比全景声"),
     "screen_size_inch": ("screen_size_inch", "screen_size", "尺寸"),
     "speaker_output_power_w": ("speaker_output_power_w", "speaker_power_w", "音响功率"),
+    "energy_efficiency_ratio": ("energy_efficiency_ratio", "apf", "APF", "能效比", "全年能源消耗效率"),
+    "energy_grade_normalized": ("energy_grade_normalized", "energy_grade", "能效等级", "新一级能效"),
+    "inverter_flag": ("inverter_flag", "variable_frequency_flag", "变频"),
+    "airflow_volume_m3h": ("airflow_volume_m3h", "air_volume_m3h", "circulating_air_volume_m3h", "循环风量", "风量"),
+    "horsepower_hp": ("horsepower_hp", "horsepower", "匹数", "pishu"),
+    "installation_type": ("installation_type", "product_type", "空调类型", "挂机", "柜机"),
+    "cooling_capacity_w": ("cooling_capacity_w", "rated_cooling_capacity_w", "制冷量"),
+    "heating_capacity_w": ("heating_capacity_w", "rated_heating_capacity_w", "制热量"),
+    "heat_cool_mode": ("heat_cool_mode", "cooling_heating_type", "冷暖类型"),
+    "comfort_airflow_flag": ("comfort_airflow_flag", "soft_wind_flag", "no_direct_blow_flag", "柔风", "防直吹"),
+    "self_cleaning_flag": ("self_cleaning_flag", "self_clean_flag", "自清洁", "自洁"),
+    "purification_flag": ("purification_flag", "antibacterial_flag", "sterilization_flag", "净化", "除菌", "抗菌"),
+    "wifi_control_flag": ("wifi_control_flag", "app_control_flag", "wifi_flag", "APP控制", "智能控制"),
+    "voice_control_flag": ("voice_control_flag", "voice_assistant_flag", "语音控制"),
+    "smart_sensing_flag": ("smart_sensing_flag", "iot_flag", "智能感应", "IoT"),
+    "indoor_unit_dimensions_mm": ("indoor_unit_dimensions_mm", "indoor_dimensions", "内机尺寸"),
+    "product_type_combo": ("product_type_combo", "product_type", "机型组合"),
+    "fresh_air_flag": ("fresh_air_flag", "fresh_air", "新风"),
 }
 
 M12C_NUMERIC_GROUP_PARAM_LABELS: dict[str, str] = {
@@ -196,6 +249,11 @@ M12C_NUMERIC_GROUP_PARAM_LABELS: dict[str, str] = {
     "color_gamut_percent": "色域",
     "hdmi_2_1_port_count": "HDMI2.1 接口数",
     "speaker_output_power_w": "音响功率",
+    "energy_efficiency_ratio": "能效比/APF",
+    "airflow_volume_m3h": "循环风量",
+    "horsepower_hp": "匹数",
+    "cooling_capacity_w": "制冷量",
+    "heating_capacity_w": "制热量",
 }
 
 M12C_REFRESH_PARAM_CODES = {"declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"}
@@ -428,6 +486,15 @@ class ClaimGroupSplit:
     control_group_label_cn: str = "对照组"
 
 
+def _m12c_input_rules(product_category: str) -> dict[str, str]:
+    normalized = str(product_category or "TV").upper()
+    return M12C_PRODUCT_CATEGORY_INPUT_RULES.get(normalized, M12C_PRODUCT_CATEGORY_INPUT_RULES["TV"])
+
+
+def _m12c_input_rule(product_category: str, key: str) -> str:
+    return _m12c_input_rules(product_category)[key]
+
+
 class M12CRepository(Core3BaseRepository):
     def list_market_states(self, *, batch_id: str, market_window: str, product_category: str) -> dict[str, MarketState]:
         prefix = "TV" if product_category.upper() == "TV" else "AC"
@@ -458,7 +525,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3SkuClaimFact.project_id == self.project_id)
             .where(entities.Core3SkuClaimFact.category_code == self.category_code.value)
             .where(entities.Core3SkuClaimFact.product_category == product_category.upper())
-            .where(entities.Core3SkuClaimFact.rule_version == CORE3_M04C_TV_RULE_VERSION)
+            .where(entities.Core3SkuClaimFact.rule_version == _m12c_input_rule(product_category, "claim_rule_version"))
             .where(entities.Core3SkuClaimFact.is_current.is_(True))
             .order_by(entities.Core3SkuClaimFact.sku_code, entities.Core3SkuClaimFact.claim_code)
         )
@@ -523,7 +590,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3SkuClaimFactProfile.project_id == self.project_id)
             .where(entities.Core3SkuClaimFactProfile.category_code == self.category_code.value)
             .where(entities.Core3SkuClaimFactProfile.product_category == product_category.upper())
-            .where(entities.Core3SkuClaimFactProfile.rule_version == CORE3_M04C_TV_RULE_VERSION)
+            .where(entities.Core3SkuClaimFactProfile.rule_version == _m12c_input_rule(product_category, "claim_rule_version"))
             .where(entities.Core3SkuClaimFactProfile.is_current.is_(True))
             .where(entities.Core3SkuClaimFactProfile.sku_code.in_(sorted(sku_scope)))
             .order_by(
@@ -540,7 +607,7 @@ class M12CRepository(Core3BaseRepository):
 
     def list_param_states(self, *, batch_id: str, product_category: str) -> dict[str, ParamProfileState]:
         prefix = "TV" if product_category.upper() == "TV" else "AC"
-        rule_version = CORE3_M03B_AC_RULE_VERSION if product_category.upper() == "AC" else CORE3_M03B_RULE_VERSION
+        rule_version = _m12c_input_rule(product_category, "param_rule_version")
         stmt = (
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.project_id)
@@ -570,7 +637,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3SkuCommentFactProfile.project_id == self.project_id)
             .where(entities.Core3SkuCommentFactProfile.category_code == self.category_code.value)
             .where(entities.Core3SkuCommentFactProfile.product_category == product_category.upper())
-            .where(entities.Core3SkuCommentFactProfile.rule_version == CORE3_M05C_TV_RULE_VERSION)
+            .where(entities.Core3SkuCommentFactProfile.rule_version == _m12c_input_rule(product_category, "comment_rule_version"))
             .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
             .order_by(
                 entities.Core3SkuCommentFactProfile.sku_code,
@@ -799,7 +866,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3M09cSkuUserTaskProfile.category_code == self.category_code.value)
             .where(entities.Core3M09cSkuUserTaskProfile.batch_id == batch_id)
             .where(entities.Core3M09cSkuUserTaskProfile.product_category == product_category.upper())
-            .where(entities.Core3M09cSkuUserTaskProfile.rule_version == CORE3_M09C_TV_RULE_VERSION)
+            .where(entities.Core3M09cSkuUserTaskProfile.rule_version == _m12c_input_rule(product_category, "user_task_rule_version"))
             .where(entities.Core3M09cSkuUserTaskProfile.is_current.is_(True))
         )
         for row in self.db.execute(stmt).scalars():
@@ -817,7 +884,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3M10cSkuTargetGroupProfile.category_code == self.category_code.value)
             .where(entities.Core3M10cSkuTargetGroupProfile.batch_id == batch_id)
             .where(entities.Core3M10cSkuTargetGroupProfile.product_category == product_category.upper())
-            .where(entities.Core3M10cSkuTargetGroupProfile.rule_version == CORE3_M10C_TV_RULE_VERSION)
+            .where(entities.Core3M10cSkuTargetGroupProfile.rule_version == _m12c_input_rule(product_category, "target_group_rule_version"))
             .where(entities.Core3M10cSkuTargetGroupProfile.is_current.is_(True))
         )
         for row in self.db.execute(stmt).scalars():
@@ -835,7 +902,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3SkuValueBattlefieldProfile.category_code == self.category_code.value)
             .where(entities.Core3SkuValueBattlefieldProfile.batch_id == batch_id)
             .where(entities.Core3SkuValueBattlefieldProfile.product_category == product_category.upper())
-            .where(entities.Core3SkuValueBattlefieldProfile.rule_version == CORE3_M11C_TV_RULE_VERSION)
+            .where(entities.Core3SkuValueBattlefieldProfile.rule_version == _m12c_input_rule(product_category, "battlefield_rule_version"))
             .where(entities.Core3SkuValueBattlefieldProfile.is_current.is_(True))
         )
         for row in self.db.execute(stmt).scalars():
@@ -856,7 +923,7 @@ class M12CRepository(Core3BaseRepository):
             .where(entities.Core3SkuValueBattlefieldScore.category_code == self.category_code.value)
             .where(entities.Core3SkuValueBattlefieldScore.batch_id == batch_id)
             .where(entities.Core3SkuValueBattlefieldScore.product_category == product_category.upper())
-            .where(entities.Core3SkuValueBattlefieldScore.rule_version == CORE3_M11C_TV_RULE_VERSION)
+            .where(entities.Core3SkuValueBattlefieldScore.rule_version == _m12c_input_rule(product_category, "battlefield_rule_version"))
             .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
             .where(entities.Core3SkuValueBattlefieldScore.relation_status.in_(("primary_battlefield", "secondary_battlefield", "opportunity_battlefield")))
             .where(entities.Core3SkuValueBattlefieldScore.market_gate_status != "mismatch")
@@ -1046,6 +1113,7 @@ class M12CClaimValueQuantificationService:
                     "eligible_sku_count": 0,
                     "comparable_sku_count": len(comparable_skus),
                     "target_sku_codes": sorted(scope),
+                    "input_rule_versions": _m12c_input_rules(normalized_category),
                 },
             )
 
@@ -1179,6 +1247,7 @@ class M12CClaimValueQuantificationService:
                 "market_window": market_window,
                 "analysis_population": analysis_population,
                 "rule_version": rule_version,
+                "input_rule_versions": _m12c_input_rules(normalized_category),
                 "eligible_sku_count": len(output_skus),
                 "comparable_sku_count": len(comparable_skus),
                 "claim_pool_count": len(pool_rows),

@@ -41,7 +41,7 @@ M03B 参数事实画像
 | 品类 | raw 销售/参数 | raw 卖点 | raw 评论 | M02 销售/参数 | M02 卖点 | M02 评论 | 当前主要缺口 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | TV | 377 | 328 | 360 | 377 | 328 | 348 | M03B/M04C/M05C/M07 已按当前规则对齐；M09C/M10C/M11C 已按 348 comment-ready 语义可消费口径对齐，29 个无评论 SKU 标记为 semantic-ineligible；M11D graph SKU 348；M12C current quantification SKU 289 |
-| AC | 155 | 155 | 147 | 155 | 155 | 144 | M03B-M05C/M07 已按当前口径对齐；M09C/M10C/M11C 已按 144 comment-ready 语义可消费口径对齐，11 个无评论 SKU 标记为 semantic-ineligible；M11D `fact_complete_with_comment` graph SKU 140，`all_semantic_profiles` graph SKU 144；M12C 未完整适配 AC |
+| AC | 155 | 155 | 147 | 155 | 155 | 144 | M03B-M05C/M07 已按当前口径对齐；M09C/M10C/M11C 已按 144 comment-ready 语义可消费口径对齐，11 个无评论 SKU 标记为 semantic-ineligible；M11D `fact_complete_with_comment` graph SKU 140，`all_semantic_profiles` graph SKU 144；M12C claim value SKU 140 |
 
 AC 的用户任务、目标客群、价值战场标准已经存在，并且已有输出：
 
@@ -59,10 +59,11 @@ AC 的用户任务、目标客群、价值战场标准已经存在，并且已�
 
 这意味着 AC 的 SKU 画像“记录”已生成，但并非每个 SKU 都有可直接供智能体消费的主用户任务、主目标客群、主价值战场。后续必须补一个 AC 画像完整性任务，不能直接进入 M11D/M12C。
 
-AC 后续还缺 M12C 的 product-category 适配：
+AC G10 已补齐 M12C 的 product-category 适配：
 
-- M12C 当前只有参数层部分识别 AC，M04C/M05C/M09C/M10C/M11C rule 过滤和 claim-value 规则仍大量按 TV 写死。
-- `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]` 中 `claim_value_quantification_rule_version` 仍为 `None`。
+- M12C repository 已按 `product_category` 选择 AC M03B/M04C/M05C/M09C/M10C/M11C/M11D rule version。
+- `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]` 中 `claim_value_quantification_rule_version` 已打开。
+- M12C 输出仍沿用通用 `m12c_claim_value_quantification_v0.1`，但运行摘要写入 `input_rule_versions`，用于证明 AC 结果没有静默套用 TV 上游规则。
 
 ## 3.1 执行闭环修订：最小可决策闭环
 
@@ -359,13 +360,27 @@ M09C -> M10C -> M11C
 
 ### G10：AC M12C 适配与生成
 
+状态：已完成。执行记录见 `tmp/catforge_alignment_20260708/G10_execution_record.md`。
+
 目标：让 AC 进入卖点价值量化与贡献归因。
+
+完成结果：
+
+- AC M12C 可量化交集：140 SKU。
+- M12C context pool：902。
+- M12C pool metric：902。
+- M12C SKU claim value：140 SKU / 6303 rows。
+- M12C contribution attribution：140 SKU / 2491 rows。
+- M12C dimension summary：514 rows。
+- 405 条 review issue 均为 pool 级 `sample_insufficient`，不是 SKU 级静默失败。
+- `catforge_analyst sku-claim-value --product-category ac`、`claim-value-space --product-category ac`、`claim-contribution --product-category ac` 均可读取。
+- 本地 M12C product-category + param parsing 测试 17 passed；M12C + M11D 回归测试 25 passed。
 
 实现点：
 
 1. M12C repository 按 product_category 选择 M04C/M05C/M09C/M10C/M11C rule version。
 2. 增加 AC claim-code 到 param fallback、门槛卖点、差异化卖点、场景卖点规则。
-3. 建议引入 AC 专属规则版本，例如 `m12c_ac_claim_value_quantification_v0.1`，不要把 TV 业务规则硬套 AC。
+3. 本次保留通用 M12C 输出 rule version 以兼容现有 analyst/publish 过滤；AC 可追溯性通过 `product_category=AC` 和 `input_rule_versions` 固化，不静默套 TV 上游规则。
 4. `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]` 打开 claim-value quantification 规则。
 
 执行口径：
@@ -377,7 +392,7 @@ M09C -> M10C -> M11C
 验收：
 
 - 冒烟 SKU 能生成 pool metric、SKU claim value、contribution attribution。
-- AC M12C 覆盖接近可量化交集，初始目标约 144。
+- AC M12C 覆盖当前可量化交集 140 SKU。
 - `catforge_analyst sku-claim-value --product-category ac` 可读取。
 
 ### G11：智能体验收
