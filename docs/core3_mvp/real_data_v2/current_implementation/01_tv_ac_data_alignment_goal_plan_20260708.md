@@ -397,7 +397,23 @@ M09C -> M10C -> M11C
 
 ### G11：智能体验收
 
+状态：已完成。执行记录见 `tmp/catforge_alignment_20260708/G11_execution_record.md`。
+
 目标：证明 TV/AC 智能体入口可以基于最新对齐结果回答业务问题。
+
+完成结果：
+
+- TV `ask "TV00026228 的竞品有哪些"` 路由到 `competitor-set`，读取 TV batch `m00_20260619084551_857df63b`。
+- TV `ask "TV00026228 哪些卖点是溢价卖点"` 路由到 `premium-claim-drivers`，读取 TV M12C/M07 等派生结果。
+- AC `ask "AC00038662 的目标客群是什么"` 路由到 `sku-business-brief`，读取 AC batch `m00_20260624000202_1150a669`，并对缺失 `semantic_dimension_positions` 给出 limitation。
+- AC `ask "AC00038662 哪些卖点支撑销量"` 路由到 `claim-contribution`，读取 AC M12C 归因结果。
+- TV `battlefield-space --product-category tv` 返回 13 个战场，首个 `BF_LARGE_SCREEN_VALUE_UPGRADE`。
+- AC `battlefield-space --product-category ac` 返回 11 个战场，首个 `BF_WALL_1_5_MAINSTREAM_VALUE`。
+- 验收过程中发现 205 compose 被重建成连接本地空 Postgres；已切回 `docker-compose.cloud.yml` + `.env` 的外部 `catforge_dev`，并重新热更新运行容器代码。
+
+遗留风险：
+
+- `/opt/catforge` 源目录由 uid 501 持有，`deploy` 无 sudo，无法把本地提交直接固化到远端源码。当前运行容器正确；后续如重建容器，必须先通过正常部署同步本地提交。
 
 验收命令方向：
 
