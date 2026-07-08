@@ -36,14 +36,18 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     _by_sku,
     _canonical_size_tier,
     _clamp_decimal,
+    _comment_batch_by_sku,
+    _comment_missing_exclusion_summary,
     _decimal,
     _decimal_to_float,
     _derive_comparable_market_contexts,
     _derive_price_bands,
+    _filter_comment_ready_param_profiles,
     fact_rule_versions_for_product_category,
     _group_by_sku,
     _json_safe,
     _list_or_empty,
+    _mark_profile_score_skus_not_current,
     _market_snapshot,
     _market_validation_score,
     market_validation_policy_for_product_category,
@@ -913,6 +917,28 @@ class M09CUserTaskRepository(ParamExtractionRepository):
             replace_existing=replace_on_hash_conflict,
         )
 
+    def mark_skus_not_current(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        taxonomy_version: str,
+        rule_version: str,
+        sku_codes: Sequence[str],
+    ) -> int:
+        return _mark_profile_score_skus_not_current(
+            self,
+            (
+                entities.Core3M09cSkuUserTaskProfile,
+                entities.Core3M09cSkuUserTaskScore,
+            ),
+            batch_id=batch_id,
+            product_category=product_category,
+            taxonomy_version=taxonomy_version,
+            rule_version=rule_version,
+            sku_codes=sku_codes,
+        )
+
 
 class M09CInputReader(M11CInputReader):
     """M09C consumes the same fact-layer tables and versions as M10C/M11C."""
@@ -1092,26 +1118,37 @@ class M09CService:
             taxonomy.product_category
         )
         reader = M09CInputReader(self.context)
-        param_profiles = reader.list_param_profiles(
+        scoped_param_profiles = reader.list_param_profiles(
             batch_id,
             sku_code_prefix=taxonomy.sku_code_prefix,
             param_rule_version=fact_versions["param_rule_version"],
             target_sku_codes=target_sku_codes,
         )
-        sku_codes = [profile.sku_code for profile in param_profiles]
-        context_param_profiles = param_profiles
+        context_param_profiles = scoped_param_profiles
         if target_sku_codes:
             context_param_profiles = reader.list_param_profiles(
                 batch_id,
                 sku_code_prefix=taxonomy.sku_code_prefix,
                 param_rule_version=fact_versions["param_rule_version"],
             )
+        scoped_sku_codes = [profile.sku_code for profile in scoped_param_profiles]
+        comment_profile_rows = reader.list_comment_profiles(
+            batch_id,
+            scoped_sku_codes,
+            comment_rule_version=fact_versions["comment_rule_version"],
+            product_category=taxonomy.product_category,
+        )
+        comment_batch_by_sku = _comment_batch_by_sku(comment_profile_rows)
+        param_profiles, comment_missing_sku_codes = _filter_comment_ready_param_profiles(
+            scoped_param_profiles, comment_profile_rows
+        )
+        sku_codes = [profile.sku_code for profile in param_profiles]
         context_sku_codes = [profile.sku_code for profile in context_param_profiles]
         market_profiles = _by_sku(reader.list_market_profiles(batch_id, sku_codes))
         market_weekly_rows = reader.list_clean_market_weekly(batch_id, sku_codes)
         context_market_profiles = market_profiles
         context_market_weekly_rows = market_weekly_rows
-        if target_sku_codes:
+        if set(context_sku_codes) != set(sku_codes):
             context_market_profiles = _by_sku(
                 reader.list_market_profiles(batch_id, context_sku_codes)
             )
@@ -1132,18 +1169,14 @@ class M09CService:
                 claim_rule_version=fact_versions["claim_rule_version"],
             )
         )
-        comment_profiles = _by_sku(
-            reader.list_comment_profiles(
-                batch_id,
-                sku_codes,
-                comment_rule_version=fact_versions["comment_rule_version"],
-            )
-        )
+        comment_profiles = _by_sku(comment_profile_rows)
         comment_facts = _group_by_sku(
             reader.list_comment_facts(
                 batch_id,
                 sku_codes,
                 comment_rule_version=fact_versions["comment_rule_version"],
+                product_category=taxonomy.product_category,
+                comment_batch_by_sku=comment_batch_by_sku,
             )
         )
         sku_inputs = _build_sku_inputs(
@@ -1170,7 +1203,19 @@ class M09CService:
         ).build(sku_inputs)
 
         repository = M09CUserTaskRepository(self.context)
+        deactivated_count = repository.mark_skus_not_current(
+            batch_id=batch_id,
+            product_category=taxonomy.product_category,
+            taxonomy_version=taxonomy.taxonomy_version,
+            rule_version=rule_version,
+            sku_codes=comment_missing_sku_codes,
+        )
         write_results = {
+            "comment_missing_excluded_current_rows": {
+                "created_count": 0,
+                "reused_count": 0,
+                "deactivated_count": deactivated_count,
+            },
             "user_task_profiles": repository.save_profiles(
                 profiles, replace_on_hash_conflict=force_rebuild
             ),
@@ -1181,10 +1226,18 @@ class M09CService:
                 coverages, replace_on_hash_conflict=force_rebuild
             ),
         }
+        summary = {
+            **summary,
+            **_comment_missing_exclusion_summary(comment_missing_sku_codes),
+        }
         warnings: list[str] = []
-        if not sku_inputs:
+        if not scoped_param_profiles:
             warnings.append(
                 "M09C 没有读取到 M03B 参数画像，无法生成 SKU 用户任务画像。"
+            )
+        if comment_missing_sku_codes:
+            warnings.append(
+                f"M09C 排除 {len(comment_missing_sku_codes)} 个缺少 M05C 评论事实画像的 SKU，不生成用户任务画像。"
             )
         if sku_inputs and not any(item.market_profile for item in sku_inputs):
             warnings.append(
@@ -1206,8 +1259,17 @@ class M09CService:
             warnings=warnings,
             write_summary={
                 key: {
-                    "created_count": value.created_count,
-                    "reused_count": value.reused_count,
+                    "created_count": value["created_count"]
+                    if isinstance(value, dict)
+                    else value.created_count,
+                    "reused_count": value["reused_count"]
+                    if isinstance(value, dict)
+                    else value.reused_count,
+                    **(
+                        {"deactivated_count": value.get("deactivated_count", 0)}
+                        if isinstance(value, dict)
+                        else {}
+                    ),
                 }
                 for key, value in write_results.items()
             },

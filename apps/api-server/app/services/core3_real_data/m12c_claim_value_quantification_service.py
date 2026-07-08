@@ -368,6 +368,8 @@ class SemanticState:
                     return Decimal("0.7500")
                 if relation_role == "opportunity":
                     return Decimal("0.5500")
+                if relation_role == "m11d_allocation_fallback":
+                    return Decimal("0.6500")
                 if relation_role == "drag":
                     return Decimal("0.3000")
         return Decimal("0.4500") if context_type == "market_pool" else Decimal("0.0000")
@@ -443,19 +445,31 @@ class M12CRepository(Core3BaseRepository):
         rows = list(self.db.execute(stmt).scalars())
         return {row.sku_code: _market_state(row) for row in rows}
 
-    def list_claim_states(self, *, batch_id: str, product_category: str) -> dict[str, dict[str, ClaimState]]:
+    def list_claim_states(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_codes: Iterable[str] | None = None,
+    ) -> dict[str, dict[str, ClaimState]]:
+        serving_batch_by_sku = self._serving_claim_batch_by_sku(product_category=product_category, sku_codes=sku_codes)
         stmt = (
             select(entities.Core3SkuClaimFact)
             .where(entities.Core3SkuClaimFact.project_id == self.project_id)
             .where(entities.Core3SkuClaimFact.category_code == self.category_code.value)
-            .where(entities.Core3SkuClaimFact.batch_id == batch_id)
             .where(entities.Core3SkuClaimFact.product_category == product_category.upper())
             .where(entities.Core3SkuClaimFact.rule_version == CORE3_M04C_TV_RULE_VERSION)
             .where(entities.Core3SkuClaimFact.is_current.is_(True))
             .order_by(entities.Core3SkuClaimFact.sku_code, entities.Core3SkuClaimFact.claim_code)
         )
+        if serving_batch_by_sku:
+            stmt = stmt.where(entities.Core3SkuClaimFact.sku_code.in_(sorted(serving_batch_by_sku)))
+        else:
+            stmt = stmt.where(entities.Core3SkuClaimFact.batch_id == batch_id)
         result: dict[str, dict[str, ClaimState]] = defaultdict(dict)
         for row in self.db.execute(stmt).scalars():
+            if serving_batch_by_sku and serving_batch_by_sku.get(row.sku_code) != row.batch_id:
+                continue
             guard = _row_wtp_input_guard(row)
             canonical_claim_code = _row_canonical_claim_code(row)
             canonical_claim_name = _row_canonical_claim_name(row)
@@ -493,6 +507,37 @@ class M12CRepository(Core3BaseRepository):
                 result[row.sku_code][canonical_claim_code] = _merge_claim_states(existing, state)
         return dict(result)
 
+    def _serving_claim_batch_by_sku(self, *, product_category: str, sku_codes: Iterable[str] | None) -> dict[str, str]:
+        sku_scope = {str(sku).strip() for sku in (sku_codes or ()) if str(sku).strip()}
+        if not sku_scope:
+            return {}
+        stmt = (
+            select(
+                entities.Core3SkuClaimFactProfile.sku_code,
+                entities.Core3SkuClaimFactProfile.batch_id,
+            )
+            .join(
+                entities.Core3SourceBatch,
+                entities.Core3SkuClaimFactProfile.batch_id == entities.Core3SourceBatch.batch_id,
+            )
+            .where(entities.Core3SkuClaimFactProfile.project_id == self.project_id)
+            .where(entities.Core3SkuClaimFactProfile.category_code == self.category_code.value)
+            .where(entities.Core3SkuClaimFactProfile.product_category == product_category.upper())
+            .where(entities.Core3SkuClaimFactProfile.rule_version == CORE3_M04C_TV_RULE_VERSION)
+            .where(entities.Core3SkuClaimFactProfile.is_current.is_(True))
+            .where(entities.Core3SkuClaimFactProfile.sku_code.in_(sorted(sku_scope)))
+            .order_by(
+                entities.Core3SkuClaimFactProfile.sku_code,
+                entities.Core3SourceBatch.scan_started_at,
+                entities.Core3SkuClaimFactProfile.batch_id,
+                entities.Core3SkuClaimFactProfile.updated_at,
+            )
+        )
+        latest_by_sku: dict[str, str] = {}
+        for sku_code, claim_batch_id in self.db.execute(stmt).all():
+            latest_by_sku[str(sku_code)] = str(claim_batch_id)
+        return latest_by_sku
+
     def list_param_states(self, *, batch_id: str, product_category: str) -> dict[str, ParamProfileState]:
         prefix = "TV" if product_category.upper() == "TV" else "AC"
         rule_version = CORE3_M03B_AC_RULE_VERSION if product_category.upper() == "AC" else CORE3_M03B_RULE_VERSION
@@ -517,13 +562,22 @@ class M12CRepository(Core3BaseRepository):
     def list_comment_states(self, *, batch_id: str, product_category: str) -> dict[str, CommentState]:
         stmt = (
             select(entities.Core3SkuCommentFactProfile)
+            .join(
+                entities.Core3SourceBatch,
+                entities.Core3SkuCommentFactProfile.batch_id
+                == entities.Core3SourceBatch.batch_id,
+            )
             .where(entities.Core3SkuCommentFactProfile.project_id == self.project_id)
             .where(entities.Core3SkuCommentFactProfile.category_code == self.category_code.value)
-            .where(entities.Core3SkuCommentFactProfile.batch_id == batch_id)
             .where(entities.Core3SkuCommentFactProfile.product_category == product_category.upper())
             .where(entities.Core3SkuCommentFactProfile.rule_version == CORE3_M05C_TV_RULE_VERSION)
             .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
-            .order_by(entities.Core3SkuCommentFactProfile.sku_code)
+            .order_by(
+                entities.Core3SkuCommentFactProfile.sku_code,
+                entities.Core3SourceBatch.scan_started_at,
+                entities.Core3SkuCommentFactProfile.batch_id,
+                entities.Core3SkuCommentFactProfile.updated_at,
+            )
         )
         return {
             row.sku_code: CommentState(
@@ -547,10 +601,12 @@ class M12CRepository(Core3BaseRepository):
     ) -> dict[str, SemanticState]:
         contexts_by_sku: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
         self._append_battlefield_contexts(batch_id, product_category, contexts_by_sku)
+        self._append_battlefield_contexts_from_scores(batch_id, product_category, contexts_by_sku)
         allocation_weights = self._m11d_allocation_weights(batch_id, product_category, analysis_population, market_window)
-        allocated_skus = set(allocation_weights)
-        if allocated_skus:
-            contexts_by_sku = {sku: value for sku, value in contexts_by_sku.items() if sku in allocated_skus}
+        self._append_battlefield_contexts_from_allocations(allocation_weights, contexts_by_sku)
+        contribution_skus = self._m11d_contribution_skus(batch_id, product_category, analysis_population, market_window)
+        if contribution_skus:
+            contexts_by_sku = {sku: value for sku, value in contexts_by_sku.items() if sku in contribution_skus}
         return {
             sku: SemanticState(
                 sku_code=sku,
@@ -788,6 +844,74 @@ class M12CRepository(Core3BaseRepository):
             for code in row.secondary_battlefield_codes_json or []:
                 result[row.sku_code].append(("battlefield", str(code), str(code), "secondary"))
 
+    def _append_battlefield_contexts_from_scores(
+        self,
+        batch_id: str,
+        product_category: str,
+        result: dict[str, list[tuple[str, str, str, str]]],
+    ) -> None:
+        stmt = (
+            select(entities.Core3SkuValueBattlefieldScore)
+            .where(entities.Core3SkuValueBattlefieldScore.project_id == self.project_id)
+            .where(entities.Core3SkuValueBattlefieldScore.category_code == self.category_code.value)
+            .where(entities.Core3SkuValueBattlefieldScore.batch_id == batch_id)
+            .where(entities.Core3SkuValueBattlefieldScore.product_category == product_category.upper())
+            .where(entities.Core3SkuValueBattlefieldScore.rule_version == CORE3_M11C_TV_RULE_VERSION)
+            .where(entities.Core3SkuValueBattlefieldScore.is_current.is_(True))
+            .where(entities.Core3SkuValueBattlefieldScore.relation_status.in_(("primary_battlefield", "secondary_battlefield", "opportunity_battlefield")))
+            .where(entities.Core3SkuValueBattlefieldScore.market_gate_status != "mismatch")
+            .order_by(
+                entities.Core3SkuValueBattlefieldScore.sku_code,
+                entities.Core3SkuValueBattlefieldScore.battlefield_score.desc(),
+            )
+        )
+        relation_role_by_status = {
+            "primary_battlefield": "primary",
+            "secondary_battlefield": "secondary",
+            "opportunity_battlefield": "opportunity",
+        }
+        for row in self.db.execute(stmt).scalars():
+            existing = {(dimension_type, dimension_code) for dimension_type, dimension_code, _, _ in result.get(row.sku_code, [])}
+            if any(dimension_type == "battlefield" for dimension_type, _ in existing):
+                continue
+            battlefield_code = str(row.battlefield_code or "").strip()
+            if not battlefield_code:
+                continue
+            relation_role = relation_role_by_status.get(str(row.relation_status or ""), "opportunity")
+            result[row.sku_code].append(("battlefield", battlefield_code, str(row.battlefield_name or battlefield_code), relation_role))
+
+    def _append_battlefield_contexts_from_allocations(
+        self,
+        allocation_weights: Mapping[str, Mapping[tuple[str, str], Decimal]],
+        result: dict[str, list[tuple[str, str, str, str]]],
+    ) -> None:
+        for sku_code, weights in allocation_weights.items():
+            existing = {(dimension_type, dimension_code) for dimension_type, dimension_code, _, _ in result.get(sku_code, [])}
+            for dimension_type, dimension_code in sorted(weights):
+                if dimension_type != "battlefield" or (dimension_type, dimension_code) in existing:
+                    continue
+                result[sku_code].append(("battlefield", dimension_code, dimension_code, "m11d_allocation_fallback"))
+
+    def _m11d_contribution_skus(
+        self,
+        batch_id: str,
+        product_category: str,
+        analysis_population: str,
+        market_window: str,
+    ) -> set[str]:
+        stmt = (
+            select(entities.Core3SemanticMarketSkuContribution.sku_code)
+            .where(entities.Core3SemanticMarketSkuContribution.project_id == self.project_id)
+            .where(entities.Core3SemanticMarketSkuContribution.category_code == self.category_code.value)
+            .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
+            .where(entities.Core3SemanticMarketSkuContribution.product_category == product_category.upper())
+            .where(entities.Core3SemanticMarketSkuContribution.analysis_population == _m11d_population(analysis_population))
+            .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
+            .where(entities.Core3SemanticMarketSkuContribution.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketSkuContribution.is_current.is_(True))
+        )
+        return {str(sku_code) for sku_code in self.db.execute(stmt).scalars()}
+
     def _m11d_allocation_weights(
         self,
         batch_id: str,
@@ -825,6 +949,7 @@ class M12CRepository(Core3BaseRepository):
         reused_count = 0
         updated_count = 0
         for payload in payloads:
+            payload = _fit_payload_to_model_columns(model_cls, payload)
             existing = self._find_existing_by_primary_key(model_cls, payload) or self._find_existing(model_cls, payload, unique_fields)
             if existing is None:
                 record = model_cls(**payload)
@@ -879,7 +1004,7 @@ class M12CClaimValueQuantificationService:
     ) -> M12CServiceResult:
         normalized_category = product_category.upper()
         markets_all = self.repository.list_market_states(batch_id=batch_id, market_window=market_window, product_category=normalized_category)
-        claims_all = self.repository.list_claim_states(batch_id=batch_id, product_category=normalized_category)
+        claims_all = self.repository.list_claim_states(batch_id=batch_id, product_category=normalized_category, sku_codes=set(markets_all))
         param_profiles_all = self.repository.list_param_states(batch_id=batch_id, product_category=normalized_category)
         comments_all = self.repository.list_comment_states(batch_id=batch_id, product_category=normalized_category)
         semantics_all = self.repository.list_semantic_states(
@@ -1011,13 +1136,14 @@ class M12CClaimValueQuantificationService:
         metric_write = self.repository.save_metrics(metric_rows)
         quant_write = self.repository.save_quantifications(quant_rows)
         attr_write = self.repository.save_attributions(attribution_rows)
+        retire_sku_scope = output_skus if scope else set()
         retired_quant_count = self.repository.retire_stale_quantifications(
             batch_id=batch_id,
             product_category=normalized_category,
             analysis_population=analysis_population,
             market_window=market_window,
             rule_version=rule_version,
-            sku_codes=output_skus,
+            sku_codes=retire_sku_scope,
             active_rows=quant_rows,
         )
         retired_attr_count = self.repository.retire_stale_attributions(
@@ -1026,7 +1152,7 @@ class M12CClaimValueQuantificationService:
             analysis_population=analysis_population,
             market_window=market_window,
             rule_version=rule_version,
-            sku_codes=output_skus,
+            sku_codes=retire_sku_scope,
             active_rows=attribution_rows,
         )
         summary_write = self.repository.save_dimension_summaries(summary_rows)
@@ -1460,7 +1586,7 @@ def _row_canonical_claim_code(row: entities.Core3SkuClaimFact) -> str:
 
 
 def _row_canonical_claim_name(row: entities.Core3SkuClaimFact) -> str:
-    return str(getattr(row, "canonical_claim_name", "") or row.claim_name or "")
+    return _safe_label(getattr(row, "canonical_claim_name", "") or row.claim_name or row.claim_code)
 
 
 def _merge_claim_states(existing: ClaimState | None, incoming: ClaimState) -> ClaimState:
@@ -1711,7 +1837,7 @@ def _target_param_display_value(
     value = _decimal_param_value(entry.get("normalized_value"))
     if value is None:
         raw_value = entry.get("normalized_value")
-        return str(raw_value).strip() if raw_value is not None else ""
+        return _safe_param_display_value(raw_value)
     if param_code == "declared_brightness_nit_or_band":
         return f"{int(value)}nits"
     if param_code in {"declared_refresh_rate_hz", "native_refresh_rate_hz", "refresh_rate_hz"}:
@@ -1728,6 +1854,57 @@ def _format_decimal_for_label(value: Decimal) -> str:
     if rounded == rounded.to_integral_value():
         return str(int(rounded))
     return format(rounded.normalize(), "f").rstrip("0").rstrip(".")
+
+
+def _safe_param_display_value(value: Any) -> str:
+    if value is None or _missing_value(value):
+        return ""
+    if isinstance(value, Mapping):
+        for key in ("business_value", "value_text", "normalized_text", "raw_value"):
+            if key in value:
+                label = _safe_param_display_value(value[key])
+                if label:
+                    return label
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        labels = [_safe_param_display_value(item) for item in value]
+        return "、".join(item for item in labels if item)[:80]
+    text = str(value).strip()
+    if not text or text.startswith("{") or text.startswith("["):
+        return ""
+    return _safe_label(text, max_length=80)
+
+
+def _safe_label(value: Any, *, max_length: int = 120) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, Mapping):
+        for key in ("claim_name", "canonical_claim_name", "name", "label", "value_text"):
+            if key in value:
+                label = _safe_label(value[key], max_length=max_length)
+                if label:
+                    return label
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        text = "、".join(_safe_label(item, max_length=max_length) for item in value)
+    else:
+        text = str(value)
+    text = " ".join(text.strip().split())
+    if len(text) <= max_length:
+        return text
+    return text[: max_length - 1].rstrip() + "…"
+
+
+def _fit_payload_to_model_columns(model_cls: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    for column in model_cls.__table__.columns:
+        length = getattr(column.type, "length", None)
+        if not length or column.name not in normalized:
+            continue
+        value = normalized[column.name]
+        if isinstance(value, str) and len(value) > length:
+            normalized[column.name] = _safe_label(value, max_length=length)
+    return normalized
 
 
 def _quantification_rows(
@@ -4035,6 +4212,10 @@ def _fallback_context_weight(relation_role: str) -> Decimal:
         return Decimal("1.000000")
     if relation_role == "secondary":
         return Decimal("0.700000")
+    if relation_role == "m11d_allocation_fallback":
+        return Decimal("0.650000")
+    if relation_role == "opportunity":
+        return Decimal("0.450000")
     return Decimal("0.000000")
 
 

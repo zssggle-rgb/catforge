@@ -14,6 +14,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M03B_TAXONOMY_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
@@ -439,6 +441,42 @@ def seed_ac_sku(
                 review_status="auto_pass",
             )
         )
+    session.add(
+        entities.Core3SkuCommentFactProfile(
+            comment_profile_id=f"comment-profile-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M05C_AC_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name=sku_code,
+            brand_name="海信" if sku_code == AC_LOW else "竞品",
+            comment_sentence_count=1,
+            matched_sentence_count=1,
+            fact_atom_count=0,
+            product_fact_sentence_count=1,
+            positive_sentence_count=1,
+            negative_sentence_count=0,
+            dimension_summary_json={},
+            signal_summary_json={},
+            param_comment_support_json={},
+            claim_comment_support_json={},
+            polarity_summary_json={},
+            evidence_examples_json=[],
+            supported_param_codes=[],
+            contradicted_param_codes=[],
+            unmentioned_param_codes=[],
+            supported_claim_codes=[],
+            contradicted_claim_codes=[],
+            unmentioned_claim_codes=[],
+            evidence_ids=[f"ev-comment-profile-{sku_code}"],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash=f"sha256:comment-profile-{sku_code}",
+            rule_version=CORE3_M05C_AC_RULE_VERSION,
+        )
+    )
 
 
 def seed_sku(
@@ -1036,9 +1074,10 @@ def test_m11c_runner_generates_value_battlefield_profile_and_graph():
     )
     session.commit()
 
-    assert result.status == Core3RunStatus.SUCCESS
-    assert result.summary_json["sku_count"] == 5
+    assert result.status == Core3RunStatus.WARNING
+    assert result.summary_json["sku_count"] == 2
     assert result.summary_json["battlefield_count"] == 13
+    assert result.summary_json["comment_missing_excluded_sku_count"] == 3
 
     profile = session.execute(
         select(entities.Core3SkuValueBattlefieldProfile).where(
@@ -1126,7 +1165,7 @@ def test_m11c_splits_giant_value_downtrade_from_flagship():
     )
     session.commit()
 
-    assert result.status == Core3RunStatus.SUCCESS
+    assert result.status == Core3RunStatus.WARNING
     profile = session.execute(
         select(entities.Core3SkuValueBattlefieldProfile).where(
             entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_GIANT_VALUE
@@ -1169,8 +1208,8 @@ def test_m11c_pipeline_and_insight_cli_query_value_battlefields():
         product_category="TV",
         force_rebuild=True,
     )
-    assert pipeline_result["status"] == "ok"
-    assert pipeline_result["summary"]["profile_count"] == 5
+    assert pipeline_result["status"] == "warning"
+    assert pipeline_result["summary"]["profile_count"] == 2
 
     current_profile = session.execute(
         select(entities.Core3SkuValueBattlefieldProfile).where(

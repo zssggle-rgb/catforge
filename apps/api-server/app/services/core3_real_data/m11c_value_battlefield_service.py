@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -1088,6 +1088,28 @@ class M11CValueBattlefieldRepository(ParamExtractionRepository):
             replace_existing=replace_on_hash_conflict,
         )
 
+    def mark_skus_not_current(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        taxonomy_version: str,
+        rule_version: str,
+        sku_codes: Sequence[str],
+    ) -> int:
+        return _mark_profile_score_skus_not_current(
+            self,
+            (
+                entities.Core3SkuValueBattlefieldProfile,
+                entities.Core3SkuValueBattlefieldScore,
+            ),
+            batch_id=batch_id,
+            product_category=product_category,
+            taxonomy_version=taxonomy_version,
+            rule_version=rule_version,
+            sku_codes=sku_codes,
+        )
+
 
 class M11CInputReader(Core3BaseRepository):
     def list_param_profiles(
@@ -1217,9 +1239,11 @@ class M11CInputReader(Core3BaseRepository):
         sku_codes: Sequence[str],
         *,
         comment_rule_version: str = CORE3_M05C_TV_RULE_VERSION,
+        product_category: str | None = None,
     ) -> list[entities.Core3SkuCommentFactProfile]:
         if not sku_codes:
             return []
+        normalized_product_category = _normalized_product_category(product_category)
         stmt = (
             select(entities.Core3SkuCommentFactProfile)
             .where(entities.Core3SkuCommentFactProfile.project_id == self.project_id)
@@ -1227,14 +1251,34 @@ class M11CInputReader(Core3BaseRepository):
                 entities.Core3SkuCommentFactProfile.category_code
                 == self.category_code.value
             )
-            .where(entities.Core3SkuCommentFactProfile.batch_id == batch_id)
             .where(
                 entities.Core3SkuCommentFactProfile.rule_version == comment_rule_version
             )
             .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
             .where(entities.Core3SkuCommentFactProfile.sku_code.in_(tuple(sku_codes)))
-            .order_by(entities.Core3SkuCommentFactProfile.sku_code)
         )
+        if normalized_product_category:
+            stmt = (
+                stmt.join(
+                    entities.Core3SourceBatch,
+                    entities.Core3SkuCommentFactProfile.batch_id
+                    == entities.Core3SourceBatch.batch_id,
+                )
+                .where(
+                    entities.Core3SkuCommentFactProfile.product_category
+                    == normalized_product_category
+                )
+                .order_by(
+                    entities.Core3SkuCommentFactProfile.sku_code,
+                    entities.Core3SourceBatch.scan_started_at,
+                    entities.Core3SkuCommentFactProfile.batch_id,
+                    entities.Core3SkuCommentFactProfile.updated_at,
+                )
+            )
+        else:
+            stmt = stmt.where(
+                entities.Core3SkuCommentFactProfile.batch_id == batch_id
+            ).order_by(entities.Core3SkuCommentFactProfile.sku_code)
         return list(self.db.execute(stmt).scalars())
 
     def list_comment_facts(
@@ -1243,23 +1287,58 @@ class M11CInputReader(Core3BaseRepository):
         sku_codes: Sequence[str],
         *,
         comment_rule_version: str = CORE3_M05C_TV_RULE_VERSION,
+        product_category: str | None = None,
+        comment_batch_by_sku: Mapping[str, str] | None = None,
     ) -> list[entities.Core3CommentFactAtom]:
         if not sku_codes:
             return []
+        normalized_product_category = _normalized_product_category(product_category)
         stmt = (
             select(entities.Core3CommentFactAtom)
             .where(entities.Core3CommentFactAtom.project_id == self.project_id)
             .where(
                 entities.Core3CommentFactAtom.category_code == self.category_code.value
             )
-            .where(entities.Core3CommentFactAtom.batch_id == batch_id)
             .where(entities.Core3CommentFactAtom.rule_version == comment_rule_version)
             .where(entities.Core3CommentFactAtom.is_current.is_(True))
             .where(entities.Core3CommentFactAtom.sku_code.in_(tuple(sku_codes)))
-            .order_by(
-                entities.Core3CommentFactAtom.sku_code,
-                entities.Core3CommentFactAtom.subdimension_code,
+        )
+        if comment_batch_by_sku:
+            pairs = tuple(
+                sorted(
+                    {
+                        (str(sku_code), str(comment_batch_by_sku[sku_code]))
+                        for sku_code in sku_codes
+                        if sku_code in comment_batch_by_sku
+                    }
+                )
             )
+            if not pairs:
+                return []
+            stmt = stmt.where(
+                tuple_(
+                    entities.Core3CommentFactAtom.sku_code,
+                    entities.Core3CommentFactAtom.batch_id,
+                ).in_(pairs)
+            )
+        elif normalized_product_category:
+            stmt = (
+                stmt.join(
+                    entities.Core3SourceBatch,
+                    entities.Core3CommentFactAtom.batch_id
+                    == entities.Core3SourceBatch.batch_id,
+                )
+                .where(
+                    entities.Core3CommentFactAtom.product_category
+                    == normalized_product_category
+                )
+            )
+        else:
+            stmt = stmt.where(entities.Core3CommentFactAtom.batch_id == batch_id)
+        stmt = stmt.order_by(
+            entities.Core3CommentFactAtom.sku_code,
+            entities.Core3CommentFactAtom.batch_id,
+            entities.Core3CommentFactAtom.subdimension_code,
         )
         return list(self.db.execute(stmt).scalars())
 
@@ -1444,26 +1523,37 @@ class M11CService:
             taxonomy.product_category
         )
         reader = M11CInputReader(self.context)
-        param_profiles = reader.list_param_profiles(
+        scoped_param_profiles = reader.list_param_profiles(
             batch_id,
             sku_code_prefix=taxonomy.sku_code_prefix,
             param_rule_version=fact_versions["param_rule_version"],
             target_sku_codes=target_sku_codes,
         )
-        sku_codes = [profile.sku_code for profile in param_profiles]
-        context_param_profiles = param_profiles
+        context_param_profiles = scoped_param_profiles
         if target_sku_codes:
             context_param_profiles = reader.list_param_profiles(
                 batch_id,
                 sku_code_prefix=taxonomy.sku_code_prefix,
                 param_rule_version=fact_versions["param_rule_version"],
             )
+        scoped_sku_codes = [profile.sku_code for profile in scoped_param_profiles]
+        comment_profile_rows = reader.list_comment_profiles(
+            batch_id,
+            scoped_sku_codes,
+            comment_rule_version=fact_versions["comment_rule_version"],
+            product_category=taxonomy.product_category,
+        )
+        comment_batch_by_sku = _comment_batch_by_sku(comment_profile_rows)
+        param_profiles, comment_missing_sku_codes = _filter_comment_ready_param_profiles(
+            scoped_param_profiles, comment_profile_rows
+        )
+        sku_codes = [profile.sku_code for profile in param_profiles]
         context_sku_codes = [profile.sku_code for profile in context_param_profiles]
         market_profiles = _by_sku(reader.list_market_profiles(batch_id, sku_codes))
         market_weekly_rows = reader.list_clean_market_weekly(batch_id, sku_codes)
         context_market_profiles = market_profiles
         context_market_weekly_rows = market_weekly_rows
-        if target_sku_codes:
+        if set(context_sku_codes) != set(sku_codes):
             context_market_profiles = _by_sku(
                 reader.list_market_profiles(batch_id, context_sku_codes)
             )
@@ -1484,18 +1574,14 @@ class M11CService:
                 claim_rule_version=fact_versions["claim_rule_version"],
             )
         )
-        comment_profiles = _by_sku(
-            reader.list_comment_profiles(
-                batch_id,
-                sku_codes,
-                comment_rule_version=fact_versions["comment_rule_version"],
-            )
-        )
+        comment_profiles = _by_sku(comment_profile_rows)
         comment_facts = _group_by_sku(
             reader.list_comment_facts(
                 batch_id,
                 sku_codes,
                 comment_rule_version=fact_versions["comment_rule_version"],
+                product_category=taxonomy.product_category,
+                comment_batch_by_sku=comment_batch_by_sku,
             )
         )
         sku_inputs = _build_sku_inputs(
@@ -1522,7 +1608,19 @@ class M11CService:
         ).build(sku_inputs, graph_mode=graph_mode)
 
         repository = M11CValueBattlefieldRepository(self.context)
+        deactivated_count = repository.mark_skus_not_current(
+            batch_id=batch_id,
+            product_category=taxonomy.product_category,
+            taxonomy_version=taxonomy.taxonomy_version,
+            rule_version=rule_version,
+            sku_codes=comment_missing_sku_codes,
+        )
         write_results = {
+            "comment_missing_excluded_current_rows": {
+                "created_count": 0,
+                "reused_count": 0,
+                "deactivated_count": deactivated_count,
+            },
             "value_battlefield_profiles": repository.save_profiles(
                 profiles, replace_on_hash_conflict=force_rebuild
             ),
@@ -1537,9 +1635,17 @@ class M11CService:
             )
 
         warnings: list[str] = []
-        if not sku_inputs:
+        summary = {
+            **summary,
+            **_comment_missing_exclusion_summary(comment_missing_sku_codes),
+        }
+        if not scoped_param_profiles:
             warnings.append(
                 "M11C 没有读取到 M03B 参数画像，无法生成 SKU 价值战场画像。"
+            )
+        if comment_missing_sku_codes:
+            warnings.append(
+                f"M11C 排除 {len(comment_missing_sku_codes)} 个缺少 M05C 评论事实画像的 SKU，不生成价值战场画像。"
             )
         if sku_inputs and not any(item.market_profile for item in sku_inputs):
             warnings.append(
@@ -1561,8 +1667,17 @@ class M11CService:
             warnings=warnings,
             write_summary={
                 key: {
-                    "created_count": value.created_count,
-                    "reused_count": value.reused_count,
+                    "created_count": value["created_count"]
+                    if isinstance(value, dict)
+                    else value.created_count,
+                    "reused_count": value["reused_count"]
+                    if isinstance(value, dict)
+                    else value.reused_count,
+                    **(
+                        {"deactivated_count": value.get("deactivated_count", 0)}
+                        if isinstance(value, dict)
+                        else {}
+                    ),
                 }
                 for key, value in write_results.items()
             },
@@ -3410,6 +3525,76 @@ def _group_by_sku(rows: Sequence[Any]) -> dict[str, list[Any]]:
     for row in rows:
         grouped[row.sku_code].append(row)
     return grouped
+
+
+def _normalized_product_category(product_category: str | None) -> str:
+    return str(product_category or "").strip().upper()
+
+
+def _comment_batch_by_sku(
+    comment_profiles: Sequence[entities.Core3SkuCommentFactProfile],
+) -> dict[str, str]:
+    return {row.sku_code: row.batch_id for row in comment_profiles}
+
+
+def _filter_comment_ready_param_profiles(
+    param_profiles: Sequence[entities.Core3SkuParamProfile],
+    comment_profiles: Sequence[entities.Core3SkuCommentFactProfile],
+) -> tuple[list[entities.Core3SkuParamProfile], list[str]]:
+    comment_ready_skus = {row.sku_code for row in comment_profiles}
+    eligible = [
+        profile for profile in param_profiles if profile.sku_code in comment_ready_skus
+    ]
+    excluded = sorted(
+        {profile.sku_code for profile in param_profiles} - comment_ready_skus
+    )
+    return eligible, excluded
+
+
+def _comment_missing_exclusion_summary(sku_codes: Sequence[str]) -> dict[str, Any]:
+    sorted_skus = sorted({str(sku_code) for sku_code in sku_codes if str(sku_code)})
+    return {
+        "comment_missing_excluded_sku_count": len(sorted_skus),
+        "comment_missing_excluded_sku_sample": sorted_skus[:20],
+        "comment_missing_exclusion_reason": (
+            "missing_m05c_comment_fact_profile_semantic_ineligible"
+            if sorted_skus
+            else None
+        ),
+    }
+
+
+def _mark_profile_score_skus_not_current(
+    repository: ParamExtractionRepository,
+    models: Sequence[type[Any]],
+    *,
+    batch_id: str,
+    product_category: str,
+    taxonomy_version: str,
+    rule_version: str,
+    sku_codes: Sequence[str],
+) -> int:
+    normalized_skus = tuple(sorted({str(sku_code) for sku_code in sku_codes if str(sku_code)}))
+    if not normalized_skus:
+        return 0
+    total = 0
+    normalized_product_category = _normalized_product_category(product_category)
+    for model in models:
+        stmt = (
+            update(model)
+            .where(model.project_id == repository.project_id)
+            .where(model.category_code == repository.category_code.value)
+            .where(model.batch_id == batch_id)
+            .where(model.product_category == normalized_product_category)
+            .where(model.taxonomy_version == taxonomy_version)
+            .where(model.rule_version == rule_version)
+            .where(model.sku_code.in_(normalized_skus))
+            .where(model.is_current.is_(True))
+            .values(is_current=False)
+        )
+        result = repository.db.execute(stmt)
+        total += int(result.rowcount or 0)
+    return total
 
 
 def _param_numeric(param_values: Mapping[str, Any], param_code: str) -> Decimal | None:

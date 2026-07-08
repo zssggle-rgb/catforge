@@ -255,6 +255,15 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
     ) -> M11DSemanticInputs:
         sku_scope = tuple(sorted({code for code in target_sku_codes if code}))
         input_rules = PRODUCT_CATEGORY_INPUT_RULES.get(product_category.upper(), {})
+        market_profiles = tuple(
+            self._list_market_profiles(
+                batch_id,
+                market_window=market_window,
+                sku_scope=sku_scope,
+                rule_version=input_rules.get("market_rule_version"),
+            )
+        )
+        comment_sku_scope = sku_scope or tuple(row.sku_code for row in market_profiles)
         return M11DSemanticInputs(
             user_task_profiles=tuple(
                 self._list_current(
@@ -316,13 +325,11 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
                     taxonomy_version=input_rules.get("battlefield_taxonomy_version"),
                 )
             ),
-            market_profiles=tuple(self._list_market_profiles(batch_id, market_window=market_window, sku_scope=sku_scope, rule_version=input_rules.get("market_rule_version"))),
+            market_profiles=market_profiles,
             comment_profiles=tuple(
-                self._list_current(
-                    entities.Core3SkuCommentFactProfile,
-                    batch_id,
+                self._list_serving_comment_profiles(
                     product_category=product_category,
-                    sku_scope=sku_scope,
+                    sku_scope=comment_sku_scope,
                     rule_version=input_rules.get("comment_rule_version"),
                     taxonomy_version=input_rules.get("comment_taxonomy_version"),
                 )
@@ -468,6 +475,47 @@ class M11DSemanticMarketRepository(Core3BaseRepository):
         if sku_scope:
             stmt = stmt.where(entities.Core3SkuMarketProfile.sku_code.in_(tuple(sku_scope)))
         return self._paged_scalars(stmt, limit=100000, offset=0)
+
+    def _list_serving_comment_profiles(
+        self,
+        *,
+        product_category: str,
+        sku_scope: Sequence[str],
+        rule_version: str | None = None,
+        taxonomy_version: str | None = None,
+    ) -> list[entities.Core3SkuCommentFactProfile]:
+        stmt = (
+            select(entities.Core3SkuCommentFactProfile)
+            .join(
+                entities.Core3SourceBatch,
+                entities.Core3SkuCommentFactProfile.batch_id
+                == entities.Core3SourceBatch.batch_id,
+            )
+            .where(entities.Core3SkuCommentFactProfile.project_id == self.project_id)
+            .where(
+                entities.Core3SkuCommentFactProfile.category_code
+                == self.category_code.value
+            )
+            .where(entities.Core3SkuCommentFactProfile.product_category == product_category)
+            .where(entities.Core3SkuCommentFactProfile.is_current.is_(True))
+        )
+        if rule_version:
+            stmt = stmt.where(entities.Core3SkuCommentFactProfile.rule_version == rule_version)
+        if taxonomy_version:
+            stmt = stmt.where(entities.Core3SkuCommentFactProfile.taxonomy_version == taxonomy_version)
+        if sku_scope:
+            stmt = stmt.where(entities.Core3SkuCommentFactProfile.sku_code.in_(tuple(sku_scope)))
+        rows = self._paged_scalars(
+            stmt.order_by(
+                entities.Core3SkuCommentFactProfile.sku_code,
+                entities.Core3SourceBatch.scan_started_at,
+                entities.Core3SkuCommentFactProfile.batch_id,
+                entities.Core3SkuCommentFactProfile.updated_at,
+            ),
+            limit=100000,
+            offset=0,
+        )
+        return list({row.sku_code: row for row in rows}.values())
 
     def _current_query(self, model_cls: Any, batch_id: str) -> Any:
         return (

@@ -8,6 +8,8 @@ from sqlalchemy.pool import StaticPool
 from app.cli import catforge_insight, catforge_pipeline
 from app.models import entities
 from app.services.core3_real_data.constants import (
+    CORE3_M04C_TV_RULE_VERSION,
+    CORE3_M04C_TV_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
@@ -20,12 +22,18 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_TAXONOMY_VERSION,
     Core3SourceBatchStatus,
 )
+from app.services.core3_real_data.m12c_claim_value_quantification_service import (
+    M12CRepository,
+)
+from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606220011"
 SKU_STRONG = "TV00099001"
 SKU_NO_TASK = "TV00099002"
+COMMENT_BATCH_ID = "m00_202606230001_comment"
+CLAIM_BATCH_ID = "m00_202606230002_claim"
 
 
 def make_session() -> Session:
@@ -39,6 +47,8 @@ def make_session() -> Session:
         entities.CategoryProject.__table__,
         entities.Core3SourceBatch.__table__,
         entities.Core3SkuMarketProfile.__table__,
+        entities.Core3SkuClaimFactProfile.__table__,
+        entities.Core3SkuClaimFact.__table__,
         entities.Core3SkuCommentFactProfile.__table__,
         entities.Core3M09cSkuUserTaskProfile.__table__,
         entities.Core3M09cSkuUserTaskScore.__table__,
@@ -105,6 +115,114 @@ def seed_foundation(session: Session) -> None:
         price_band="mid_low",
     )
     seed_stale_current_battlefield_outputs(session)
+    session.commit()
+
+
+def seed_comment_only_batch(session: Session, sku_code: str) -> None:
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=COMMENT_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["comment_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 23, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    comment_profile = session.execute(
+        select(entities.Core3SkuCommentFactProfile).where(
+            entities.Core3SkuCommentFactProfile.sku_code == sku_code
+        )
+    ).scalar_one()
+    comment_profile.batch_id = COMMENT_BATCH_ID
+    comment_profile.profile_hash = f"{comment_profile.profile_hash}-comment-batch"
+    session.commit()
+
+
+def seed_claim_only_batch(session: Session, sku_code: str) -> None:
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=CLAIM_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["selling_points_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 23, 1, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id=f"m04c-profile-{sku_code}",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=CLAIM_BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name="65B-Quiet",
+            brand_name="TCL",
+            raw_claim_count=1,
+            matched_claim_count=1,
+            fact_claim_count=1,
+            claim_texts_json=["144Hz 高刷新率"],
+            claim_codes=["tv_claim_high_refresh_rate"],
+            fact_claim_codes=["tv_claim_high_refresh_rate"],
+            dimension_profile_json={"motion_gaming": ["tv_claim_high_refresh_rate"]},
+            evidence_ids=[f"ev-claim-{sku_code}"],
+            confidence=Decimal("0.9000"),
+            profile_hash=f"hash-m04c-profile-{sku_code}",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
+    session.add(
+        entities.Core3SkuClaimFact(
+            claim_fact_id=f"m04c-fact-{sku_code}-refresh",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=CLAIM_BATCH_ID,
+            product_category="TV",
+            taxonomy_version=CORE3_M04C_TV_TAXONOMY_VERSION,
+            sku_code=sku_code,
+            model_name="65B-Quiet",
+            brand_name="TCL",
+            source_claim_key=f"{sku_code}:refresh",
+            raw_claim_text="144Hz 高刷新率",
+            clean_claim_text="144Hz 高刷新率",
+            claim_code="tv_claim_high_refresh_rate",
+            claim_name="高刷新率",
+            claim_dimension="motion_gaming",
+            claim_subtype="refresh_rate",
+            claim_kind="product_experience",
+            match_score=Decimal("0.9500"),
+            param_support_status="supported",
+            param_support_level="strong_numeric_or_tier_support",
+            param_support_specificity="specific",
+            supporting_param_codes=["declared_refresh_rate_hz"],
+            primary_supporting_param_codes=["declared_refresh_rate_hz"],
+            supporting_param_snapshot_json={"declared_refresh_rate_hz": {"normalized_value": 144}},
+            support_explanation="fixture",
+            canonical_claim_code="tv_claim_high_refresh_rate",
+            canonical_claim_name="高刷新率",
+            wtp_input_guard="eligible_strong_param",
+            fact_claim_flag=True,
+            evidence_ids=[f"ev-claim-{sku_code}"],
+            confidence=Decimal("0.9000"),
+            fact_hash=f"hash-m04c-fact-{sku_code}",
+            rule_version=CORE3_M04C_TV_RULE_VERSION,
+        )
+    )
     session.commit()
 
 
@@ -603,6 +721,92 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
     ).scalar_one()
     assert summary.allocated_sku_count == 1
     assert "其中 1 个 SKU" in summary.business_summary_cn
+
+
+def test_m11d_reads_serving_comment_profile_from_comment_only_batch() -> None:
+    session = make_session()
+    seed_comment_only_batch(session, SKU_NO_TASK)
+
+    result = catforge_pipeline.run_semantic_market_graph(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+
+    assert result["status"] == "ok"
+    assert result["summary"]["population_summary"]["included_sku_count"] == 2
+    assert result["summary"]["population_summary"]["input_counts"]["comment_profiles"] == 2
+
+
+def test_m12c_reads_serving_comment_profile_from_comment_only_batch() -> None:
+    session = make_session()
+    seed_comment_only_batch(session, SKU_NO_TASK)
+
+    comments = M12CRepository(
+        Core3RepositoryContext(
+            db=session,
+            project_id=PROJECT_ID,
+            category_code="TV",
+        )
+    ).list_comment_states(batch_id=BATCH_ID, product_category="TV")
+
+    assert set(comments) == {SKU_STRONG, SKU_NO_TASK}
+
+
+def test_m12c_reads_serving_claim_profile_from_claim_only_batch() -> None:
+    session = make_session()
+    seed_claim_only_batch(session, SKU_NO_TASK)
+
+    claims = M12CRepository(
+        Core3RepositoryContext(
+            db=session,
+            project_id=PROJECT_ID,
+            category_code="TV",
+        )
+    ).list_claim_states(batch_id=BATCH_ID, product_category="TV", sku_codes={SKU_STRONG, SKU_NO_TASK})
+
+    assert set(claims) == {SKU_NO_TASK}
+    assert "tv_claim_high_refresh_rate" in claims[SKU_NO_TASK]
+
+
+def test_m12c_uses_score_battlefield_when_profile_primary_is_blank() -> None:
+    session = make_session()
+    catforge_pipeline.run_semantic_market_graph(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        force_rebuild=True,
+    )
+    profile = session.execute(
+        select(entities.Core3SkuValueBattlefieldProfile).where(
+            entities.Core3SkuValueBattlefieldProfile.sku_code == SKU_STRONG,
+            entities.Core3SkuValueBattlefieldProfile.rule_version == CORE3_M11C_TV_RULE_VERSION,
+        )
+    ).scalar_one()
+    profile.primary_battlefield_code = None
+    profile.secondary_battlefield_codes_json = []
+    session.commit()
+
+    semantics = M12CRepository(
+        Core3RepositoryContext(
+            db=session,
+            project_id=PROJECT_ID,
+            category_code="TV",
+        )
+    ).list_semantic_states(
+        batch_id=BATCH_ID,
+        product_category="TV",
+        analysis_population="claim_value_ready_with_comment",
+        market_window="full_observed_window",
+    )
+
+    battlefield_contexts = [item for item in semantics[SKU_STRONG].contexts if item[0] == "battlefield"]
+    assert ("battlefield", "BF_LARGE_SCREEN_VALUE_UPGRADE", "主价值战场", "primary") in battlefield_contexts
 
 
 def test_m11d_insight_queries_market_map_and_sku_sales_allocation() -> None:

@@ -542,9 +542,10 @@ def test_m10c_runner_generates_target_group_profiles_and_coverage() -> None:
     )
     session.commit()
 
-    assert result.status == Core3RunStatus.SUCCESS
-    assert result.summary_json["sku_count"] == 3
+    assert result.status == Core3RunStatus.WARNING
+    assert result.summary_json["sku_count"] == 2
     assert result.summary_json["target_group_count"] == 10
+    assert result.summary_json["comment_missing_excluded_sku_count"] == 1
 
     family_profile = session.execute(
         select(entities.Core3M10cSkuTargetGroupProfile).where(
@@ -555,15 +556,12 @@ def test_m10c_runner_generates_target_group_profiles_and_coverage() -> None:
     assert family_profile.size_tier == "xlarge_70_85"
     assert family_profile.price_band_in_size_tier == "low"
 
-    smart_score = session.execute(
-        select(entities.Core3M10cSkuTargetGroupScore)
-        .where(entities.Core3M10cSkuTargetGroupScore.sku_code == SKU_SMART)
-        .where(
-            entities.Core3M10cSkuTargetGroupScore.target_group_code
-            == "TG_SMART_CONNECTED_USER"
+    smart_profile = session.execute(
+        select(entities.Core3M10cSkuTargetGroupProfile).where(
+            entities.Core3M10cSkuTargetGroupProfile.sku_code == SKU_SMART
         )
-    ).scalar_one()
-    assert smart_score.relation_status == "brand_claimed_group"
+    ).scalar_one_or_none()
+    assert smart_profile is None
 
     senior_score = session.execute(
         select(entities.Core3M10cSkuTargetGroupScore)
@@ -592,8 +590,8 @@ def test_m10c_pipeline_and_insight_cli_query_target_groups() -> None:
         product_category="TV",
         force_rebuild=True,
     )
-    assert pipeline_result["status"] == "ok"
-    assert pipeline_result["summary"]["profile_count"] == 3
+    assert pipeline_result["status"] == "warning"
+    assert pipeline_result["summary"]["profile_count"] == 2
 
     sku_profile = catforge_insight.query_sku_target_group(
         session,
