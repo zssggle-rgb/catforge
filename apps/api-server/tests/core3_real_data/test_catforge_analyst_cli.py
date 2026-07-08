@@ -52,6 +52,18 @@ BATCH_ID = "m00_analyst_test"
 AC_BATCH_ID = "m00_ac_analyst_test"
 
 
+def _assert_feishu_web_url_open_applink(url: str) -> str:
+    parts = urlsplit(url)
+    query = parse_qs(parts.query)
+    assert parts.scheme == "https"
+    assert parts.netloc == "applink.feishu.cn"
+    assert parts.path == "/client/web_url/open"
+    assert query["mode"] == ["sidebar-semi"]
+    assert query["max_width"] == ["1200"]
+    assert query["reload"] == ["false"]
+    return query["url"][0]
+
+
 def _m12c_test_pool() -> m12c_service.ClaimPool:
     return m12c_service.ClaimPool(
         claim_code="tv_claim_wall_mount_design",
@@ -4117,7 +4129,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     compare_button = card["body"]["elements"][-1]
     assert compare_button["element_id"] == "view_product_compare"
     assert compare_button["text"]["content"] == "查看详细对比结果"
-    compare_query = parse_qs(urlsplit(compare_button["behaviors"][0]["default_url"]).query)
+    compare_url = _assert_feishu_web_url_open_applink(compare_button["behaviors"][0]["default_url"])
+    compare_query = parse_qs(urlsplit(compare_url).query)
     assert compare_query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
     assert "创维 65A7H PRO" in card_json
     assert "多维评分雷达图" in card_json
@@ -4262,6 +4275,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert compare_button["element_id"] == "view_product_compare"
     assert compare_button["text"]["content"] == "查看详细对比结果"
     compare_url = compare_button["behaviors"][0]["default_url"]
+    compare_url = _assert_feishu_web_url_open_applink(compare_url)
     compare_parts = urlsplit(compare_url)
     compare_query = parse_qs(compare_parts.query)
     assert compare_parts.scheme == "https"

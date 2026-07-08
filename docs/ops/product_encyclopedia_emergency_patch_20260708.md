@@ -14,8 +14,9 @@
 - 产品百科 API 代理：`http://123.56.42.205/product-api/`
 - 原产品百科 API 上游：`https://120.46.25.87/api/`
 - CatForge API 环境变量：`CATFORGE_PRODUCT_ENCYCLOPEDIA_URL=http://123.56.42.205/`
+- 飞书卡片按钮外层：`https://applink.feishu.cn/client/web_url/open?mode=sidebar-semi&max_width=1200&reload=false&url=<encoded 产品百科 URL>`，用于在飞书内置浏览器打开。
 
-新生成的飞书卡片会打开类似：
+新生成的飞书卡片内层产品百科 URL 类似：
 
 ```text
 http://123.56.42.205/encyclopedia?source=catforge_competitor_card&view=compare&category=tv&model=海信 65E7Q&model=65A7H PRO&model=65Q9L PRO&model=65A6F ULTRA&model_names=65E7Q,65A7H PRO,65Q9L PRO,65A6F ULTRA&brands=海信,创维,TCL,创维
@@ -59,14 +60,16 @@ location /product-api/ {
 }
 ```
 
-Docker Compose：
+后端运行配置：
 
-- 当前配置：`/opt/catforge/docker-compose.yml`
+- 当前运行 compose：`/opt/catforge/docker-compose.cloud.yml`
+- 当前运行 env：`/opt/catforge/.env`
+- 安全端口 compose 副本：`/opt/catforge/docker-compose.yml`
 - 应急配置副本：`/home/deploy/docker-compose.safe-ports.yml`
-- `api.environment` 增加：
+- `/opt/catforge/.env` 增加：
 
-```yaml
-CATFORGE_PRODUCT_ENCYCLOPEDIA_URL: http://123.56.42.205/
+```dotenv
+CATFORGE_PRODUCT_ENCYCLOPEDIA_URL=http://123.56.42.205/
 ```
 
 - 端口约束：
@@ -91,6 +94,8 @@ Compose 备份候选：
 /var/backups/catforge-compose/docker-compose.yml.
 /var/backups/catforge-compose/docker-compose.yml.no-pg-port.
 /var/backups/catforge-compose/docker-compose.yml.safe-ports.20260708_174117
+/home/deploy/catforge.env.bak.20260708_product_encyclopedia_url
+/home/deploy/competitor_answer.py.bak.20260708_feishu_applink
 ```
 
 注意：部分 compose 备份文件名缺少时间戳，是因为首次远端脚本中本地 shell 提前展开了变量。恢复时优先使用当前记录中的 `/home/deploy/docker-compose.safe-ports.yml` 重新应用应急状态。
@@ -120,8 +125,9 @@ docker run --rm --privileged --pid=host -v /:/host redis:7 sh -euxc '
 '
 
 cd /opt/catforge
-docker compose up -d postgres redis
-docker compose up -d --no-deps api
+grep -q '^CATFORGE_PRODUCT_ENCYCLOPEDIA_URL=' .env \
+  || printf '\nCATFORGE_PRODUCT_ENCYCLOPEDIA_URL=http://123.56.42.205/\n' >> .env
+docker compose -f docker-compose.cloud.yml up -d --build api
 ```
 
 验证：
@@ -131,6 +137,11 @@ curl -sS http://123.56.42.205/readyz
 curl -sS 'http://123.56.42.205/product-api/dict/page-config?category=tv&requestId=recovery-check'
 curl -sS -I http://123.56.42.205/assets/Page1View-D343IxNv.js
 docker exec catforge-api-1 env | grep CATFORGE_PRODUCT_ENCYCLOPEDIA_URL
+docker exec catforge-api-1 python - <<'PY'
+from urllib.parse import parse_qs, urlsplit
+from app.services.core3_real_data.analyst import competitor_answer
+print(urlsplit(competitor_answer._feishu_web_url_open_applink("http://123.56.42.205/encyclopedia")).netloc)
+PY
 ```
 
 期望：
@@ -138,6 +149,7 @@ docker exec catforge-api-1 env | grep CATFORGE_PRODUCT_ENCYCLOPEDIA_URL
 ```text
 {"status":"ready","database":"ok"}
 CATFORGE_PRODUCT_ENCYCLOPEDIA_URL=http://123.56.42.205/
+applink.feishu.cn
 ```
 
 ## 回滚到应急前状态
@@ -155,23 +167,25 @@ docker run --rm --privileged --pid=host -v /:/host redis:7 sh -euxc '
 '
 ```
 
-如需同时撤销后端链接临时入口，需要从 `/opt/catforge/docker-compose.yml` 删除：
+如需同时撤销后端链接临时入口，需要从 `/opt/catforge/.env` 删除：
 
-```yaml
-CATFORGE_PRODUCT_ENCYCLOPEDIA_URL: http://123.56.42.205/
+```dotenv
+CATFORGE_PRODUCT_ENCYCLOPEDIA_URL=http://123.56.42.205/
 ```
 
 然后重启 API：
 
 ```bash
 cd /opt/catforge
-docker compose up -d --no-deps api
+docker compose -f docker-compose.cloud.yml up -d api
 ```
 
 ## 已完成验证
 
 - `http://123.56.42.205/readyz` 返回 `{"status":"ready","database":"ok"}`。
 - `http://123.56.42.205/product-api/dict/page-config?category=tv` 正常返回 `maxModels: 4`。
+- API 容器内生成的“查看详细对比结果”按钮外层为 `applink.feishu.cn/client/web_url/open`，参数为 `mode=sidebar-semi`、`max_width=1200`、`reload=false`。
+- 该 AppLink 内层 URL 为 `http://123.56.42.205/encyclopedia`，并保留本品 + 3 个竞品的 `model` 参数。
 - 浏览器打开实际后端生成 URL，页面渲染了 4 个型号：
   - 海信 65E7Q
   - 创维 65A7H PRO
@@ -185,6 +199,7 @@ CatForge 后端功能提交：
 
 ```text
 510ee3d3 Add product encyclopedia compare link to competitor cards
+本次提交 Wrap product compare card button with Feishu AppLink for in-client browser
 ```
 
-该提交新增飞书卡片按钮“查看详细对比结果”，并生成本品 + 3 个竞品的产品百科 query。
+`510ee3d3` 新增飞书卡片按钮“查看详细对比结果”，并生成本品 + 3 个竞品的产品百科 query；后续补丁将按钮 URL 包装为飞书 AppLink，使其在飞书内置浏览器打开。

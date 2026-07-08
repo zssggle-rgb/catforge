@@ -150,6 +150,7 @@ ROLE_CN = {
 }
 
 DEFAULT_PRODUCT_ENCYCLOPEDIA_URL = "https://hisense2.avc-mr.com/"
+FEISHU_WEB_URL_OPEN_BASE = "https://applink.feishu.cn/client/web_url/open"
 
 CLAIM_LABELS_CN = {
     "tv_claim_ai_large_model": "AI 大模型/智能能力",
@@ -4562,9 +4563,21 @@ def _feishu_product_compare_action(dashboard_payload: dict[str, Any]) -> dict[st
     return _feishu_open_url_button(
         element_id="view_product_compare",
         text=str(link.get("label") or "查看详细对比结果"),
-        url=url,
+        url=_feishu_web_url_open_applink(url),
         button_type="default",
     )
+
+
+def _feishu_web_url_open_applink(url: str) -> str:
+    query = urlencode(
+        [
+            ("mode", "sidebar-semi"),
+            ("max_width", "1200"),
+            ("reload", "false"),
+            ("url", url),
+        ]
+    )
+    return f"{FEISHU_WEB_URL_OPEN_BASE}?{query}"
 
 
 def _feishu_open_url_button(*, element_id: str, text: str, url: str, button_type: str) -> dict[str, Any]:
