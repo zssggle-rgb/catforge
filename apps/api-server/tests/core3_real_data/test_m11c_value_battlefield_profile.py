@@ -26,6 +26,7 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
 )
 from app.services.core3_real_data.m11c_value_battlefield_service import (
+    M11CProfileBuilder,
     M11CValueBattlefieldTaxonomyLoader,
     M11CRunner,
     _canonical_size_tier,
@@ -170,6 +171,81 @@ def test_ac_floor_hp_3_plus_borrows_floor_hp_3_price_context() -> None:
     ]
     assert contexts["ACPLUS"]["borrowed_adjacent_context_pool"] is True
     assert contexts["ACPLUS"]["qualified_peer_count"] == 2
+
+
+def test_m11c_ac_adjacent_opportunity_can_be_primary_when_evidence_is_strong() -> None:
+    taxonomy = ac_value_battlefield_taxonomy_v0_1()
+    builder = M11CProfileBuilder(
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        run_id="run-ac",
+        module_run_id="module-ac",
+        taxonomy=taxonomy,
+        battlefields=(),
+        rule_version=CORE3_M11C_AC_RULE_VERSION,
+    )
+    payload = {
+        "sku_code": "AC000ADJ",
+        "battlefield_code": "BF_FLOOR_3_LIVING_VALUE_UPGRADE",
+        "battlefield_name": "3匹柜机客厅性价比升级战场",
+        "relation_status": "opportunity_battlefield",
+        "value_effect": "basic_support",
+        "battlefield_score": Decimal("0.8100"),
+        "market_gate_status": "adjacent",
+        "user_voice_score": Decimal("0.8200"),
+        "claim_alignment_score": Decimal("0.6667"),
+        "param_capability_score": Decimal("1.0000"),
+        "score_breakdown_json": {"test": "adjacent-ac"},
+        "status_reason_cn": "3匹柜机客厅性价比升级战场可作为候选战场。",
+        "result_hash": "old",
+    }
+
+    updated = builder._assign_primary_secondary([payload])
+
+    assert updated[0]["relation_status"] == "primary_battlefield"
+    assert updated[0]["value_effect"] == "basic_support"
+    assert "作为主价值战场" in updated[0]["status_reason_cn"]
+
+
+def test_m11c_tv_does_not_promote_adjacent_opportunity_to_primary() -> None:
+    taxonomy = ac_value_battlefield_taxonomy_v0_1()
+    tv_taxonomy = type(taxonomy)(
+        taxonomy_version=taxonomy.taxonomy_version,
+        product_category="TV",
+        product_category_label_cn=taxonomy.product_category_label_cn,
+        sku_code_prefix=taxonomy.sku_code_prefix,
+        battlefields=taxonomy.battlefields,
+    )
+    builder = M11CProfileBuilder(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        run_id="run-tv",
+        module_run_id="module-tv",
+        taxonomy=tv_taxonomy,
+        battlefields=(),
+        rule_version="m11c_tv_rule_test",
+    )
+    payload = {
+        "sku_code": "TV000ADJ",
+        "battlefield_code": "BF_FLOOR_3_LIVING_VALUE_UPGRADE",
+        "battlefield_name": "3匹柜机客厅性价比升级战场",
+        "relation_status": "opportunity_battlefield",
+        "value_effect": "basic_support",
+        "battlefield_score": Decimal("0.8100"),
+        "market_gate_status": "adjacent",
+        "user_voice_score": Decimal("0.8200"),
+        "claim_alignment_score": Decimal("0.6667"),
+        "param_capability_score": Decimal("1.0000"),
+        "score_breakdown_json": {"test": "adjacent-tv"},
+        "status_reason_cn": "战场可作为候选战场。",
+        "result_hash": "old",
+    }
+
+    updated = builder._assign_primary_secondary([payload])
+
+    assert updated[0]["relation_status"] == "opportunity_battlefield"
 
 
 def make_session() -> Session:

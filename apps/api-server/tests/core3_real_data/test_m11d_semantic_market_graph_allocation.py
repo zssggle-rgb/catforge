@@ -26,6 +26,9 @@ from app.services.core3_real_data.m12c_claim_value_quantification_service import
     M12CRepository,
 )
 from app.services.core3_real_data.repositories import Core3RepositoryContext
+from app.services.core3_real_data.semantic_market_graph_service import (
+    PRODUCT_CATEGORY_INPUT_RULES,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -34,6 +37,21 @@ SKU_STRONG = "TV00099001"
 SKU_NO_TASK = "TV00099002"
 COMMENT_BATCH_ID = "m00_202606230001_comment"
 CLAIM_BATCH_ID = "m00_202606230002_claim"
+
+
+def test_m11d_ac_input_rules_are_configured() -> None:
+    config = catforge_pipeline.product_category_config("ac")
+
+    assert config["semantic_market_rule_version"]
+    assert PRODUCT_CATEGORY_INPUT_RULES["AC"]["user_task_rule_version"].startswith(
+        "m09c_ac_"
+    )
+    assert PRODUCT_CATEGORY_INPUT_RULES["AC"]["target_group_rule_version"].startswith(
+        "m10c_ac_"
+    )
+    assert PRODUCT_CATEGORY_INPUT_RULES["AC"]["battlefield_rule_version"].startswith(
+        "m11c_ac_"
+    )
 
 
 def make_session() -> Session:
@@ -675,7 +693,13 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
     )
 
     assert result["status"] == "ok"
-    assert result["summary"]["population_summary"]["included_sku_count"] == 2
+    assert result["summary"]["population_summary"]["included_sku_count"] == 1
+    assert result["summary"]["population_summary"]["excluded_reason_counts"][
+        "missing_primary_user_task"
+    ] == 1
+    assert result["summary"]["population_summary"]["input_counts"][
+        "user_task_primary_profiles"
+    ] == 1
     assert result["summary"]["population_summary"]["input_counts"]["battlefield_profiles"] == 2
     assert result["summary"]["allocation_count"] > 0
     assert result["summary"]["summary_count"] > 0
@@ -683,26 +707,19 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
 
     allocations = session.execute(select(entities.Core3SemanticMarketAllocation)).scalars().all()
     assert allocations
-    for sku_code in {SKU_STRONG, SKU_NO_TASK}:
-        for dimension_type in {"user_task", "target_group", "battlefield"}:
-            rows = [row for row in allocations if row.sku_code == sku_code and row.dimension_type == dimension_type]
-            if sku_code == SKU_NO_TASK and dimension_type == "user_task":
-                assert rows == []
-                continue
-            assert round(sum(float(row.allocation_weight) for row in rows), 6) == 1.0
-
-    no_task_check = session.execute(
-        select(entities.Core3SemanticMarketReconciliationCheck)
-        .where(entities.Core3SemanticMarketReconciliationCheck.sku_code == SKU_NO_TASK)
-        .where(entities.Core3SemanticMarketReconciliationCheck.dimension_type == "user_task")
-        .where(entities.Core3SemanticMarketReconciliationCheck.check_type == "no_allocation_eligible_dimension")
-    ).scalar_one()
-    assert no_task_check.status == "diagnostic"
+    assert [row for row in allocations if row.sku_code == SKU_NO_TASK] == []
+    for dimension_type in {"user_task", "target_group", "battlefield"}:
+        rows = [
+            row
+            for row in allocations
+            if row.sku_code == SKU_STRONG and row.dimension_type == dimension_type
+        ]
+        assert round(sum(float(row.allocation_weight) for row in rows), 6) == 1.0
 
     graph = session.execute(select(entities.Core3SemanticMarketGraphSnapshot)).scalar_one()
-    assert graph.sku_count == 2
+    assert graph.sku_count == 1
     assert graph.dimension_count >= 4
-    assert graph.unallocated_summary_json["no_allocation_count"] == 1
+    assert graph.unallocated_summary_json["no_allocation_count"] == 0
 
     rerun = catforge_pipeline.run_semantic_market_graph(
         session,
@@ -723,6 +740,38 @@ def test_m11d_pipeline_generates_market_graph_allocations_and_checks() -> None:
     assert "其中 1 个 SKU" in summary.business_summary_cn
 
 
+def test_m11d_all_semantic_population_keeps_review_profiles_for_diagnostics() -> None:
+    session = make_session()
+
+    result = catforge_pipeline.run_semantic_market_graph(
+        session,
+        project_id=PROJECT_ID,
+        source_category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        analysis_population="all_semantic_profiles",
+        force_rebuild=True,
+    )
+
+    assert result["status"] == "ok"
+    assert result["summary"]["population_summary"]["included_sku_count"] == 2
+    assert "missing_primary_user_task" not in result["summary"][
+        "population_summary"
+    ]["excluded_reason_counts"]
+
+    no_task_check = session.execute(
+        select(entities.Core3SemanticMarketReconciliationCheck)
+        .where(entities.Core3SemanticMarketReconciliationCheck.sku_code == SKU_NO_TASK)
+        .where(entities.Core3SemanticMarketReconciliationCheck.dimension_type == "user_task")
+        .where(entities.Core3SemanticMarketReconciliationCheck.check_type == "no_allocation_eligible_dimension")
+    ).scalar_one()
+    assert no_task_check.status == "diagnostic"
+
+    graph = session.execute(select(entities.Core3SemanticMarketGraphSnapshot)).scalar_one()
+    assert graph.sku_count == 2
+    assert graph.unallocated_summary_json["no_allocation_count"] == 1
+
+
 def test_m11d_reads_serving_comment_profile_from_comment_only_batch() -> None:
     session = make_session()
     seed_comment_only_batch(session, SKU_NO_TASK)
@@ -737,7 +786,7 @@ def test_m11d_reads_serving_comment_profile_from_comment_only_batch() -> None:
     )
 
     assert result["status"] == "ok"
-    assert result["summary"]["population_summary"]["included_sku_count"] == 2
+    assert result["summary"]["population_summary"]["included_sku_count"] == 1
     assert result["summary"]["population_summary"]["input_counts"]["comment_profiles"] == 2
 
 

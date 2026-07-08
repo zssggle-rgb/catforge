@@ -41,7 +41,7 @@ M03B 参数事实画像
 | 品类 | raw 销售/参数 | raw 卖点 | raw 评论 | M02 销售/参数 | M02 卖点 | M02 评论 | 当前主要缺口 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | TV | 377 | 328 | 360 | 377 | 328 | 348 | M03B/M04C/M05C/M07 已按当前规则对齐；M09C/M10C/M11C 已按 348 comment-ready 语义可消费口径对齐，29 个无评论 SKU 标记为 semantic-ineligible；M11D graph SKU 348；M12C current quantification SKU 289 |
-| AC | 155 | 155 | 147 | 155 | 155 | 144 | M03B-M11C 有行覆盖，但 M09C/M10C/M11C 主画像 code 未全量可消费；M05C 差 3 个 raw 评论 SKU；M11D/M12C 未完整适配 AC |
+| AC | 155 | 155 | 147 | 155 | 155 | 144 | M03B-M05C/M07 已按当前口径对齐；M09C/M10C/M11C 已按 144 comment-ready 语义可消费口径对齐，11 个无评论 SKU 标记为 semantic-ineligible；M11D `fact_complete_with_comment` graph SKU 140，`all_semantic_profiles` graph SKU 144；M12C 未完整适配 AC |
 
 AC 的用户任务、目标客群、价值战场标准已经存在，并且已有输出：
 
@@ -59,11 +59,10 @@ AC 的用户任务、目标客群、价值战场标准已经存在，并且已�
 
 这意味着 AC 的 SKU 画像“记录”已生成，但并非每个 SKU 都有可直接供智能体消费的主用户任务、主目标客群、主价值战场。后续必须补一个 AC 画像完整性任务，不能直接进入 M11D/M12C。
 
-AC 后续还缺 M11D/M12C 的 product-category 适配：
+AC 后续还缺 M12C 的 product-category 适配：
 
-- M11D 当前 `PRODUCT_CATEGORY_INPUT_RULES` 只配置 TV。
 - M12C 当前只有参数层部分识别 AC，M04C/M05C/M09C/M10C/M11C rule 过滤和 claim-value 规则仍大量按 TV 写死。
-- `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]` 中 `semantic_market_rule_version` 和 `claim_value_quantification_rule_version` 仍为 `None`。
+- `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]` 中 `claim_value_quantification_rule_version` 仍为 `None`。
 
 ## 3.1 执行闭环修订：最小可决策闭环
 
@@ -261,7 +260,20 @@ M09C -> M10C -> M11C
 
 ### G07：AC M05C 尾差审计
 
+状态：已完成。执行记录见 `tmp/catforge_alignment_20260708/G07_execution_record.md`。
+
 目标：解释或修复 AC raw 评论 147 与 M05C 144 的差异。
+
+完成结果：
+
+- AC M02 current comment evidence SKU：144。
+- AC M05C current `m05c_ac_comment_fact_profile_v0.1` SKU：144。
+- M02 current comment evidence 缺 M05C SKU：0。
+- raw/clean 147 到 M05C 144 的差异来自上游清洗和 M02 证据资格，不是 M05C 漏跑：
+  - `AC00036291`：clean comment 仅有 skipped row，无 active comment、无 sentence、无 M02 comment evidence。
+  - `AC00039044`：active comment 全为低价值默认/空评价，无 sentence、无 M02 comment evidence。
+  - `AC00039082`：active comment 全为低价值默认/空评价，无 sentence、无 M02 comment evidence。
+- G07 未写 205 数据，未重跑 M00-M02，也无需补跑 M05C。
 
 操作：
 
@@ -276,13 +288,19 @@ M09C -> M10C -> M11C
 
 ### G08：AC M09C/M10C/M11C 画像完整性补齐
 
+状态：已完成。执行记录见 `tmp/catforge_alignment_20260708/G08_execution_record.md`。
+
 目标：让 AC 每个 SKU 都具备智能体可消费的用户任务、目标客群、价值战场画像，或者给出明确的 unknown/review 降级原因，不能只看 profile 行数。
 
-当前缺口：
+完成结果：
 
-- M09C 主用户任务缺 12 个 SKU。
-- M10C 主目标客群缺 14 个 SKU。
-- M11C 主价值战场缺 27 个 SKU。
+- AC semantic 输入口径已从 155 个市场/参数 SKU 收敛到 144 个 M05C comment-ready SKU。
+- 11 个无 M05C 评论事实画像 SKU 已从 M09C/M10C/M11C current 画像中排除，排除原因为 `missing_m05c_comment_fact_profile_semantic_ineligible`。
+- M09C current profile：144，主用户任务：143，剩余 1 个 review reason。
+- M10C current profile：144，主目标客群：141，剩余 3 个 review reason。
+- M11C current profile：144，主价值战场：142，剩余 2 个 review reason。
+- M11C 修复 AC `adjacent` 稀疏可比池下的主战场规则；高置信 adjacent opportunity 可升主战场，TV 规则不变。
+- 下游 G09 `fact_complete_with_comment` 当前预期为 140 个三类主画像齐全 SKU；`all_semantic_profiles` 诊断口径为 144 个 comment-ready SKU。
 
 操作：
 
@@ -295,14 +313,26 @@ M09C -> M10C -> M11C
 
 验收：
 
-- AC M09C profile 行数 155，且每个 SKU 有 `primary_user_task_code` 或明确 unknown/review reason。
-- AC M10C profile 行数 155，且每个 SKU 有 `primary_target_group_code` 或明确 unknown/review reason。
-- AC M11C profile 行数 155，且每个 SKU 有 `primary_battlefield_code` 或明确 unknown/review reason。
-- 缺主 code 的 SKU 清单为空；如非空，必须有业务可接受的降级原因并能被 `catforge_analyst` 输出。
+- AC M09C profile 行数 144，且每个 comment-ready SKU 有 `primary_user_task_code` 或明确 unknown/review reason。
+- AC M10C profile 行数 144，且每个 comment-ready SKU 有 `primary_target_group_code` 或明确 unknown/review reason。
+- AC M11C profile 行数 144，且每个 comment-ready SKU 有 `primary_battlefield_code` 或明确 unknown/review reason。
+- 无 M05C 评论事实画像 SKU 不生成 current 用户任务、目标客群、价值战场画像。
+- 缺主 code 的 SKU 如非空，必须有业务可接受的降级原因；真正 analyst 入口读取在 G09/G11 验收。
 
 ### G09：AC M11D 适配与生成
 
+状态：已完成。执行记录见 `tmp/catforge_alignment_20260708/G09_execution_record.md`。
+
 目标：让 AC 进入语义市场图谱。
+
+完成结果：
+
+- M11D 已增加 AC input rules，按 AC M05C/M09C/M10C/M11C/M07 规则隔离读取。
+- `catforge_pipeline.PRODUCT_CATEGORY_CONFIGS["AC"]["semantic_market_rule_version"]` 已打开。
+- `fact_complete_with_comment` 按 G08 三类主画像齐全口径生成 140 个 SKU。
+- `all_semantic_profiles` 按 comment-ready 诊断口径生成 144 个 SKU。
+- `catforge_analyst semantic-dimension-space --product-category ac` 和 `battlefield-space --product-category ac` 均可读取。
+- 本地 M11D 目标测试 8 passed；M09C/M10C/M11C/M11D 组合测试 27 passed。
 
 实现点：
 
@@ -323,8 +353,8 @@ M09C -> M10C -> M11C
 
 验收：
 
-- AC M11D `fact_complete_with_comment` 接近 144 SKU。
-- AC M11D `all_semantic_profiles` 接近 155 SKU。
+- AC M11D `fact_complete_with_comment` 接近 140 SKU。
+- AC M11D `all_semantic_profiles` 接近 144 SKU。
 - `catforge_analyst semantic-dimension-space --product-category ac` 可读取。
 
 ### G10：AC M12C 适配与生成

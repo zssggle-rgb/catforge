@@ -142,7 +142,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "target_group_rule_version": CORE3_M10C_AC_RULE_VERSION,
         "value_battlefield_taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION,
         "value_battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
-        "semantic_market_rule_version": None,
+        "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
         "claim_value_quantification_rule_version": None,
     },
 }

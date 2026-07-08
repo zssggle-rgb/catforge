@@ -1962,9 +1962,7 @@ class M11CProfileBuilder:
         eligible = [
             payload
             for payload in score_payloads
-            if payload["relation_status"] == REL_SECONDARY
-            and payload["market_gate_status"] == "matched"
-            and payload["battlefield_score"] >= Decimal("0.6800")
+            if self._primary_candidate(payload)
         ]
         eligible.sort(
             key=lambda item: (
@@ -2017,6 +2015,24 @@ class M11CProfileBuilder:
                 payload, self.taxonomy.taxonomy_version, self.rule_version
             )
         return score_payloads
+
+    def _primary_candidate(self, payload: Mapping[str, Any]) -> bool:
+        if payload["battlefield_score"] < Decimal("0.6800"):
+            return False
+        if (
+            payload["relation_status"] == REL_SECONDARY
+            and payload["market_gate_status"] == "matched"
+        ):
+            return True
+        if str(self.taxonomy.product_category).upper() != "AC":
+            return False
+        return (
+            payload["relation_status"] == REL_OPPORTUNITY
+            and payload["market_gate_status"] == "adjacent"
+            and payload["user_voice_score"] >= Decimal("0.5500")
+            and payload["claim_alignment_score"] >= Decimal("0.3000")
+            and payload["param_capability_score"] >= Decimal("0.5500")
+        )
 
     def _profile_payload(
         self, sku_input: M11CSkuInput, score_payloads: Sequence[dict[str, Any]]

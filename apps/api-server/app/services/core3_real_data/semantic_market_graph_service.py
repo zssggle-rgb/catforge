@@ -20,13 +20,21 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
+    CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
+    CORE3_M09C_AC_RULE_VERSION,
+    CORE3_M09C_AC_TAXONOMY_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
     CORE3_M09C_TV_TAXONOMY_VERSION,
+    CORE3_M10C_AC_RULE_VERSION,
+    CORE3_M10C_AC_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
+    CORE3_M11C_AC_RULE_VERSION,
+    CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_MODULE_VERSION,
@@ -56,6 +64,17 @@ PRODUCT_CATEGORY_INPUT_RULES = {
         "target_group_taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
         "battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
         "battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+        "market_rule_version": CORE3_M07_RULE_VERSION,
+    },
+    "AC": {
+        "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
+        "comment_taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION,
+        "user_task_rule_version": CORE3_M09C_AC_RULE_VERSION,
+        "user_task_taxonomy_version": CORE3_M09C_AC_TAXONOMY_VERSION,
+        "target_group_rule_version": CORE3_M10C_AC_RULE_VERSION,
+        "target_group_taxonomy_version": CORE3_M10C_AC_TAXONOMY_VERSION,
+        "battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
+        "battlefield_taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION,
         "market_rule_version": CORE3_M07_RULE_VERSION,
     }
 }
@@ -900,13 +919,34 @@ def _resolve_population(
     target_sku_codes: Sequence[str],
 ) -> tuple[tuple[str, ...], dict[str, Any]]:
     user_skus = {row.sku_code for row in inputs.user_task_profiles}
+    user_primary_skus = {
+        row.sku_code
+        for row in inputs.user_task_profiles
+        if _has_text(getattr(row, "primary_user_task_code", None))
+    }
     group_skus = {row.sku_code for row in inputs.target_group_profiles}
+    group_primary_skus = {
+        row.sku_code
+        for row in inputs.target_group_profiles
+        if _has_text(getattr(row, "primary_target_group_code", None))
+    }
     battlefield_skus = {row.sku_code for row in inputs.battlefield_profiles}
+    battlefield_primary_skus = {
+        row.sku_code
+        for row in inputs.battlefield_profiles
+        if _has_text(getattr(row, "primary_battlefield_code", None))
+    }
     market_skus = set(sku_markets)
     comment_skus = {row.sku_code for row in inputs.comment_profiles}
     semantic_skus = user_skus & group_skus & battlefield_skus
     if analysis_population == ANALYSIS_POPULATION_FACT_COMPLETE:
-        included = semantic_skus & market_skus & comment_skus
+        included = (
+            user_primary_skus
+            & group_primary_skus
+            & battlefield_primary_skus
+            & market_skus
+            & comment_skus
+        )
     else:
         included = semantic_skus & market_skus
     if target_sku_codes:
@@ -923,10 +963,25 @@ def _resolve_population(
             continue
         if sku_code not in user_skus:
             excluded_reason_counts["missing_user_task_profile"] += 1
+        elif (
+            analysis_population == ANALYSIS_POPULATION_FACT_COMPLETE
+            and sku_code not in user_primary_skus
+        ):
+            excluded_reason_counts["missing_primary_user_task"] += 1
         if sku_code not in group_skus:
             excluded_reason_counts["missing_target_group_profile"] += 1
+        elif (
+            analysis_population == ANALYSIS_POPULATION_FACT_COMPLETE
+            and sku_code not in group_primary_skus
+        ):
+            excluded_reason_counts["missing_primary_target_group"] += 1
         if sku_code not in battlefield_skus:
             excluded_reason_counts["missing_battlefield_profile"] += 1
+        elif (
+            analysis_population == ANALYSIS_POPULATION_FACT_COMPLETE
+            and sku_code not in battlefield_primary_skus
+        ):
+            excluded_reason_counts["missing_primary_battlefield"] += 1
         if sku_code not in market_skus:
             excluded_reason_counts["missing_market_profile"] += 1
         if analysis_population == ANALYSIS_POPULATION_FACT_COMPLETE and sku_code not in comment_skus:
@@ -939,12 +994,19 @@ def _resolve_population(
         "excluded_reason_counts": dict(sorted(excluded_reason_counts.items())),
         "input_counts": {
             "user_task_profiles": len(inputs.user_task_profiles),
+            "user_task_primary_profiles": len(user_primary_skus),
             "target_group_profiles": len(inputs.target_group_profiles),
+            "target_group_primary_profiles": len(group_primary_skus),
             "battlefield_profiles": len(inputs.battlefield_profiles),
+            "battlefield_primary_profiles": len(battlefield_primary_skus),
             "market_profiles": len(inputs.market_profiles),
             "comment_profiles": len(inputs.comment_profiles),
         },
     }
+
+
+def _has_text(value: Any) -> bool:
+    return bool(str(value or "").strip())
 
 
 def _build_sku_market_map(market_profiles: Sequence[entities.Core3SkuMarketProfile]) -> dict[str, M11DSkuMarket]:
