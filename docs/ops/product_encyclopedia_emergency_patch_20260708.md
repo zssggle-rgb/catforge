@@ -38,7 +38,9 @@ http://123.56.42.205/encyclopedia?source=catforge_competitor_card&view=compare&c
 - 应急静态包：`/home/deploy/hisense-patched.tgz`
 - patched 页面文件：`/var/www/hisense2/assets/Page1View-D343IxNv.js`
   - 增加 `URLSearchParams` 读取 query。
+  - 增加读取 `category` query，空调链接会用 `category=air` 搜索，不再落回默认 `tv`。
   - 有 query 时覆盖接口 `defaultSelection`。
+  - 有 query 时按 query 中实际机型数量临时放宽 `maxModels`，支持本品 + 3 个竞品。
 - patched API 文件：`/var/www/hisense2/assets/LineChart-Nuna-ORo.js`
   - API base 从 `/api` 改为 `/product-api`。
 
@@ -96,6 +98,8 @@ Compose 备份候选：
 /var/backups/catforge-compose/docker-compose.yml.safe-ports.20260708_174117
 /home/deploy/catforge.env.bak.20260708_product_encyclopedia_url
 /home/deploy/competitor_answer.py.bak.20260708_feishu_applink
+/home/deploy/Page1View-D343IxNv.js.bak.20260708_ac_category_query
+/home/deploy/hisense-patched.tgz.bak.20260708_before_ac_category_query
 ```
 
 注意：部分 compose 备份文件名缺少时间戳，是因为首次远端脚本中本地 shell 提前展开了变量。恢复时优先使用当前记录中的 `/home/deploy/docker-compose.safe-ports.yml` 重新应用应急状态。
@@ -186,6 +190,12 @@ docker compose -f docker-compose.cloud.yml up -d api
 - `http://123.56.42.205/product-api/dict/page-config?category=tv` 正常返回 `maxModels: 4`。
 - API 容器内生成的“查看详细对比结果”按钮外层为 `applink.feishu.cn/client/web_url/open`，参数为 `mode=sidebar-semi`、`max_width=1200`、`reload=false`。
 - 该 AppLink 内层 URL 为 `http://123.56.42.205/encyclopedia`，并保留本品 + 3 个竞品的 `model` 参数。
+- 空调对比 URL 验证通过：
+  - 美的 KFR-88LW/N8KS1-1U
+  - 格力 KFR-72LW/(72527)FNHAB-B1
+  - 格力 KFR-72LW/NHMA1BG
+  - 格力 KFR-72LW/(72587)FNHAD-B1
+  - 页面无“未找到 / 已跳过 / 无匹配机型”提示。
 - 浏览器打开实际后端生成 URL，页面渲染了 4 个型号：
   - 海信 65E7Q
   - 创维 65A7H PRO
