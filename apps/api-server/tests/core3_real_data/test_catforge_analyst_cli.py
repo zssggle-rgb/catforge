@@ -14,6 +14,7 @@ from app.cli import catforge_analyst
 from app.models import entities
 from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
 from app.services.core3_real_data.analyst import competitor_answer
+from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext
 from app.services.core3_real_data.analyst.sop_orchestrators import CLAIM_VALUE_REPORT_LIMIT, SopOrchestrators
 from app.services.core3_real_data.constants import (
@@ -45,6 +46,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
     CORE3_M12D_RULE_VERSION,
+    CORE3_M14_RULE_VERSION,
     Core3CategoryCode,
     Core3ConfidenceLevel,
     M12DAnchorRole,
@@ -446,6 +448,7 @@ def make_session() -> Session:
         entities.Core3SkuParamProfile.__table__,
         entities.Core3SkuClaimFactProfile.__table__,
         entities.Core3SkuCommentFactProfile.__table__,
+        entities.Core3CommentFactAtom.__table__,
         entities.Core3M09cSkuUserTaskProfile.__table__,
         entities.Core3M10cSkuTargetGroupProfile.__table__,
         entities.Core3SkuValueBattlefieldProfile.__table__,
@@ -462,6 +465,8 @@ def make_session() -> Session:
         entities.Core3PurchaseReasonProfileVersion.__table__,
         entities.Core3SkuPurchaseReasonProfile.__table__,
         entities.Core3SkuPurchaseReasonAnchor.__table__,
+        entities.Core3CompetitorSelectionRun.__table__,
+        entities.Core3CompetitorSelection.__table__,
     ]:
         table.create(bind=engine, checkfirst=True)
     session = Session(engine)
@@ -5286,3 +5291,360 @@ def test_ask_keeps_explicit_sku_over_extracted_model() -> None:
     assert result["routed_command"] == "sku-business-brief"
     assert result["routing"]["applied_params"]["sku_code"] == "TV00030001"
     assert result["target"]["sku_code"] == "TV00030001"
+
+
+def _seed_sellpoint_pm_m14_and_comments(session: Session) -> None:
+    session.add(
+        entities.Core3CompetitorSelectionRun(
+            selection_run_id="m14-sellpoint-pm-run-1",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            target_sku_code="TV00029112",
+            target_model_name="65E7Q",
+            target_brand_name="海信",
+            candidate_count=1,
+            scored_candidate_count=1,
+            selected_count=1,
+            empty_slot_count=2,
+            review_candidate_count=0,
+            blocked_candidate_count=0,
+            selection_status="limited",
+            selection_summary_cn="测试用单一权威竞品选择批次。",
+            target_profile_hash="hash-target-sellpoint-pm",
+            m12_recall_fingerprint="fp-m12-sellpoint-pm",
+            m13_score_fingerprint="fp-m13-sellpoint-pm",
+            rule_version=CORE3_M14_RULE_VERSION,
+            input_fingerprint="fp-m14-run-sellpoint-pm",
+            result_hash="hash-m14-run-sellpoint-pm",
+            processing_status="warning",
+            review_required=False,
+            review_status="auto_pass",
+            created_at=datetime(2026, 6, 22, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 22, tzinfo=timezone.utc),
+        )
+    )
+    session.add(
+        entities.Core3CompetitorSelection(
+            competitor_selection_id="m14-sellpoint-pm-selection-1",
+            selection_run_id="m14-sellpoint-pm-run-1",
+            candidate_pool_id="m12-sellpoint-pm-pool-1",
+            candidate_component_score_id="m13-sellpoint-pm-score-1",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            target_sku_code="TV00029112",
+            target_model_name="65E7Q",
+            target_brand_name="海信",
+            candidate_sku_code="TV00030001",
+            candidate_model_name="65E7Q Pro",
+            candidate_brand_name="海信",
+            same_brand_flag=True,
+            slot_code="primary_direct",
+            slot_name_cn="首选直接竞品",
+            selection_rank=1,
+            slot_selection_score=Decimal("0.8800"),
+            role_score=Decimal("0.8600"),
+            component_total_score=Decimal("0.8400"),
+            confidence=Decimal("0.8500"),
+            evidence_completeness_score=Decimal("0.9000"),
+            pressure_level="high",
+            selection_reason_cn="测试用既有直接竞品。",
+            selection_reason_short_cn="既有直接竞品",
+            business_conclusion_cn="仅用于测试既有竞品复用。",
+            evidence_ids=["ev-m14-sellpoint-pm"],
+            target_profile_hash="hash-target-sellpoint-pm",
+            candidate_profile_hash="hash-candidate-sellpoint-pm",
+            m13_score_hash="hash-m13-sellpoint-pm",
+            rule_version=CORE3_M14_RULE_VERSION,
+            input_fingerprint="fp-m14-sellpoint-pm",
+            result_hash="hash-m14-sellpoint-pm",
+        )
+    )
+    for sku_code, source_key, text, subdimension, claim_codes in [
+        ("TV00029112", "comment-target-generic", "好高清，画面很清晰", "picture_clarity_resolution", ["tv_claim_miniled_display"]),
+        ("TV00029112", "comment-target-bright", "白天阳光照进客厅也看得清，不发灰", "picture_brightness_hdr", ["tv_claim_hdr_high_brightness"]),
+        ("TV00030001", "comment-candidate-game", "打游戏操作跟手，没有拖影", "gaming_high_refresh_motion", ["tv_claim_high_refresh"]),
+    ]:
+        session.add(
+            entities.Core3CommentFactAtom(
+                comment_fact_id=f"m05c-sellpoint-pm-{source_key}",
+                project_id=PROJECT_ID,
+                category_code="TV",
+                batch_id=BATCH_ID,
+                product_category="TV",
+                taxonomy_version=CORE3_M05C_TV_TAXONOMY_VERSION,
+                sku_code=sku_code,
+                source_comment_key=source_key,
+                sentence_seq=1,
+                clean_comment_text=text,
+                dimension_code="picture_screen_experience" if "game" not in source_key else "gaming_motion_experience",
+                dimension_name="画质屏幕体验" if "game" not in source_key else "游戏运动体验",
+                subdimension_code=subdimension,
+                subdimension_name=subdimension,
+                dimension_type="product_experience",
+                polarity="positive",
+                evidence_strength="strong",
+                support_relation="supports_sku_param_claim",
+                support_target_type="claim",
+                supported_claim_codes=claim_codes,
+                evidence_ids=[f"ev-{source_key}"],
+                confidence=Decimal("0.9000"),
+                fact_hash=f"hash-{source_key}",
+                rule_version=CORE3_M05C_TV_RULE_VERSION,
+            )
+        )
+    session.commit()
+
+
+def test_sellpoint_value_pm_uses_m14_and_keeps_generic_comment_unattributed() -> None:
+    session = make_session()
+    _seed_sellpoint_pm_m14_and_comments(session)
+
+    result = catforge_analyst.sellpoint_value_pm(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+        answer_style="xiaoao",
+        with_report="markdown",
+    )
+
+    assert result["status"] == "ok"
+    analysis = result["result"]["sellpoint_value_pm"]
+    assert analysis["competitor_boundary"]["source"] == "M14"
+    assert analysis["competitor_boundary"]["sku_codes"] == ["TV00030001"]
+    assert analysis["audit"]["competitor_selection_batch_id"] == BATCH_ID
+    bright = next(item for item in analysis["value_units"] if item["unit_code"] == "tv_bright_room_dark_detail")
+    assert bright["user_understanding"]["direct_sentence_count"] == 0
+    assert bright["user_understanding"]["indirect_sentence_count"] == 1
+    assert bright["user_understanding"]["unattributable_sentence_count"] == 1
+    assert "same_price_choice_weight" not in bright["weights"]
+    answer = result["result"]["sellpoint_value_pm_answer"]
+    assert answer["report"]["status"] == "markdown_ready"
+    assert "不拆给单个卖点" in answer["markdown"]
+
+
+def test_ask_routes_sellpoint_weighting_to_parallel_pm_sop() -> None:
+    session = make_session()
+    _seed_sellpoint_pm_m14_and_comments(session)
+
+    result = catforge_analyst.answer_natural_language(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        question="海信65E7Q做卖点称重，用户怎么看这些卖点，当前价格承接怎么样？",
+        answer_style="xiaoao",
+    )
+
+    assert result["status"] == "ok"
+    assert result["routed_command"] == "sellpoint-value-pm"
+    assert "sellpoint_value_pm" in result["result"]
+    assert "sellpoint_value_pm_answer" in result["result"]
+
+
+def test_sellpoint_value_pm_falls_back_to_existing_competitor_sop_without_reusing_its_claim_amounts() -> None:
+    session = make_session()
+
+    result = catforge_analyst.sellpoint_value_pm(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    analysis = result["result"]["sellpoint_value_pm"]
+    assert analysis["competitor_boundary"]["source"] == "competitor_set_fallback"
+    assert analysis["competitor_boundary"]["competitor_count"] >= 1
+    serialized = json.dumps(analysis, ensure_ascii=False)
+    assert "sku_level_user_payment_value_abs" not in serialized
+    assert "可解释金额" not in serialized
+
+
+def test_sellpoint_value_pm_reads_only_the_latest_successful_m14_run() -> None:
+    session = make_session()
+    _seed_sellpoint_pm_m14_and_comments(session)
+    newer_batch_id = "m00_sellpoint_pm_newer_m14"
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=newer_batch_id,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["competitor_selection"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m14-test",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    session.add(
+        entities.Core3CompetitorSelectionRun(
+            selection_run_id="m14-sellpoint-pm-run-newer",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=newer_batch_id,
+            target_sku_code="TV00029112",
+            target_model_name="65E7Q",
+            target_brand_name="海信",
+            candidate_count=1,
+            scored_candidate_count=1,
+            selected_count=1,
+            empty_slot_count=2,
+            review_candidate_count=0,
+            blocked_candidate_count=0,
+            selection_status="limited",
+            selection_summary_cn="更新后的单一竞品选择批次。",
+            target_profile_hash="hash-target-newer",
+            m12_recall_fingerprint="fp-m12-newer",
+            m13_score_fingerprint="fp-m13-newer",
+            rule_version=CORE3_M14_RULE_VERSION,
+            input_fingerprint="fp-m14-newer",
+            result_hash="hash-m14-newer",
+            processing_status="warning",
+            review_required=False,
+            review_status="auto_pass",
+            created_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        )
+    )
+    session.add(
+        entities.Core3CompetitorSelection(
+            competitor_selection_id="m14-sellpoint-pm-selection-newer",
+            selection_run_id="m14-sellpoint-pm-run-newer",
+            candidate_pool_id="m12-sellpoint-pm-pool-newer",
+            candidate_component_score_id="m13-sellpoint-pm-score-newer",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=newer_batch_id,
+            target_sku_code="TV00029112",
+            target_model_name="65E7Q",
+            target_brand_name="海信",
+            candidate_sku_code="TV00040001",
+            candidate_model_name="65A7H PRO",
+            candidate_brand_name="创维",
+            same_brand_flag=False,
+            slot_code="primary_direct",
+            slot_name_cn="首选直接竞品",
+            selection_rank=1,
+            slot_selection_score=Decimal("0.9000"),
+            role_score=Decimal("0.8800"),
+            component_total_score=Decimal("0.8600"),
+            confidence=Decimal("0.8700"),
+            evidence_completeness_score=Decimal("0.9100"),
+            pressure_level="high",
+            selection_reason_cn="测试最新批次只读，不用旧批次补槽。",
+            selection_reason_short_cn="最新批次",
+            business_conclusion_cn="仅用于批次隔离回归测试。",
+            evidence_ids=["ev-m14-newer"],
+            target_profile_hash="hash-target-newer",
+            candidate_profile_hash="hash-candidate-newer",
+            m13_score_hash="hash-m13-newer",
+            rule_version=CORE3_M14_RULE_VERSION,
+            input_fingerprint="fp-selection-newer",
+            result_hash="hash-selection-newer",
+        )
+    )
+    session.commit()
+
+    repository = AnalystRepository(session, project_id=PROJECT_ID, category_code="TV")
+    historical_rows = repository._sellpoint_competitor_selections(
+        batch_id=BATCH_ID,
+        target_sku_code="TV00029112",
+    )
+    latest_scope = repository.latest_batch_id(product_category="TV")
+    rows = repository._sellpoint_competitor_selections(
+        batch_id=str(latest_scope),
+        target_sku_code="TV00029112",
+    )
+
+    assert latest_scope is not None and newer_batch_id in latest_scope
+    assert [row.candidate_sku_code for row in historical_rows] == ["TV00030001"]
+    assert {row.selection_run_id for row in historical_rows} == {"m14-sellpoint-pm-run-1"}
+    assert [row.candidate_sku_code for row in rows] == ["TV00040001"]
+    assert {row.selection_run_id for row in rows} == {"m14-sellpoint-pm-run-newer"}
+
+
+def test_sellpoint_weekly_rows_follow_each_skus_authoritative_m07_batch() -> None:
+    session = make_session()
+    older_batch_id = "m00_sellpoint_pm_older_market"
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=older_batch_id,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="full",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 13, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    seed_market_profile(
+        session,
+        batch_id=older_batch_id,
+        sku_code="TV00029112",
+        model_name="65E7Q Legacy",
+        brand_name="海信",
+        size=65,
+        price=Decimal("3999"),
+        volume=Decimal("9999"),
+    )
+    session.add(
+        entities.Core3CleanMarketWeekly(
+            clean_market_id="clean-market-old-batch-target-1",
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=older_batch_id,
+            source_pk="old-TV00029112-1",
+            source_row_id="week_sales_data:old:TV00029112:1",
+            source_operation_type="insert",
+            sku_code="TV00029112",
+            model_name="65E7Q Legacy",
+            brand_name="海信",
+            period_raw="26W01",
+            period_type="week",
+            period_year_hint=2026,
+            period_week_index=1,
+            period_parse_status="parsed",
+            channel_type="online",
+            platform_type="test_platform",
+            sales_volume=Decimal("9999"),
+            sales_amount=Decimal("39986001"),
+            avg_price=Decimal("3999"),
+            price_check_status="ok",
+            clean_record_key="market:old:TV00029112:1",
+            clean_hash="hash-clean-old-TV00029112-1",
+            clean_version="m01_clean_v1",
+            hash_version="m00_row_hash_v1",
+            record_status="active",
+            quality_status="ok",
+        )
+    )
+    session.commit()
+    repository = AnalystRepository(session, project_id=PROJECT_ID, category_code="TV")
+    serving_batch_id = repository.latest_batch_id(product_category="TV")
+
+    rows = repository._sellpoint_market_weekly_rows(
+        batch_id=str(serving_batch_id),
+        sku_codes=["TV00029112"],
+        market_window="full_observed_window",
+    )
+
+    assert rows
+    assert {row.batch_id for row in rows} == {BATCH_ID}
+    assert all(row.sales_volume != Decimal("9999") for row in rows)

@@ -12,6 +12,9 @@ from typing import Any, Callable
 from app.services.core3_real_data.analyst.anchor_substitutability import AnchorSubstitutabilityResult, ValueAnchorMatcher
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
+from app.services.core3_real_data.analyst.claim_value_pm_answer import build_claim_value_pm_answer
+from app.services.core3_real_data.analyst.claim_value_pm_schemas import ClaimValuePmContext
+from app.services.core3_real_data.analyst.claim_value_pm_service import analyze_sellpoint_value_pm
 from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 from app.services.core3_real_data.analyst.low_sales_answer import build_low_sales_answer
 from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
@@ -30,6 +33,14 @@ MIN_OVERLAP_WEEKS = 4
 
 
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
+    "sellpoint-value-pm": (
+        "resolve-sku",
+        "sellpoint-value-evidence",
+        "competitor-set-fallback",
+        "strict-comment-attribution",
+        "direct-competitor-choice-curve",
+        "product-manager-report",
+    ),
     "competitor-set": (
         "resolve-sku",
         "sku-fact-brief",
@@ -87,6 +98,7 @@ class SopOrchestrators:
 
     def dispatch(self, command: str, context: AnalystContext, **kwargs: Any) -> dict[str, Any]:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
+            "sellpoint-value-pm": self.sellpoint_value_pm,
             "competitor-set": self.competitor_set,
             "sku-business-brief": self.sku_business_brief,
             "why-sales-diff": self.why_sales_diff,
@@ -99,6 +111,136 @@ class SopOrchestrators:
         if handler is None:
             return self.planned_sop(context, command=command, **kwargs)
         return handler(context, **kwargs)
+
+    def sellpoint_value_pm(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        limit: int = 20,
+        answer_style: str = "raw",
+        with_report: str = "none",
+        top_n: int = 3,
+        max_chat_chars: int = 600,
+        report_title: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        del top_n
+        evidence_atom = self.atomic_handlers.sellpoint_value_evidence(
+            context,
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+            limit=limit,
+        )
+        if not _ok(evidence_atom):
+            return _sop_error(
+                command="sellpoint-value-pm",
+                context=context,
+                atom_results=[evidence_atom],
+                message_cn="卖点称重前未能唯一解析目标 SKU 或加载事实。",
+            )
+        evidence_context = ((evidence_atom.get("result") or {}).get("sellpoint_value_evidence") or {})
+        atom_results = [evidence_atom]
+        fallback_result: dict[str, Any] | None = None
+        if not evidence_context.get("competitors"):
+            fallback_result = self.competitor_set(
+                context,
+                query=query,
+                sku_code=str((evidence_atom.get("target") or {}).get("sku_code") or sku_code or ""),
+                model_name=model_name,
+                limit=limit,
+                answer_style="xiaoao",
+                with_report="none",
+            )
+            atom_results.append(fallback_result)
+            fallback_payload = fallback_result.get("result") or {}
+            fallback_candidates = (
+                (fallback_payload.get("competitor_answer") or {}).get("top_competitors")
+                or (fallback_payload.get("competitor_set") or {}).get("candidates")
+                or []
+            )
+            if fallback_candidates:
+                evidence_atom = self.atomic_handlers.sellpoint_value_evidence(
+                    context,
+                    sku_code=str((evidence_atom.get("target") or {}).get("sku_code") or ""),
+                    fallback_candidates=fallback_candidates,
+                    limit=limit,
+                )
+                atom_results.append(evidence_atom)
+                evidence_context = ((evidence_atom.get("result") or {}).get("sellpoint_value_evidence") or {})
+        if fallback_result:
+            m12d_hypothesis = (((fallback_result.get("result") or {}).get("competitor_set") or {}).get("m12d_consumption") or {})
+            if m12d_hypothesis:
+                evidence_context["purchase_reason_hypothesis"] = {
+                    "source": "M12D",
+                    "usage": "derived_hypothesis_only",
+                    "payload": m12d_hypothesis,
+                }
+        if not evidence_context.get("purchase_reason_hypothesis"):
+            repository = getattr(self.atomic_handlers, "repository", None)
+            db = getattr(repository, "db", None)
+            target_sku_code = str((evidence_atom.get("target") or {}).get("sku_code") or "")
+            if db is not None and target_sku_code:
+                try:
+                    contract = RepositoryPurchaseReasonProfileReader(db).read(
+                        PurchaseReasonProfileLookupKey(
+                            project_id=context.project_id,
+                            category_code=context.category_code,
+                            batch_id=context.batch_id,
+                            sku_code=target_sku_code,
+                        )
+                    )
+                    profile = contract.profile
+                    evidence_context["purchase_reason_hypothesis"] = {
+                        "source": "M12D",
+                        "usage": "derived_hypothesis_only",
+                        "found": contract.found,
+                        "consumption_state": contract.consumption_state,
+                        "message_cn": contract.message_cn,
+                        "review_required": bool(profile.review_required) if profile else False,
+                        "review_reasons": list(profile.review_reasons) if profile else [],
+                        "anchors": [item.model_dump(mode="json") for item in (profile.anchors if profile else [])],
+                    }
+                except Exception:
+                    evidence_context["purchase_reason_hypothesis"] = {
+                        "source": "M12D",
+                        "usage": "derived_hypothesis_only",
+                        "found": False,
+                        "message_cn": "已发布成交理由画像读取失败，本轮不把它作为独立证据。",
+                    }
+        typed_context = ClaimValuePmContext.model_validate(evidence_context)
+        analysis = analyze_sellpoint_value_pm(typed_context)
+        target = evidence_atom.get("target") or typed_context.target
+        result_payload: dict[str, Any] = {"sellpoint_value_pm": analysis}
+        if answer_style == "xiaoao" or with_report != "none":
+            result_payload["sellpoint_value_pm_answer"] = build_claim_value_pm_answer(
+                target=target,
+                analysis=analysis,
+                with_report=with_report,
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+            )
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-pm",
+            context=context,
+            target=target,
+            result=result_payload,
+            sop_steps=[
+                {"step_code": "sellpoint-value-evidence", "status": "ok", "run_count": 2 if fallback_result else 1},
+                {"step_code": "competitor-set-fallback", "status": "ok" if fallback_result else "skipped", "run_count": int(fallback_result is not None)},
+                {"step_code": "strict-comment-attribution", "status": "ok", "run_count": 1},
+                {"step_code": "direct-competitor-choice-curve", "status": "ok", "run_count": 1},
+                {"step_code": "product-manager-report", "status": "ok" if "sellpoint_value_pm_answer" in result_payload else "skipped", "run_count": int("sellpoint_value_pm_answer" in result_payload)},
+            ],
+            atoms_used=_atoms_used(atom_results),
+            evidence=_evidence(atom_results),
+            limitations=_dedupe_strings([*_limitations(atom_results), *(analysis.get("limitations") or [])]),
+            answer_outline=[analysis.get("headline_cn") or "已生成产品经理版卖点称重结果。"],
+        )
 
     def competitor_set(
         self,

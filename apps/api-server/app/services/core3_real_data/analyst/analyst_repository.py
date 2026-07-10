@@ -28,6 +28,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
+    CORE3_M14_RULE_VERSION,
 )
 
 
@@ -153,6 +154,7 @@ class AnalystRepository:
                 sku_prefix=sku_prefix,
             )
         )
+        batch_ids.update(self._current_m14_batch_ids(sku_prefix=sku_prefix))
         batch_ids.update(
             self._current_profile_batch_ids(
                 entities.Core3SkuParamProfile,
@@ -186,6 +188,22 @@ class AnalystRepository:
         if not batch_ids:
             return ()
         return self._order_batch_ids_newest_first(batch_ids)
+
+    def _current_m14_batch_ids(self, *, sku_prefix: str) -> tuple[str, ...]:
+        stmt = (
+            select(entities.Core3CompetitorSelectionRun.batch_id)
+            .where(entities.Core3CompetitorSelectionRun.project_id == self.project_id)
+            .where(entities.Core3CompetitorSelectionRun.category_code == self.category_code)
+            .where(entities.Core3CompetitorSelectionRun.target_sku_code.like(f"{sku_prefix}%"))
+            .where(entities.Core3CompetitorSelectionRun.rule_version == CORE3_M14_RULE_VERSION)
+            .where(entities.Core3CompetitorSelectionRun.is_current.is_(True))
+            .where(entities.Core3CompetitorSelectionRun.processing_status.in_(("success", "warning")))
+            .where(entities.Core3CompetitorSelectionRun.selection_status.in_(("success", "limited")))
+            .where(entities.Core3CompetitorSelectionRun.selected_count > 0)
+            .where(entities.Core3CompetitorSelectionRun.review_required.is_(False))
+            .group_by(entities.Core3CompetitorSelectionRun.batch_id)
+        )
+        return tuple(str(batch_id) for batch_id in self.db.execute(stmt).scalars())
 
     def _current_profile_batch_ids(
         self,
@@ -564,6 +582,317 @@ class AnalystRepository:
             "missing_sections": missing_sections,
             "evidence_sources": evidence_sources,
         }
+
+    def sellpoint_value_evidence_context(
+        self,
+        *,
+        batch_id: str,
+        sku: ResolvedSku,
+        product_category: str,
+        market_window: str,
+        analysis_population: str,
+        fallback_candidates: Sequence[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Load published evidence for the product-manager sellpoint analysis.
+
+        M14 is the only native competitor selector used here. Callers may pass
+        candidate identifiers produced by the existing competitor SOP when M14
+        has no current selection; final competitor narratives and M12C values
+        are intentionally not consumed.
+        """
+
+        normalized_category = product_category.upper()
+        target_fact = self.sku_fact_brief(
+            batch_id=batch_id,
+            sku=sku,
+            product_category=normalized_category,
+            market_window=market_window,
+            analysis_population=analysis_population,
+        )
+        target_source_rows = {
+            "M03B": self._param_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+            "M04C": self._claim_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+            "M05C": self._comment_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+            "M07": self._market_profile(batch_id=batch_id, sku_code=sku.sku_code, market_window=market_window),
+            "M09C": self._user_task_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+            "M10C": self._target_group_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+            "M11C": self._battlefield_profile(batch_id=batch_id, product_category=normalized_category, sku_code=sku.sku_code),
+        }
+        selection_rows = self._sellpoint_competitor_selections(
+            batch_id=batch_id,
+            target_sku_code=sku.sku_code,
+        )
+        competitor_source = "M14" if selection_rows else "none"
+        competitor_refs: list[dict[str, Any]] = [
+            _sellpoint_competitor_selection_payload(row)
+            for row in selection_rows
+        ]
+        if not competitor_refs and fallback_candidates:
+            competitor_source = "competitor_set_fallback"
+            seen: set[str] = set()
+            for rank, item in enumerate(fallback_candidates, start=1):
+                candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else item
+                sku_code = str((candidate or {}).get("sku_code") or "").strip()
+                if not sku_code or sku_code in seen or sku_code == sku.sku_code:
+                    continue
+                seen.add(sku_code)
+                competitor_refs.append(
+                    {
+                        "sku_code": sku_code,
+                        "brand_name": (candidate or {}).get("brand_name"),
+                        "model_name": (candidate or {}).get("model_name"),
+                        "selection_rank": rank,
+                        "slot_code": item.get("competitor_role") or item.get("role") or "existing_competitor_sop",
+                        "slot_name_cn": item.get("competitor_role_cn") or item.get("role_cn") or "既有竞品智能体候选",
+                        "selection_confidence": _number(item.get("confidence")) or _number(item.get("business_score")),
+                        "evidence_completeness_score": _number(item.get("evidence_completeness_score")),
+                        "selection_source": "competitor_set_fallback",
+                        "selection_evidence_ids": [],
+                    }
+                )
+                if len(competitor_refs) >= 3:
+                    break
+        sku_codes = [sku.sku_code, *[str(item["sku_code"]) for item in competitor_refs]]
+        atoms = self._sellpoint_comment_atoms(
+            batch_id=batch_id,
+            product_category=normalized_category,
+            sku_codes=sku_codes,
+        )
+        weekly_rows = self._sellpoint_market_weekly_rows(
+            batch_id=batch_id,
+            sku_codes=sku_codes,
+            market_window=market_window,
+        )
+        atoms_by_sku: dict[str, list[dict[str, Any]]] = {}
+        for row in atoms:
+            atoms_by_sku.setdefault(row.sku_code, []).append(_sellpoint_comment_atom_payload(row))
+        weekly_by_sku: dict[str, list[dict[str, Any]]] = {}
+        for row in weekly_rows:
+            if row.sku_code:
+                weekly_by_sku.setdefault(row.sku_code, []).append(_sellpoint_market_weekly_payload(row))
+        competitors: list[dict[str, Any]] = []
+        for reference in competitor_refs:
+            competitor_sku = self._resolved_sku_for_sellpoint(
+                batch_id=batch_id,
+                product_category=normalized_category,
+                market_window=market_window,
+                sku_code=str(reference["sku_code"]),
+                fallback=reference,
+            )
+            if competitor_sku is None:
+                continue
+            competitors.append(
+                {
+                    **reference,
+                    "fact_brief": self.sku_fact_brief(
+                        batch_id=batch_id,
+                        sku=competitor_sku,
+                        product_category=normalized_category,
+                        market_window=market_window,
+                        analysis_population=analysis_population,
+                    ),
+                    "comment_atoms": atoms_by_sku.get(competitor_sku.sku_code, []),
+                    "market_weekly_rows": weekly_by_sku.get(competitor_sku.sku_code, []),
+                }
+            )
+        evidence_ids = _dedupe_texts(
+            [
+                *(item for row in atoms for item in (row.evidence_ids or [])),
+                *(row.clean_market_id for row in weekly_rows),
+                *(item for row in selection_rows for item in (row.evidence_ids or [])),
+            ]
+        )
+        return {
+            "schema_version": "sellpoint_value_pm_context_v1",
+            "project_id": self.project_id,
+            "category_code": self.category_code,
+            "batch_id": batch_id,
+            "product_category": normalized_category,
+            "market_window": market_window,
+            "target": sku.to_dict(),
+            "fact_brief": target_fact,
+            "comment_atoms": atoms_by_sku.get(sku.sku_code, []),
+            "market_weekly_rows": weekly_by_sku.get(sku.sku_code, []),
+            "competitor_source": competitor_source,
+            "competitor_selection_batch_id": selection_rows[0].batch_id if selection_rows else None,
+            "competitors": competitors,
+            "purchase_reason_hypothesis": {},
+            "source_versions": {
+                **{
+                    module: str(getattr(row, "rule_version"))
+                    for module, row in target_source_rows.items()
+                    if row is not None and getattr(row, "rule_version", None)
+                },
+                **({"M14": str(selection_rows[0].rule_version)} if selection_rows else {}),
+            },
+            "evidence_ids": evidence_ids,
+        }
+
+    def _sellpoint_competitor_selections(
+        self,
+        *,
+        batch_id: str,
+        target_sku_code: str,
+    ) -> list[entities.Core3CompetitorSelection]:
+        eligible_batch_ids = batch_ids_from_scope(batch_id)
+        run_stmt = (
+            select(entities.Core3CompetitorSelectionRun)
+            .where(entities.Core3CompetitorSelectionRun.project_id == self.project_id)
+            .where(entities.Core3CompetitorSelectionRun.category_code == self.category_code)
+            .where(entities.Core3CompetitorSelectionRun.target_sku_code == target_sku_code)
+            .where(entities.Core3CompetitorSelectionRun.rule_version == CORE3_M14_RULE_VERSION)
+            .where(entities.Core3CompetitorSelectionRun.is_current.is_(True))
+            .where(entities.Core3CompetitorSelectionRun.processing_status.in_(("success", "warning")))
+            .where(entities.Core3CompetitorSelectionRun.selection_status.in_(("success", "limited")))
+            .where(entities.Core3CompetitorSelectionRun.selected_count > 0)
+            .where(entities.Core3CompetitorSelectionRun.review_required.is_(False))
+            .order_by(
+                entities.Core3CompetitorSelectionRun.updated_at.desc(),
+                entities.Core3CompetitorSelectionRun.created_at.desc(),
+                entities.Core3CompetitorSelectionRun.selection_run_id.desc(),
+            )
+            .limit(1)
+        )
+        if eligible_batch_ids:
+            run_stmt = run_stmt.where(entities.Core3CompetitorSelectionRun.batch_id.in_(eligible_batch_ids))
+        selection_run = self.db.execute(run_stmt).scalar_one_or_none()
+        if selection_run is None:
+            return []
+        stmt = (
+            select(entities.Core3CompetitorSelection)
+            .where(entities.Core3CompetitorSelection.project_id == self.project_id)
+            .where(entities.Core3CompetitorSelection.category_code == self.category_code)
+            .where(entities.Core3CompetitorSelection.batch_id == selection_run.batch_id)
+            .where(entities.Core3CompetitorSelection.selection_run_id == selection_run.selection_run_id)
+            .where(entities.Core3CompetitorSelection.target_sku_code == target_sku_code)
+            .where(entities.Core3CompetitorSelection.rule_version == CORE3_M14_RULE_VERSION)
+            .where(entities.Core3CompetitorSelection.is_current.is_(True))
+            .where(entities.Core3CompetitorSelection.processing_status.in_(("success", "warning")))
+            .where(entities.Core3CompetitorSelection.review_required.is_(False))
+            .order_by(
+                entities.Core3CompetitorSelection.selection_rank,
+                entities.Core3CompetitorSelection.slot_code,
+            )
+        )
+        result: list[entities.Core3CompetitorSelection] = []
+        seen: set[str] = set()
+        for row in self.db.execute(stmt).scalars():
+            if row.candidate_sku_code in seen:
+                continue
+            seen.add(row.candidate_sku_code)
+            result.append(row)
+            if len(result) >= 3:
+                break
+        return result
+
+    def _sellpoint_comment_atoms(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        sku_codes: Sequence[str],
+    ) -> list[entities.Core3CommentFactAtom]:
+        if not sku_codes:
+            return []
+        result: list[entities.Core3CommentFactAtom] = []
+        for sku_code in _dedupe_texts(sku_codes):
+            profile = self._comment_profile(
+                batch_id=batch_id,
+                product_category=product_category,
+                sku_code=sku_code,
+            )
+            if profile is None or not profile.batch_id:
+                continue
+            stmt = (
+                select(entities.Core3CommentFactAtom)
+                .where(entities.Core3CommentFactAtom.project_id == self.project_id)
+                .where(entities.Core3CommentFactAtom.category_code == self.category_code)
+                .where(entities.Core3CommentFactAtom.batch_id == profile.batch_id)
+                .where(entities.Core3CommentFactAtom.product_category == product_category)
+                .where(entities.Core3CommentFactAtom.sku_code == sku_code)
+                .where(entities.Core3CommentFactAtom.rule_version == _comment_rule_version(product_category))
+                .where(entities.Core3CommentFactAtom.is_current.is_(True))
+                .order_by(
+                    entities.Core3CommentFactAtom.source_comment_key,
+                    entities.Core3CommentFactAtom.sentence_seq,
+                    entities.Core3CommentFactAtom.subdimension_code,
+                )
+            )
+            seen: set[tuple[str, int | None, str]] = set()
+            for row in self.db.execute(stmt).scalars():
+                key = (row.source_comment_key, row.sentence_seq, row.subdimension_code)
+                if key in seen:
+                    continue
+                seen.add(key)
+                result.append(row)
+        return result
+
+    def _sellpoint_market_weekly_rows(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+        market_window: str,
+    ) -> list[entities.Core3CleanMarketWeekly]:
+        if not sku_codes:
+            return []
+        result: list[entities.Core3CleanMarketWeekly] = []
+        for sku_code in _dedupe_texts(sku_codes):
+            profile = self._market_profile(
+                batch_id=batch_id,
+                sku_code=sku_code,
+                market_window=market_window,
+            )
+            if profile is None or not profile.batch_id:
+                continue
+            stmt = (
+                select(entities.Core3CleanMarketWeekly)
+                .where(entities.Core3CleanMarketWeekly.project_id == self.project_id)
+                .where(entities.Core3CleanMarketWeekly.category_code == self.category_code)
+                .where(entities.Core3CleanMarketWeekly.batch_id == profile.batch_id)
+                .where(entities.Core3CleanMarketWeekly.sku_code == sku_code)
+                .where(entities.Core3CleanMarketWeekly.period_week_index.is_not(None))
+                .where(entities.Core3CleanMarketWeekly.record_status == "active")
+                .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
+                .order_by(
+                    entities.Core3CleanMarketWeekly.period_week_index,
+                    entities.Core3CleanMarketWeekly.platform_type,
+                    entities.Core3CleanMarketWeekly.source_row_id,
+                )
+            )
+            seen: set[str] = set()
+            for row in self.db.execute(stmt).scalars():
+                if row.clean_record_key in seen:
+                    continue
+                seen.add(row.clean_record_key)
+                result.append(row)
+        return result
+
+    def _resolved_sku_for_sellpoint(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        market_window: str,
+        sku_code: str,
+        fallback: dict[str, Any],
+    ) -> ResolvedSku | None:
+        market = self._market_profile(batch_id=batch_id, sku_code=sku_code, market_window=market_window)
+        param = self._param_profile(batch_id=batch_id, product_category=product_category, sku_code=sku_code)
+        if market is None and param is None:
+            return None
+        return ResolvedSku(
+            sku_code=sku_code,
+            brand_name=(market.brand_name or market.brand) if market is not None else fallback.get("brand_name"),
+            model_name=(market.model_name if market is not None else None) or (param.model_name if param is not None else None) or fallback.get("model_name"),
+            product_category=product_category,
+            size_tier=(market.size_segment if market is not None else None) or _param_size_tier(param),
+            price_band_in_size_tier=market.price_band_size if market is not None else None,
+            screen_size_inch=_decimal(market.screen_size_inch) if market is not None else None,
+            weighted_price=_decimal(market.price_wavg) if market is not None else None,
+            avg_weekly_sales_volume=_safe_avg(_decimal(market.sales_volume_total), market.active_week_count) if market is not None else None,
+            source="M14/M07" if market is not None else "M14/M03B",
+        )
 
     def semantic_dimension_space(
         self,
@@ -2318,6 +2647,69 @@ def _comment_payload(row: entities.Core3SkuCommentFactProfile | None) -> dict[st
         "quality_flags": row.quality_flags or [],
         "evidence_id_count": len(row.evidence_ids or []),
     }
+
+
+def _sellpoint_competitor_selection_payload(row: entities.Core3CompetitorSelection) -> dict[str, Any]:
+    return {
+        "sku_code": row.candidate_sku_code,
+        "brand_name": row.candidate_brand_name,
+        "model_name": row.candidate_model_name,
+        "selection_rank": row.selection_rank,
+        "slot_code": row.slot_code,
+        "slot_name_cn": row.slot_name_cn,
+        "selection_confidence": _number(row.confidence),
+        "evidence_completeness_score": _number(row.evidence_completeness_score),
+        "selection_source": "M14",
+        "selection_evidence_ids": list(row.evidence_ids or []),
+    }
+
+
+def _sellpoint_comment_atom_payload(row: entities.Core3CommentFactAtom) -> dict[str, Any]:
+    return {
+        "source_comment_key": row.source_comment_key,
+        "source_comment_id": row.source_comment_id,
+        "sentence_seq": row.sentence_seq,
+        "clean_comment_text": row.clean_comment_text,
+        "dimension_code": row.dimension_code,
+        "subdimension_code": row.subdimension_code,
+        "dimension_type": row.dimension_type,
+        "polarity": row.polarity,
+        "support_relation": row.support_relation,
+        "supported_param_codes": list(row.supported_param_codes or []),
+        "contradicted_param_codes": list(row.contradicted_param_codes or []),
+        "supported_claim_codes": list(row.supported_claim_codes or []),
+        "contradicted_claim_codes": list(row.contradicted_claim_codes or []),
+        "evidence_ids": list(row.evidence_ids or []),
+        "quality_flags": list(row.quality_flags or []),
+        "confidence": _number(row.confidence) or 0.0,
+    }
+
+
+def _sellpoint_market_weekly_payload(row: entities.Core3CleanMarketWeekly) -> dict[str, Any]:
+    return {
+        "sku_code": str(row.sku_code or ""),
+        "period_week_index": int(row.period_week_index or 0),
+        "period_raw": row.period_raw,
+        "platform_type": row.platform_type or "unknown",
+        "channel_type": row.channel_type,
+        "sales_volume": _number(row.sales_volume),
+        "sales_amount": _number(row.sales_amount),
+        "avg_price": _number(row.avg_price),
+        "price_check_status": row.price_check_status,
+        "quality_flags": list(row.quality_flags or []),
+        "evidence_ids": [row.clean_market_id, row.source_row_id],
+    }
+
+
+def _dedupe_texts(values: Iterable[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            result.append(text)
+    return result
 
 
 def _add_profile_dimension_codes(

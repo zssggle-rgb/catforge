@@ -47,6 +47,15 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
         status="implemented",
     ),
     AbilityDefinition(
+        code="sellpoint-value-evidence",
+        ability_type="atom",
+        description_cn="加载单 SKU 的参数、卖点、评论原子、周平台市场明细和既有竞品事实，供产品经理版卖点称重使用。",
+        required_inputs=("sku_code|query",),
+        optional_inputs=("limit",),
+        source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M14"),
+        status="implemented",
+    ),
+    AbilityDefinition(
         code="same-size-price-candidates",
         ability_type="atom",
         description_cn="按同尺寸、同尺寸内价格带找可比 SKU 候选。",
@@ -154,6 +163,15 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
 
 
 SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
+    AbilityDefinition(
+        code="sellpoint-value-pm",
+        ability_type="sop",
+        description_cn="面向产品经理生成卖点称重、用户理解、同价选择、价格承接、既有竞品校准和下一步动作。",
+        required_inputs=("sku_code|query",),
+        optional_inputs=("limit", "answer_style", "with_report", "max_chat_chars", "report_title"),
+        source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12D", "M14"),
+        status="implemented",
+    ),
     AbilityDefinition(
         code="competitor-set",
         ability_type="sop",

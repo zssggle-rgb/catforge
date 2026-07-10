@@ -20,6 +20,7 @@ LATEST_BATCH = "latest"
 ATOM_COMMANDS = {
     "resolve-sku",
     "sku-fact-brief",
+    "sellpoint-value-evidence",
     "same-size-price-candidates",
     "semantic-overlap",
     "sales-overlap",
@@ -35,6 +36,7 @@ ATOM_COMMANDS = {
 }
 
 SOP_COMMANDS = {
+    "sellpoint-value-pm",
     "competitor-set",
     "why-sales-diff",
     "premium-claim-drivers",
@@ -110,6 +112,8 @@ class CatForgeAnalystService:
             return self.atomic_handlers.resolve_sku(context, **kwargs)
         if command == "sku-fact-brief":
             return self.atomic_handlers.sku_fact_brief(context, **kwargs)
+        if command == "sellpoint-value-evidence":
+            return self.atomic_handlers.sellpoint_value_evidence(context, **kwargs)
         if command == "same-size-price-candidates":
             return self.atomic_handlers.same_size_price_candidates(context, **kwargs)
         if command == "semantic-overlap":
@@ -148,7 +152,7 @@ class CatForgeAnalystService:
         routed_command = route.command
         routed_ability = get_ability(routed_command)
         merged_kwargs = merge_route_kwargs(explicit_kwargs=kwargs, extracted_kwargs=route.extracted_params)
-        if routed_command not in {"competitor-set", "sku-claim-value", "low-sales-diagnosis"}:
+        if routed_command not in {"competitor-set", "sku-claim-value", "low-sales-diagnosis", "sellpoint-value-pm"}:
             for presentation_key in ("answer_style", "with_report", "top_n", "max_chat_chars", "report_title"):
                 merged_kwargs.pop(presentation_key, None)
         result = self.dispatch(routed_command, context, **merged_kwargs)
@@ -189,7 +193,11 @@ def route_question(question: str, explicit_params: dict[str, Any] | None = None)
     matched_rule = "fallback_sku_business_brief"
     confidence = "low"
 
-    if re.search(r"卖点.*空间|卖点.*图谱|哪些卖点.*市场|卖点价值.*分布", normalized):
+    if re.search(r"卖点称重|用户怎么看.*卖点|卖点.*用户.*接住|产品经理.*卖点|价格承接|选择保持价差|支付意愿定价|哪些.*(?:保留|做强|别再单独讲)", normalized):
+        command = "sellpoint-value-pm"
+        matched_rule = "sellpoint_value_pm"
+        confidence = "high" if _has_sku_target(routing_params) else "medium"
+    elif re.search(r"卖点.*空间|卖点.*图谱|哪些卖点.*市场|卖点价值.*分布", normalized):
         command = "claim-value-space"
         matched_rule = "claim_value_space"
         confidence = "high"

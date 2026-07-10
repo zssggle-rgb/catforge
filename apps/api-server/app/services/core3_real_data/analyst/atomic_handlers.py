@@ -105,6 +105,64 @@ class AtomicAnalystHandlers:
             answer_outline=outline,
         )
 
+    def sellpoint_value_evidence(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        fallback_candidates: list[dict[str, Any]] | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        del limit
+        resolved = self._resolve_one(
+            context,
+            command="sellpoint-value-evidence",
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+        )
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        evidence_context = self.repository.sellpoint_value_evidence_context(
+            batch_id=context.batch_id,
+            sku=candidate,
+            product_category=context.product_category,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            fallback_candidates=fallback_candidates,
+        )
+        limitations: list[str] = []
+        if not evidence_context.get("competitors"):
+            limitations.append("当前没有可复用的 M14 竞品选择或既有竞品 SOP 候选。")
+        if not evidence_context.get("comment_atoms"):
+            limitations.append("目标 SKU 没有可用 M05C 评论事实原子。")
+        if not evidence_context.get("market_weekly_rows"):
+            limitations.append("目标 SKU 没有可用周度市场明细。")
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-evidence",
+            context=context,
+            target=candidate.to_dict(),
+            result={"sellpoint_value_evidence": evidence_context},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "sellpoint-value-evidence", "status": "ok"},
+            ],
+            evidence=[
+                {"source_module": module, "rule_version": version}
+                for module, version in (evidence_context.get("source_versions") or {}).items()
+            ],
+            limitations=limitations,
+            answer_outline=[
+                f"已加载 {len(evidence_context.get('comment_atoms') or [])} 条评论事实、"
+                f"{len(evidence_context.get('market_weekly_rows') or [])} 条周度市场行和 "
+                f"{len(evidence_context.get('competitors') or [])} 个既有竞品。"
+            ],
+        )
+
     def semantic_dimension_space(
         self,
         context: AnalystContext,

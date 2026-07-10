@@ -47,6 +47,7 @@ DEFAULT_CANDIDATE_LIMIT = 20
 ATOM_COMMAND_ORDER = (
     "resolve-sku",
     "sku-fact-brief",
+    "sellpoint-value-evidence",
     "same-size-price-candidates",
     "semantic-overlap",
     "sales-overlap",
@@ -62,6 +63,7 @@ ATOM_COMMAND_ORDER = (
 )
 
 SOP_COMMAND_ORDER = (
+    "sellpoint-value-pm",
     "competitor-set",
     "why-sales-diff",
     "premium-claim-drivers",
@@ -661,6 +663,44 @@ def sku_claim_value(
     )
 
 
+def sellpoint_value_pm(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    limit: int = DEFAULT_CANDIDATE_LIMIT,
+    answer_style: str = "raw",
+    with_report: str = "none",
+    max_chat_chars: int = 600,
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    return run_analyst_command(
+        db,
+        command="sellpoint-value-pm",
+        project_id=project_id,
+        category_code=category_code,
+        batch_id=batch_id,
+        product_category=product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+        limit=limit,
+        answer_style=answer_style,
+        with_report=with_report,
+        max_chat_chars=max_chat_chars,
+        report_title=report_title,
+    )
+
+
 def claim_contribution(
     db: Session,
     *,
@@ -1215,6 +1255,7 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     payload = result.get("result") or {}
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
+    sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
     answer_key = ""
     card = None
     if competitor_answer.get("feishu_card_payload"):
@@ -1223,6 +1264,9 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     elif claim_value_answer.get("feishu_card_payload"):
         answer_key = "claim_value_answer"
         card = claim_value_answer.get("feishu_card_payload")
+    elif sellpoint_value_pm_answer.get("feishu_card_payload"):
+        answer_key = "sellpoint_value_pm_answer"
+        card = sellpoint_value_pm_answer.get("feishu_card_payload")
     else:
         return
     if chat_id:
@@ -1248,6 +1292,8 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     delivery_payload = delivery.to_dict()
     if answer_key == "claim_value_answer" and delivery_payload.get("status") == "sent":
         delivery_payload["message_cn"] = "已发送飞书用户卖点价值看板卡片。"
+    if answer_key == "sellpoint_value_pm_answer" and delivery_payload.get("status") == "sent":
+        delivery_payload["message_cn"] = "已发送飞书卖点经营盘卡片。"
     if not isinstance(result.get("result"), dict):
         result["result"] = {}
     if not isinstance(result["result"].get(answer_key), dict):
@@ -1293,7 +1339,12 @@ def _feishu_card_delivery(result: dict[str, Any]) -> dict[str, Any]:
     payload = result.get("result") or {}
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
-    delivery = competitor_answer.get("feishu_card_delivery") or claim_value_answer.get("feishu_card_delivery")
+    sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
+    delivery = (
+        competitor_answer.get("feishu_card_delivery")
+        or claim_value_answer.get("feishu_card_delivery")
+        or sellpoint_value_pm_answer.get("feishu_card_delivery")
+    )
     return delivery if isinstance(delivery, dict) else {}
 
 
@@ -1301,6 +1352,7 @@ def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
     payload = result.get("result") or {}
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
+    sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
     delivery = _feishu_card_delivery(result)
     if delivery.get("status") == "sent":
         return str(delivery.get("message_cn") or "已发送飞书竞品看板卡片。")
@@ -1310,7 +1362,12 @@ def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
         return "飞书卡片发送失败。"
     if delivery.get("status"):
         return "未发送飞书看板卡片。"
-    return str(competitor_answer.get("short_answer") or claim_value_answer.get("short_answer") or "")
+    return str(
+        competitor_answer.get("short_answer")
+        or claim_value_answer.get("short_answer")
+        or sellpoint_value_pm_answer.get("short_answer")
+        or ""
+    )
 
 
 def format_business_text(result: dict[str, Any]) -> str:
@@ -1323,6 +1380,12 @@ def format_business_text(result: dict[str, Any]) -> str:
     claim_value_answer = payload.get("claim_value_answer") or {}
     if claim_value_answer.get("short_answer"):
         return str(claim_value_answer["short_answer"])
+    sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
+    if sellpoint_value_pm_answer.get("short_answer"):
+        return str(sellpoint_value_pm_answer["short_answer"])
+    if "sellpoint_value_pm" in payload:
+        analysis = payload.get("sellpoint_value_pm") or {}
+        return str(analysis.get("headline_cn") or "已生成产品经理版卖点称重结果。")
     if "competitor_set" in payload:
         return _format_competitor_set_text(result)
     if "why_sales_diff" in payload:
