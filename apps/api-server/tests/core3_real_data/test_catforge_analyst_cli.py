@@ -3987,9 +3987,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 2.1 候选 SKU 综合评分" in markdown
     assert "替代压力 5" in markdown
     assert "### 2.5 关键价值锚点、替代压力和市场验证依据" in markdown
-    assert "## 三、四个产品详情链接" in markdown
-    assert "[海信 65E7Q 产品画像](#profile-target)" in markdown
-    assert "[创维 65A7H PRO 产品画像](#profile-competitor-1)" in markdown
+    assert "## 三、四个产品详情链接" not in markdown
     assert "## 四、四个产品横向详细对比" in markdown
     assert "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
     assert "### 4.1 市场画像" in markdown
@@ -3998,17 +3996,13 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 4.4 目标客群画像" in markdown
     assert "### 4.5 卖点画像" in markdown
     assert "### 4.6 参数画像" in markdown
-    assert "### 4.7 卖点价值量化" in markdown
+    assert "### 4.7 卖点价值量化" not in markdown
     assert "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |" in markdown
     assert "| 命中的固定价值战场 |" in markdown
     assert "| 补充证据判断 |" in markdown
     assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
     assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
     assert "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |" in markdown
-    assert "| 本品分类与卖点 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
-    assert "| 强溢价卖点：MiniLED | 战场价差合计280元；战场销量合计15台/周；战场销额合计75,000元/周；覆盖高端画质升级战场 | 未进入强溢价卖点 | 未进入强溢价卖点 | 未进入强溢价卖点 |" in markdown
-    assert "| 强销量卖点：高刷 | 战场价差合计80元；战场销量合计22台/周；战场销额合计88,000元/周；覆盖游戏体育流畅战场 | 未进入强销量卖点 | 未进入强销量卖点 | 未进入强销量卖点 |" in markdown
-    assert "横向比较口径：本表以本品的业务分类和具体卖点为基准" in markdown
     assert "| 组合型增值卖点 |" not in markdown
     assert "| 基础门槛卖点 |" not in markdown
     assert "卖点溢价指数 Top" not in markdown
@@ -4019,7 +4013,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "目标客群画像" in markdown
     assert "卖点画像" in markdown
     assert "参数画像" in markdown
-    assert "卖点价值量化" in markdown
+    assert "### 5.7 卖点价值量化" not in markdown
+    assert "### 6.7 卖点价值量化" not in markdown
+    assert "### 7.7 卖点价值量化" not in markdown
+    assert "### 8.7 卖点价值量化" not in markdown
     assert "所在池空间" in markdown
     assert "池内销量表现" in markdown
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
@@ -4033,24 +4030,9 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "量子点：未见" in markdown
     assert "5200尼特" in markdown
     assert "控光分区：1,920" in markdown
-    assert "溢价卖点" in markdown
-    assert "#### 强溢价卖点" in markdown
-    assert "| MiniLED | 280元 | 15台/周 | 75,000元/周 | 高端画质升级战场 | 参数强，评论强，市场场景强 |" in markdown
-    assert "#### 强销量卖点" in markdown
-    assert "| 高刷 | 80元 | 22台/周 | 88,000元/周 | 游戏体育流畅战场 | 参数强，评论强，市场场景强 |" in markdown
-    assert "#### 用户感知风险/拖后腿" in markdown
-    assert "用户感知风险/拖后腿：音响体验" in markdown
-    assert "该卖点存在用户感知不足、负向反馈或证据支撑不足，可能削弱相关场景的成交解释" in markdown
-    assert "| 音响体验 | 0元 | 0台/周 | 0元/周 |" not in markdown
-    assert "| MiniLED | 高端画质升级战场 | 400元 | 20台/周 | 280元 | 15台/周 |" in markdown
-    assert "战场可解释价差/销量/销额合计，只汇总同一分类、同一卖点在价值战场中的去重量化结果" in markdown
-    assert "业务类型说明：" in markdown
-    assert "卖点解释：" in markdown
-    assert "竞品拦截与补强建议：" in markdown
-    assert "本品相对可比产品表现差异" in markdown
     assert "卖点贡献归因" not in markdown
     assert "语义上下文" not in markdown
-    assert "卖点价值量化待生成" in markdown
+    assert "卖点价值量化待生成" not in markdown
     for forbidden in (
         "CLI",
         "JSON",

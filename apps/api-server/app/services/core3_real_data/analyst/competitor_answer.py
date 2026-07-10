@@ -691,10 +691,6 @@ def render_competitor_report(
     lines.extend(_task_group_score_lines(top_competitors, all_competitors))
     lines.extend(["", "### 2.5 关键价值锚点、替代压力和市场验证依据", ""])
     lines.extend(_anchor_market_score_lines(top_competitors, all_competitors))
-    lines.extend(["", "## 三、四个产品详情链接", ""])
-    lines.append(f"- [{target_name} 产品画像](#profile-target)")
-    for index, item in enumerate(top_competitors[:3], start=1):
-        lines.append(f"- [{_display_name(item.get('candidate') or {})} 产品画像](#profile-competitor-{index})")
     lines.extend(["", "## 四、四个产品横向详细对比", ""])
     lines.extend(
         _product_comparison_lines(
@@ -949,9 +945,6 @@ def _product_comparison_lines(
             _param_comparison_values,
         )
     )
-    lines.extend(["", "### 4.7 卖点价值量化", ""])
-    lines.extend(_claim_value_comparison_table_lines(products))
-    lines.extend(["", _claim_value_footnote()])
     return lines
 
 
@@ -2187,8 +2180,6 @@ def _product_profile_lines(
     lines.extend(_product_claim_profile_lines(sections))
     lines.extend(["", f"### {section_no}.6 参数画像", ""])
     lines.extend(_product_param_profile_lines(sections))
-    lines.extend(["", f"### {section_no}.7 卖点价值量化", ""])
-    lines.extend(_product_claim_value_quantification_lines(claim_value=claim_value, claim_contribution=claim_contribution))
     return lines
 
 
