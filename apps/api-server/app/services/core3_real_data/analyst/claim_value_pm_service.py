@@ -1589,7 +1589,7 @@ def _decision_actions(
                 priority=1,
                 action_type="数据核验",
                 action_cn="先修参数事实与卖点事实链，再讨论单项卖点的价格作用。",
-                why_cn="；".join(blocking_messages[:2]),
+                why_cn=_join_cn_sentences(blocking_messages[:2]),
                 success_signal_cn="同一产品版本的参数事实、卖点表达、能力数量和确认状态完全一致。",
             )
         )
@@ -1643,7 +1643,7 @@ def _test_backlog(
                 priority=1,
                 action_type="先修数据",
                 action_cn="先解决产品事实冲突，本轮不安排卖点选择或价格测试。",
-                why_cn="；".join(item.message_cn for item in product_blockers[:2]),
+                why_cn=_join_cn_sentences(item.message_cn for item in product_blockers[:2]),
                 success_signal_cn="参数事实与卖点事实对同一 SKU、同一规格口径一致。",
             )
         ]
@@ -1795,6 +1795,11 @@ def _known_value(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)):
         return bool(value)
     return True
+
+
+def _join_cn_sentences(values: Iterable[str]) -> str:
+    parts = [str(value).strip().rstrip("。；") for value in values if str(value).strip()]
+    return ("；".join(parts) + "。") if parts else ""
 
 
 def _numeric_value(value: Any) -> float | None:

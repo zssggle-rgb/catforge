@@ -301,6 +301,8 @@ def test_product_fact_blocker_keeps_l3_market_as_observation_without_price_actio
     assert result["data_gate"]["status_cn"] == "数据需修复，卖点结论暂停"
     assert all(item["action_type"] != "价格验证" for item in result["decision_summary"])
     assert [item["action_type"] for item in result["test_backlog"]] == ["先修数据"]
+    assert "。；" not in result["decision_summary"][0]["why_cn"]
+    assert "。；" not in result["test_backlog"][0]["why_cn"]
 
 
 def test_mixed_user_feedback_is_not_promoted_to_keep_and_strengthen() -> None:
