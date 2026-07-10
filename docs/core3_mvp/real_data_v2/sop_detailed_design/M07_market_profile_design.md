@@ -315,7 +315,7 @@ SAMPLE_INSUFFICIENT
 | `market_row_count` | `integer` | 是 | 来源市场行数 |
 | `platform_count` | `integer` | 是 | 平台数 |
 | `screen_size_inch` | `numeric` | 否 | 屏幕尺寸 |
-| `size_segment` | `text` | 是 | 50/55/65/75/85/100/unknown |
+| `size_segment` | `text` | 是 | TV 为 50/55/65/75/85/100/unknown；AC 为安装形态 + 匹数段，其中 3匹和 3匹以上柜机统一为 `floor_hp_3` |
 | `size_param_confidence` | `numeric` | 是 | M03 尺寸置信度 |
 | `sales_volume_total` | `numeric` | 否 | 观察期总销量 |
 | `sales_amount_total` | `numeric` | 否 | 观察期总销额 |
@@ -366,6 +366,11 @@ SAMPLE_INSUFFICIENT
 | `price_percentile_in_size` | `numeric` | 否 | 同尺寸价格分位 |
 | `volume_percentile_in_size` | `numeric` | 否 | 同尺寸销量分位 |
 | `amount_percentile_in_size` | `numeric` | 否 | 同尺寸销额分位 |
+| `market_pool_key` | `text` | 否 | 同池统计逻辑键；TV 为尺寸段 + 渠道 + 窗口，AC 为匹数段 + 价格带 + 渠道 + 窗口 |
+| `same_pool_sku_count` | `integer` | 是 | 同池 SKU 数；AC 必须按“匹数段 × 价格带”统计 |
+| `same_pool_price_percentile` | `numeric` | 否 | 同池价格分位 |
+| `same_pool_volume_percentile` | `numeric` | 否 | 同池销量分位 |
+| `same_pool_amount_percentile` | `numeric` | 否 | 同池销额分位 |
 | `price_gap_to_category_median` | `numeric` | 否 | 与品类中位价差 |
 | `price_gap_to_size_median` | `numeric` | 否 | 与同尺寸中位价差 |
 | `volume_gap_to_size_median` | `numeric` | 否 | 与同尺寸中位销量差 |
@@ -1133,6 +1138,10 @@ SKU 在某窗口内无有效行时，仍生成 profile，但 `sample_status='unk
 3. 根据品类价格分位生成 `price_band_category`。
 4. 根据尺寸内价格分位生成 `price_band_size`。
 5. 样本不足时保留分位值但降级 sample status。
+
+AC 品类的 `size_segment` 使用安装形态和匹数段，不使用屏幕尺寸。柜机 3匹和 3匹以上统一写入 `floor_hp_3`，业务展示为“3匹及以上柜机”。AC 的同池统计必须在 `price_band_size` 生成之后二次确定：`market_pool_key = ac:{size_segment}:{price_band_size}:{channel}:{window}`，`same_pool_sku_count`、同池价格分位、同池销量分位和同池销额分位都按该 key 计算。这样 1.5匹挂机不会被 77 个 SKU 的大池稀释，3匹以上柜机也不会形成单 SKU 孤岛。
+
+版本约束：TV 继续使用 `m07_price_band_v1 / m07_pool_v1`；AC 新口径使用 `m07_ac_hp_price_band_v2 / m07_ac_hp_price_pool_v2`。M07 主画像版本继续为 `m07_market_profile_v1`，由价格带规则和市场池规则字段区分品类算法，避免未重跑 TV 时切断现有 TV 读取链路。
 
 ### 9.7 步骤 6：生成业务区间和区间内销量位置
 

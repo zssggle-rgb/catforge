@@ -11,9 +11,9 @@ import os
 import re
 import shutil
 import subprocess
-from hashlib import sha256
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
+from hashlib import sha256
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -31,12 +31,25 @@ PRICE_BAND_ORDER = {
 
 SCORE_WEIGHTS = {
     "purchase_pool": Decimal("0.20"),
-    "battlefield": Decimal("0.15"),
-    "user_task": Decimal("0.20"),
-    "target_group": Decimal("0.20"),
+    "battlefield": Decimal("0.25"),
+    "user_task": Decimal("0.15"),
+    "target_group": Decimal("0.15"),
     "value_anchor": Decimal("0.15"),
-    "replacement_pressure": Decimal("0.05"),
-    "market_validation": Decimal("0.05"),
+    "replacement_pressure": Decimal("0.10"),
+}
+
+ANCHOR_PRIMARY_DIRECT_MIN = Decimal("7")
+REPLACEMENT_STRONG_MIN = Decimal("5")
+TOP3_DEVIATED_PURCHASE_POOLS = {"P3", "P4"}
+MARKET_VALIDATION_SORT_PRIORITY = {"strong": 2, "medium": 1, "weak": 0}
+ROLE_SORT_PRIORITY = {
+    "primary_direct": 6,
+    "strong_direct": 5,
+    "price_adjacent": 4,
+    "downtrade_diversion": 3,
+    "uptrade_alternative": 3,
+    "scenario_alternative": 2,
+    "excluded": 0,
 }
 
 ROLE_WEIGHTS = {
@@ -262,6 +275,30 @@ PARAM_GROUP_NAMES = {
     "eye_care": "护眼舒适",
 }
 
+DIMENSION_PROFILE_LABELS_CN = {
+    "authority": "品牌/认证背书",
+    "brand_authority": "品牌/认证背书",
+    "sales_certification": "销量/认证背书",
+    "energy_efficiency": "能效/省电",
+    "power_saving": "能效/省电",
+    "durability_quality": "耐用品质",
+    "quality_durability": "耐用品质",
+    "service_fulfillment": "安装/售后履约",
+    "installation_service": "安装/售后履约",
+    "installation_design": "安装/空间适配",
+    "smart_iot": "智能互联",
+    "smart_control": "智能控制/互联",
+    "wifi_control": "智能控制/互联",
+    "voice_control": "智能控制/互联",
+    "health_clean_air": "健康洁净",
+    "purification": "健康洁净",
+    "comfort_airflow": "舒适送风",
+    "cooling_heating": "制冷制热",
+    "quiet_sleep": "静音睡眠",
+    "price_value": "价格/补贴价值",
+    "value_price": "价格/补贴价值",
+}
+
 SIZE_TIER_NAMES = {
     "small_32_45": "32-45 寸小屏段",
     "medium_46_59": "46-59 寸中屏段",
@@ -273,7 +310,7 @@ SIZE_TIER_NAMES = {
     "wall_hp_2": "2匹挂机",
     "wall_hp_3": "3匹挂机",
     "floor_hp_2": "2匹柜机",
-    "floor_hp_3": "3匹柜机",
+    "floor_hp_3": "3匹及以上柜机",
     "floor_hp_3_plus": "3匹及以上柜机",
 }
 
@@ -499,29 +536,29 @@ def render_short_answer(
     lines = [f"{target_name} 的重点竞品建议看{len(top_competitors)}款：{names}。"]
     for index, item in enumerate(top_competitors, start=1):
         name = _display_name(item.get("candidate") or {})
-        anchors = _join_cn(item["value_anchor"]["shared_anchors"][:4]) or "关键价值锚点"
+        anchors = _join_cn((item.get("value_anchor") or {}).get("shared_anchors", [])[:4]) or "关键价值锚点待复核"
+        pressure = item.get("replacement_pressure") or {}
+        pressure_cn = str(pressure.get("type_cn") or "替代压力待复核")
         if index == 1:
             if evidence_state["semantic_verified"]:
                 lines.append(
                     f"{name}排第一，核心原因是同一购买池内替代关系最完整，"
                     f"主辅价值战场、用户任务和目标客群的有效重合更完整，"
                     f"共同价值锚点集中在{anchors}，"
-                    f"形成{item['replacement_pressure']['type_cn']}。"
+                    f"形成{pressure_cn}。"
                 )
             else:
                 lines.append(
                     f"{name}排第一，主要因为它与{target_name}处在同一购买池，"
-                    f"参数和卖点可替代性最强；共同锚点集中在{anchors}。"
+                    f"共同价值锚点集中在{anchors}，"
+                    f"形成{pressure_cn}。"
                 )
         else:
-            pressure = item["replacement_pressure"]["type_cn"]
-            if not evidence_state["semantic_verified"] and pressure == "价值替代压力":
-                pressure = "参数/卖点替代压力"
             lines.append(
-                f"{name}属于{item['role_cn']}，主要压力来自{pressure}。"
+                f"{name}属于{item['role_cn']}，主要压力来自{pressure_cn}。"
             )
     if not evidence_state["semantic_verified"]:
-        lines.append("当前缺少用户评论或语义图谱验证，以上排序更偏同池配置、卖点和价格替代判断。")
+        lines.append("当前缺少用户评论或语义图谱验证，以上排序按购买池、关键价值锚点可替代性和替代压力降级判断。")
     lines.append(_report_suffix(report_url))
     text = "".join(lines)
     return _compress_answer(text, target=target, top_competitors=top_competitors, report_url=report_url, max_chat_chars=max_chat_chars)
@@ -588,6 +625,8 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
             elements.append(_feishu_markdown(_battlefield_chart_heading(battlefield_chart_values)))
             elements.append(_feishu_battlefield_overlap_chart(battlefield_chart_values))
         elements.append({"tag": "hr"})
+        elements.append(_feishu_markdown(_dashboard_anchor_pressure_markdown(competitors)))
+        elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品市场验证**"))
         elements.append(_feishu_competitor_market_table(target, competitors))
     action = _feishu_report_action(dashboard_payload)
@@ -638,6 +677,10 @@ def render_competitor_dashboard_markdown(dashboard_payload: dict[str, Any]) -> l
             "",
             *_dashboard_score_dimension_lines(competitors),
             "",
+            "### 关键价值锚点与替代压力",
+            "",
+            *_dashboard_anchor_pressure_lines(competitors),
+            "",
             "### 市场验证条形图",
             "",
             *_dashboard_market_chart_lines(competitors),
@@ -676,21 +719,9 @@ def render_competitor_report(
             "",
             "## 二、分析过程",
             "",
-            "竞品排序采用 100 分制，重点解释候选 SKU 是否会进入同一批用户的最终候选清单。评分不是单纯参数相似度，也不是销量排名，而是把购买池、价值战场、用户任务、目标客群、关键价值锚点和市场验证合并判断。",
-            "",
         ]
     )
-    lines.extend(_scoring_method_lines(target))
-    lines.extend(["", "### 2.1 候选 SKU 综合评分", ""])
-    lines.extend(_candidate_score_table_lines(top_competitors, all_competitors))
-    lines.extend(["", "### 2.2 购买池评分依据", ""])
-    lines.extend(_purchase_pool_score_lines(top_competitors, all_competitors))
-    lines.extend(["", "### 2.3 价值战场评分依据", ""])
-    lines.extend(_dimension_score_lines(top_competitors, all_competitors, dimension="battlefield"))
-    lines.extend(["", "### 2.4 用户任务和目标客群评分依据", ""])
-    lines.extend(_task_group_score_lines(top_competitors, all_competitors))
-    lines.extend(["", "### 2.5 关键价值锚点、替代压力和市场验证依据", ""])
-    lines.extend(_anchor_market_score_lines(top_competitors, all_competitors))
+    lines.extend(_analysis_process_lines(target_name, target, target_sections, top_competitors, all_competitors))
     lines.extend(["", "## 四、四个产品横向详细对比", ""])
     lines.extend(
         _product_comparison_lines(
@@ -812,24 +843,398 @@ def _analysis_conclusion_lines(
     return lines
 
 
+def _analysis_process_lines(
+    target_name: str,
+    target: dict[str, Any],
+    target_sections: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+    all_competitors: list[dict[str, Any]],
+) -> list[str]:
+    products = _analysis_products(target_name, target, target_sections, top_competitors)
+    lines: list[str] = [
+        "竞品排序采用 100 分制，分析过程按维度展开。候选池只说明纳入和排除范围，不替代购买池、价值战场、用户任务、目标客群、关键价值锚点、替代压力和市场验证的横向判断。",
+        "",
+    ]
+    lines.extend(_scoring_method_lines(target))
+    lines.extend(
+        _analysis_section_lines(
+            "### 2.1 综合评分总览",
+            "先看 Top 3 是否在六个主体评分维度上同时成立；市场验证只作为置信和同分排序校验。",
+            _comparison_table_lines(
+                products,
+                ["竞争角色", "综合分", "购买池", "价值战场", "用户任务", "目标客群", "关键价值锚点", "替代压力", "市场验证", "排序判断"],
+                _score_overview_values,
+            ),
+            "综合排序不是价格或销量单因子，首选竞品必须同时满足购买池、语义重合、锚点可替代性和替代压力。",
+        )
+    )
+    lines.extend(
+        _analysis_section_lines(
+            "### 2.2 购买池比较",
+            "购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策；这是竞品成立的前置条件。",
+            _comparison_table_lines(
+                products,
+                ["尺寸/价格带", "均价", "购买池判断", "价差/预算关系", "维度得分"],
+                _purchase_pool_process_values,
+            ),
+            "同尺寸或邻近价格带候选优先进入正面对标；价格明显上探或下探时，需要通过替代压力说明其分流方式。",
+        )
+    )
+    lines.extend(_semantic_analysis_section(products, profile_type="battlefield"))
+    lines.extend(_semantic_analysis_section(products, profile_type="task"))
+    lines.extend(_semantic_analysis_section(products, profile_type="group"))
+    target_anchor_summary = _target_anchor_summary(top_competitors)
+    lines.extend(
+        _analysis_section_lines(
+            "### 2.6 关键价值锚点可替代性比较",
+            "关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖、强化或绕开；只看 SKU 级成交理由画像和 pair 级可替代性，不用参数标签直接拼结论。",
+            _comparison_table_lines(
+                products,
+                ["目标核心锚点", "候选覆盖情况", "候选更强锚点", "弱表达/复核", "维度得分", "排序含义"],
+                lambda product: _anchor_process_values(product, target_anchor_summary=target_anchor_summary),
+            ),
+            "锚点可替代性不足的候选可以作为价格或场景参考，但不能成为首选直接竞品。",
+        )
+    )
+    lines.extend(
+        _analysis_section_lines(
+            "### 2.7 替代压力比较",
+            "替代压力回答竞品通过什么方式改变本品成交：价值替代、价格压制、配置标杆、场景心智、品牌生态、下探或上探替代。",
+            _comparison_table_lines(
+                products,
+                ["主压力类型", "辅助压力", "压力得分", "强替代话术", "成交影响"],
+                _pressure_process_values,
+            ),
+            "替代压力低于 5/10 时只能作为复核或弱压力说明，不输出高确定性强替代结论。",
+        )
+    )
+    lines.extend(
+        _analysis_section_lines(
+            "### 2.8 市场验证比较",
+            "市场验证只回答候选是否具备真实线上成交和分流基础；它不直接进入主体综合分。",
+            _comparison_table_lines(
+                products,
+                ["周均销量", "重叠在售周", "验证等级", "真实分流判断", "排序作用"],
+                _market_validation_process_values,
+            ),
+            "销量用于验证竞品有效性，不把销量高但购买池或成交理由偏离的 SKU 排成直接竞品。",
+        )
+    )
+    lines.extend(["", "### 2.9 候选池与未选原因附录", ""])
+    lines.extend(_candidate_pool_appendix_lines(top_competitors, all_competitors))
+    return lines
+
+
+def _analysis_section_lines(heading: str, criterion: str, table_lines: list[str], conclusion: str) -> list[str]:
+    return [
+        "",
+        heading,
+        "",
+        f"判断口径：{criterion}",
+        "",
+        *table_lines,
+        "",
+        f"业务结论：{conclusion}",
+    ]
+
+
+def _analysis_products(
+    target_name: str,
+    target: dict[str, Any],
+    target_sections: dict[str, Any],
+    top_competitors: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    products = [{"name": target_name, "sku": target, "sections": target_sections, "competitor_item": None}]
+    for item in top_competitors[:3]:
+        candidate = item.get("candidate") or {}
+        products.append(
+            {
+                "name": _display_name(candidate),
+                "sku": candidate,
+                "sections": _fact_sections(item.get("candidate_fact_brief") or {}),
+                "competitor_item": item,
+            }
+        )
+    return products
+
+
+def _score_overview_values(product: dict[str, Any]) -> dict[str, str]:
+    item = product.get("competitor_item")
+    if not item:
+        return {
+            "竞争角色": "本品基准",
+            "综合分": "本品不参与竞品排序",
+            "购买池": "本品基准",
+            "价值战场": "本品主战场基准",
+            "用户任务": "本品主任务基准",
+            "目标客群": "本品主客群基准",
+            "关键价值锚点": "目标核心成交理由基准",
+            "替代压力": "被替代对象",
+            "市场验证": "本品市场表现基准",
+            "排序判断": "作为比较目标",
+        }
+    score = _candidate_score_breakdown(item)
+    market = item.get("market_validation") or {}
+    return {
+        "竞争角色": _report_role_cn(item),
+        "综合分": f"{score['total']}/100",
+        "购买池": f"{score['purchase_pool']}/20；{item['purchase_pool']['reason_cn']}",
+        "价值战场": f"{score['battlefield']}/25",
+        "用户任务": f"{score['user_task']}/15",
+        "目标客群": f"{score['target_group']}/15",
+        "关键价值锚点": f"{score['value_anchor']}/15",
+        "替代压力": f"{score['replacement_pressure']}/10；{(item.get('replacement_pressure') or {}).get('type_cn') or '替代压力待复核'}",
+        "市场验证": market.get("level_cn") or "验证不足",
+        "排序判断": _candidate_sort_reason(item),
+    }
+
+
+def _purchase_pool_process_values(product: dict[str, Any]) -> dict[str, str]:
+    sku = product.get("sku") or {}
+    sections = product.get("sections") or {}
+    item = product.get("competitor_item")
+    position = _market_position(sections)
+    metrics = _market_metrics(sections)
+    size = position.get("screen_size_inch") or sku.get("screen_size_inch")
+    size_tier = SIZE_TIER_NAMES.get(str(position.get("size_tier") or sku.get("size_tier")), "尺寸段未知")
+    price_band = PRICE_BAND_NAMES.get(str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier")), "价格带未知")
+    price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price") or sku.get("price_wavg")
+    if not item:
+        return {
+            "尺寸/价格带": f"{_format_number(size) or '未知'}寸；{size_tier}；{price_band}",
+            "均价": _format_money(price) or "未知",
+            "购买池判断": "本品所在尺寸价格池",
+            "价差/预算关系": "本品基准",
+            "维度得分": "本品不评分",
+        }
+    score = _candidate_score_breakdown(item)
+    candidate = item.get("candidate") or {}
+    return {
+        "尺寸/价格带": f"{_format_number(size) or _format_number(candidate.get('screen_size_inch')) or '未知'}寸；{size_tier}；{price_band}",
+        "均价": _format_money(price or candidate.get("weighted_price") or candidate.get("price_wavg")) or "未知",
+        "购买池判断": item["purchase_pool"]["reason_cn"],
+        "价差/预算关系": _price_gap_phrase(candidate.get("price_gap_pct_to_target")),
+        "维度得分": f"{score['purchase_pool']}/20",
+    }
+
+
+def _semantic_analysis_section(products: list[dict[str, Any]], *, profile_type: str) -> list[str]:
+    configs = {
+        "battlefield": {
+            "heading": "### 2.3 价值战场比较",
+            "criterion": "价值战场比较本品和竞品是否争夺同一类付费场景，主/辅关系高于简单重合数量。",
+            "rows": ["主价值战场", "辅/机会价值战场", "与本品重合", "维度得分", "业务判断"],
+            "conclusion": "价值战场越接近，竞品越容易在同一价值解释框架下拦截本品。",
+        },
+        "task": {
+            "heading": "### 2.4 用户任务比较",
+            "criterion": "用户任务比较同一批用户买产品时要完成的核心用途是否交叉。",
+            "rows": ["主用户任务", "辅/观察用户任务", "与本品重合", "维度得分", "业务判断"],
+            "conclusion": "主任务交叉越强，导购和详情页越需要解释本品在该任务上的不可替代收益。",
+        },
+        "group": {
+            "heading": "### 2.5 目标客群比较",
+            "criterion": "目标客群比较本品和竞品是否争夺同一批核心人群或相邻升级人群。",
+            "rows": ["主目标客群", "辅/观察目标客群", "与本品重合", "维度得分", "业务判断"],
+            "conclusion": "核心客群相同会放大正面对标压力；客群偏离时应降级为场景或价格参考。",
+        },
+    }
+    config = configs[profile_type]
+    return _analysis_section_lines(
+        str(config["heading"]),
+        str(config["criterion"]),
+        _comparison_table_lines(
+            products,
+            list(config["rows"]),
+            lambda product: _semantic_process_values(product, profile_type=profile_type, row_labels=list(config["rows"])),
+        ),
+        str(config["conclusion"]),
+    )
+
+
+def _semantic_process_values(product: dict[str, Any], *, profile_type: str, row_labels: list[str]) -> dict[str, str]:
+    profile_key = {"battlefield": "value_battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    dimension_key = {"battlefield": "battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    rows = _semantic_rows((product.get("sections") or {}).get(profile_key) or {}, profile_type=profile_type)
+    primary_markers = {
+        "battlefield": ("主战场",),
+        "task": ("主任务",),
+        "group": ("主客群",),
+    }[profile_type]
+    secondary_markers = {
+        "battlefield": ("辅战场", "机会战场", "拖后腿战场"),
+        "task": ("辅任务", "评论观察任务", "厂家主张任务"),
+        "group": ("辅客群", "评论观察客群", "厂家主张客群"),
+    }[profile_type]
+    primary = _semantic_labels_by_relation(rows, primary_markers) or "未形成稳定主项"
+    secondary = _semantic_labels_by_relation(rows, secondary_markers) or "未形成稳定辅项"
+    item = product.get("competitor_item")
+    if not item:
+        return {
+            row_labels[0]: primary,
+            row_labels[1]: secondary,
+            row_labels[2]: "本品基准",
+            row_labels[3]: "本品不评分",
+            row_labels[4]: "作为横向比较的目标画像",
+        }
+    score = _candidate_score_breakdown(item)
+    max_points = {"battlefield": 25, "task": 15, "group": 15}[profile_type]
+    score_key = {"battlefield": "battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    matched = _join_cn((item.get("matched_dimensions") or {}).get(dimension_key, [])[:6]) or "重合不足"
+    overlap = _pct_or_unknown((item.get("weighted_overlap") or {}).get(dimension_key))
+    return {
+        row_labels[0]: primary,
+        row_labels[1]: secondary,
+        row_labels[2]: f"{matched}；加权重合{overlap}",
+        row_labels[3]: f"{score[score_key]}/{max_points}",
+        row_labels[4]: "主辅重合可支撑正面对标" if matched != "重合不足" else "重合不足，排序需降级解释",
+    }
+
+
+def _semantic_labels_by_relation(rows: list[tuple[str, str, str, str]], markers: tuple[str, ...]) -> str:
+    labels = [label for _code, label, relation, _reason in rows if any(marker in relation for marker in markers)]
+    return _join_cn(labels[:5])
+
+
+def _target_anchor_summary(top_competitors: list[dict[str, Any]]) -> str:
+    anchors = _unique_strings(
+        *[
+            (item.get("value_anchor") or {}).get("shared_anchors", [])
+            + (item.get("value_anchor") or {}).get("target_stronger_anchors", [])
+            for item in top_competitors[:3]
+        ]
+    )
+    return _join_cn(anchors[:6]) or "目标核心成交理由锚点待 M12D 补充"
+
+
+def _anchor_process_values(product: dict[str, Any], *, target_anchor_summary: str) -> dict[str, str]:
+    item = product.get("competitor_item")
+    if not item:
+        return {
+            "目标核心锚点": target_anchor_summary,
+            "候选覆盖情况": "本品基准",
+            "候选更强锚点": "不适用",
+            "弱表达/复核": "不适用",
+            "维度得分": "本品不评分",
+            "排序含义": "目标核心锚点用于判断竞品是否可替代",
+        }
+    anchor = item.get("value_anchor") or {}
+    score = _candidate_score_breakdown(item)
+    weak = _join_cn((anchor.get("weak_expression_anchors") or [])[:4])
+    requires_review = "需复核" if anchor.get("requires_review") else "无需额外复核"
+    eligible = "可进入直接竞品判断" if anchor.get("primary_direct_eligible", True) else "不得升级为首选直接竞品"
+    return {
+        "目标核心锚点": target_anchor_summary,
+        "候选覆盖情况": _join_cn((anchor.get("shared_anchors") or [])[:5]) or "目标核心锚点覆盖不足",
+        "候选更强锚点": _join_cn((anchor.get("candidate_stronger_anchors") or [])[:4]) or "未形成候选更强锚点",
+        "弱表达/复核": _join_cn([weak, requires_review]) if weak else requires_review,
+        "维度得分": f"{score['value_anchor']}/15",
+        "排序含义": eligible,
+    }
+
+
+def _pressure_process_values(product: dict[str, Any]) -> dict[str, str]:
+    item = product.get("competitor_item")
+    if not item:
+        return {
+            "主压力类型": "被替代对象",
+            "辅助压力": "不适用",
+            "压力得分": "本品不评分",
+            "强替代话术": "不适用",
+            "成交影响": "本品是压力承接对象",
+        }
+    pressure = item.get("replacement_pressure") or {}
+    score = _candidate_score_breakdown(item)
+    auxiliary = pressure.get("auxiliary_pressure_types") or []
+    auxiliary_names = _join_cn([str(value.get("type_cn") or value.get("type") or "") for value in auxiliary[:2] if isinstance(value, dict)])
+    strong_allowed = "允许输出强替代判断" if pressure.get("strong_pressure_allowed", True) else "只能输出弱压力/复核判断"
+    return {
+        "主压力类型": pressure.get("type_cn") or "替代压力待复核",
+        "辅助压力": auxiliary_names or "无稳定辅助压力",
+        "压力得分": f"{score['replacement_pressure']}/10",
+        "强替代话术": strong_allowed,
+        "成交影响": pressure.get("reason_cn") or _candidate_sort_reason(item),
+    }
+
+
+def _market_validation_process_values(product: dict[str, Any]) -> dict[str, str]:
+    sku = product.get("sku") or {}
+    sections = product.get("sections") or {}
+    item = product.get("competitor_item")
+    if not item:
+        metrics = _market_metrics(sections)
+        weekly = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
+        return {
+            "周均销量": f"{_format_unit_count(weekly) or '未知'}台",
+            "重叠在售周": "本品基准",
+            "验证等级": "本品市场表现",
+            "真实分流判断": "作为被分流目标",
+            "排序作用": "不参与竞品排序",
+        }
+    market = item.get("market_validation") or {}
+    weekly = market.get("avg_weekly_sales_volume")
+    level = market.get("level_cn") or "验证不足"
+    return {
+        "周均销量": f"{_format_unit_count(weekly) or '未知'}台",
+        "重叠在售周": f"{_format_number(market.get('overlap_week_count')) or '0'}周",
+        "验证等级": level,
+        "真实分流判断": market.get("summary_cn") or "市场验证待补充",
+        "排序作用": "增强置信" if market.get("level") in {"strong", "medium"} else "降低置信，不单独清零",
+    }
+
+
+def _candidate_pool_appendix_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "判断口径：候选池只解释哪些 SKU 被纳入或排除；未进入 Top 3 的候选不再放在主分析章节前面。",
+        "",
+        "| 候选 SKU | 是否 Top 3 | 竞争角色 | 综合分 | 购买池 | 市场验证 | 入选或未选原因 |",
+        "| --- | --- | --- | ---: | --- | --- | --- |",
+    ]
+    top_codes = {str((item.get("candidate") or {}).get("sku_code") or "") for item in top_competitors[:3]}
+    for item in _report_candidates(top_competitors, all_competitors, limit=20):
+        candidate = item.get("candidate") or {}
+        code = str(candidate.get("sku_code") or "")
+        score = _candidate_score_breakdown(item)
+        selected = "Top 3" if code in top_codes else "未入选"
+        reason = _candidate_sort_reason(item) if selected == "Top 3" else item.get("exclusion_reason_cn") or _candidate_sort_reason(item)
+        if selected != "Top 3" and item.get("ranking_gate_reasons"):
+            reason = f"{reason}；门槛：{_join_cn(item.get('ranking_gate_reasons') or [])}"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_cell(_display_name(candidate)),
+                    selected,
+                    _markdown_cell(_report_role_cn(item)),
+                    str(score["total"]),
+                    _markdown_cell((item.get("purchase_pool") or {}).get("reason_cn") or "购买池待判断"),
+                    _markdown_cell((item.get("market_validation") or {}).get("level_cn") or "验证不足"),
+                    _markdown_cell(reason),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def _scoring_method_lines(target: dict[str, Any]) -> list[str]:
     category_noun = _category_noun(target)
     return [
         "| 评分维度 | 权重 | 判断问题 |",
         "| --- | ---: | --- |",
         "| 购买池 | 20 | 是否同尺寸、同价位或相邻价位，是否会进入同一次购买决策 |",
-        "| 价值战场 | 15 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
-        f"| 用户任务 | 20 | 用户买{category_noun}要完成的使用任务是否高度交叉 |",
-        "| 目标客群 | 20 | 是否争夺同一批核心人群和相邻人群 |",
+        "| 价值战场 | 25 | 主辅价值战场是否重合，是否争夺同一类付费场景 |",
+        f"| 用户任务 | 15 | 用户买{category_noun}要完成的使用任务是否高度交叉 |",
+        "| 目标客群 | 15 | 是否争夺同一批核心人群和相邻人群 |",
         "| 关键价值锚点 | 15 | 参数、卖点、评论能否形成可替代的成交理由 |",
-        "| 替代压力 | 5 | 是否会改变用户对目标 SKU 价值判断 |",
-        "| 市场验证 | 5 | 是否具备真实线上成交能力，能否形成实际分流 |",
+        "| 替代压力 | 10 | 是否会改变用户对目标 SKU 价值判断 |",
+        "| 市场验证 | 置信/排序校验 | 是否具备真实线上成交能力；不直接计入综合分 |",
     ]
 
 
 def _candidate_score_table_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
     lines = [
-        "| 排名 | 候选 SKU | 竞争角色 | 购买池 20 | 价值战场 15 | 用户任务 20 | 目标客群 20 | 价值锚点 15 | 替代压力 5 | 市场验证 5 | 综合分 | 排序判断 |",
+        "| 排名 | 候选 SKU | 竞争角色 | 购买池 20 | 价值战场 25 | 用户任务 15 | 目标客群 15 | 价值锚点 15 | 替代压力 10 | 市场验证 | 综合分 | 排序判断 |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for rank, item in enumerate(_report_candidates(top_competitors, all_competitors), start=1):
@@ -889,7 +1294,7 @@ def _task_group_score_lines(top_competitors: list[dict[str, Any]], all_competito
 
 
 def _anchor_market_score_lines(top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]) -> list[str]:
-    lines = ["| 候选 SKU | 价值锚点分 | 替代压力分 | 市场验证分 | 依据 |", "| --- | ---: | ---: | ---: | --- |"]
+    lines = ["| 候选 SKU | 价值锚点分 | 替代压力分 | 市场验证 | 依据 |", "| --- | ---: | ---: | --- | --- |"]
     for item in _report_candidates(top_competitors, all_competitors):
         score = _candidate_score_breakdown(item)
         anchors = _join_cn(item["value_anchor"]["shared_anchors"][:5]) or "关键价值锚点不足"
@@ -917,12 +1322,14 @@ def _product_comparison_lines(
         top_competitors=top_competitors,
     )
     lines: list[str] = [
-        "本节把本品和前三重点竞品放在同一张业务比较表里：纵轴是比较内容，横轴是四个产品，重点看同一购买池中的市场位置、价值战场、用户任务、目标客群、卖点和参数证据差异。",
+        "本节把本品和前三重点竞品放在同一张业务比较表里：纵轴是比较内容，横轴是四个产品，重点看购买池口径、市场位置、价值战场、用户任务、目标客群、卖点和参数证据差异。",
         "",
         "### 4.1 市场画像",
         "",
     ]
-    lines.extend(_comparison_table_lines(products, ["尺寸", "尺寸价格池", "均价", "周均销量", "所在池空间", "池内销量表现", "相对本品", "市场角色"], _market_comparison_values))
+    lines.extend(_comparison_table_lines(products, ["尺寸", "尺寸价格池", "市场池口径", "可比关系", "均价", "周均销量", "所在池空间", "池内销量表现", "相对本品", "市场角色"], _market_comparison_values))
+    lines.append("")
+    lines.append("市场画像口径：市场池由尺寸/匹数段和价格带共同定义；只有“市场池口径”与本品同池时，池内排名和池内份额才可直接横向比较。不同池时，该行只说明 SKU 在各自市场池中的位置。")
     lines.extend(["", "### 4.2 价值战场画像", ""])
     lines.extend(_comparison_table_lines(products, ["命中的固定价值战场", "主价值战场", "辅价值战场", "补充证据判断", "主价值战场市场空间", "本品在主战场销量承接", "与本品重合"], lambda product: _semantic_comparison_values(product, profile_type="battlefield")))
     lines.extend(["", "### 4.3 用户任务画像", ""])
@@ -957,6 +1364,7 @@ def _comparison_products(
     target_claim_contribution: dict[str, Any] | None,
     top_competitors: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    target_market_scope_key = _market_pool_scope_key(target_sections, target)
     products = [
         {
             "name": target_name,
@@ -965,6 +1373,7 @@ def _comparison_products(
             "competitor_item": None,
             "claim_value": _extract_claim_value_payload(target_claim_value),
             "claim_contribution": _extract_claim_contribution_payload(target_claim_contribution),
+            "target_market_scope_key": target_market_scope_key,
         }
     ]
     for item in top_competitors[:3]:
@@ -977,6 +1386,7 @@ def _comparison_products(
                 "competitor_item": item,
                 "claim_value": _extract_claim_value_payload(item.get("candidate_claim_value") or {}),
                 "claim_contribution": _extract_claim_contribution_payload(item.get("candidate_claim_contribution") or {}),
+                "target_market_scope_key": target_market_scope_key,
             }
         )
     return products
@@ -1055,26 +1465,67 @@ def _market_comparison_values(product: dict[str, Any]) -> dict[str, str]:
     price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price")
     weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
     size = position.get("screen_size_inch") or sku.get("screen_size_inch")
-    price_band = PRICE_BAND_NAMES.get(str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier")), "价格带未知")
-    size_tier = SIZE_TIER_NAMES.get(str(position.get("size_tier") or sku.get("size_tier")), "尺寸段未知")
+    price_band_code = str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier") or "")
+    size_tier_code = str(position.get("size_tier") or sku.get("size_tier") or "")
+    price_band = PRICE_BAND_NAMES.get(price_band_code, "价格带未知")
+    size_tier = SIZE_TIER_NAMES.get(size_tier_code, "尺寸段未知")
     pool = (sections.get("market") or {}).get("market_pool") or {}
+    market_scope_key = _market_pool_scope_key(sections, sku)
+    target_scope_key = product.get("target_market_scope_key")
+    same_target_pool = not competitor_item or (target_scope_key and market_scope_key == target_scope_key)
+    pool_scope_text = f"{size_tier} × {price_band}"
+    if competitor_item:
+        pool_scope_text = f"{pool_scope_text}（与本品{'同池' if same_target_pool else '不同池'}）"
     if competitor_item:
         candidate = competitor_item.get("candidate") or {}
         relative = f"{_price_gap_phrase(candidate.get('price_gap_pct_to_target'))}；{(competitor_item.get('market_validation') or {}).get('summary_cn') or '市场验证待补充'}"
         role = _report_role_cn(competitor_item)
+        purchase_pool = competitor_item.get("purchase_pool") or {}
+        comparable_scope = purchase_pool.get("reason_cn") or "可比关系待复核"
+        if not same_target_pool:
+            comparable_scope = f"{comparable_scope}；跨市场池，只比较替代/分流关系"
     else:
         relative = "本品基准"
         role = f"{price_band}核心 SKU"
+        comparable_scope = "本品基准"
     return {
         "尺寸": _size_cell(size, size_tier, sku),
         "尺寸价格池": f"{size_tier} × {price_band}",
+        "市场池口径": pool_scope_text,
+        "可比关系": comparable_scope,
         "均价": _format_money(price) or "未知",
         "周均销量": f"{_format_unit_count(weekly_sales) or '未知'} 台",
-        "所在池空间": f"{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台；周均{_format_unit_count(pool.get('total_avg_weekly_sales_volume')) or '未知'}台；SKU数{_format_number(pool.get('sku_count')) or '未知'}",
-        "池内销量表现": f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名；占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}",
+        "所在池空间": _market_pool_space_text(pool),
+        "池内销量表现": _market_pool_performance_text(pool),
         "相对本品": relative,
         "市场角色": role,
     }
+
+
+def _market_pool_scope_key(sections: dict[str, Any], sku: dict[str, Any]) -> tuple[str, str]:
+    position = _market_position(sections)
+    size_tier = _report_size_tier_key(position.get("size_tier") or sku.get("size_tier"))
+    price_band = str(position.get("price_band_in_size_tier") or sku.get("price_band_in_size_tier") or "")
+    return size_tier, price_band
+
+
+def _market_pool_space_text(pool: dict[str, Any]) -> str:
+    text = f"{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台；周均{_format_unit_count(pool.get('total_avg_weekly_sales_volume')) or '未知'}台；SKU数{_format_number(pool.get('sku_count')) or '未知'}"
+    if _market_pool_is_sparse(pool):
+        return f"{text}（小样本池，仅作背景）"
+    return text
+
+
+def _market_pool_performance_text(pool: dict[str, Any]) -> str:
+    if _market_pool_is_sparse(pool):
+        sku_count = _format_number(pool.get("sku_count")) or "不足"
+        return f"样本不足（SKU数{sku_count}），不做池内排名/份额判断"
+    return f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名；占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}"
+
+
+def _market_pool_is_sparse(pool: dict[str, Any]) -> bool:
+    count = _decimal(pool.get("sku_count"))
+    return count is not None and count < Decimal("3")
 
 
 def _size_cell(size: Any, size_tier: str, sku: dict[str, Any]) -> str:
@@ -2104,21 +2555,54 @@ def _claim_value_comparison_values(product: dict[str, Any]) -> dict[str, str]:
 def _claim_param_support_text(claim: dict[str, Any]) -> str:
     profile = claim.get("dimension_profile_json") or claim.get("dimension_profile") or {}
     if isinstance(profile, dict) and profile:
-        parts = []
-        for key, value in list(profile.items())[:6]:
+        support_by_label: dict[str, dict[str, Any]] = {}
+        for key, value in profile.items():
+            label = _dimension_profile_label(key)
+            if not label:
+                continue
+            row = support_by_label.setdefault(label, {"count": Decimal("0"), "has_count": False})
             if isinstance(value, dict):
                 count = value.get("fact_claim_count") or value.get("matched_claim_count") or value.get("count")
-                label = _label_code(key)
-                parts.append(f"{label}{f'({count})' if count is not None else ''}")
-            else:
-                parts.append(_label_code(key))
+                numeric_count = _decimal(count)
+                if numeric_count is not None:
+                    row["count"] += numeric_count
+                    row["has_count"] = True
+            elif isinstance(value, int | float | Decimal):
+                row["count"] += Decimal(str(value))
+                row["has_count"] = True
+        parts = [_dimension_profile_part(label, payload) for label, payload in support_by_label.items()]
         if parts:
-            return _join_cn(parts)
+            return _join_cn(parts[:6])
     fact_claims = claim.get("fact_claim_codes") or []
     unsupported = claim.get("unsupported_claim_codes") or []
     if fact_claims or unsupported:
         return f"事实卖点{len(fact_claims)}个，需复核{len(unsupported)}个"
     return "暂无稳定证据"
+
+
+def _dimension_profile_part(label: str, payload: dict[str, Any]) -> str:
+    if payload.get("has_count"):
+        count_text = _format_number(payload.get("count"))
+        if count_text:
+            return f"{label}{count_text}项"
+    return label
+
+
+def _dimension_profile_label(code: Any) -> str:
+    text = str(code or "").strip()
+    if not text:
+        return ""
+    normalized = text.lower()
+    if normalized in DIMENSION_PROFILE_LABELS_CN:
+        return DIMENSION_PROFILE_LABELS_CN[normalized]
+    if text in DIMENSION_PROFILE_LABELS_CN:
+        return DIMENSION_PROFILE_LABELS_CN[text]
+    label = _label_code(text)
+    if label and label != text:
+        return label
+    if re.search(r"[A-Za-z]", text):
+        return "其他参数证据"
+    return label
 
 
 def _parameter_comparison_dimensions(target: dict[str, Any]) -> list[str]:
@@ -2204,14 +2688,8 @@ def _product_market_profile_lines(
         ("均价", _format_money(price) or "未知"),
         ("周均销量", f"{_format_unit_count(weekly_sales) or '未知'} 台"),
         ("尺寸价格池", f"{size_tier or '尺寸段未知'} × {price_band}"),
-        (
-            "所在池空间",
-            f"{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台，周均{_format_unit_count(pool.get('total_avg_weekly_sales_volume')) or '未知'}台，SKU数{_format_number(pool.get('sku_count')) or '未知'}",
-        ),
-        (
-            "池内销量表现",
-            f"第{_format_number(pool.get('target_rank_by_avg_weekly_sales')) or '未知'}名，占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}",
-        ),
+        ("所在池空间", _market_pool_space_text(pool).replace("；", "，")),
+        ("池内销量表现", _market_pool_performance_text(pool).replace("；", "，")),
         ("市场角色", role),
     ]
     lines = ["| 指标 | 表现 |", "| --- | --- |"]
@@ -2219,10 +2697,16 @@ def _product_market_profile_lines(
     lines.extend(
         [
             "",
-            f"市场解读：{sku_name} 当前处在{size_tier or '目标尺寸段'}的{price_band}，周均销量约{_format_unit_count(weekly_sales) or '未知'}台；所在尺寸价格池总销量约{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台，本品占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}。",
+            f"市场解读：{sku_name} 当前处在{size_tier or '目标尺寸段'}的{price_band}，周均销量约{_format_unit_count(weekly_sales) or '未知'}台；所在尺寸价格池总销量约{_format_unit_count(pool.get('total_sales_volume')) or '未知'}台。{_market_pool_interpretation_tail(pool)}",
         ]
     )
     return lines
+
+
+def _market_pool_interpretation_tail(pool: dict[str, Any]) -> str:
+    if _market_pool_is_sparse(pool):
+        return "该池样本不足，池内排名和份额不作为竞争力判断。"
+    return f"本品占池内销量{_pct_or_unknown(pool.get('target_sales_volume_share'))}。"
 
 
 def _semantic_profile_table_lines(profile: dict[str, Any], *, profile_type: str, sections: dict[str, Any]) -> list[str]:
@@ -2398,7 +2882,7 @@ def _semantic_position_by_code(sections: dict[str, Any], *, profile_type: str) -
 def _semantic_market_space_text(position: dict[str, Any]) -> str:
     market_space = position.get("market_space") or {}
     if not market_space:
-        return "未纳入当前销量空间测算"
+        return "本轮未计算该语义维度销量空间"
     parts = [
         f"空间{_format_unit_count(market_space.get('estimated_sales_volume')) or '未知'}台",
         f"周均{_format_unit_count(market_space.get('estimated_avg_weekly_sales_volume')) or '未知'}台",
@@ -2415,8 +2899,8 @@ def _semantic_sku_performance_text(position: dict[str, Any], *, relation: str = 
     contribution = position.get("sku_contribution") or {}
     if not allocation:
         if any(marker in relation for marker in ("机会", "拖后腿", "厂家主张", "评论观察", "用户观察")):
-            return "未分配销量，仅作机会或观察证据"
-        return "当前图谱未分配本品销量"
+            return "本轮未做销量归因，仅作机会或观察证据"
+        return "本轮未分配该 SKU 在此维度的销量"
     share = contribution.get("sku_share_in_dimension_volume")
     if share is None:
         market_space = position.get("market_space") or {}
@@ -2483,24 +2967,13 @@ def _report_candidates(top_competitors: list[dict[str, Any]], all_competitors: l
 
 def _candidate_score_breakdown(item: dict[str, Any]) -> dict[str, int]:
     purchase_pool = _bounded_points(item.get("purchase_pool", {}).get("score"), 20)
-    battlefield = _bounded_points((item.get("weighted_overlap") or {}).get("battlefield"), 15)
-    user_task = _bounded_points((item.get("weighted_overlap") or {}).get("user_task"), 20)
-    target_group = _bounded_points((item.get("weighted_overlap") or {}).get("target_group"), 20)
+    battlefield = _bounded_points((item.get("weighted_overlap") or {}).get("battlefield"), 25)
+    user_task = _bounded_points((item.get("weighted_overlap") or {}).get("user_task"), 15)
+    target_group = _bounded_points((item.get("weighted_overlap") or {}).get("target_group"), 15)
     value_anchor = _bounded_points((item.get("value_anchor") or {}).get("score"), 15)
-    replacement_pressure = _bounded_points((item.get("replacement_pressure") or {}).get("score"), 5)
+    replacement_pressure = _bounded_points((item.get("replacement_pressure") or {}).get("score"), 10)
     market_validation = _market_validation_points((item.get("market_validation") or {}).get("level"))
-    total = purchase_pool + battlefield + user_task + target_group + value_anchor + replacement_pressure + market_validation
-    role = str(item.get("role") or "")
-    if role == "strong_direct":
-        total += 4
-    elif role == "primary_direct":
-        total += 5
-    elif role == "downtrade_diversion":
-        total -= 3
-    elif role == "price_adjacent":
-        total -= 8
-    elif role == "uptrade_alternative":
-        total -= 5
+    total = purchase_pool + battlefield + user_task + target_group + value_anchor + replacement_pressure
     total = max(0, min(100, total))
     return {
         "purchase_pool": purchase_pool,
@@ -3477,10 +3950,16 @@ def _enrich_competitor(target: dict[str, Any], target_fact_brief: dict[str, Any]
     battlefield = _dimension_score(semantic.get("value_battlefield") or {})
     task = _dimension_score(semantic.get("user_task") or {})
     group = _dimension_score(semantic.get("target_group") or {})
-    value_anchor = _value_anchor(param_claim, target_fact_brief)
+    value_anchor = _value_anchor_payload(
+        item.get("value_anchor") or item.get("anchor_substitutability"),
+        _value_anchor(param_claim, target_fact_brief),
+    )
     market_validation = _market_validation(sales, candidate)
-    replacement = _replacement_pressure(purchase_pool, battlefield, task, group, value_anchor, candidate)
-    market_score = _market_validation_score(market_validation.get("level"))
+    replacement = _replacement_pressure_payload(
+        item.get("replacement_pressure"),
+        _replacement_pressure(purchase_pool, battlefield, task, group, value_anchor, candidate),
+        value_anchor=value_anchor,
+    )
     business_score = (
         purchase_pool["score"] * SCORE_WEIGHTS["purchase_pool"]
         + battlefield["score"] * SCORE_WEIGHTS["battlefield"]
@@ -3488,9 +3967,15 @@ def _enrich_competitor(target: dict[str, Any], target_fact_brief: dict[str, Any]
         + group["score"] * SCORE_WEIGHTS["target_group"]
         + value_anchor["score"] * SCORE_WEIGHTS["value_anchor"]
         + replacement["score"] * SCORE_WEIGHTS["replacement_pressure"]
-        + market_score * SCORE_WEIGHTS["market_validation"]
     )
-    role = _base_role(target, purchase_pool, replacement, candidate)
+    role = _base_role(target, purchase_pool, replacement, value_anchor, candidate)
+    selection_gate = _selection_gate(
+        role=role,
+        purchase_pool=purchase_pool,
+        value_anchor=value_anchor,
+        replacement=replacement,
+        market_validation=market_validation,
+    )
     matched_dimensions = {
         "battlefield": _dimension_labels(semantic.get("value_battlefield") or {}, BATTLEFIELD_NAMES),
         "user_task": _dimension_labels(semantic.get("user_task") or {}, TASK_NAMES),
@@ -3524,14 +4009,26 @@ def _enrich_competitor(target: dict[str, Any], target_fact_brief: dict[str, Any]
             "shared_anchors": value_anchor["shared_anchors"],
             "target_stronger_anchors": value_anchor["target_stronger_anchors"],
             "candidate_stronger_anchors": value_anchor["candidate_stronger_anchors"],
+            "anchor_substitutability_score": value_anchor["anchor_substitutability_score"],
+            "anchor_substitutability_level": value_anchor["anchor_substitutability_level"],
+            "primary_direct_eligible": value_anchor["primary_direct_eligible"],
+            "requires_review": value_anchor["requires_review"],
+            "gate_reasons": value_anchor["gate_reasons"],
         },
         "replacement_pressure": {
             "type": replacement["type"],
             "type_cn": replacement["type_cn"],
             "score": _float(replacement["score"]),
+            "replacement_pressure_score": replacement["replacement_pressure_score"],
+            "replacement_pressure_level": replacement["replacement_pressure_level"],
+            "strong_pressure_allowed": replacement["strong_pressure_allowed"],
+            "requires_review": replacement["requires_review"],
             "reason_cn": replacement["reason_cn"],
         },
         "market_validation": market_validation,
+        "selection_gate": selection_gate,
+        "top3_eligible": selection_gate["top3_eligible"],
+        "ranking_gate_reasons": selection_gate["gate_reasons"],
         "exclusion_reason_cn": _exclusion_reason(purchase_pool, battlefield, task, group, value_anchor, candidate),
     }
     return enriched
@@ -3541,7 +4038,10 @@ def _purchase_pool(target: dict[str, Any], candidate: dict[str, Any]) -> dict[st
     target_size = _decimal(target.get("screen_size_inch"))
     candidate_size = _decimal(candidate.get("screen_size_inch"))
     exact_size = target_size is not None and candidate_size is not None and abs(target_size - candidate_size) <= Decimal("0.5")
-    same_tier = bool(target.get("size_tier")) and target.get("size_tier") == candidate.get("size_tier")
+    target_tier = _report_size_tier_key(target.get("size_tier"))
+    candidate_tier = _report_size_tier_key(candidate.get("size_tier"))
+    same_tier = bool(target_tier) and target_tier == candidate_tier
+    adjacent_tier = _adjacent_ac_size_tier(target_tier, candidate_tier)
     target_band = str(target.get("price_band_in_size_tier") or "").lower()
     candidate_band = str(candidate.get("price_band_in_size_tier") or "").lower()
     same_band = target_band and target_band == candidate_band
@@ -3554,7 +4054,33 @@ def _purchase_pool(target: dict[str, Any], candidate: dict[str, Any]) -> dict[st
         return {"level": "P2", "score": Decimal("0.70"), "reason_cn": "同尺寸段、同价格带购买池"}
     if same_tier and adjacent_band:
         return {"level": "P3", "score": Decimal("0.55"), "reason_cn": "同尺寸段、邻近价格带购买池"}
+    if adjacent_tier and same_band:
+        return {"level": "P3", "score": Decimal("0.55"), "reason_cn": "相邻匹数段、同价格带购买池"}
+    if adjacent_tier and adjacent_band:
+        return {"level": "P4", "score": Decimal("0.45"), "reason_cn": "相邻匹数段、邻近价格带购买池"}
     return {"level": "P4", "score": Decimal("0.35"), "reason_cn": "语义相关但购买池偏离"}
+
+
+def _adjacent_ac_size_tier(target_tier: Any, candidate_tier: Any) -> bool:
+    target = _report_size_tier_key(target_tier)
+    candidate = _report_size_tier_key(candidate_tier)
+    if not target or not candidate or target == candidate:
+        return False
+    orders = {
+        "wall": ("wall_hp_1_or_below", "wall_hp_1_5", "wall_hp_2", "wall_hp_3", "wall_hp_3_plus"),
+        "floor": ("floor_hp_2", "floor_hp_3"),
+    }
+    for values in orders.values():
+        if target in values and candidate in values:
+            return abs(values.index(target) - values.index(candidate)) == 1
+    return False
+
+
+def _report_size_tier_key(size_tier: Any) -> str:
+    value = str(size_tier or "")
+    if value == "floor_hp_3_plus":
+        return "floor_hp_3"
+    return value
 
 
 def _dimension_score(overlap: dict[str, Any]) -> dict[str, Any]:
@@ -3588,6 +4114,52 @@ def _value_anchor(param_claim: dict[str, Any], target_fact_brief: dict[str, Any]
         "target_stronger_anchors": [item for item in target_only if item not in shared],
         "candidate_stronger_anchors": [item for item in candidate_only if item not in shared],
     }
+
+
+def _value_anchor_payload(raw_value: Any, fallback: dict[str, Any]) -> dict[str, Any]:
+    raw = _legacy_mapping(raw_value, method_name="to_legacy_value_anchor")
+    source = raw or fallback
+    score = _normalized_score_from_points(source, point_key="anchor_substitutability_score", max_points=15)
+    if score is None:
+        score = _clamp01(_decimal(fallback.get("score")))
+    points = _points_from_normalized(source, point_key="anchor_substitutability_score", max_points=15, fallback_score=score)
+    pair_scoring_allowed = bool(source.get("pair_scoring_allowed", True))
+    primary_direct_eligible = source.get("primary_direct_eligible")
+    if primary_direct_eligible is None:
+        primary_direct_eligible = points >= ANCHOR_PRIMARY_DIRECT_MIN and pair_scoring_allowed
+    gate_reasons = _coerce_list(source.get("gate_reasons"))
+    if not primary_direct_eligible and "anchor_substitutability_below_primary_threshold" not in gate_reasons:
+        gate_reasons.append("anchor_substitutability_below_primary_threshold")
+    return {
+        "score": score,
+        "shared_anchors": _source_list_or_fallback(source, ("shared_anchors", "shared_core_anchors"), fallback.get("shared_anchors")),
+        "target_stronger_anchors": _source_list_or_fallback(
+            source,
+            ("target_stronger_anchors", "target_only_anchors"),
+            fallback.get("target_stronger_anchors"),
+        ),
+        "candidate_stronger_anchors": _source_list_or_fallback(
+            source,
+            ("candidate_stronger_anchors",),
+            fallback.get("candidate_stronger_anchors"),
+        ),
+        "anchor_substitutability_score": int(points),
+        "anchor_substitutability_level": source.get("anchor_substitutability_level") or _anchor_level(points),
+        "weak_expression_anchors": _unique_strings(_coerce_list(source.get("weak_expression_anchors"))),
+        "match_details": _coerce_list(source.get("match_details")),
+        "anchor_substitution_summary_cn": source.get("anchor_substitution_summary_cn") or "",
+        "pair_scoring_allowed": pair_scoring_allowed,
+        "primary_direct_eligible": bool(primary_direct_eligible),
+        "requires_review": bool(source.get("requires_review", False)),
+        "gate_reasons": gate_reasons,
+    }
+
+
+def _source_list_or_fallback(source: dict[str, Any], keys: tuple[str, ...], fallback: Any) -> list[str]:
+    for key in keys:
+        if key in source:
+            return _unique_strings(_coerce_list(source.get(key)))
+    return _unique_strings(_coerce_list(fallback))
 
 
 def _replacement_pressure(
@@ -3630,6 +4202,37 @@ def _replacement_pressure(
     }
 
 
+def _replacement_pressure_payload(raw_value: Any, fallback: dict[str, Any], *, value_anchor: dict[str, Any]) -> dict[str, Any]:
+    raw = _legacy_mapping(raw_value, method_name="to_legacy_replacement_pressure")
+    source = raw or fallback
+    score = _normalized_score_from_points(source, point_key="replacement_pressure_score", max_points=10)
+    if score is None:
+        score = _clamp01(_decimal(fallback.get("score")))
+    points = _points_from_normalized(source, point_key="replacement_pressure_score", max_points=10, fallback_score=score)
+    strong_pressure_allowed = source.get("strong_pressure_allowed")
+    if strong_pressure_allowed is None:
+        strong_pressure_allowed = points >= REPLACEMENT_STRONG_MIN and bool(value_anchor.get("pair_scoring_allowed", True))
+    pressure_type = source.get("type") or source.get("primary_pressure_type") or fallback.get("type") or "value_substitution"
+    pressure_type_cn = (
+        source.get("type_cn")
+        or source.get("primary_pressure_type_cn")
+        or fallback.get("type_cn")
+        or "价值替代压力"
+    )
+    reason_cn = source.get("reason_cn") or fallback.get("reason_cn") or "替代压力依据待补充。"
+    return {
+        **source,
+        "type": pressure_type,
+        "type_cn": pressure_type_cn,
+        "score": score,
+        "replacement_pressure_score": int(points),
+        "replacement_pressure_level": source.get("replacement_pressure_level") or _replacement_pressure_level(points),
+        "strong_pressure_allowed": bool(strong_pressure_allowed),
+        "requires_review": bool(source.get("requires_review", points < REPLACEMENT_STRONG_MIN)),
+        "reason_cn": reason_cn,
+    }
+
+
 def _market_validation(sales: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     overlap_week_count = int(sales.get("overlap_week_count") or 0)
     candidate_side = sales.get("candidate") or {}
@@ -3660,8 +4263,18 @@ def _market_validation(sales: dict[str, Any], candidate: dict[str, Any]) -> dict
     }
 
 
-def _base_role(target: dict[str, Any], purchase_pool: dict[str, Any], replacement: dict[str, Any], candidate: dict[str, Any]) -> str:
+def _base_role(
+    target: dict[str, Any],
+    purchase_pool: dict[str, Any],
+    replacement: dict[str, Any],
+    value_anchor: dict[str, Any],
+    candidate: dict[str, Any],
+) -> str:
     gap = _decimal(candidate.get("price_gap_pct_to_target")) or Decimal("0")
+    anchor_points = _decimal(value_anchor.get("anchor_substitutability_score")) or Decimal("0")
+    anchor_direct_eligible = bool(value_anchor.get("primary_direct_eligible")) and anchor_points >= ANCHOR_PRIMARY_DIRECT_MIN
+    replacement_points = _decimal(replacement.get("replacement_pressure_score")) or Decimal("0")
+    replacement_strong_allowed = bool(replacement.get("strong_pressure_allowed")) and replacement_points >= REPLACEMENT_STRONG_MIN
     if _is_ac_context(target) and purchase_pool["score"] < Decimal("0.55"):
         if abs(gap) <= Decimal("0.08") and replacement["score"] >= Decimal("0.45"):
             return "price_adjacent"
@@ -3673,20 +4286,67 @@ def _base_role(target: dict[str, Any], purchase_pool: dict[str, Any], replacemen
         return "uptrade_alternative"
     if abs(gap) <= Decimal("0.03") and purchase_pool["score"] >= Decimal("0.55"):
         return "price_adjacent"
-    if purchase_pool["score"] >= Decimal("0.85") and replacement["score"] >= Decimal("0.60"):
+    if purchase_pool["score"] >= Decimal("0.85") and replacement["score"] >= Decimal("0.60") and anchor_direct_eligible and replacement_strong_allowed:
         return "strong_direct"
     if purchase_pool["score"] >= Decimal("0.55"):
         return "scenario_alternative"
     return "excluded"
 
 
+def _selection_gate(
+    *,
+    role: str,
+    purchase_pool: dict[str, Any],
+    value_anchor: dict[str, Any],
+    replacement: dict[str, Any],
+    market_validation: dict[str, Any],
+) -> dict[str, Any]:
+    anchor_points = _decimal(value_anchor.get("anchor_substitutability_score")) or Decimal("0")
+    replacement_points = _decimal(replacement.get("replacement_pressure_score")) or Decimal("0")
+    primary_direct_eligible = bool(value_anchor.get("primary_direct_eligible")) and anchor_points >= ANCHOR_PRIMARY_DIRECT_MIN
+    strong_pressure_allowed = bool(replacement.get("strong_pressure_allowed")) and replacement_points >= REPLACEMENT_STRONG_MIN
+    gate_reasons = _unique_strings(_coerce_list(value_anchor.get("gate_reasons")))
+    if not primary_direct_eligible and "anchor_substitutability_below_primary_threshold" not in gate_reasons:
+        gate_reasons.append("anchor_substitutability_below_primary_threshold")
+    if not strong_pressure_allowed and "replacement_pressure_below_strong_threshold" not in gate_reasons:
+        gate_reasons.append("replacement_pressure_below_strong_threshold")
+
+    market_level = str(market_validation.get("level") or "weak").lower()
+    purchase_pool_level = str(purchase_pool.get("level") or "")
+    top3_eligible = True
+    if purchase_pool_level in TOP3_DEVIATED_PURCHASE_POOLS and market_level == "weak":
+        top3_eligible = False
+        if "market_weak_and_purchase_pool_deviated" not in gate_reasons:
+            gate_reasons.append("market_weak_and_purchase_pool_deviated")
+    if role == "excluded":
+        top3_eligible = False
+    return {
+        "top3_eligible": top3_eligible,
+        "primary_direct_eligible": primary_direct_eligible,
+        "strong_pressure_allowed": strong_pressure_allowed,
+        "anchor_substitutability_score": int(anchor_points),
+        "replacement_pressure_score": int(replacement_points),
+        "market_validation_priority": MARKET_VALIDATION_SORT_PRIORITY.get(market_level, 0),
+        "gate_reasons": gate_reasons,
+    }
+
+
+def _direct_role_allowed(item: dict[str, Any]) -> bool:
+    gate = item.get("selection_gate") or {}
+    return bool(gate.get("primary_direct_eligible")) and bool(gate.get("strong_pressure_allowed"))
+
+
 def _assign_top_roles(enriched: list[dict[str, Any]]) -> None:
     for item in enriched:
-        if item["role"] in {"strong_direct", "price_adjacent", "scenario_alternative"} and item["business_score"] >= 0.48:
+        if (
+            item["role"] in {"strong_direct", "price_adjacent", "scenario_alternative"}
+            and item["business_score"] >= 0.48
+            and _direct_role_allowed(item)
+        ):
             item["role"] = "strong_direct"
             item["role_cn"] = ROLE_CN["strong_direct"]
     for item in enriched:
-        if item["role"] == "strong_direct":
+        if item["role"] == "strong_direct" and _direct_role_allowed(item):
             item["role"] = "primary_direct"
             item["role_cn"] = ROLE_CN["primary_direct"]
             return
@@ -3715,8 +4375,9 @@ def _bucket_item(item: dict[str, Any]) -> dict[str, Any]:
 def _select_top_competitors(enriched: list[dict[str, Any]], *, target: dict[str, Any], top_n: int) -> list[dict[str, Any]]:
     if top_n <= 0:
         return []
+    eligible = [item for item in enriched if item.get("top3_eligible", True)]
     selected: list[dict[str, Any]] = []
-    direct = [item for item in enriched if item["role"] in {"primary_direct", "strong_direct"}]
+    direct = [item for item in eligible if item["role"] in {"primary_direct", "strong_direct"} and _direct_role_allowed(item)]
     for item in direct[:2]:
         if item not in selected:
             selected.append(item)
@@ -3727,11 +4388,11 @@ def _select_top_competitors(enriched: list[dict[str, Any]], *, target: dict[str,
     for role in strategic_roles:
         if len(selected) >= top_n:
             break
-        for item in enriched:
+        for item in eligible:
             if item["role"] == role and item not in selected:
                 selected.append(item)
                 break
-    for item in enriched:
+    for item in eligible:
         if len(selected) >= top_n:
             break
         if item not in selected and item["role"] != "excluded":
@@ -3763,11 +4424,94 @@ def _dashboard_competitor_payload(index: int, item: dict[str, Any], *, report_ur
         "reason_cn": _dashboard_reason_cn(item),
         "overlap_rows": overlap_rows,
         "shared_anchors_cn": [str(value) for value in shared_anchors[:5] if value],
+        "anchor_substitutability_cn": _dashboard_anchor_substitutability_cn(item),
+        "pressure_breakdown_cn": _dashboard_pressure_breakdown_cn(item),
+        "anchor_substitutability": _dashboard_anchor_substitutability_payload(item),
+        "pressure_breakdown": _dashboard_pressure_breakdown_payload(item),
         "market_validation_cn": (item.get("market_validation") or {}).get("summary_cn") or "市场验证待补充",
         "market": _dashboard_market_snapshot(candidate),
         "evidence_refs": _dashboard_evidence_refs(item),
         "action_links": _dashboard_action_links(report_url),
     }
+
+
+def _dashboard_anchor_substitutability_cn(item: dict[str, Any]) -> str:
+    anchor = item.get("value_anchor") or {}
+    score = _decimal(anchor.get("anchor_substitutability_score"))
+    score_text = f"{int(score)}/15" if score is not None else _dashboard_score_cn(anchor.get("score"))
+    shared = _join_cn([str(value) for value in (anchor.get("shared_anchors") or [])[:4] if value]) or "共同锚点待复核"
+    stronger = _join_cn([str(value) for value in (anchor.get("candidate_stronger_anchors") or [])[:2] if value])
+    eligibility = "可进入直接竞品判断" if anchor.get("primary_direct_eligible", True) else "不得升为首选直接竞品"
+    parts = [f"锚点可替代性{score_text}", f"共同覆盖{shared}"]
+    if stronger:
+        parts.append(f"候选更强点：{stronger}")
+    parts.append(eligibility)
+    return "；".join(parts)
+
+
+def _dashboard_pressure_breakdown_cn(item: dict[str, Any]) -> str:
+    pressure = item.get("replacement_pressure") or {}
+    score = _decimal(pressure.get("replacement_pressure_score"))
+    score_text = f"{int(score)}/10" if score is not None else _dashboard_score_cn(pressure.get("score"))
+    primary = str(pressure.get("type_cn") or "替代压力待复核")
+    auxiliary = _join_cn(
+        [
+            str(value.get("type_cn") or value.get("type") or "")
+            for value in (pressure.get("auxiliary_pressure_types") or [])[:2]
+            if isinstance(value, dict)
+        ]
+    )
+    strength = "允许强替代判断" if pressure.get("strong_pressure_allowed", True) else "仅可输出弱压力或复核判断"
+    reason = str(pressure.get("reason_cn") or "").strip()
+    parts = [f"替代压力{score_text}", f"主压力：{primary}"]
+    if auxiliary:
+        parts.append(f"辅助压力：{auxiliary}")
+    parts.append(strength)
+    if reason:
+        parts.append(reason)
+    return "；".join(parts)
+
+
+def _dashboard_anchor_substitutability_payload(item: dict[str, Any]) -> dict[str, Any]:
+    anchor = item.get("value_anchor") or {}
+    return {
+        "score": anchor.get("anchor_substitutability_score"),
+        "score_cn": _dashboard_anchor_score_cn(anchor),
+        "level": anchor.get("anchor_substitutability_level"),
+        "shared_anchors_cn": [str(value) for value in (anchor.get("shared_anchors") or [])[:5] if value],
+        "candidate_stronger_anchors_cn": [str(value) for value in (anchor.get("candidate_stronger_anchors") or [])[:5] if value],
+        "requires_review": bool(anchor.get("requires_review", False)),
+        "primary_direct_eligible": bool(anchor.get("primary_direct_eligible", True)),
+    }
+
+
+def _dashboard_pressure_breakdown_payload(item: dict[str, Any]) -> dict[str, Any]:
+    pressure = item.get("replacement_pressure") or {}
+    return {
+        "score": pressure.get("replacement_pressure_score"),
+        "score_cn": _dashboard_pressure_score_cn(pressure),
+        "level": pressure.get("replacement_pressure_level"),
+        "primary_pressure_type": pressure.get("type"),
+        "primary_pressure_type_cn": pressure.get("type_cn"),
+        "auxiliary_pressure_types": pressure.get("auxiliary_pressure_types") or [],
+        "strong_pressure_allowed": bool(pressure.get("strong_pressure_allowed", True)),
+        "requires_review": bool(pressure.get("requires_review", False)),
+        "reason_cn": pressure.get("reason_cn"),
+    }
+
+
+def _dashboard_anchor_score_cn(anchor: dict[str, Any]) -> str:
+    score = _decimal(anchor.get("anchor_substitutability_score"))
+    if score is not None:
+        return f"{int(score)}/15"
+    return _dashboard_score_cn(anchor.get("score"))
+
+
+def _dashboard_pressure_score_cn(pressure: dict[str, Any]) -> str:
+    score = _decimal(pressure.get("replacement_pressure_score"))
+    if score is not None:
+        return f"{int(score)}/10"
+    return _dashboard_score_cn(pressure.get("score"))
 
 
 def _dashboard_overlap_row(item: dict[str, Any], *, dimension_key: str, dimension_cn: str) -> dict[str, Any]:
@@ -4376,6 +5120,35 @@ def _dashboard_score_dimension_lines(competitors: list[dict[str, Any]]) -> list[
     return lines
 
 
+def _dashboard_anchor_pressure_markdown(competitors: list[dict[str, Any]]) -> str:
+    lines = ["**关键价值锚点与替代压力**"]
+    for item in competitors[:3]:
+        lines.append(
+            f"{item.get('rank') or '-'}\\. {_dashboard_competitor_alias(item)}："
+            f"{item.get('anchor_substitutability_cn') or '锚点可替代性待复核'}；"
+            f"{item.get('pressure_breakdown_cn') or item.get('pressure_cn') or '替代压力待复核'}"
+        )
+    return "\n".join(lines)
+
+
+def _dashboard_anchor_pressure_lines(competitors: list[dict[str, Any]]) -> list[str]:
+    lines = ["| 排名 | 竞品 | 关键价值锚点可替代性 | 替代压力 |", "| ---: | --- | --- | --- |"]
+    for item in competitors[:3]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_cell(item.get("rank")),
+                    _markdown_cell(_dashboard_competitor_alias(item)),
+                    _markdown_cell(item.get("anchor_substitutability_cn") or "锚点可替代性待复核"),
+                    _markdown_cell(item.get("pressure_breakdown_cn") or "替代压力待复核"),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def _feishu_market_chart_table(competitors: list[dict[str, Any]]) -> dict[str, Any]:
     metrics = [_dashboard_market_metric(item) for item in competitors[:3]]
     max_sales = max((metric["sales"] or 0 for metric in metrics), default=0)
@@ -4608,7 +5381,7 @@ def _trim_feishu_card(card: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _sort_key(item: dict[str, Any]) -> tuple[float, float, float, float]:
+def _sort_key(item: dict[str, Any]) -> tuple[float, float, float, float, float, float, float, float]:
     overlap = item.get("weighted_overlap") or {}
     semantic_balance = min(
         float(overlap.get("battlefield") or 0),
@@ -4616,7 +5389,21 @@ def _sort_key(item: dict[str, Any]) -> tuple[float, float, float, float]:
         float(overlap.get("target_group") or 0),
     )
     gap = abs(float(_decimal((item.get("candidate") or {}).get("price_gap_pct_to_target")) or Decimal("1")))
-    return (float(item["business_score"]), semantic_balance, float(item["purchase_pool"]["score"]), -gap)
+    gate = item.get("selection_gate") or {}
+    role = str(item.get("role") or "")
+    top3_rank = 1.0 if item.get("top3_eligible", True) else 0.0
+    direct_rank = 1.0 if _direct_role_allowed(item) else 0.0
+    market_rank = float(gate.get("market_validation_priority") or 0)
+    return (
+        top3_rank,
+        direct_rank,
+        float(item["business_score"]),
+        float(ROLE_SORT_PRIORITY.get(role, 0)),
+        semantic_balance,
+        float(item["purchase_pool"]["score"]),
+        market_rank,
+        -gap,
+    )
 
 
 def _exclusion_reason(
@@ -4702,7 +5489,7 @@ def publish_feishu_card_reply(
         return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：没有可发送的卡片内容。")
     cli_bin = os.environ.get("CATFORGE_FEISHU_CLI_BIN") or shutil.which("lark-cli")
     if not cli_bin:
-        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未安装飞书 CLI。")
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未配置飞书消息发送能力。")
     content = json.dumps(card, ensure_ascii=False, separators=(",", ":"))
     command = [
         cli_bin,
@@ -4731,7 +5518,7 @@ def publish_feishu_card_reply(
     try:
         completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=30, env=env)
     except FileNotFoundError:
-        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境找不到飞书 CLI。")
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前飞书消息发送服务不可用。")
     except subprocess.TimeoutExpired:
         return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：飞书消息接口超时。")
     except Exception:
@@ -4760,7 +5547,7 @@ def publish_feishu_card_message(
         return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：没有可发送的卡片内容。")
     cli_bin = os.environ.get("CATFORGE_FEISHU_CLI_BIN") or shutil.which("lark-cli")
     if not cli_bin:
-        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未安装飞书 CLI。")
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境未配置飞书消息发送能力。")
     content = json.dumps(card, ensure_ascii=False, separators=(",", ":"))
     command = [
         cli_bin,
@@ -4789,9 +5576,9 @@ def publish_feishu_card_message(
     try:
         completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=30, env=env)
     except FileNotFoundError:
-        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前环境找不到飞书 CLI。")
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：当前飞书消息发送服务不可用。")
     except subprocess.TimeoutExpired:
-        return FeishuCardPublishResult(status="failed", message_cn="飞书消息接口超时。")
+        return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败：飞书消息接口超时。")
     except Exception:
         return FeishuCardPublishResult(status="failed", message_cn="飞书卡片发送失败。")
     if completed.returncode != 0:
@@ -4953,22 +5740,18 @@ def _feishu_failure_message(output: str) -> str:
 def _feishu_im_failure_message(output: str) -> str:
     normalized = output.lower()
     if "not found" in normalized or "no such file" in normalized:
-        return "飞书卡片发送失败：当前环境找不到飞书 CLI。"
+        return "飞书卡片发送失败：当前飞书消息发送服务不可用。"
     if "not_configured" in normalized or "not configured" in normalized:
-        return "飞书卡片发送失败：API 容器未加载飞书 CLI 配置或密钥目录。请检查 CATFORGE_FEISHU_CONFIG_DIR 和 CATFORGE_FEISHU_DATA_DIR 挂载。"
+        return "飞书卡片发送失败：当前环境未配置飞书消息发送能力。"
     if "scope" in normalized or "permission" in normalized or "forbidden" in normalized:
-        scopes = _extract_missing_scopes(output)
-        console_url = _extract_console_url(output)
-        scope_text = f"（缺少 {scopes}）" if scopes else ""
-        url_text = f" 请在飞书开发者后台开通后重试：{console_url}" if console_url else ""
-        return f"飞书卡片发送失败：飞书应用或用户缺少消息发送权限{scope_text}。{url_text}".strip()
+        return "飞书卡片发送失败：飞书应用或用户缺少消息发送权限。"
     if "invalid message" in normalized or "message_id" in normalized or "message id" in normalized:
         return "飞书卡片发送失败：当前消息 ID 不可回复或已失效。"
     if "field validation failed" in normalized or "field_violations" in normalized:
         return "飞书卡片发送失败：飞书消息字段校验未通过。"
     if "auth" in normalized or "login" in normalized or "user identity" in normalized:
         return "飞书卡片发送失败：飞书用户身份未授权或授权已失效。"
-    return "飞书卡片发送失败：请检查飞书 CLI 配置、机器人是否在会话中以及消息发送权限。"
+    return "飞书卡片发送失败：请检查飞书应用授权、机器人入群状态和消息发送权限。"
 
 
 def _feishu_idempotency_key(value: str | None) -> str | None:
@@ -5155,6 +5938,16 @@ def _unique_strings(*groups: list[Any]) -> list[str]:
     return result
 
 
+def _coerce_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple | set):
+        return list(value)
+    return [value]
+
+
 def _join_cn(items: list[Any]) -> str:
     values = [str(item) for item in items if item]
     if not values:
@@ -5218,6 +6011,65 @@ def _decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except Exception:
         return None
+
+
+def _clamp01(value: Decimal | None) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return max(Decimal("0"), min(Decimal("1"), value))
+
+
+def _legacy_mapping(value: Any, *, method_name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    method = getattr(value, method_name, None)
+    if callable(method):
+        converted = method()
+        if isinstance(converted, dict):
+            return converted
+    return {}
+
+
+def _normalized_score_from_points(source: dict[str, Any], *, point_key: str, max_points: int) -> Decimal | None:
+    points = _decimal(source.get(point_key))
+    if points is None:
+        return None
+    return (max(Decimal("0"), min(Decimal(max_points), points)) / Decimal(max_points)).quantize(Decimal("0.0001"))
+
+
+def _points_from_normalized(
+    source: dict[str, Any],
+    *,
+    point_key: str,
+    max_points: int,
+    fallback_score: Decimal,
+) -> Decimal:
+    points = _decimal(source.get(point_key))
+    if points is not None:
+        return max(Decimal("0"), min(Decimal(max_points), points)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return (fallback_score * Decimal(max_points)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def _anchor_level(points: Decimal) -> str:
+    if points >= Decimal("13"):
+        return "strong"
+    if points >= Decimal("10"):
+        return "medium"
+    if points >= ANCHOR_PRIMARY_DIRECT_MIN:
+        return "partial"
+    return "insufficient"
+
+
+def _replacement_pressure_level(points: Decimal) -> str:
+    if points >= Decimal("8"):
+        return "high"
+    if points >= REPLACEMENT_STRONG_MIN:
+        return "medium"
+    if points > Decimal("0"):
+        return "low"
+    return "insufficient"
 
 
 def _float(value: Any) -> float | None:

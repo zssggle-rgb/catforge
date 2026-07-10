@@ -5,6 +5,7 @@ from app.services.core3_real_data.constants import M07AnalysisWindow, M07MarketS
 from app.services.core3_real_data.market_profile_schemas import M07MarketInputRow, M07SkuMarketMetrics
 from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
+    _ac_size_segment,
     _market_size_class,
     _market_pool_key,
     _observed_window_sample_status,
@@ -177,6 +178,12 @@ def test_m07_ac_market_size_inputs_use_horsepower_and_installation() -> None:
     assert "size_missing" not in flags
 
 
+def test_m07_ac_floor_three_and_above_share_market_size_segment() -> None:
+    assert _ac_size_segment("柜机", Decimal("3"), None) == "floor_hp_3"
+    assert _ac_size_segment("柜机", Decimal("3.5"), None) == "floor_hp_3"
+    assert _ac_size_segment("柜机", None, Decimal("8800")) == "floor_hp_3"
+
+
 def test_m07_ac_percentiles_do_not_require_screen_size_inch() -> None:
     service = MarketProfileService(repository=object())
     updated = service._apply_percentiles(
@@ -223,6 +230,43 @@ def test_m07_ac_percentiles_do_not_require_screen_size_inch() -> None:
     assert by_sku["AC-A"].price_per_inch_percentile is None
     assert "size_missing" not in by_sku["AC-A"].quality_flags
     assert by_sku["AC-A"].market_confidence > Decimal("0.6000")
+
+
+def test_m07_ac_same_pool_uses_hp_price_band_instead_of_hp_only() -> None:
+    service = MarketProfileService(repository=object())
+    updated = service._apply_percentiles(
+        [
+            M07SkuMarketMetrics(
+                sku_code=f"AC-1P5-{index}",
+                analysis_window=M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+                size_segment="wall_hp_1_5",
+                screen_size_class="wall_hp_1_5",
+                market_pool_key="ac:wall_hp_1_5:线上:full_observed_window",
+                active_week_count=8,
+                market_row_count=8,
+                platform_count=1,
+                size_param_confidence=Decimal("0.9200"),
+                price_wavg=Decimal(1000 + index * 100),
+                sales_volume_total=Decimal(100 - index),
+                sales_amount_total=Decimal(1000 + index * 100) * Decimal(100 - index),
+                main_channel_type="线上",
+                input_fingerprint=f"input-{index}",
+                result_hash=f"hash-{index}",
+            )
+            for index in range(10)
+        ],
+        product_category="AC",
+    )
+
+    by_sku = {item.sku_code: item for item in updated}
+    assert by_sku["AC-1P5-0"].price_band_size == "low"
+    assert by_sku["AC-1P5-0"].same_pool_sku_count == 2
+    assert (
+        by_sku["AC-1P5-0"].market_pool_key
+        == "ac:wall_hp_1_5:low:线上:full_observed_window"
+    )
+    assert by_sku["AC-1P5-9"].price_band_size == "high"
+    assert by_sku["AC-1P5-9"].same_pool_sku_count == 2
 
 
 def test_m07_late_launch_complete_latest_week_is_sufficient() -> None:

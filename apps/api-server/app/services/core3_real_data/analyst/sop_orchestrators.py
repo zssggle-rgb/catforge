@@ -9,10 +9,16 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Callable
 
+from app.services.core3_real_data.analyst.anchor_substitutability import AnchorSubstitutabilityResult, ValueAnchorMatcher
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
 from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 from app.services.core3_real_data.analyst.low_sales_answer import build_low_sales_answer
+from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
+    PurchaseReasonProfileLookupKey,
+    RepositoryPurchaseReasonProfileReader,
+)
+from app.services.core3_real_data.analyst.replacement_pressure import ReplacementPressureClassifier, ReplacementPressureInput
 
 
 CLAIM_VALUE_REPORT_LIMIT = 200
@@ -151,8 +157,16 @@ class SopOrchestrators:
                     candidate_claim_contribution,
                 )
             )
+        m12d_atom_result = _attach_purchase_reason_pair_scores(
+            self.atomic_handlers,
+            context=context,
+            target=target["target"],
+            competitors=competitors,
+        )
         target_claim_atoms = [atom for atom in (target_claim_value, target_claim_contribution) if atom]
         atom_results = [target, fact, candidates_result, *target_claim_atoms, *pair_atom_results]
+        if m12d_atom_result:
+            atom_results.append(m12d_atom_result)
         target_fact_brief = (fact.get("result") or {}).get("fact_brief", {})
         result_payload: dict[str, Any] = {
             "competitor_set": {
@@ -166,6 +180,7 @@ class SopOrchestrators:
                 "target_fact_brief": target_fact_brief,
                 "target_claim_value": ((target_claim_value or {}).get("result") or {}).get("sku_claim_value", {}),
                 "target_claim_contribution": ((target_claim_contribution or {}).get("result") or {}).get("claim_contribution", {}),
+                "m12d_consumption": ((m12d_atom_result or {}).get("result") or {}).get("m12d_consumption", {}),
                 "candidate_count": len(competitors),
                 "candidates": competitors,
             }
@@ -640,6 +655,277 @@ def _limitations(atom_results: list[dict[str, Any]]) -> list[str]:
         for item in atom.get("limitations") or []:
             if item not in result:
                 result.append(item)
+    return result
+
+
+def _attach_purchase_reason_pair_scores(
+    atomic_handlers: AtomicAnalystHandlers,
+    *,
+    context: AnalystContext,
+    target: dict[str, Any],
+    competitors: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    repository = getattr(atomic_handlers, "repository", None)
+    db = getattr(repository, "db", None)
+    if db is None:
+        return None
+
+    reader = RepositoryPurchaseReasonProfileReader(db)
+    matcher = ValueAnchorMatcher()
+    pressure_classifier = ReplacementPressureClassifier()
+    target_sku_code = str(target.get("sku_code") or "").strip()
+    if not target_sku_code:
+        return None
+
+    try:
+        target_contract = reader.read(
+            PurchaseReasonProfileLookupKey(
+                project_id=context.project_id,
+                category_code=context.category_code,
+                batch_id=context.batch_id,
+                sku_code=target_sku_code,
+            )
+        )
+        if not target_contract.found:
+            message = "目标 SKU 缺少已发布 M12D 成交理由画像，竞品分析保留旧有事实维度评分，关键价值锚点和替代压力需降级复核。"
+            return base_result(
+                status=AnalystStatus.UNSUPPORTED,
+                command="m12d-purchase-reason-consumption",
+                context=context,
+                result={
+                    "m12d_consumption": {
+                        "status": "unavailable",
+                        "source": "published_m12d_contract",
+                        "target_contract": _m12d_contract_summary(target_contract),
+                        "candidate_count": 0,
+                        "found_candidate_count": 0,
+                        "requires_review_count": 0,
+                        "candidates": [],
+                    }
+                },
+                evidence=[
+                    {
+                        "source_module": "M12D",
+                        "category_code": context.category_code,
+                        "target_sku_code": target_sku_code,
+                        "row_count": 0,
+                    }
+                ],
+                limitations=[message],
+                message_cn=message,
+            )
+        candidate_summaries: list[dict[str, Any]] = []
+        requires_review_count = 0
+        found_candidate_count = 0
+        for item in competitors:
+            candidate = item.get("candidate") or {}
+            candidate_sku_code = str(candidate.get("sku_code") or "").strip()
+            if not candidate_sku_code:
+                continue
+            candidate_contract = reader.read(
+                PurchaseReasonProfileLookupKey(
+                    project_id=context.project_id,
+                    category_code=context.category_code,
+                    batch_id=context.batch_id,
+                    sku_code=candidate_sku_code,
+                )
+            )
+            if candidate_contract.found:
+                found_candidate_count += 1
+            anchor_result = matcher.match(
+                target_contract=target_contract,
+                candidate_contract=candidate_contract,
+            )
+            pressure_result = pressure_classifier.classify(
+                _replacement_pressure_input(
+                    target=target,
+                    item=item,
+                    anchor_result=anchor_result,
+                )
+            )
+            value_anchor = anchor_result.to_legacy_value_anchor()
+            replacement_pressure = pressure_result.to_legacy_replacement_pressure()
+            requires_review = anchor_result.requires_review or pressure_result.requires_review
+            if requires_review:
+                requires_review_count += 1
+            pair_consumption = {
+                "target_contract": _m12d_contract_summary(target_contract),
+                "candidate_contract": _m12d_contract_summary(candidate_contract),
+                "requires_review": requires_review,
+                "gate_reasons": _dedupe_strings(
+                    [
+                        *value_anchor.get("gate_reasons", []),
+                        *pressure_result.risk_notes,
+                    ]
+                ),
+            }
+            item["anchor_substitutability"] = value_anchor
+            item["value_anchor"] = value_anchor
+            item["replacement_pressure"] = replacement_pressure
+            item["m12d_consumption"] = pair_consumption
+            candidate_summaries.append(
+                {
+                    "candidate_sku_code": candidate_sku_code,
+                    "contract": pair_consumption["candidate_contract"],
+                    "anchor_substitutability_score": value_anchor["anchor_substitutability_score"],
+                    "replacement_pressure_score": replacement_pressure["replacement_pressure_score"],
+                    "requires_review": requires_review,
+                    "gate_reasons": pair_consumption["gate_reasons"],
+                }
+            )
+    except Exception as exc:
+        message = f"M12D 成交理由画像读取失败，竞品分析已按旧有事实维度降级输出：{exc}"
+        return base_result(
+            status=AnalystStatus.UNSUPPORTED,
+            command="m12d-purchase-reason-consumption",
+            context=context,
+            limitations=[message],
+            message_cn=message,
+        )
+
+    status = "unavailable" if not target_contract.found else "consumed_with_review" if requires_review_count else "consumed"
+    limitations: list[str] = []
+    if not target_contract.found:
+        limitations.append("目标 SKU 缺少已发布 M12D 成交理由画像，关键价值锚点和替代压力只能降级复核。")
+    missing_candidate_count = max(0, len(candidate_summaries) - found_candidate_count)
+    if missing_candidate_count:
+        limitations.append(f"{missing_candidate_count} 个候选 SKU 缺少已发布 M12D 成交理由画像，不能依赖关键价值锚点进入强结论。")
+    if requires_review_count:
+        limitations.append(f"{requires_review_count} 个竞品对触发 M12D 降级/复核门控，报告需展示复核原因。")
+
+    return base_result(
+        status=AnalystStatus.OK if target_contract.found else AnalystStatus.UNSUPPORTED,
+        command="m12d-purchase-reason-consumption",
+        context=context,
+        result={
+            "m12d_consumption": {
+                "status": status,
+                "source": "published_m12d_contract",
+                "target_contract": _m12d_contract_summary(target_contract),
+                "candidate_count": len(candidate_summaries),
+                "found_candidate_count": found_candidate_count,
+                "requires_review_count": requires_review_count,
+                "candidates": candidate_summaries,
+            }
+        },
+        evidence=[
+            {
+                "source_module": "M12D",
+                "category_code": context.category_code,
+                "target_sku_code": target_sku_code,
+                "row_count": int(target_contract.found) + found_candidate_count,
+            }
+        ],
+        limitations=limitations,
+        answer_outline=["已读取已发布 M12D 成交理由画像，并用于关键价值锚点可替代性和替代压力评分。"] if target_contract.found else [],
+    )
+
+
+def _replacement_pressure_input(
+    *,
+    target: dict[str, Any],
+    item: dict[str, Any],
+    anchor_result: AnchorSubstitutabilityResult,
+) -> ReplacementPressureInput:
+    candidate = item.get("candidate") or {}
+    purchase_pool = _m12d_purchase_pool(target, candidate)
+    weighted_overlap = _m12d_weighted_overlap(item.get("semantic_overlap") or {})
+    return ReplacementPressureInput(
+        purchase_pool_level=purchase_pool["level"],
+        purchase_pool_score=purchase_pool["score"],
+        anchor_substitutability=anchor_result,
+        price_gap_pct_to_target=candidate.get("price_gap_pct_to_target"),
+        weighted_overlap=weighted_overlap,
+        market_validation_level=_m12d_market_validation_level(item.get("sales_overlap") or {}, candidate),
+        candidate_config_advantage_score=Decimal("0.75") if anchor_result.candidate_stronger_anchors else None,
+        candidate_scenario_mindshare_score=max(weighted_overlap.values()) if weighted_overlap else None,
+        risk_flags=list(anchor_result.gate_reasons),
+    )
+
+
+def _m12d_purchase_pool(target: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    target_size = _decimal(target.get("screen_size_inch"))
+    candidate_size = _decimal(candidate.get("screen_size_inch"))
+    exact_size = target_size is not None and candidate_size is not None and abs(target_size - candidate_size) <= Decimal("0.5")
+    same_tier = bool(target.get("size_tier")) and target.get("size_tier") == candidate.get("size_tier")
+    target_band = str(target.get("price_band_in_size_tier") or "").lower()
+    candidate_band = str(candidate.get("price_band_in_size_tier") or "").lower()
+    same_band = bool(target_band) and target_band == candidate_band
+    adjacent_band = _m12d_adjacent_price_band(target_band, candidate_band)
+    if exact_size and same_band:
+        return {"level": "P0", "score": Decimal("1.00")}
+    if exact_size and adjacent_band:
+        return {"level": "P1", "score": Decimal("0.85")}
+    if same_tier and same_band:
+        return {"level": "P2", "score": Decimal("0.70")}
+    if same_tier and adjacent_band:
+        return {"level": "P3", "score": Decimal("0.55")}
+    return {"level": "P4", "score": Decimal("0.35")}
+
+
+def _m12d_adjacent_price_band(left: str, right: str) -> bool:
+    if not left or not right or left == "unknown" or right == "unknown":
+        return False
+    order = ["low", "mid_low", "mid", "mid_high", "high", "premium"]
+    if left not in order or right not in order:
+        return False
+    return abs(order.index(left) - order.index(right)) == 1
+
+
+def _m12d_weighted_overlap(semantic_overlap: dict[str, Any]) -> dict[str, Decimal]:
+    return {
+        "battlefield": _m12d_dimension_score(semantic_overlap.get("value_battlefield") or {}),
+        "user_task": _m12d_dimension_score(semantic_overlap.get("user_task") or {}),
+        "target_group": _m12d_dimension_score(semantic_overlap.get("target_group") or {}),
+    }
+
+
+def _m12d_dimension_score(overlap: dict[str, Any]) -> Decimal:
+    weighted = _decimal(overlap.get("weighted_overlap_score"))
+    if weighted is None:
+        weighted = _decimal(overlap.get("overlap_score")) or Decimal("0")
+    risk = _decimal(overlap.get("risk_overlap_score")) or Decimal("0")
+    return max(Decimal("0"), weighted - risk * Decimal("0.25"))
+
+
+def _m12d_market_validation_level(sales: dict[str, Any], candidate: dict[str, Any]) -> str:
+    overlap_week_count = int(sales.get("overlap_week_count") or 0)
+    candidate_side = sales.get("candidate") or {}
+    avg_weekly = (
+        _decimal(candidate_side.get("avg_weekly_sales_volume_on_overlap_weeks"))
+        or _decimal(candidate_side.get("avg_weekly_sales_volume"))
+        or _decimal(candidate.get("avg_weekly_sales_volume"))
+    )
+    if overlap_week_count >= 4 and avg_weekly and avg_weekly > 0:
+        return "strong"
+    if avg_weekly and avg_weekly > 0:
+        return "medium"
+    return "weak"
+
+
+def _m12d_contract_summary(contract: Any) -> dict[str, Any]:
+    profile = contract.profile
+    return {
+        "found": contract.found,
+        "category_code": str(profile.category_code) if profile is not None else contract.lookup_key.get("category_code"),
+        "batch_id": profile.batch_id if profile is not None else contract.lookup_key.get("batch_id"),
+        "m12d_profile_version": profile.m12d_profile_version if profile is not None else contract.lookup_key.get("m12d_profile_version"),
+        "sku_code": profile.sku_code if profile is not None else contract.lookup_key.get("sku_code"),
+        "consumption_state": contract.consumption_state,
+        "downstream_action": contract.downstream_action,
+        "profile_confidence": float(profile.profile_confidence) if profile is not None and profile.profile_confidence is not None else None,
+        "degradation_reasons": list(profile.degradation_reasons) if profile is not None else [],
+    }
+
+
+def _dedupe_strings(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = str(value).strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            result.append(normalized)
     return result
 
 

@@ -127,9 +127,21 @@ def test_feishu_card_reply_failure_message_is_business_safe(monkeypatch) -> None
     result = competitor_answer.publish_feishu_card_reply(card={"schema": "2.0"}, reply_message_id="om_original")
 
     assert result.status == "failed"
-    assert "飞书卡片发送失败" in result.message_cn
-    assert "im:message" in result.message_cn
+    assert result.message_cn == "飞书卡片发送失败：飞书应用或用户缺少消息发送权限。"
+    assert "im:message" not in result.message_cn
+    assert "console" not in result.message_cn
     assert "appSecret" not in result.message_cn
+
+
+def test_feishu_card_not_configured_message_is_business_safe() -> None:
+    message = competitor_answer._feishu_im_failure_message(
+        '{"ok": false, "error": {"type": "config", "subtype": "not_configured", "message": "not configured"}}'
+    )
+
+    assert message == "飞书卡片发送失败：当前环境未配置飞书消息发送能力。"
+    assert "CATFORGE_FEISHU_CONFIG_DIR" not in message
+    assert "CATFORGE_FEISHU_DATA_DIR" not in message
+    assert "CLI" not in message
 
 
 def test_feishu_card_reply_field_validation_message_is_specific() -> None:
@@ -273,6 +285,67 @@ def test_attach_feishu_card_delivery_prefers_main_chat_message(monkeypatch) -> N
     assert delivery["message_id"] == "om_sent"
 
 
+def test_attach_feishu_card_delivery_falls_back_to_reply_after_main_chat_failure(monkeypatch) -> None:
+    reply_calls: list[dict[str, object]] = []
+    message_calls: list[dict[str, object]] = []
+
+    def fake_publish_feishu_card_message(**kwargs):
+        message_calls.append(kwargs)
+        return competitor_answer.FeishuCardPublishResult(
+            status="failed",
+            message_cn="飞书卡片发送失败：飞书应用或用户缺少消息发送权限。",
+        )
+
+    def fake_publish_feishu_card_reply(**kwargs):
+        reply_calls.append(kwargs)
+        return competitor_answer.FeishuCardPublishResult(
+            status="sent",
+            message_cn="已发送飞书竞品看板卡片。",
+            message_id="om_reply",
+            chat_id="oc_chat",
+        )
+
+    monkeypatch.setattr(competitor_answer, "publish_feishu_card_message", fake_publish_feishu_card_message)
+    monkeypatch.setattr(competitor_answer, "publish_feishu_card_reply", fake_publish_feishu_card_reply)
+    result = {
+        "result": {
+            "competitor_answer": {
+                "feishu_card_payload": {"schema": "2.0", "body": {"elements": []}},
+            }
+        }
+    }
+
+    catforge_analyst.attach_feishu_card_delivery(
+        result,
+        Namespace(
+            feishu_chat_id="oc_chat",
+            feishu_reply_message_id="om_original",
+            feishu_reply_in_thread=False,
+            feishu_card_idempotency_key="competitor-card-om_original",
+        ),
+    )
+
+    assert message_calls == [
+        {
+            "card": {"schema": "2.0", "body": {"elements": []}},
+            "chat_id": "oc_chat",
+            "idempotency_key": "competitor-card-om_original",
+        }
+    ]
+    assert reply_calls == [
+        {
+            "card": {"schema": "2.0", "body": {"elements": []}},
+            "reply_message_id": "om_original",
+            "reply_in_thread": False,
+            "idempotency_key": "competitor-card-om_original",
+        }
+    ]
+    delivery = result["result"]["competitor_answer"]["feishu_card_delivery"]
+    assert delivery["status"] == "sent"
+    assert delivery["message_cn"] == "已发送飞书竞品看板卡片。"
+    assert delivery["message_id"] == "om_reply"
+
+
 def test_text_output_prefers_feishu_card_delivery_status(capsys) -> None:
     result = {
         "result": {
@@ -309,3 +382,25 @@ def test_feishu_card_only_without_delivery_does_not_fallback_to_short_answer(cap
     catforge_analyst.emit_result(result, "text", feishu_card_only=True)
 
     assert capsys.readouterr().out.strip() == "未发送飞书看板卡片：缺少发送结果。"
+
+
+def test_feishu_card_only_failure_outputs_sanitized_status(capsys) -> None:
+    result = {
+        "result": {
+            "competitor_answer": {
+                "short_answer": "短摘要",
+                "feishu_card_delivery": {
+                    "status": "failed",
+                    "message_cn": "飞书卡片发送失败：飞书应用或用户缺少消息发送权限。",
+                },
+            }
+        }
+    }
+
+    catforge_analyst.emit_result(result, "text", feishu_card_only=True)
+
+    output = capsys.readouterr().out.strip()
+    assert output == "飞书卡片发送失败：飞书应用或用户缺少消息发送权限。"
+    assert "短摘要" not in output
+    assert "im:message" not in output
+    assert "console" not in output

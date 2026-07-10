@@ -44,12 +44,28 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
+    CORE3_M12D_RULE_VERSION,
+    Core3CategoryCode,
+    Core3ConfidenceLevel,
+    M12DAnchorRole,
+    M12DEvidenceDomain,
+    M12DEvidenceStrength,
+    M12DInputStatus,
+    M12DProfileStatus,
 )
+from app.services.core3_real_data.purchase_reason_profile_repositories import PurchaseReasonProfileRepository
+from app.services.core3_real_data.purchase_reason_profile_schemas import (
+    M12DPurchaseReasonAnchorRecord,
+    M12DPurchaseReasonProfileVersionRecord,
+    M12DSkuPurchaseReasonProfileRecord,
+)
+from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_analyst_test"
 AC_BATCH_ID = "m00_ac_analyst_test"
+AC_M12D_VERSION = "m12d_ac_competitor_consumption_test"
 
 
 def _assert_feishu_web_url_open_applink(url: str) -> str:
@@ -443,6 +459,9 @@ def make_session() -> Session:
         entities.Core3SkuClaimContributionAttribution.__table__,
         entities.Core3ClaimValueDimensionSummary.__table__,
         entities.Core3ClaimValueReviewIssue.__table__,
+        entities.Core3PurchaseReasonProfileVersion.__table__,
+        entities.Core3SkuPurchaseReasonProfile.__table__,
+        entities.Core3SkuPurchaseReasonAnchor.__table__,
     ]:
         table.create(bind=engine, checkfirst=True)
     session = Session(engine)
@@ -502,16 +521,18 @@ def seed_market_profile(
     price: Decimal,
     volume: Decimal,
     price_band: str = "mid_high",
+    batch_id: str = BATCH_ID,
 ) -> None:
     size_tier = "large_60_69"
     amount = price * volume
+    profile_suffix = sku_code if batch_id == BATCH_ID else f"{batch_id}-{sku_code}"
     session.add(
         entities.Core3SkuMarketProfile(
-            profile_id=f"m07-{sku_code}",
-            sku_market_profile_id=f"m07-profile-{sku_code}",
+            profile_id=f"m07-{profile_suffix}",
+            sku_market_profile_id=f"m07-profile-{profile_suffix}",
             project_id=PROJECT_ID,
             category_code="TV",
-            batch_id=BATCH_ID,
+            batch_id=batch_id,
             sku_code=sku_code,
             model_name=model_name,
             brand_name=brand_name,
@@ -551,8 +572,8 @@ def seed_market_profile(
             evidence_ids=[f"ev-market-{sku_code}"],
             market_evidence_ids=[f"ev-market-{sku_code}"],
             rule_version=CORE3_M07_RULE_VERSION,
-            input_fingerprint=f"fp-m07-{sku_code}",
-            result_hash=f"hash-m07-{sku_code}",
+            input_fingerprint=f"fp-m07-{profile_suffix}",
+            result_hash=f"hash-m07-{profile_suffix}",
         )
     )
 
@@ -579,10 +600,10 @@ def seed_ac_analyst_data(session: Session) -> None:
         sku_code="AC00038063",
         model_name="KFR-88LW/N8KS1-1U",
         brand_name="美的",
-        size_tier="floor_hp_3_plus",
+        size_tier="floor_hp_3",
         price=Decimal("7208"),
         volume=Decimal("13916"),
-        price_band="unknown",
+        price_band="high",
     )
     seed_ac_market_profile(
         session,
@@ -605,7 +626,7 @@ def seed_ac_analyst_data(session: Session) -> None:
         price_band="high",
     )
     for sku_code, model_name, brand_name, size_tier in [
-        ("AC00038063", "KFR-88LW/N8KS1-1U", "美的", "floor_hp_3_plus"),
+        ("AC00038063", "KFR-88LW/N8KS1-1U", "美的", "floor_hp_3"),
         ("AC00028640", "KFR-72LW/BDN8Y-YH200", "海信", "floor_hp_3"),
         ("AC00029751", "KFR-72LW/N8MXA1", "格力", "floor_hp_3"),
     ]:
@@ -615,10 +636,344 @@ def seed_ac_analyst_data(session: Session) -> None:
         sku_code="AC00038063",
         model_name="KFR-88LW/N8KS1-1U",
         brand_name="美的",
-        size_tier="floor_hp_3_plus",
+        size_tier="floor_hp_3",
         sample_peer_codes=["AC00028640", "AC00029751"],
     )
+    seed_ac_semantic_space(session)
     session.commit()
+
+
+def seed_ac_semantic_space(session: Session) -> None:
+    summary_id = "summary-ac-floor-3-premium"
+    session.add(
+        entities.Core3SemanticMarketDimensionSummary(
+            summary_id=summary_id,
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
+            dimension_name="3匹及以上柜机高端舒适健康战场",
+            taxonomy_version=CORE3_M11C_AC_TAXONOMY_VERSION,
+            sku_relation_count=3,
+            allocated_sku_count=3,
+            primary_sku_count=2,
+            secondary_sku_count=1,
+            estimated_sales_volume=Decimal("22116.0000"),
+            estimated_sales_amount=Decimal("150000000.0000"),
+            estimated_avg_weekly_sales_volume=Decimal("921.500000"),
+            estimated_avg_weekly_sales_amount=Decimal("6250000.000000"),
+            sales_volume_share=Decimal("0.600000"),
+            sales_amount_share=Decimal("0.650000"),
+            allocation_coverage_rate=Decimal("1.000000"),
+            brand_distribution_json={"美的": {"sku_count": 1}},
+            size_price_distribution_json={"floor_hp_3": {"high": {"sku_count": 2}}},
+            relation_status_counts_json={"primary_battlefield": 2},
+            top_skus_json=[{"sku_code": "AC00038063", "allocated_sales_volume": 8862}],
+            confidence_avg=Decimal("0.8400"),
+            business_summary_cn="3匹及以上柜机高端舒适健康战场由大空间、舒适风和健康洁净支撑。",
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-summary-ac-floor-3-premium",
+            result_hash="hash-summary-ac-floor-3-premium",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketAllocation(
+            allocation_id="allocation-ac00038063-floor-3-premium",
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            active_week_count=24,
+            dimension_type="battlefield",
+            dimension_code="BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
+            dimension_name="3匹及以上柜机高端舒适健康战场",
+            sku_code="AC00038063",
+            brand_name="美的",
+            model_name="KFR-88LW/N8KS1-1U",
+            size_tier="floor_hp_3",
+            price_band_in_size_tier="high",
+            relation_status="primary_battlefield",
+            allocation_role="primary",
+            allocation_value_type="positive_value",
+            final_score=Decimal("0.9000"),
+            allocation_basis=Decimal("0.636846"),
+            relation_factor=Decimal("1.0000"),
+            allocation_weight=Decimal("0.636846"),
+            sales_volume_total=Decimal("13916.0000"),
+            sales_amount_total=Decimal("100318928.0000"),
+            avg_weekly_sales_volume=Decimal("579.833333"),
+            avg_weekly_sales_amount=Decimal("4179955.333333"),
+            allocated_sales_volume=Decimal("8862.3489"),
+            allocated_sales_amount=Decimal("63887708.6197"),
+            allocated_avg_weekly_sales_volume=Decimal("369.264538"),
+            allocated_avg_weekly_sales_amount=Decimal("2661987.859154"),
+            allocation_confidence=Decimal("0.8400"),
+            allocation_basis_json={"source": "test"},
+            evidence_ids_json=["ev-bf-ac00038063"],
+            market_source_json={"market_window": "full_observed_window"},
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-allocation-ac00038063-floor-3-premium",
+            result_hash="hash-allocation-ac00038063-floor-3-premium",
+        )
+    )
+    session.add(
+        entities.Core3SemanticMarketSkuContribution(
+            contribution_id="contribution-ac00038063-floor-3-premium",
+            summary_id=summary_id,
+            project_id=PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            analysis_population="fact_complete_with_comment",
+            market_window="full_observed_window",
+            dimension_type="battlefield",
+            dimension_code="BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
+            dimension_name="3匹及以上柜机高端舒适健康战场",
+            sku_code="AC00038063",
+            brand_name="美的",
+            model_name="KFR-88LW/N8KS1-1U",
+            allocation_weight=Decimal("0.636846"),
+            allocated_sales_volume=Decimal("8862.3489"),
+            allocated_sales_amount=Decimal("63887708.6197"),
+            allocated_avg_weekly_sales_volume=Decimal("369.264538"),
+            allocated_avg_weekly_sales_amount=Decimal("2661987.859154"),
+            sku_share_in_dimension_volume=Decimal("0.400725"),
+            sku_share_in_dimension_amount=Decimal("0.425918"),
+            sku_rank_in_dimension=1,
+            is_primary_dimension=True,
+            allocation_role="primary",
+            relation_status="primary_battlefield",
+            allocation_confidence=Decimal("0.8400"),
+            contribution_reason_cn="本品是该战场的主贡献 SKU。",
+            evidence_ids_json=["ev-bf-ac00038063"],
+            rule_version=CORE3_M11D_RULE_VERSION,
+            input_fingerprint="fp-contribution-ac00038063-floor-3-premium",
+            result_hash="hash-contribution-ac00038063-floor-3-premium",
+        )
+    )
+
+
+def seed_ac_purchase_reason_profiles_for_competitor_consumption(session: Session) -> None:
+    repository = PurchaseReasonProfileRepository(
+        Core3RepositoryContext(
+            db=session,
+            project_id=PROJECT_ID,
+            category_code=Core3CategoryCode.AC,
+        )
+    )
+    repository.save_versions(
+        [
+            M12DPurchaseReasonProfileVersionRecord(
+                purchase_reason_version_id="version-ac-ca-g01",
+                project_id=PROJECT_ID,
+                category_code=Core3CategoryCode.AC,
+                batch_id=AC_BATCH_ID,
+                product_category="AC",
+                m12d_profile_version=AC_M12D_VERSION,
+                source_batch_ids_json=[AC_BATCH_ID],
+                input_scope_json={"sku_count": 2, "scope": "competitor_consumption_test"},
+                sku_count=2,
+                ready_count=2,
+                input_fingerprint="input-version-ac-ca-g01",
+                result_hash="hash-version-ac-ca-g01",
+            )
+        ]
+    )
+    repository.save_profiles(
+        [
+            _ac_m12d_profile(
+                sku_code="AC00038063",
+                model_name="KFR-88LW/N8KS1-1U",
+                brand_name="美的",
+                display_name_cn="美的 KFR-88LW/N8KS1-1U",
+                core_payment_anchors=["large_space_fast_cooling", "premium_comfort_health"],
+                supporting_anchors=["smart_energy_saving_control"],
+            ),
+            _ac_m12d_profile(
+                sku_code="AC00029751",
+                model_name="KFR-72LW/N8MXA1",
+                brand_name="格力",
+                display_name_cn="格力 KFR-72LW/N8MXA1",
+                core_payment_anchors=["large_space_fast_cooling", "premium_comfort_health"],
+                supporting_anchors=["smart_energy_saving_control"],
+            ),
+        ]
+    )
+    repository.save_anchors(
+        [
+            _ac_m12d_anchor(
+                sku_code="AC00038063",
+                model_name="KFR-88LW/N8KS1-1U",
+                brand_name="美的",
+                anchor_code="large_space_fast_cooling",
+                anchor_cn="大空间快速冷暖",
+                family_code="large_space_climate",
+                rank=1,
+                role=M12DAnchorRole.CORE_PAYMENT,
+                strength=M12DEvidenceStrength.STRONG,
+                confidence=Decimal("0.9000"),
+            ),
+            _ac_m12d_anchor(
+                sku_code="AC00038063",
+                model_name="KFR-88LW/N8KS1-1U",
+                brand_name="美的",
+                anchor_code="premium_comfort_health",
+                anchor_cn="舒适健康体验值得多花钱",
+                family_code="comfort_health_upgrade",
+                rank=2,
+                role=M12DAnchorRole.CORE_PAYMENT,
+                strength=M12DEvidenceStrength.MEDIUM,
+                confidence=Decimal("0.8200"),
+            ),
+            _ac_m12d_anchor(
+                sku_code="AC00038063",
+                model_name="KFR-88LW/N8KS1-1U",
+                brand_name="美的",
+                anchor_code="smart_energy_saving_control",
+                anchor_cn="智能省心和能效安心",
+                family_code="smart_energy_saving",
+                rank=3,
+                role=M12DAnchorRole.SUPPORTING,
+                strength=M12DEvidenceStrength.MEDIUM,
+                confidence=Decimal("0.8000"),
+            ),
+            _ac_m12d_anchor(
+                sku_code="AC00029751",
+                model_name="KFR-72LW/N8MXA1",
+                brand_name="格力",
+                anchor_code="large_space_fast_cooling",
+                anchor_cn="大空间快速冷暖",
+                family_code="large_space_climate",
+                rank=1,
+                role=M12DAnchorRole.CORE_PAYMENT,
+                strength=M12DEvidenceStrength.STRONG,
+                confidence=Decimal("0.9300"),
+            ),
+            _ac_m12d_anchor(
+                sku_code="AC00029751",
+                model_name="KFR-72LW/N8MXA1",
+                brand_name="格力",
+                anchor_code="premium_comfort_health",
+                anchor_cn="舒适健康体验值得多花钱",
+                family_code="comfort_health_upgrade",
+                rank=2,
+                role=M12DAnchorRole.CORE_PAYMENT,
+                strength=M12DEvidenceStrength.STRONG,
+                confidence=Decimal("0.9100"),
+            ),
+            _ac_m12d_anchor(
+                sku_code="AC00029751",
+                model_name="KFR-72LW/N8MXA1",
+                brand_name="格力",
+                anchor_code="smart_energy_saving_control",
+                anchor_cn="智能省心和能效安心",
+                family_code="smart_energy_saving",
+                rank=3,
+                role=M12DAnchorRole.SUPPORTING,
+                strength=M12DEvidenceStrength.MEDIUM,
+                confidence=Decimal("0.8400"),
+            ),
+        ]
+    )
+    repository.publish_version(
+        batch_id=AC_BATCH_ID,
+        m12d_profile_version=AC_M12D_VERSION,
+        rule_version=CORE3_M12D_RULE_VERSION,
+        published_by="ac_ca_g01_test",
+    )
+    session.commit()
+
+
+def _ac_m12d_profile(
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    display_name_cn: str,
+    core_payment_anchors: list[str],
+    supporting_anchors: list[str],
+) -> M12DSkuPurchaseReasonProfileRecord:
+    return M12DSkuPurchaseReasonProfileRecord(
+        purchase_reason_profile_id=f"profile-ac-ca-g01-{sku_code.lower()}",
+        purchase_reason_version_id="version-ac-ca-g01",
+        project_id=PROJECT_ID,
+        category_code=Core3CategoryCode.AC,
+        batch_id=AC_BATCH_ID,
+        product_category="AC",
+        m12d_profile_version=AC_M12D_VERSION,
+        sku_code=sku_code,
+        model_name=model_name,
+        brand_name=brand_name,
+        display_name_cn=display_name_cn,
+        status=M12DProfileStatus.READY,
+        profile_confidence=Decimal("0.8800"),
+        confidence_level=Core3ConfidenceLevel.HIGH,
+        core_reasons_json=["用户愿意为大空间快速冷暖和舒适健康体验付费。"],
+        core_payment_anchors_json=core_payment_anchors,
+        supporting_anchors_json=supporting_anchors,
+        param_profile_status=M12DInputStatus.READY,
+        claim_fact_status=M12DInputStatus.READY,
+        comment_profile_status=M12DInputStatus.READY,
+        market_profile_status=M12DInputStatus.READY,
+        semantic_profile_status=M12DInputStatus.READY,
+        semantic_market_status=M12DInputStatus.READY,
+        claim_value_status=M12DInputStatus.READY,
+        source_batch_ids_json=[AC_BATCH_ID],
+        source_merge_strategy="unit_test",
+        input_fingerprint=f"input-profile-ac-ca-g01-{sku_code.lower()}",
+        result_hash=f"hash-profile-ac-ca-g01-{sku_code.lower()}",
+    )
+
+
+def _ac_m12d_anchor(
+    *,
+    sku_code: str,
+    model_name: str,
+    brand_name: str,
+    anchor_code: str,
+    anchor_cn: str,
+    family_code: str,
+    rank: int,
+    role: M12DAnchorRole,
+    strength: M12DEvidenceStrength,
+    confidence: Decimal,
+) -> M12DPurchaseReasonAnchorRecord:
+    return M12DPurchaseReasonAnchorRecord(
+        purchase_reason_anchor_id=f"anchor-ac-ca-g01-{sku_code.lower()}-{anchor_code}",
+        purchase_reason_profile_id=f"profile-ac-ca-g01-{sku_code.lower()}",
+        purchase_reason_version_id="version-ac-ca-g01",
+        project_id=PROJECT_ID,
+        category_code=Core3CategoryCode.AC,
+        batch_id=AC_BATCH_ID,
+        product_category="AC",
+        m12d_profile_version=AC_M12D_VERSION,
+        sku_code=sku_code,
+        model_name=model_name,
+        brand_name=brand_name,
+        anchor_code=anchor_code,
+        anchor_cn=anchor_cn,
+        anchor_family_code=family_code,
+        anchor_rank=rank,
+        role=role,
+        evidence_strength=strength,
+        confidence=confidence,
+        evidence_domains_json=[
+            M12DEvidenceDomain.PARAM_FACT,
+            M12DEvidenceDomain.FACT_CLAIM,
+            M12DEvidenceDomain.COMMENT_PERCEPTION,
+            M12DEvidenceDomain.MARKET_ACCEPTANCE,
+            M12DEvidenceDomain.SEMANTIC_SCENE,
+        ],
+        support_summary_cn=f"{anchor_cn}由空调参数、卖点、评论和市场接受度共同支撑。",
+        input_fingerprint=f"input-anchor-ac-ca-g01-{sku_code.lower()}-{anchor_code}",
+        result_hash=f"hash-anchor-ac-ca-g01-{sku_code.lower()}-{anchor_code}",
+    )
 
 
 def seed_ac_market_profile(
@@ -653,7 +1008,7 @@ def seed_ac_market_profile(
             platform_count=1,
             size_segment=size_tier,
             screen_size_class=size_tier,
-            market_pool_key=f"ac:{size_tier}:online:full_observed_window",
+            market_pool_key=f"ac:{size_tier}:{price_band}:online:full_observed_window",
             sales_volume_total=volume,
             sales_amount_total=amount,
             price_wavg=price,
@@ -668,7 +1023,7 @@ def seed_ac_market_profile(
             price_percentile_in_size=Decimal("0.900000") if price_band == "high" else Decimal("0.500000"),
             volume_percentile_in_size=Decimal("0.800000"),
             amount_percentile_in_size=Decimal("0.850000"),
-            same_pool_sku_count=1 if size_tier == "floor_hp_3_plus" else 3,
+            same_pool_sku_count=2 if size_tier == "floor_hp_3" and price_band == "high" else 1,
             market_confidence=Decimal("0.9000"),
             confidence_level="high",
             sample_status="sufficient",
@@ -896,11 +1251,11 @@ def seed_ac_battlefield_score(
                     "comparable_market_context": {
                         "method": "pairwise_peer_overlap_active_week_average",
                         "size_tier": size_tier,
-                        "comparison_size_tiers": ["floor_hp_3", "floor_hp_3_plus"],
-                        "borrowed_adjacent_context_pool": True,
+                        "comparison_size_tiers": ["floor_hp_3"],
+                        "borrowed_adjacent_context_pool": False,
                         "qualified_peer_count": 37,
                         "sample_peer_comparisons": [{"peer_sku_code": code, "overlap_week_count": 12} for code in sample_peer_codes],
-                        "note_cn": "销量/销额验证使用已批准相邻分档 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
+                        "note_cn": "销量/销额验证使用同尺寸 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
                     }
                 }
             },
@@ -3235,6 +3590,145 @@ def test_resolve_sku_latest_uses_latest_analyst_ready_batch_not_empty_source_bat
     assert result["target"]["sku_code"] == "TV00029112"
 
 
+def test_resolve_sku_latest_tv_serving_scope_includes_older_ready_batch() -> None:
+    session = make_session()
+    older_batch_id = "m00_older_tv_full"
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=older_batch_id,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="full",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 13, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    seed_market_profile(
+        session,
+        batch_id=older_batch_id,
+        sku_code="TV00010001",
+        model_name="55OLD",
+        brand_name="海信",
+        size=55,
+        price=Decimal("3299"),
+        volume=Decimal("600"),
+    )
+    session.commit()
+
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="tv",
+        sku_code="TV00010001",
+    )
+
+    assert result["status"] == "ok"
+    assert result["batch_id"].startswith("serving-scope:TV:")
+    assert BATCH_ID in result["batch_id"]
+    assert older_batch_id in result["batch_id"]
+    assert result["target"]["sku_code"] == "TV00010001"
+
+
+def test_resolve_sku_latest_scope_prefers_newer_duplicate_batch_row() -> None:
+    session = make_session()
+    older_batch_id = "m00_older_tv_duplicate"
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=older_batch_id,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="full",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data", "attribute_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 13, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    seed_market_profile(
+        session,
+        batch_id=older_batch_id,
+        sku_code="TV00029112",
+        model_name="65E7Q Legacy",
+        brand_name="海信",
+        size=65,
+        price=Decimal("2999"),
+        volume=Decimal("300"),
+    )
+    session.commit()
+
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id="latest",
+        product_category="tv",
+        sku_code="TV00029112",
+    )
+
+    assert result["status"] == "ok"
+    assert result["target"]["model_name"] == "65E7Q"
+    assert result["target"]["weighted_price"] == Decimal("4999")
+
+
+def test_resolve_sku_latest_ac_scope_ignores_tv_category_ac_prefix_history() -> None:
+    session = make_session()
+    seed_ac_analyst_data(session)
+    tv_legacy_batch_id = "m00_tv_legacy_with_ac_prefix"
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=tv_legacy_batch_id,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="full",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            status="registered",
+        )
+    )
+    seed_market_profile(
+        session,
+        batch_id=tv_legacy_batch_id,
+        sku_code="AC99999999",
+        model_name="KFR-LEGACY",
+        brand_name="历史空调",
+        size=65,
+        price=Decimal("3999"),
+        volume=Decimal("100"),
+    )
+    session.commit()
+
+    result = catforge_analyst.resolve_sku(
+        session,
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id="latest",
+        product_category="ac",
+        sku_code="AC00038063",
+    )
+
+    assert result["status"] == "ok"
+    assert result["batch_id"] == AC_BATCH_ID
+    assert tv_legacy_batch_id not in result["batch_id"]
+    assert result["target"]["sku_code"] == "AC00038063"
+
+
 def test_resolve_sku_tolerates_three_digit_size_typo_before_model_letter() -> None:
     session = make_session()
     result = catforge_analyst.resolve_sku(
@@ -3378,6 +3872,32 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
     assert fact_brief["missing_sections"] == []
 
 
+def test_ac_sku_fact_brief_includes_m11d_semantic_positions() -> None:
+    session = make_session()
+    seed_ac_analyst_data(session)
+
+    result = catforge_analyst.sku_fact_brief(
+        session,
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        product_category="ac",
+        sku_code="AC00038063",
+    )
+
+    assert result["status"] == "ok"
+    positions = result["result"]["fact_brief"]["sections"]["semantic_dimension_positions"]
+    battlefield = next(
+        item
+        for item in positions
+        if item["dimension_type"] == "battlefield"
+        and item["dimension_code"] == "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
+    )
+    assert battlefield["market_space"]["estimated_sales_volume"] == 22116.0
+    assert battlefield["sku_allocation"]["allocated_sales_volume"] == 8862.3489
+    assert battlefield["sku_contribution"]["sku_rank_in_dimension"] == 1
+
+
 def test_semantic_dimension_space_returns_m11d_market_space() -> None:
     session = make_session()
     result = catforge_analyst.semantic_dimension_space(
@@ -3424,7 +3944,7 @@ def test_same_size_price_candidates_returns_same_pool_candidates() -> None:
     assert search["candidates"][0]["price_band_in_size_tier"] == "mid_high"
 
 
-def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
+def test_ac_ask_infers_category_reads_facts_and_uses_hp_price_pool() -> None:
     session = make_session()
     seed_ac_analyst_data(session)
 
@@ -3445,7 +3965,7 @@ def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
     payload = result["result"]["competitor_set"]
     assert payload["candidate_count"] >= 2
     candidate_codes = [item["candidate"]["sku_code"] for item in payload["candidates"]]
-    assert candidate_codes[:2] == ["AC00028640", "AC00029751"]
+    assert set(candidate_codes[:2]) == {"AC00028640", "AC00029751"}
     fact_brief = payload["target_fact_brief"]
     sections = fact_brief["sections"]
     assert sections["claim_fact"]["fact_claim_codes"] == [
@@ -3461,7 +3981,7 @@ def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
     assert sections["target_group"]["primary_target_group_code"] == "TG_LIVING_ROOM_LARGE_SPACE"
     assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
     assert sections["market"]["market_position"]["price_band_in_size_tier"] == "high"
-    assert sections["market"]["market_position"]["price_band_source"] == "M11C"
+    assert "price_band_source" not in sections["market"]["market_position"]
     assert "claim_fact" not in fact_brief["missing_sections"]
     assert "comment_fact" not in fact_brief["missing_sections"]
     markdown = result["result"]["competitor_answer"]["report_payload"]["markdown"]
@@ -3477,6 +3997,57 @@ def test_ac_ask_infers_category_reads_facts_and_uses_m11c_sparse_pool() -> None:
     assert "该尺寸价格段电视" not in markdown
     assert "尺寸段未知 × 价格带未知" not in markdown
     assert "未知 寸" not in markdown
+
+
+def test_ac_competitor_set_consumes_published_m12d_without_tv_fallback() -> None:
+    session = make_session()
+    seed_ac_analyst_data(session)
+    seed_ac_purchase_reason_profiles_for_competitor_consumption(session)
+
+    result = catforge_analyst.competitor_set(
+        session,
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        product_category="ac",
+        sku_code="AC00038063",
+        limit=5,
+        answer_style="xiaoao",
+        with_report="markdown",
+    )
+
+    assert result["status"] == "ok"
+    payload = result["result"]["competitor_set"]
+    m12d = payload["m12d_consumption"]
+    assert m12d["status"] == "consumed_with_review"
+    assert m12d["source"] == "published_m12d_contract"
+    assert m12d["target_contract"]["category_code"] == "AC"
+    assert m12d["target_contract"]["m12d_profile_version"] == AC_M12D_VERSION
+    assert m12d["found_candidate_count"] == 1
+    assert m12d["requires_review_count"] >= 1
+
+    candidates = {item["candidate"]["sku_code"]: item for item in payload["candidates"]}
+    matched = candidates["AC00029751"]
+    assert matched["m12d_consumption"]["candidate_contract"]["found"] is True
+    assert matched["m12d_consumption"]["candidate_contract"]["category_code"] == "AC"
+    assert matched["value_anchor"]["anchor_substitutability_score"] >= 7
+    assert "大空间快速冷暖" in matched["value_anchor"]["shared_anchors"]
+    assert matched["replacement_pressure"]["replacement_pressure_score"] >= 5
+
+    missing = candidates["AC00028640"]
+    assert missing["m12d_consumption"]["candidate_contract"]["found"] is False
+    assert missing["value_anchor"]["anchor_substitutability_level"] == "blocked"
+    assert missing["value_anchor"]["pair_scoring_allowed"] is False
+    assert missing["value_anchor"]["shared_anchors"] == []
+    assert "not_found" in missing["value_anchor"]["gate_reasons"]
+
+    markdown = result["result"]["competitor_answer"]["report_payload"]["markdown"]
+    assert "### 2.6 关键价值锚点可替代性比较" in markdown
+    assert "### 2.7 替代压力比较" in markdown
+    assert "大空间快速冷暖" in markdown
+    assert "舒适健康体验值得多花钱" in markdown
+    assert "MiniLED" not in markdown
+    assert "影院沉浸观影" not in markdown
 
 
 def test_semantic_overlap_returns_task_group_battlefield_matches() -> None:
@@ -3984,9 +4555,23 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "会影响同一批用户的最终候选清单" not in dashboard_section
     assert "## 一、分析结论" in markdown
     assert "## 二、分析过程" in markdown
-    assert "### 2.1 候选 SKU 综合评分" in markdown
-    assert "替代压力 5" in markdown
-    assert "### 2.5 关键价值锚点、替代压力和市场验证依据" in markdown
+    assert "### 2.1 综合评分总览" in markdown
+    assert "### 2.2 购买池比较" in markdown
+    assert "### 2.3 价值战场比较" in markdown
+    assert "### 2.4 用户任务比较" in markdown
+    assert "### 2.5 目标客群比较" in markdown
+    assert "### 2.6 关键价值锚点可替代性比较" in markdown
+    assert "### 2.7 替代压力比较" in markdown
+    assert "### 2.8 市场验证比较" in markdown
+    assert "### 2.9 候选池与未选原因附录" in markdown
+    assert markdown.index("### 2.1 综合评分总览") < markdown.index("### 2.9 候选池与未选原因附录")
+    assert markdown.index("### 2.8 市场验证比较") < markdown.index("### 2.9 候选池与未选原因附录")
+    assert "| 替代压力 | 10 | 是否会改变用户对目标 SKU 价值判断 |" in markdown
+    assert "### 2.1 候选 SKU 综合评分" not in markdown
+    assert "### 2.4 用户任务和目标客群评分依据" not in markdown
+    assert "### 2.5 关键价值锚点、替代压力和市场验证依据" not in markdown
+    assert "判断口径：购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策" in markdown
+    assert "判断口径：关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖" in markdown
     assert "## 三、四个产品详情链接" not in markdown
     assert "## 四、四个产品横向详细对比" in markdown
     assert "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
@@ -4022,7 +4607,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "空间900台；周均75台；覆盖2个SKU" in markdown
     assert "分配700台；周均58台；权重60%；维度内第1名；占维度销量78%" in markdown
     assert "主流客厅均衡体验 | 辅战场 | 空间600台" in markdown
-    assert "当前图谱未分配本品销量" in markdown
+    assert "本轮未分配该 SKU 在此维度的销量" in markdown
     assert "影院沉浸观影 | 主任务和评论观察任务 | 空间1,100台" in markdown
     assert "高端影音体验用户 | 主客群和评论观察客群 | 空间1,000台" in markdown
     assert "MiniLED 高端画质路线" in markdown
@@ -4090,6 +4675,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     ]
     assert battlefield_structure["segments"][0]["battlefields_cn"] == ["高端画质升级"]
     assert any("游戏体育流畅" in note for note in battlefield_structure["notes_cn"])
+    assert "锚点可替代性" in dashboard["competitors"][0]["anchor_substitutability_cn"]
+    assert "替代压力" in dashboard["competitors"][0]["pressure_breakdown_cn"]
+    assert dashboard["competitors"][0]["anchor_substitutability"]["score_cn"]
+    assert dashboard["competitors"][0]["pressure_breakdown"]["score_cn"]
     card = answer["feishu_card_payload"]
     card_json = json.dumps(card, ensure_ascii=False)
     assert card["schema"] == "2.0"
@@ -4104,6 +4693,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "chart",
         "hr",
         "markdown",
+        "hr",
+        "markdown",
         "table",
         "hr",
         "button",
@@ -4115,11 +4706,15 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     compare_query = parse_qs(urlsplit(compare_url).query)
     assert compare_query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
     assert "创维 65A7H PRO" in card_json
+    assert "关键价值锚点与替代压力" in card_json
+    assert "锚点可替代性" in card_json
+    assert "小米 L65MC-SP" not in card_json
     assert "多维评分雷达图" in card_json
     assert '"tag": "chart"' in card_json
     assert '"type": "radar"' in card_json
     assert card["body"]["elements"][5]["content"].startswith("**价值战场重合结构**")
     assert "主战场：高端画质" in card["body"]["elements"][5]["content"]
+    assert card["body"]["elements"][8]["content"].startswith("**关键价值锚点与替代压力**")
     assert "辅战场：" in card["body"]["elements"][5]["content"]
     assert "机会战场：" in card["body"]["elements"][5]["content"]
     assert "错位/缺口：" not in card["body"]["elements"][5]["content"]
@@ -4134,7 +4729,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert any("错位" in row["label"] for row in battlefield_values if row["segment"] == "错位/缺口")
     assert "竞品市场验证" in card_json
     assert '"tag": "table"' in card_json
-    market_table = card["body"]["elements"][9]
+    market_table = card["body"]["elements"][11]
     assert market_table["element_id"] == "competitor_market_table"
     assert [column["display_name"] for column in market_table["columns"]] == ["序号", "竞品/目标", "定位", "均价", "周均销量"]
     assert market_table["columns"][0]["width"] == "80px"
@@ -4205,6 +4800,8 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert {row["dimension_cn"] for row in competitor["overlap_rows"]} == {"价值战场", "用户任务", "目标客群"}
     assert all("重合" in row["strength_cn"] for row in competitor["overlap_rows"])
     assert all("impact_cn" in row for row in competitor["overlap_rows"])
+    assert "共同覆盖MiniLED" in competitor["anchor_substitutability_cn"]
+    assert "替代压力" in competitor["pressure_breakdown_cn"]
 
     card = competitor_answer.render_feishu_card_payload(dashboard)
     card_json = json.dumps(card, ensure_ascii=False)
@@ -4218,6 +4815,8 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "chart",
         "hr",
         "markdown",
+        "hr",
+        "markdown",
         "table",
         "hr",
         "button",
@@ -4226,13 +4825,14 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
     assert card["body"]["elements"][3]["tag"] == "chart"
+    assert card["body"]["elements"][5]["content"].startswith("**关键价值锚点与替代压力**")
     radar_values = card["body"]["elements"][3]["chart_spec"]["data"]["values"]
     assert len(radar_values) == 6
     assert {row["dimension"] for row in radar_values} == {"购买池", "价值战场", "用户任务", "目标客群", "价值锚点", "市场验证"}
     assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
-    assert card["body"]["elements"][5]["content"] == "**竞品市场验证**"
-    assert card["body"]["elements"][6]["tag"] == "table"
-    market_table = card["body"]["elements"][6]
+    assert card["body"]["elements"][7]["content"] == "**竞品市场验证**"
+    assert card["body"]["elements"][8]["tag"] == "table"
+    market_table = card["body"]["elements"][8]
     assert [column["display_name"] for column in market_table["columns"]] == ["序号", "竞品/目标", "定位", "均价", "周均销量"]
     assert market_table["columns"][0]["width"] == "80px"
     assert market_table["rows"][0] == {"rank": "目标", "name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
@@ -4403,7 +5003,8 @@ def test_xiaoao_short_answer_downgrades_when_semantic_evidence_missing() -> None
 
     assert "主辅价值战场、用户任务和目标客群的有效重合更完整" not in text
     assert "当前缺少用户评论或语义图谱验证" in text
-    assert "参数/卖点替代压力" in text
+    assert "关键价值锚点可替代性和替代压力" in text
+    assert "参数/卖点替代压力" not in text
 
 
 def test_sku_business_brief_sop_returns_summary_sections() -> None:

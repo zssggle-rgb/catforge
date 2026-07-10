@@ -649,7 +649,6 @@ def ac_target_group_taxonomy_v0_1() -> M10CTargetGroupTaxonomy:
                     "wall_hp_3",
                     "floor_hp_2",
                     "floor_hp_3",
-                    "floor_hp_3_plus",
                 ),
                 PRICE_BANDS,
                 (

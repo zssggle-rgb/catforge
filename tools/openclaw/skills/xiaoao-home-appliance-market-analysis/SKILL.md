@@ -7,7 +7,7 @@ description: Use CatForge CLI to answer home-appliance market-analysis questions
 
 Use this skill when the user asks business-language questions about home-appliance SKU market performance, competitors, user tasks, target groups, value battlefields, claims, parameters, comments, market space, or sales allocation.
 
-The user does not need to know module codes, table names, or CLI command names. XiaoAo must translate the question into CatForge CLI calls, read the JSON result, and then answer in business language.
+The user does not need to know module codes, table names, or CLI command names. XiaoAo must translate the question into CatForge CLI calls, read the stable CLI result, and then answer in business language. Most routes return JSON; Feishu card entrypoints return text stdout that must be used as-is.
 
 ## Role
 
@@ -52,7 +52,7 @@ Prefer running inside the API container:
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst ...
 ```
 
-Use `--batch-id latest`, `--product-category tv`, and `--format json` unless the user specifies another batch or category.
+Use `--batch-id latest` and `--product-category tv` unless the user specifies another batch or category. Use `--format json` for analysis routes, but use the documented `--format text --feishu-card-only` command for Feishu card entrypoints.
 
 For local development in the repo, the same commands can be run without Docker from `apps/api-server` environment if the database configuration is available.
 
@@ -98,7 +98,7 @@ Tooling hygiene:
   CLI attempt to send the interactive card directly. Do not parse JSON or send
   the card payload yourself. Always send the CLI stdout as the visible user
   reply, but stdout is only the card delivery status in this path. The visible
-  reply must be a short Chinese delivery status, never an empty reply or only a heartbeat. The CLI owns ranking,
+  reply must be a short Chinese delivery status, never an empty reply or only a heartbeat. If card sending fails, send that short sanitized stdout as-is; do not expose raw stdout/stderr, missing scopes, config paths, stack traces, or command text. The CLI owns ranking,
   dashboard structure, wording, report link, and card delivery for this
   question; do not rewrite it.
 

@@ -12,6 +12,11 @@ from app.services.core3_real_data.constants import (
     CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M05C_AC_RULE_VERSION,
     CORE3_M05C_AC_TAXONOMY_VERSION,
+    CORE3_M07_AC_POOL_RULE_VERSION,
+    CORE3_M07_AC_PRICE_BAND_RULE_VERSION,
+    CORE3_M07_POOL_RULE_VERSION,
+    CORE3_M07_PRICE_BAND_RULE_VERSION,
+    CORE3_M07_RULE_VERSION,
     CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M12C_RULE_VERSION,
@@ -38,6 +43,18 @@ def test_m12c_ac_input_rules_are_configured() -> None:
     assert M12C_PRODUCT_CATEGORY_INPUT_RULES["AC"]["comment_rule_version"] == CORE3_M05C_AC_RULE_VERSION
     assert M12C_PRODUCT_CATEGORY_INPUT_RULES["AC"]["battlefield_rule_version"] == CORE3_M11C_AC_RULE_VERSION
     assert "airflow_volume_m3h" in M12C_CLAIM_PARAM_FALLBACKS["ac_claim_large_airflow_coverage"]
+
+
+def test_m07_market_rule_versions_are_isolated_by_product_category() -> None:
+    tv_config = catforge_pipeline.product_category_config("tv")
+    ac_config = catforge_pipeline.product_category_config("ac")
+
+    assert tv_config["market_rule_version"] == CORE3_M07_RULE_VERSION
+    assert tv_config["market_price_band_rule_version"] == CORE3_M07_PRICE_BAND_RULE_VERSION
+    assert tv_config["market_pool_rule_version"] == CORE3_M07_POOL_RULE_VERSION
+    assert ac_config["market_rule_version"] == CORE3_M07_RULE_VERSION
+    assert ac_config["market_price_band_rule_version"] == CORE3_M07_AC_PRICE_BAND_RULE_VERSION
+    assert ac_config["market_pool_rule_version"] == CORE3_M07_AC_POOL_RULE_VERSION
 
 
 def test_m12c_repository_reads_ac_claim_and_comment_rules() -> None:

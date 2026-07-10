@@ -39,6 +39,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
+    CORE3_M07_AC_POOL_RULE_VERSION,
+    CORE3_M07_AC_PRICE_BAND_RULE_VERSION,
     CORE3_M07_MODULE_VERSION,
     CORE3_M07_POOL_RULE_VERSION,
     CORE3_M07_PRICE_BAND_RULE_VERSION,
@@ -117,6 +119,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_TV_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
         "comment_rule_version": CORE3_M05C_TV_RULE_VERSION,
+        "market_rule_version": CORE3_M07_RULE_VERSION,
+        "market_price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
+        "market_pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
         "user_task_taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
         "user_task_rule_version": CORE3_M09C_TV_RULE_VERSION,
         "target_group_taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
@@ -136,6 +141,9 @@ PRODUCT_CATEGORY_CONFIGS = {
         "claim_rule_version": CORE3_M04C_AC_RULE_VERSION,
         "comment_taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION,
         "comment_rule_version": CORE3_M05C_AC_RULE_VERSION,
+        "market_rule_version": CORE3_M07_RULE_VERSION,
+        "market_price_band_rule_version": CORE3_M07_AC_PRICE_BAND_RULE_VERSION,
+        "market_pool_rule_version": CORE3_M07_AC_POOL_RULE_VERSION,
         "user_task_taxonomy_version": CORE3_M09C_AC_TAXONOMY_VERSION,
         "user_task_rule_version": CORE3_M09C_AC_RULE_VERSION,
         "target_group_taxonomy_version": CORE3_M10C_AC_TAXONOMY_VERSION,
@@ -1931,9 +1939,9 @@ def run_market_profile(
         else None,
         "analysis_windows": list(analysis_windows) or "all",
         "executed_analysis_windows": list(analysis_window_values),
-        "rule_version": CORE3_M07_RULE_VERSION,
-        "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
-        "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
+        "rule_version": config["market_rule_version"],
+        "price_band_rule_version": config["market_price_band_rule_version"],
+        "pool_rule_version": config["market_pool_rule_version"],
         "module_status": status_value,
         "input_count": module_result.input_count,
         "output_count": module_result.output_count,
@@ -1956,6 +1964,7 @@ def run_market_profile_windows(
     analysis_windows: Sequence[str],
     sku_chunk_size: int,
 ) -> Any:
+    config = product_category_config(product_category)
     results = []
     executed_chunk_count = 0
     for analysis_window in analysis_windows:
@@ -1968,9 +1977,9 @@ def run_market_profile_windows(
                 run_id=run_id,
                 module_run_id=module_run_id,
                 product_category=product_category,
-                rule_version=CORE3_M07_RULE_VERSION,
-                price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
-                pool_rule_version=CORE3_M07_POOL_RULE_VERSION,
+                rule_version=str(config["market_rule_version"]),
+                price_band_rule_version=str(config["market_price_band_rule_version"]),
+                pool_rule_version=str(config["market_pool_rule_version"]),
                 sku_scope=sku_chunk,
                 analysis_windows=(analysis_window,),
             )
@@ -2098,6 +2107,7 @@ def aggregate_m07_summary(
     sku_chunk_size: int,
     executed_chunk_count: int,
 ) -> dict[str, Any]:
+    config = product_category_config(product_category)
     count_keys = (
         "market_profile_count",
         "market_signal_count",
@@ -2121,9 +2131,9 @@ def aggregate_m07_summary(
         "sku_execution_mode": "chunked",
         "sku_chunk_size": sku_chunk_size,
         "executed_chunk_count": executed_chunk_count,
-        "rule_version": CORE3_M07_RULE_VERSION,
-        "price_band_rule_version": CORE3_M07_PRICE_BAND_RULE_VERSION,
-        "pool_rule_version": CORE3_M07_POOL_RULE_VERSION,
+        "rule_version": config["market_rule_version"],
+        "price_band_rule_version": config["market_price_band_rule_version"],
+        "pool_rule_version": config["market_pool_rule_version"],
     }
     for key in count_keys:
         summary[key] = sum(
@@ -2234,6 +2244,7 @@ def ensure_m07_cli_run_records(
     sku_chunk_size: int,
     product_category: str = "TV",
 ) -> tuple[str, str]:
+    config = product_category_config(product_category)
     run_id = stable_cli_uuid(
         "m07-pipeline-run",
         {
@@ -2243,6 +2254,9 @@ def ensure_m07_cli_run_records(
             "batch_id": batch_id,
             "sku_scope": sorted(str(sku_code) for sku_code in sku_scope),
             "analysis_windows": list(analysis_windows) or ["all"],
+            "rule_version": config["market_rule_version"],
+            "price_band_rule_version": config["market_price_band_rule_version"],
+            "pool_rule_version": config["market_pool_rule_version"],
         },
     )
     module_run_id = stable_cli_uuid(
@@ -2277,6 +2291,9 @@ def ensure_m07_cli_run_records(
         "sku_scope": list(sku_scope),
         "analysis_windows": list(analysis_windows) or ["all"],
         "sku_chunk_size": sku_chunk_size,
+        "rule_version": config["market_rule_version"],
+        "price_band_rule_version": config["market_price_band_rule_version"],
+        "pool_rule_version": config["market_pool_rule_version"],
     }
     pipeline_run.module_version_json = {
         Core3ModuleCode.M07.value: CORE3_M07_MODULE_VERSION

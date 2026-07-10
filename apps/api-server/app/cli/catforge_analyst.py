@@ -19,13 +19,21 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.services.core3_real_data.analyst import competitor_answer as competitor_answer_renderer
-from app.services.core3_real_data.analyst.analyst_schemas import AnalystStatus
+from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.analyst_service import (
     ATOM_COMMANDS,
     LATEST_BATCH,
     SOP_COMMANDS,
     CatForgeAnalystError,
     CatForgeAnalystService,
+)
+from app.services.core3_real_data.constants import (
+    CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
+    CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,
+)
+from app.services.core3_real_data.purchase_reason_profile_preview import (
+    M12DSkuPurchaseReasonPreviewError,
+    build_sku_purchase_reason_preview,
 )
 
 
@@ -69,41 +77,57 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         with SessionLocal() as db:
-            result = run_analyst_command(
-                db,
-                command=args.command,
-                project_id=args.project_id,
-                category_code=args.category_code,
-                batch_id=args.batch_id,
-                product_category=args.product_category,
-                market_window=args.market_window,
-                analysis_population=args.analysis_population,
-                ability_type=getattr(args, "ability_type", None),
-                question=" ".join(getattr(args, "question", ()) or ()),
-                query=getattr(args, "query", None),
-                sku_code=getattr(args, "sku_code", None),
-                model_name=getattr(args, "model_name", None),
-                candidate_sku_code=getattr(args, "candidate_sku_code", None),
-                dimension_type=getattr(args, "dimension_type", None),
-                dimension_code=getattr(args, "dimension_code", None),
-                brand_name=getattr(args, "brand_name", None),
-                size_tier=getattr(args, "size_tier", None),
-                price_band=getattr(args, "price_band", None),
-                claim_code=getattr(args, "claim_code", None),
-                param_code=getattr(args, "param_code", None),
-                user_task_code=getattr(args, "user_task_code", None),
-                target_group_code=getattr(args, "target_group_code", None),
-                battlefield_code=getattr(args, "battlefield_code", None),
-                role=getattr(args, "role", None),
-                limit=getattr(args, "limit", DEFAULT_CANDIDATE_LIMIT),
-                answer_style=getattr(args, "answer_style", None),
-                with_report=getattr(args, "with_report", None),
-                top_n=getattr(args, "top_n", None),
-                max_chat_chars=getattr(args, "max_chat_chars", None),
-                report_title=getattr(args, "report_title", None),
-            )
-            attach_feishu_card_delivery(result, args)
-    except CatForgeAnalystError as exc:
+            if args.command == "sku-purchase-reason":
+                result = sku_purchase_reason(
+                    db,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=args.product_category,
+                    market_window=args.market_window,
+                    analysis_population=args.analysis_population,
+                    query=getattr(args, "query", None),
+                    sku_code=getattr(args, "sku_code", None),
+                    model_name=getattr(args, "model_name", None),
+                    taxonomy_version=args.taxonomy_version,
+                    max_anchors=args.max_anchors,
+                )
+            else:
+                result = run_analyst_command(
+                    db,
+                    command=args.command,
+                    project_id=args.project_id,
+                    category_code=args.category_code,
+                    batch_id=args.batch_id,
+                    product_category=args.product_category,
+                    market_window=args.market_window,
+                    analysis_population=args.analysis_population,
+                    ability_type=getattr(args, "ability_type", None),
+                    question=" ".join(getattr(args, "question", ()) or ()),
+                    query=getattr(args, "query", None),
+                    sku_code=getattr(args, "sku_code", None),
+                    model_name=getattr(args, "model_name", None),
+                    candidate_sku_code=getattr(args, "candidate_sku_code", None),
+                    dimension_type=getattr(args, "dimension_type", None),
+                    dimension_code=getattr(args, "dimension_code", None),
+                    brand_name=getattr(args, "brand_name", None),
+                    size_tier=getattr(args, "size_tier", None),
+                    price_band=getattr(args, "price_band", None),
+                    claim_code=getattr(args, "claim_code", None),
+                    param_code=getattr(args, "param_code", None),
+                    user_task_code=getattr(args, "user_task_code", None),
+                    target_group_code=getattr(args, "target_group_code", None),
+                    battlefield_code=getattr(args, "battlefield_code", None),
+                    role=getattr(args, "role", None),
+                    limit=getattr(args, "limit", DEFAULT_CANDIDATE_LIMIT),
+                    answer_style=getattr(args, "answer_style", None),
+                    with_report=getattr(args, "with_report", None),
+                    top_n=getattr(args, "top_n", None),
+                    max_chat_chars=getattr(args, "max_chat_chars", None),
+                    report_title=getattr(args, "report_title", None),
+                )
+                attach_feishu_card_delivery(result, args)
+    except (CatForgeAnalystError, M12DSkuPurchaseReasonPreviewError) as exc:
         result = {
             "status": AnalystStatus.ERROR.value,
             "command": getattr(args, "command", None),
@@ -128,6 +152,19 @@ def build_parser() -> argparse.ArgumentParser:
     add_context_args(abilities)
     abilities.add_argument("--ability-type", choices=("atom", "sop", "router"), help="Optional ability type filter.")
     add_format_arg(abilities)
+
+    purchase_reason = subparsers.add_parser(
+        "sku-purchase-reason",
+        help="Preview one SKU's M12D purchase reason profile.",
+    )
+    add_context_args(purchase_reason)
+    add_sku_args(purchase_reason)
+    purchase_reason.add_argument(
+        "--taxonomy-version",
+        help="M12D purchase reason anchor taxonomy version. Defaults by product category.",
+    )
+    purchase_reason.add_argument("--max-anchors", type=int, default=8)
+    purchase_reason.add_argument("--format", choices=("json", "markdown"), default="json")
 
     for command in ATOM_COMMAND_ORDER:
         command_parser = subparsers.add_parser(command, help=f"Run analyst atom: {command}.")
@@ -260,6 +297,82 @@ def resolve_sku(
         model_name=model_name,
         limit=limit,
     )
+
+
+def sku_purchase_reason(
+    db: Session,
+    *,
+    project_id: str = DEFAULT_PROJECT_ID,
+    category_code: str = DEFAULT_CATEGORY_CODE,
+    batch_id: str = LATEST_BATCH,
+    product_category: str = DEFAULT_PRODUCT_CATEGORY,
+    market_window: str = DEFAULT_MARKET_WINDOW,
+    analysis_population: str = DEFAULT_ANALYSIS_POPULATION,
+    query: str | None = None,
+    sku_code: str | None = None,
+    model_name: str | None = None,
+    taxonomy_version: str | None = None,
+    max_anchors: int = 8,
+) -> dict[str, Any]:
+    normalized_product_category = _infer_product_category(
+        product_category,
+        {"query": query, "sku_code": sku_code, "model_name": model_name},
+    )
+    normalized_category_code = _infer_category_code(
+        category_code,
+        normalized_product_category,
+        {"query": query, "sku_code": sku_code, "model_name": model_name},
+    )
+    service = CatForgeAnalystService(
+        db,
+        project_id=project_id,
+        category_code=normalized_category_code,
+    )
+    context = service.build_context(
+        batch_id=batch_id,
+        product_category=normalized_product_category,
+        market_window=market_window,
+        analysis_population=analysis_population,
+        resolve_latest=True,
+    )
+    resolved_sku_code = _resolve_sku_code_for_purchase_reason(
+        db,
+        context=context,
+        query=query,
+        sku_code=sku_code,
+        model_name=model_name,
+    )
+    preview = build_sku_purchase_reason_preview(
+        db,
+        project_id=project_id,
+        category_code=context.category_code,
+        batch_id=context.batch_id,
+        product_category=context.product_category,
+        sku_code=resolved_sku_code,
+        taxonomy_version=taxonomy_version or _default_purchase_reason_taxonomy_version(normalized_product_category),
+        max_anchors=max_anchors,
+    )
+    result = base_result(
+        status=AnalystStatus.OK,
+        command="sku-purchase-reason",
+        context=AnalystContext(
+            project_id=project_id,
+            category_code=context.category_code,
+            batch_id=context.batch_id,
+            product_category=context.product_category,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+        ),
+        target=preview["sku"],
+        result={"sku_purchase_reason": preview},
+        evidence=_purchase_reason_preview_evidence(preview),
+        limitations=preview.get("limitations") or [],
+        answer_outline=[
+            f"已生成 {preview['sku'].get('display_name_cn') or resolved_sku_code} 的成交理由画像预览。",
+        ],
+    )
+    result["markdown_preview"] = preview["markdown_preview"]
+    return result
 
 
 def sku_fact_brief(
@@ -1018,6 +1131,50 @@ def run_analyst_command(
     return service.dispatch(command, context, **_clean_kwargs(kwargs))
 
 
+def _resolve_sku_code_for_purchase_reason(
+    db: Session,
+    *,
+    context: AnalystContext,
+    query: str | None,
+    sku_code: str | None,
+    model_name: str | None,
+) -> str:
+    if sku_code and sku_code.strip():
+        return sku_code.strip()
+    if not (query and query.strip()) and not (model_name and model_name.strip()):
+        raise CatForgeAnalystError("请提供 --sku-code、--model-name 或 --query。")
+    resolved = resolve_sku(
+        db,
+        project_id=context.project_id,
+        category_code=context.category_code,
+        batch_id=context.batch_id,
+        product_category=context.product_category,
+        query=query,
+        model_name=model_name,
+        limit=DEFAULT_CANDIDATE_LIMIT,
+    )
+    if resolved.get("status") != AnalystStatus.OK.value:
+        raise CatForgeAnalystError(str(resolved.get("message_cn") or "无法解析 SKU。"))
+    resolved_sku = ((resolved.get("result") or {}).get("resolved_sku") or resolved.get("target") or {}).get("sku_code")
+    if not resolved_sku:
+        raise CatForgeAnalystError("无法解析 SKU，请提供明确的 SKU code。")
+    return str(resolved_sku)
+
+
+def _purchase_reason_preview_evidence(preview: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for item in preview.get("input_status") or []:
+        evidence.append(
+            {
+                "source_module": item.get("source"),
+                "source_name_cn": item.get("source_cn"),
+                "status": item.get("status"),
+                "record_count": item.get("record_count"),
+            }
+        )
+    return evidence
+
+
 def _infer_product_category(product_category: str, kwargs: dict[str, Any]) -> str:
     normalized = (product_category or DEFAULT_PRODUCT_CATEGORY).strip().lower()
     if normalized in {"ac", "空调"}:
@@ -1025,6 +1182,12 @@ def _infer_product_category(product_category: str, kwargs: dict[str, Any]) -> st
     if normalized in {"tv", "电视", "彩电"} and _context_mentions_ac(kwargs):
         return "ac"
     return normalized
+
+
+def _default_purchase_reason_taxonomy_version(product_category: str) -> str:
+    if (product_category or "").strip().upper() == "AC":
+        return CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION
+    return CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION
 
 
 def _infer_category_code(category_code: str, product_category: str, kwargs: dict[str, Any]) -> str:
@@ -1068,6 +1231,13 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
             chat_id=chat_id,
             idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
         )
+        if delivery.status != "sent" and reply_message_id:
+            delivery = competitor_answer_renderer.publish_feishu_card_reply(
+                card=card,
+                reply_message_id=reply_message_id,
+                reply_in_thread=bool(getattr(args, "feishu_reply_in_thread", False)),
+                idempotency_key=getattr(args, "feishu_card_idempotency_key", None),
+            )
     else:
         delivery = competitor_answer_renderer.publish_feishu_card_reply(
             card=card,
@@ -1089,6 +1259,13 @@ def emit_result(result: dict[str, Any], output_format: str, *, feishu_card_only:
     if output_format == "json":
         print(json.dumps(result, ensure_ascii=False, default=json_default, indent=2, sort_keys=True))
         return
+    if output_format == "markdown":
+        markdown = result.get("markdown_preview") or ((result.get("result") or {}).get("sku_purchase_reason") or {}).get(
+            "markdown_preview"
+        )
+        if markdown:
+            print(markdown)
+            return
     card_delivery = _feishu_card_delivery(result)
     if card_delivery:
         delivery_text = format_feishu_card_delivery_text(result)

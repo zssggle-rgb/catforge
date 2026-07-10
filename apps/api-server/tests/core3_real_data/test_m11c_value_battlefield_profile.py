@@ -75,7 +75,7 @@ def test_m11c_ac_value_battlefield_taxonomy_is_published_with_hp_price_gates() -
     ].allowed_price_bands == ("low", "mid_low", "mid")
     assert taxonomy.battlefields_by_code[
         "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
-    ].allowed_size_tiers == ("floor_hp_3", "floor_hp_3_plus")
+    ].allowed_size_tiers == ("floor_hp_3",)
     assert taxonomy.battlefields_by_code[
         "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
     ].allowed_price_bands == ("mid_high", "high")
@@ -94,9 +94,16 @@ def test_m11c_canonical_size_tier_supports_ac_hp_segments() -> None:
         installation_type="floor_standing",
         horsepower_hp=Decimal("3"),
     )
+    floor_plus_profile = ac_param_profile(
+        "AC0003",
+        dimension_tier_profile={"installation": "floor_standing", "horsepower": "hp_3_plus"},
+        installation_type="floor_standing",
+        horsepower_hp=Decimal("3.5"),
+    )
 
     assert _canonical_size_tier(wall_profile) == "wall_hp_1_5"
     assert _canonical_size_tier(floor_profile) == "floor_hp_3"
+    assert _canonical_size_tier(floor_plus_profile) == "floor_hp_3"
 
 
 def test_m11c_single_sku_scope_uses_full_ac_batch_for_hp_price_band() -> None:
@@ -131,11 +138,11 @@ def test_m11c_single_sku_scope_uses_full_ac_batch_for_hp_price_band() -> None:
     assert profile.price_percentile_in_size_tier == Decimal("0.0000")
 
 
-def test_ac_floor_hp_3_plus_borrows_floor_hp_3_price_context() -> None:
+def test_m11c_ac_floor_three_and_above_use_one_price_context() -> None:
     base_inputs = [
         (entities.Core3SkuParamProfile(sku_code="AC3A"), "floor_hp_3"),
         (entities.Core3SkuParamProfile(sku_code="AC3B"), "floor_hp_3"),
-        (entities.Core3SkuParamProfile(sku_code="ACPLUS"), "floor_hp_3_plus"),
+        (entities.Core3SkuParamProfile(sku_code="ACPLUS"), "floor_hp_3"),
     ]
     market_profiles = {
         "AC3A": entities.Core3SkuMarketProfile(
@@ -164,12 +171,9 @@ def test_ac_floor_hp_3_plus_borrows_floor_hp_3_price_context() -> None:
     contexts = _derive_comparable_market_contexts(base_inputs, weekly_rows)
 
     assert price_bands["ACPLUS"] == ("high", Decimal("1.0000"))
-    assert contexts["ACPLUS"]["size_tier"] == "floor_hp_3_plus"
-    assert contexts["ACPLUS"]["comparison_size_tiers"] == [
-        "floor_hp_3",
-        "floor_hp_3_plus",
-    ]
-    assert contexts["ACPLUS"]["borrowed_adjacent_context_pool"] is True
+    assert contexts["ACPLUS"]["size_tier"] == "floor_hp_3"
+    assert contexts["ACPLUS"]["comparison_size_tiers"] == ["floor_hp_3"]
+    assert contexts["ACPLUS"]["borrowed_adjacent_context_pool"] is False
     assert contexts["ACPLUS"]["qualified_peer_count"] == 2
 
 

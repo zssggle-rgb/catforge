@@ -6,7 +6,7 @@ import re
 from decimal import Decimal
 from typing import Any, Iterable, Sequence
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -32,6 +32,7 @@ from app.services.core3_real_data.constants import (
 
 
 SKU_CODE_RE = re.compile(r"\b(?:TV|AC)\d{6,}\b", re.IGNORECASE)
+SERVING_SCOPE_BATCH_ID_PREFIX = "serving-scope:"
 MODEL_TOKEN_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:\d{2,3}[A-Za-z][A-Za-z0-9-]*(?:\s*(?:PRO|PLUS|MAX|MINI|\+))?|[A-Za-z]{1,8}\d{2,3}[A-Za-z0-9-]*(?:\s*(?:PRO|PLUS|MAX|MINI|\+))?)(?![A-Za-z0-9])",
     re.IGNORECASE,
@@ -119,7 +120,13 @@ class AnalystRepository:
         self.project_id = project_id
         self.category_code = category_code
 
-    def latest_batch_id(self) -> str | None:
+    def latest_batch_id(self, *, product_category: str | None = None) -> str | None:
+        if product_category:
+            serving_batch_ids = self.latest_serving_scope_batch_ids(product_category=product_category)
+            if len(serving_batch_ids) > 1:
+                return format_serving_scope_batch_id(product_category, serving_batch_ids)
+            if len(serving_batch_ids) == 1:
+                return serving_batch_ids[0]
         ready_batch = self._latest_semantic_market_batch_id()
         if ready_batch:
             return ready_batch
@@ -134,6 +141,106 @@ class AnalystRepository:
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
+
+    def latest_serving_scope_batch_ids(self, *, product_category: str) -> tuple[str, ...]:
+        normalized_category = product_category.upper()
+        sku_prefix = self._sku_prefix(normalized_category)
+        batch_ids: set[str] = set()
+        batch_ids.update(
+            self._current_profile_batch_ids(
+                entities.Core3SkuMarketProfile,
+                rule_version=CORE3_M07_RULE_VERSION,
+                sku_prefix=sku_prefix,
+            )
+        )
+        batch_ids.update(
+            self._current_profile_batch_ids(
+                entities.Core3SkuParamProfile,
+                rule_version=CORE3_M03B_AC_RULE_VERSION if normalized_category == "AC" else CORE3_M03B_RULE_VERSION,
+                sku_prefix=sku_prefix,
+                requires_is_current=False,
+            )
+        )
+        for model, rule_version in (
+            (entities.Core3SkuClaimFactProfile, _claim_rule_version(normalized_category)),
+            (entities.Core3SkuCommentFactProfile, _comment_rule_version(normalized_category)),
+            (entities.Core3M09cSkuUserTaskProfile, _user_task_rule_version(normalized_category)),
+            (entities.Core3M10cSkuTargetGroupProfile, _target_group_rule_version(normalized_category)),
+            (entities.Core3SkuValueBattlefieldProfile, _battlefield_rule_version(normalized_category)),
+        ):
+            batch_ids.update(
+                self._current_profile_batch_ids(
+                    model,
+                    rule_version=rule_version,
+                    sku_prefix=sku_prefix,
+                    product_category=normalized_category,
+                )
+            )
+        batch_ids.update(
+            self._current_dimension_batch_ids(
+                entities.Core3SemanticMarketDimensionSummary,
+                rule_version=CORE3_M11D_RULE_VERSION,
+                product_category=normalized_category,
+            )
+        )
+        if not batch_ids:
+            return ()
+        return self._order_batch_ids_newest_first(batch_ids)
+
+    def _current_profile_batch_ids(
+        self,
+        model: type[Any],
+        *,
+        rule_version: str,
+        sku_prefix: str,
+        product_category: str | None = None,
+        requires_is_current: bool = True,
+    ) -> tuple[str, ...]:
+        stmt = (
+            select(model.batch_id)
+            .where(model.project_id == self.project_id)
+            .where(model.category_code == self.category_code)
+            .where(model.rule_version == rule_version)
+            .where(model.sku_code.like(f"{sku_prefix}%"))
+            .group_by(model.batch_id)
+        )
+        if product_category is not None and hasattr(model, "product_category"):
+            stmt = stmt.where(model.product_category == product_category)
+        if requires_is_current and hasattr(model, "is_current"):
+            stmt = stmt.where(model.is_current.is_(True))
+        return tuple(str(batch_id) for batch_id in self.db.execute(stmt).scalars())
+
+    def _current_dimension_batch_ids(
+        self,
+        model: type[Any],
+        *,
+        rule_version: str,
+        product_category: str,
+    ) -> tuple[str, ...]:
+        stmt = (
+            select(model.batch_id)
+            .where(model.project_id == self.project_id)
+            .where(model.category_code == self.category_code)
+            .where(model.product_category == product_category)
+            .where(model.rule_version == rule_version)
+            .where(model.is_current.is_(True))
+            .group_by(model.batch_id)
+        )
+        return tuple(str(batch_id) for batch_id in self.db.execute(stmt).scalars())
+
+    def _order_batch_ids_newest_first(self, batch_ids: Iterable[str]) -> tuple[str, ...]:
+        batch_id_tuple = tuple(dict.fromkeys(batch_ids))
+        stmt = (
+            select(entities.Core3SourceBatch.batch_id)
+            .where(entities.Core3SourceBatch.project_id == self.project_id)
+            .where(entities.Core3SourceBatch.category_code == self.category_code)
+            .where(entities.Core3SourceBatch.batch_id.in_(batch_id_tuple))
+            .order_by(desc(entities.Core3SourceBatch.scan_started_at), desc(entities.Core3SourceBatch.batch_id))
+        )
+        ordered = [str(batch_id) for batch_id in self.db.execute(stmt).scalars()]
+        ordered_set = set(ordered)
+        ordered.extend(sorted(batch_id for batch_id in batch_id_tuple if batch_id not in ordered_set))
+        return tuple(ordered)
 
     def _latest_semantic_market_batch_id(self) -> str | None:
         stmt = (
@@ -223,14 +330,21 @@ class AnalystRepository:
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
-            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
         )
         if sku_code:
             stmt = base_stmt.where(entities.Core3SkuMarketProfile.sku_code == sku_code.upper())
-            rows = list(self.db.execute(stmt.order_by(entities.Core3SkuMarketProfile.sku_code).limit(limit)).scalars())
+            rows = list(
+                self.db.execute(
+                    stmt.order_by(
+                        _batch_order_expr(entities.Core3SkuMarketProfile.batch_id, batch_id),
+                        entities.Core3SkuMarketProfile.sku_code,
+                    ).limit(limit)
+                ).scalars()
+            )
         elif model_name:
             sku_prefix_filter = entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
             rows = []
@@ -238,7 +352,10 @@ class AnalystRepository:
                 exact_stmt = (
                     base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(model_variant))
                     .where(sku_prefix_filter)
-                    .order_by(entities.Core3SkuMarketProfile.sku_code)
+                    .order_by(
+                        _batch_order_expr(entities.Core3SkuMarketProfile.batch_id, batch_id),
+                        entities.Core3SkuMarketProfile.sku_code,
+                    )
                     .limit(limit)
                 )
                 exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_variant)
@@ -251,7 +368,10 @@ class AnalystRepository:
                     stmt = (
                         base_stmt.where(entities.Core3SkuMarketProfile.model_name.ilike(like_value))
                         .where(sku_prefix_filter)
-                        .order_by(entities.Core3SkuMarketProfile.sku_code)
+                        .order_by(
+                            _batch_order_expr(entities.Core3SkuMarketProfile.batch_id, batch_id),
+                            entities.Core3SkuMarketProfile.sku_code,
+                        )
                         .limit(max(limit * 5, 50))
                     )
                     rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_variant)[:limit]
@@ -289,12 +409,19 @@ class AnalystRepository:
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.category_code)
-            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuParamProfile.batch_id, batch_id))
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
         )
         if sku_code:
             stmt = base_stmt.where(entities.Core3SkuParamProfile.sku_code == sku_code.upper())
-            rows = list(self.db.execute(stmt.order_by(entities.Core3SkuParamProfile.sku_code).limit(limit)).scalars())
+            rows = list(
+                self.db.execute(
+                    stmt.order_by(
+                        _batch_order_expr(entities.Core3SkuParamProfile.batch_id, batch_id),
+                        entities.Core3SkuParamProfile.sku_code,
+                    ).limit(limit)
+                ).scalars()
+            )
         elif model_name:
             sku_prefix_filter = entities.Core3SkuParamProfile.sku_code.like(f"{self._sku_prefix(product_category)}%")
             rows = []
@@ -302,7 +429,10 @@ class AnalystRepository:
                 exact_stmt = (
                     base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(model_variant))
                     .where(sku_prefix_filter)
-                    .order_by(entities.Core3SkuParamProfile.sku_code)
+                    .order_by(
+                        _batch_order_expr(entities.Core3SkuParamProfile.batch_id, batch_id),
+                        entities.Core3SkuParamProfile.sku_code,
+                    )
                     .limit(limit)
                 )
                 exact_rows = _exact_model_rows(list(self.db.execute(exact_stmt).scalars()), model_variant)
@@ -315,7 +445,10 @@ class AnalystRepository:
                     stmt = (
                         base_stmt.where(entities.Core3SkuParamProfile.model_name.ilike(like_value))
                         .where(sku_prefix_filter)
-                        .order_by(entities.Core3SkuParamProfile.sku_code)
+                        .order_by(
+                            _batch_order_expr(entities.Core3SkuParamProfile.batch_id, batch_id),
+                            entities.Core3SkuParamProfile.sku_code,
+                        )
                         .limit(max(limit * 5, 50))
                     )
                     rows = _rank_model_rows(list(self.db.execute(stmt).scalars()), model_variant)[:limit]
@@ -451,7 +584,7 @@ class AnalystRepository:
             select(entities.Core3SemanticMarketDimensionSummary)
             .where(entities.Core3SemanticMarketDimensionSummary.project_id == self.project_id)
             .where(entities.Core3SemanticMarketDimensionSummary.category_code == self.category_code)
-            .where(entities.Core3SemanticMarketDimensionSummary.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SemanticMarketDimensionSummary.batch_id, batch_id))
             .where(entities.Core3SemanticMarketDimensionSummary.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
@@ -518,7 +651,7 @@ class AnalystRepository:
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
-            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
@@ -651,7 +784,7 @@ class AnalystRepository:
             select(entities.Core3SkuValueBattlefieldScore)
             .where(entities.Core3SkuValueBattlefieldScore.project_id == self.project_id)
             .where(entities.Core3SkuValueBattlefieldScore.category_code == self.category_code)
-            .where(entities.Core3SkuValueBattlefieldScore.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuValueBattlefieldScore.batch_id, batch_id))
             .where(entities.Core3SkuValueBattlefieldScore.product_category == product_category.upper())
             .where(entities.Core3SkuValueBattlefieldScore.sku_code == sku_code)
             .where(entities.Core3SkuValueBattlefieldScore.battlefield_code == battlefield_code)
@@ -675,7 +808,7 @@ class AnalystRepository:
             select(entities.Core3SkuValueBattlefieldProfile)
             .where(entities.Core3SkuValueBattlefieldProfile.project_id == self.project_id)
             .where(entities.Core3SkuValueBattlefieldProfile.category_code == self.category_code)
-            .where(entities.Core3SkuValueBattlefieldProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuValueBattlefieldProfile.batch_id, batch_id))
             .where(entities.Core3SkuValueBattlefieldProfile.product_category == product_category.upper())
             .where(entities.Core3SkuValueBattlefieldProfile.sku_code != target_sku_code)
             .where(entities.Core3SkuValueBattlefieldProfile.primary_battlefield_code == battlefield_code)
@@ -965,7 +1098,7 @@ class AnalystRepository:
             select(entities.Core3ClaimValueDimensionSummary)
             .where(entities.Core3ClaimValueDimensionSummary.project_id == self.project_id)
             .where(entities.Core3ClaimValueDimensionSummary.category_code == self.category_code)
-            .where(entities.Core3ClaimValueDimensionSummary.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3ClaimValueDimensionSummary.batch_id, batch_id))
             .where(entities.Core3ClaimValueDimensionSummary.product_category == product_category.upper())
             .where(entities.Core3ClaimValueDimensionSummary.market_window == market_window)
             .where(entities.Core3ClaimValueDimensionSummary.analysis_population == population)
@@ -1297,7 +1430,7 @@ class AnalystRepository:
             select(entities.Core3SkuClaimValueQuantification)
             .where(entities.Core3SkuClaimValueQuantification.project_id == self.project_id)
             .where(entities.Core3SkuClaimValueQuantification.category_code == self.category_code)
-            .where(entities.Core3SkuClaimValueQuantification.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuClaimValueQuantification.batch_id, batch_id))
             .where(entities.Core3SkuClaimValueQuantification.product_category == product_category.upper())
             .where(entities.Core3SkuClaimValueQuantification.market_window == market_window)
             .where(entities.Core3SkuClaimValueQuantification.analysis_population == analysis_population)
@@ -1357,7 +1490,7 @@ class AnalystRepository:
             select(entities.Core3SkuClaimContributionAttribution)
             .where(entities.Core3SkuClaimContributionAttribution.project_id == self.project_id)
             .where(entities.Core3SkuClaimContributionAttribution.category_code == self.category_code)
-            .where(entities.Core3SkuClaimContributionAttribution.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuClaimContributionAttribution.batch_id, batch_id))
             .where(entities.Core3SkuClaimContributionAttribution.product_category == product_category.upper())
             .where(entities.Core3SkuClaimContributionAttribution.market_window == market_window)
             .where(entities.Core3SkuClaimContributionAttribution.analysis_population == analysis_population)
@@ -1419,7 +1552,7 @@ class AnalystRepository:
             select(entities.Core3CleanMarketWeekly)
             .where(entities.Core3CleanMarketWeekly.project_id == self.project_id)
             .where(entities.Core3CleanMarketWeekly.category_code == self.category_code)
-            .where(entities.Core3CleanMarketWeekly.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3CleanMarketWeekly.batch_id, batch_id))
             .where(entities.Core3CleanMarketWeekly.sku_code.in_(tuple(sku_codes)))
             .where(entities.Core3CleanMarketWeekly.period_week_index.is_not(None))
             .where(entities.Core3CleanMarketWeekly.record_status == "active")
@@ -1444,7 +1577,7 @@ class AnalystRepository:
             select(entities.Core3SemanticMarketDimensionSummary)
             .where(entities.Core3SemanticMarketDimensionSummary.project_id == self.project_id)
             .where(entities.Core3SemanticMarketDimensionSummary.category_code == self.category_code)
-            .where(entities.Core3SemanticMarketDimensionSummary.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SemanticMarketDimensionSummary.batch_id, batch_id))
             .where(entities.Core3SemanticMarketDimensionSummary.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
@@ -1468,8 +1601,6 @@ class AnalystRepository:
         target_group_profile: entities.Core3M10cSkuTargetGroupProfile | None = None,
         battlefield_profile: entities.Core3SkuValueBattlefieldProfile | None = None,
     ) -> list[dict[str, Any]]:
-        if product_category != "TV":
-            return []
         codes_by_type: dict[str, list[str]] = {}
         for allocation in allocations:
             codes_by_type.setdefault(allocation.dimension_type, [])
@@ -1542,7 +1673,7 @@ class AnalystRepository:
             select(entities.Core3SemanticMarketSkuContribution)
             .where(entities.Core3SemanticMarketSkuContribution.project_id == self.project_id)
             .where(entities.Core3SemanticMarketSkuContribution.category_code == self.category_code)
-            .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SemanticMarketSkuContribution.batch_id, batch_id))
             .where(entities.Core3SemanticMarketSkuContribution.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketSkuContribution.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
@@ -1571,7 +1702,7 @@ class AnalystRepository:
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
-            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
@@ -1625,11 +1756,12 @@ class AnalystRepository:
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
-            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .where(entities.Core3SkuMarketProfile.sku_code == sku_code)
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .order_by(_batch_order_expr(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
@@ -1648,14 +1780,21 @@ class AnalystRepository:
             select(entities.Core3SkuMarketProfile)
             .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
             .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
-            .where(entities.Core3SkuMarketProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
             .where(entities.Core3SkuMarketProfile.sku_code.in_(tuple(sku_codes)))
             .where(entities.Core3SkuMarketProfile.sku_code.like(f"{self._sku_prefix(product_category.upper())}%"))
             .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
             .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
             .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .order_by(
+                _batch_order_expr(entities.Core3SkuMarketProfile.batch_id, batch_id),
+                entities.Core3SkuMarketProfile.sku_code,
+            )
         )
-        return {row.sku_code: row for row in self.db.execute(stmt).scalars()}
+        rows_by_sku: dict[str, entities.Core3SkuMarketProfile] = {}
+        for row in self.db.execute(stmt).scalars():
+            rows_by_sku.setdefault(row.sku_code, row)
+        return rows_by_sku
 
     def _param_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuParamProfile | None:
         rule_version = CORE3_M03B_AC_RULE_VERSION if product_category == "AC" else CORE3_M03B_RULE_VERSION
@@ -1663,9 +1802,10 @@ class AnalystRepository:
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.category_code)
-            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuParamProfile.batch_id, batch_id))
             .where(entities.Core3SkuParamProfile.sku_code == sku_code)
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
+            .order_by(_batch_order_expr(entities.Core3SkuParamProfile.batch_id, batch_id))
             .limit(1)
         )
         return self.db.execute(stmt).scalar_one_or_none()
@@ -1684,11 +1824,18 @@ class AnalystRepository:
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.category_code)
-            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SkuParamProfile.batch_id, batch_id))
             .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
+            .order_by(
+                _batch_order_expr(entities.Core3SkuParamProfile.batch_id, batch_id),
+                entities.Core3SkuParamProfile.sku_code,
+            )
         )
-        return {row.sku_code: row for row in self.db.execute(stmt).scalars()}
+        rows_by_sku: dict[str, entities.Core3SkuParamProfile] = {}
+        for row in self.db.execute(stmt).scalars():
+            rows_by_sku.setdefault(row.sku_code, row)
+        return rows_by_sku
 
     def _claim_profile(self, *, batch_id: str, product_category: str, sku_code: str) -> entities.Core3SkuClaimFactProfile | None:
         stmt = self._current_sku_profile_stmt(
@@ -1754,7 +1901,7 @@ class AnalystRepository:
             select(entities.Core3SemanticMarketAllocation)
             .where(entities.Core3SemanticMarketAllocation.project_id == self.project_id)
             .where(entities.Core3SemanticMarketAllocation.category_code == self.category_code)
-            .where(entities.Core3SemanticMarketAllocation.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SemanticMarketAllocation.batch_id, batch_id))
             .where(entities.Core3SemanticMarketAllocation.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketAllocation.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketAllocation.market_window == market_window)
@@ -1790,7 +1937,7 @@ class AnalystRepository:
                 select(entities.Core3SemanticMarketAllocation)
                 .where(entities.Core3SemanticMarketAllocation.project_id == self.project_id)
                 .where(entities.Core3SemanticMarketAllocation.category_code == self.category_code)
-                .where(entities.Core3SemanticMarketAllocation.batch_id == batch_id)
+                .where(_batch_filter(entities.Core3SemanticMarketAllocation.batch_id, batch_id))
                 .where(entities.Core3SemanticMarketAllocation.product_category == product_category.upper())
                 .where(entities.Core3SemanticMarketAllocation.analysis_population == analysis_population)
                 .where(entities.Core3SemanticMarketAllocation.market_window == market_window)
@@ -1813,7 +1960,7 @@ class AnalystRepository:
             select(entities.Core3SemanticMarketSkuContribution)
             .where(entities.Core3SemanticMarketSkuContribution.project_id == self.project_id)
             .where(entities.Core3SemanticMarketSkuContribution.category_code == self.category_code)
-            .where(entities.Core3SemanticMarketSkuContribution.batch_id == batch_id)
+            .where(_batch_filter(entities.Core3SemanticMarketSkuContribution.batch_id, batch_id))
             .where(entities.Core3SemanticMarketSkuContribution.product_category == product_category.upper())
             .where(entities.Core3SemanticMarketSkuContribution.analysis_population == analysis_population)
             .where(entities.Core3SemanticMarketSkuContribution.market_window == market_window)
@@ -1843,11 +1990,12 @@ class AnalystRepository:
             select(model)
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code)
-            .where(model.batch_id == batch_id)
+            .where(_batch_filter(model.batch_id, batch_id))
             .where(model.product_category == product_category)
             .where(model.sku_code == sku_code)
             .where(model.rule_version == rule_version)
             .where(model.is_current.is_(True))
+            .order_by(_batch_order_expr(model.batch_id, batch_id))
             .limit(1)
         )
 
@@ -1885,6 +2033,33 @@ class AnalystRepository:
     @staticmethod
     def _sku_prefix(product_category: str) -> str:
         return "AC" if product_category == "AC" else "TV"
+
+
+def format_serving_scope_batch_id(product_category: str, batch_ids: Sequence[str]) -> str:
+    normalized_category = str(product_category or "").upper()
+    ordered_batch_ids = [str(batch_id).strip() for batch_id in batch_ids if str(batch_id).strip()]
+    return f"{SERVING_SCOPE_BATCH_ID_PREFIX}{normalized_category}:{','.join(ordered_batch_ids)}"
+
+
+def batch_ids_from_scope(batch_id: str) -> tuple[str, ...]:
+    text = str(batch_id or "").strip()
+    if not text.startswith(SERVING_SCOPE_BATCH_ID_PREFIX):
+        return (text,) if text else ()
+    _, _, raw_batch_ids = text.removeprefix(SERVING_SCOPE_BATCH_ID_PREFIX).partition(":")
+    return tuple(batch_id for batch_id in (item.strip() for item in raw_batch_ids.split(",")) if batch_id)
+
+
+def _batch_filter(column: Any, batch_id: str) -> Any:
+    batch_ids = batch_ids_from_scope(batch_id)
+    if len(batch_ids) == 1:
+        return column == batch_ids[0]
+    return column.in_(batch_ids)
+
+
+def _batch_order_expr(column: Any, batch_id: str) -> Any:
+    batch_ids = batch_ids_from_scope(batch_id)
+    order_map = {candidate_batch_id: index for index, candidate_batch_id in enumerate(batch_ids)}
+    return case(order_map, value=column, else_=len(batch_ids))
 
 
 def unique_skus(candidates: Sequence[ResolvedSku]) -> list[ResolvedSku]:

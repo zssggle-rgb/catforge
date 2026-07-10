@@ -1,0 +1,638 @@
+{
+  "status": "ok",
+  "command": "competitor-set",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "category_code": "AC",
+  "product_category": "AC",
+  "batch_id": "m00_20260624000202_1150a669",
+  "target": {
+    "avg_weekly_sales_volume": 3643.9583333333335,
+    "brand_name": "格力",
+    "model_name": "KFR-35GW/(35551)FNHAA-B1",
+    "price_band_in_size_tier": "high",
+    "product_category": "AC",
+    "screen_size_inch": null,
+    "size_tier": "wall_hp_1_5",
+    "sku_code": "AC00032338",
+    "source": "M07",
+    "weighted_price": 3229.0246
+  },
+  "limitations": [
+    "缺少或未生成的事实层：semantic_dimension_positions。",
+    "8 个竞品对触发 M12D 降级/复核门控，报告需展示复核原因。"
+  ],
+  "m12d_consumption": {
+    "candidate_count": 8,
+    "candidates": [
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00034717",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_review_required",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "risk_drag_anchor_present",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.05,
+          "sku_code": "AC00034717"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 3,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00038399",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_review_required",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "risk_drag_anchor_present",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.05,
+          "sku_code": "AC00038399"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 3,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00035950",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_review_required",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "risk_drag_anchor_present",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.05,
+          "sku_code": "AC00035950"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 3,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00039205",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_review_required",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "risk_drag_anchor_present",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.05,
+          "sku_code": "AC00039205"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 2,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00033612",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_ready_degraded",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.35,
+          "sku_code": "AC00033612"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 3,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 11,
+        "candidate_sku_code": "AC00039564",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_ready_degraded",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.5,
+          "sku_code": "AC00039564"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review"
+        ],
+        "replacement_pressure_score": 5,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00029097",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_review_required",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "risk_drag_anchor_present",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.05,
+          "sku_code": "AC00029097"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 2,
+        "requires_review": true
+      },
+      {
+        "anchor_substitutability_score": 0,
+        "candidate_sku_code": "AC00039187",
+        "contract": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "category_code": "AC",
+          "consumption_state": "published_degraded",
+          "degradation_reasons": [
+            "review_required",
+            "profile_status_ready_degraded",
+            "low_profile_confidence",
+            "core_payment_missing",
+            "missing_or_partial_inputs"
+          ],
+          "downstream_action": "degraded_pair_scoring",
+          "found": true,
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+          "profile_confidence": 0.3,
+          "sku_code": "AC00039187"
+        },
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_requires_review",
+          "low_replacement_pressure_score"
+        ],
+        "replacement_pressure_score": 2,
+        "requires_review": true
+      }
+    ],
+    "found_candidate_count": 8,
+    "requires_review_count": 8,
+    "source": "published_m12d_contract",
+    "status": "consumed_with_review",
+    "target_contract": {
+      "batch_id": "m00_20260624000202_1150a669",
+      "category_code": "AC",
+      "consumption_state": "published_degraded",
+      "degradation_reasons": [
+        "review_required",
+        "profile_status_ready_degraded",
+        "missing_or_partial_inputs"
+      ],
+      "downstream_action": "degraded_pair_scoring",
+      "found": true,
+      "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_1_draft",
+      "profile_confidence": 0.5,
+      "sku_code": "AC00032338"
+    }
+  },
+  "top_competitors": [
+    {
+      "rank": 1,
+      "candidate": {
+        "avg_weekly_sales_volume": 905.3333333333334,
+        "brand_name": "格力",
+        "evidence_id_count": 68,
+        "model_name": "KFR-35GW/NHAE1BAT",
+        "price_band_in_size_tier": "high",
+        "price_gap_pct_to_target": 0.02080999940353505,
+        "price_gap_to_target": 67.196,
+        "price_wavg": 3296.2206,
+        "sales_volume_total": 21728.0,
+        "same_pool_sku_count": 77,
+        "screen_size_inch": null,
+        "size_tier": "wall_hp_1_5",
+        "sku_code": "AC00034717"
+      },
+      "role": "price_adjacent",
+      "role_cn": "价格贴身竞品",
+      "business_score": 0.6140515083372227,
+      "purchase_pool": {
+        "level": "P2",
+        "reason_cn": "同尺寸段、同价格带购买池",
+        "score": 0.7
+      },
+      "weighted_overlap": {
+        "battlefield": 0.8367346938775511,
+        "target_group": 0.8901098901098901,
+        "user_task": 0.6756756756756757
+      },
+      "value_anchor": {
+        "anchor_substitutability_level": "blocked",
+        "anchor_substitutability_score": 0,
+        "candidate_stronger_anchors": [],
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_below_primary_threshold"
+        ],
+        "primary_direct_eligible": false,
+        "requires_review": true,
+        "score": 0.0,
+        "shared_anchors": [],
+        "target_stronger_anchors": []
+      },
+      "replacement_pressure": {
+        "reason_cn": "替代压力较弱，得分3/10；当前不能输出强替代话术，主要原因是成交理由替代或市场/置信证据不足。",
+        "replacement_pressure_level": "low",
+        "replacement_pressure_score": 3,
+        "requires_review": true,
+        "score": 0.3,
+        "strong_pressure_allowed": false,
+        "type": "low_pressure_review",
+        "type_cn": "低替代压力复核"
+      },
+      "market_validation": {
+        "avg_weekly_sales_volume": 905.3333333333334,
+        "level": "strong",
+        "level_cn": "强验证",
+        "overlap_week_count": 24,
+        "summary_cn": "重叠在售周24周，候选周均销量约905台"
+      },
+      "top3_eligible": true,
+      "ranking_gate_reasons": [
+        "published_degraded",
+        "degraded_pair_scoring",
+        "review_required",
+        "profile_status_ready_degraded",
+        "missing_or_partial_inputs",
+        "profile_status_review_required",
+        "low_profile_confidence",
+        "core_payment_missing",
+        "risk_drag_anchor_present",
+        "target_m12d_degraded",
+        "candidate_m12d_degraded",
+        "target_core_anchor_not_exactly_covered",
+        "not_primary_direct_eligible",
+        "anchor_substitutability_below_primary_threshold",
+        "replacement_pressure_below_strong_threshold"
+      ]
+    },
+    {
+      "rank": 6,
+      "candidate": {
+        "avg_weekly_sales_volume": 3623.2,
+        "brand_name": "格力",
+        "evidence_id_count": 35,
+        "model_name": "KFR-35GW/NHMB1BAJ",
+        "price_band_in_size_tier": "high",
+        "price_gap_pct_to_target": 0.07129561663915475,
+        "price_gap_to_target": 230.2153,
+        "price_wavg": 3459.2399,
+        "sales_volume_total": 18116.0,
+        "same_pool_sku_count": 77,
+        "screen_size_inch": null,
+        "size_tier": "wall_hp_1_5",
+        "sku_code": "AC00039564"
+      },
+      "role": "scenario_alternative",
+      "role_cn": "场景替代竞品",
+      "business_score": 0.7018500562955867,
+      "purchase_pool": {
+        "level": "P2",
+        "reason_cn": "同尺寸段、同价格带购买池",
+        "score": 0.7
+      },
+      "weighted_overlap": {
+        "battlefield": 0.6901408450704225,
+        "target_group": 0.7722772277227723,
+        "user_task": 0.7565217391304347
+      },
+      "value_anchor": {
+        "anchor_substitutability_level": "medium",
+        "anchor_substitutability_score": 11,
+        "candidate_stronger_anchors": [],
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_below_primary_threshold"
+        ],
+        "primary_direct_eligible": false,
+        "requires_review": true,
+        "score": 0.7333,
+        "shared_anchors": [
+          "匹数空间匹配降低买小风险",
+          "大空间冷暖一步到位",
+          "冷暖效果解释更高价格",
+          "长期省电抵消更高价格",
+          "同价位能效/能力获得感",
+          "低价不明显牺牲核心冷暖体验",
+          "小房间/租房安装适配",
+          "远程/智能控制减少操作摩擦"
+        ],
+        "target_stronger_anchors": []
+      },
+      "replacement_pressure": {
+        "reason_cn": "场景心智压力为主压力，得分5/10，辅压力为价值替代压力、价格压制压力，成交理由可替代性较强。候选把同类锚点转译成更清晰的场景心智。",
+        "replacement_pressure_level": "medium",
+        "replacement_pressure_score": 5,
+        "requires_review": true,
+        "score": 0.5,
+        "strong_pressure_allowed": true,
+        "type": "scenario_mindshare",
+        "type_cn": "场景心智压力"
+      },
+      "market_validation": {
+        "avg_weekly_sales_volume": 3623.2,
+        "level": "strong",
+        "level_cn": "强验证",
+        "overlap_week_count": 5,
+        "summary_cn": "重叠在售周5周，候选周均销量约3,623台"
+      },
+      "top3_eligible": true,
+      "ranking_gate_reasons": [
+        "published_degraded",
+        "degraded_pair_scoring",
+        "review_required",
+        "profile_status_ready_degraded",
+        "missing_or_partial_inputs",
+        "target_m12d_degraded",
+        "candidate_m12d_degraded",
+        "not_primary_direct_eligible",
+        "anchor_substitutability_below_primary_threshold"
+      ]
+    },
+    {
+      "rank": 2,
+      "candidate": {
+        "avg_weekly_sales_volume": 1038.7916666666667,
+        "brand_name": "格力",
+        "evidence_id_count": 77,
+        "model_name": "KFR-35GW/NHMB1BG",
+        "price_band_in_size_tier": "high",
+        "price_gap_pct_to_target": 0.021981839345541064,
+        "price_gap_to_target": 70.9799,
+        "price_wavg": 3300.0045,
+        "sales_volume_total": 24931.0,
+        "same_pool_sku_count": 77,
+        "screen_size_inch": null,
+        "size_tier": "wall_hp_1_5",
+        "sku_code": "AC00038399"
+      },
+      "role": "price_adjacent",
+      "role_cn": "价格贴身竞品",
+      "business_score": 0.5606522869022869,
+      "purchase_pool": {
+        "level": "P2",
+        "reason_cn": "同尺寸段、同价格带购买池",
+        "score": 0.7
+      },
+      "weighted_overlap": {
+        "battlefield": 0.875,
+        "target_group": 0.6306306306306306,
+        "user_task": 0.5153846153846153
+      },
+      "value_anchor": {
+        "anchor_substitutability_level": "blocked",
+        "anchor_substitutability_score": 0,
+        "candidate_stronger_anchors": [],
+        "gate_reasons": [
+          "published_degraded",
+          "degraded_pair_scoring",
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs",
+          "profile_status_review_required",
+          "low_profile_confidence",
+          "core_payment_missing",
+          "risk_drag_anchor_present",
+          "target_m12d_degraded",
+          "candidate_m12d_degraded",
+          "target_core_anchor_not_exactly_covered",
+          "not_primary_direct_eligible",
+          "anchor_substitutability_below_primary_threshold"
+        ],
+        "primary_direct_eligible": false,
+        "requires_review": true,
+        "score": 0.0,
+        "shared_anchors": [],
+        "target_stronger_anchors": []
+      },
+      "replacement_pressure": {
+        "reason_cn": "替代压力较弱，得分3/10；当前不能输出强替代话术，主要原因是成交理由替代或市场/置信证据不足。",
+        "replacement_pressure_level": "low",
+        "replacement_pressure_score": 3,
+        "requires_review": true,
+        "score": 0.3,
+        "strong_pressure_allowed": false,
+        "type": "low_pressure_review",
+        "type_cn": "低替代压力复核"
+      },
+      "market_validation": {
+        "avg_weekly_sales_volume": 1038.7916666666667,
+        "level": "strong",
+        "level_cn": "强验证",
+        "overlap_week_count": 24,
+        "summary_cn": "重叠在售周24周，候选周均销量约1,039台"
+      },
+      "top3_eligible": true,
+      "ranking_gate_reasons": [
+        "published_degraded",
+        "degraded_pair_scoring",
+        "review_required",
+        "profile_status_ready_degraded",
+        "missing_or_partial_inputs",
+        "profile_status_review_required",
+        "low_profile_confidence",
+        "core_payment_missing",
+        "risk_drag_anchor_present",
+        "target_m12d_degraded",
+        "candidate_m12d_degraded",
+        "target_core_anchor_not_exactly_covered",
+        "not_primary_direct_eligible",
+        "anchor_substitutability_below_primary_threshold",
+        "replacement_pressure_below_strong_threshold"
+      ]
+    }
+  ],
+  "report_markdown_path": "docs/core3_mvp/real_data_v2/current_implementation/AC_CA_G01_competitor_set_AC00032338_20260708.md"
+}

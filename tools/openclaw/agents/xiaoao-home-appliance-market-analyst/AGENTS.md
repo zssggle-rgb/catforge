@@ -27,7 +27,7 @@
 
 如果 CLI 返回 `ambiguous`，不能替用户选择 SKU，要列出候选并请用户确认；在飞书入口，可以把候选 SKU 渲染成二次选择卡片。如果返回 `not_found`、`unsupported` 或 `error`，直接说明当前无法回答的原因和可替代动作，不要编造结论。
 
-竞品列表问题在飞书卡片入口优先使用稳定卡片发送命令。不要让模型解析 JSON、复制卡片 payload 或自行调用飞书 OpenAPI；必须把会话元数据中的 `message_id` 传给 CLI，由 CLI 生成报告后尝试用 bot 直接回复 `interactive` 卡片。CLI stdout 是卡片发送状态，必须作为本轮可见文本回复原样发送给用户；成功时必须输出短中文状态，不输出空回复或只发心跳。非卡片聊天入口继续使用稳定文本输出命令。例如：
+竞品列表问题在飞书卡片入口优先使用稳定卡片发送命令。不要让模型解析 JSON、复制卡片 payload 或自行调用飞书 OpenAPI；必须把会话元数据中的 `chat_id` 和 `message_id` 传给 CLI，由 CLI 生成报告后先尝试发送主会话 `interactive` 卡片，失败时由 CLI 用 `message_id` 回退回复。CLI stdout 是卡片发送状态，必须作为本轮可见文本回复原样发送给用户；成功或失败都必须输出短中文状态，不输出空回复或只发心跳，不暴露原始 stdout/stderr、权限 scope、配置路径、堆栈或命令文本。非卡片聊天入口继续使用稳定文本输出命令。例如：
 
 ```bash
 cd /opt/catforge

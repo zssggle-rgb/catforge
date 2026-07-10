@@ -77,20 +77,21 @@ class CatForgeAnalystService:
         analysis_population: str,
         resolve_latest: bool = True,
     ) -> AnalystContext:
-        resolved_batch_id = self.resolve_batch_id(batch_id) if resolve_latest else batch_id
+        normalized_product_category = normalize_product_category(product_category)
+        resolved_batch_id = self.resolve_batch_id(batch_id, product_category=normalized_product_category) if resolve_latest else batch_id
         return AnalystContext(
             project_id=self.project_id,
             category_code=self.category_code,
             batch_id=resolved_batch_id,
-            product_category=normalize_product_category(product_category),
+            product_category=normalized_product_category,
             market_window=market_window,
             analysis_population=analysis_population,
         )
 
-    def resolve_batch_id(self, batch_id: str) -> str:
+    def resolve_batch_id(self, batch_id: str, *, product_category: str | None = None) -> str:
         if batch_id != LATEST_BATCH:
             return batch_id
-        latest = self.repository.latest_batch_id()
+        latest = self.repository.latest_batch_id(product_category=product_category)
         if not latest:
             raise CatForgeAnalystError(f"没有找到项目 {self.project_id} / {self.category_code} 的可用批次。")
         return latest

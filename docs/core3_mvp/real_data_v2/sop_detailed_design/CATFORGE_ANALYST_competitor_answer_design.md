@@ -6,12 +6,13 @@
 
 设计目标：
 
-1. 把竞品排序从“通用相似度”升级为“购买池 + 主辅语义重合 + 价值锚点替代 + 替代压力 + 市场验证”。
-2. 由 CLI 生成最终聊天摘要，避免 OpenClaw 解析大 JSON 后改写答案。
-3. 由 CLI 生成飞书卡片看板 payload，让飞书会话主回答直接展示 Top 3、重合结构和证据入口。
-4. 由 CLI 生成飞书详细报告，报告作为看板的佐证层，而不是主回答展现内容。
-5. Skill 只做路由、边界处理、卡片发送和降级转发，不做竞品计算或卡片拼装。
-6. 所有测试不调用外部 LLM，不依赖真实飞书 API。
+1. 消费已发布 M12D `SKU成交理由画像`，不在竞品问答链路中生成 M12D。
+2. 把竞品排序从“通用相似度”升级为“购买池 + 主辅语义重合 + 关键价值锚点可替代性 + 替代压力 + 市场验证”。
+3. 由 CLI 生成最终聊天摘要，避免 OpenClaw 解析大 JSON 后改写答案。
+4. 由 CLI 生成飞书卡片看板 payload，让飞书会话主回答直接展示 Top 3、重合结构和证据入口。
+5. 由 CLI 生成飞书详细报告，报告作为看板的佐证层，而不是主回答展现内容。
+6. Skill 只做路由、边界处理、卡片发送和降级转发，不做竞品计算或卡片拼装。
+7. 所有测试不调用外部 LLM，不依赖真实飞书 API。
 
 ## 2. 总体架构
 
@@ -20,6 +21,7 @@
   -> 小奥 Skill
   -> catforge_analyst competitor-set
        -> SKUResolver
+       -> PurchaseReasonProfileReader
        -> CompetitorCandidateBuilder
        -> RoleWeightedOverlapScorer
        -> ValueAnchorMatcher
@@ -41,10 +43,11 @@
 | --- | --- |
 | Skill | 识别竞品意图，调用 CLI；飞书入口传入 `message_id` 和 `--feishu-card-only`，把卡片发送状态原样作为可见回复。 |
 | CLI | 参数解析、调用服务、输出 text/json；非卡片入口输出 `short_answer`，飞书入口优先输出卡片发送状态。 |
+| PurchaseReasonProfileReader | 读取已发布 M12D `SKU成交理由画像`，为目标和候选 SKU 提供核心成交理由、关键价值锚点和证据强度；不生成 M12D。 |
 | CandidateBuilder | 生成购买池候选和扩展候选。 |
 | OverlapScorer | 计算价值战场、用户任务、目标客群的主辅加权重合。 |
-| ValueAnchorMatcher | 提炼目标 SKU 和候选 SKU 的可替代价值锚点。 |
-| PressureClassifier | 判断竞品角色和替代压力。 |
+| ValueAnchorMatcher | 消费目标和候选的 M12D 画像，计算 pair 级关键价值锚点可替代性和成交理由替代强度。 |
+| PressureClassifier | 消费购买池、语义重合、关键价值锚点可替代性、价格/配置冲击和市场验证，判断竞品角色和替代压力。 |
 | ClaimValueEvidenceAssembler | 读取目标和候选 SKU 的 M12C 卖点价值量化，形成报告可直接展示的业务卖点标签、可比产品价格/销量差异、本品可解释价差/销量差份额、竞品拦截、补强建议和拖后腿卖点。 |
 | SelectionService | 汇总分数、排序、分桶、Top 3 选择。 |
 | AnswerRenderer | 生成 600 字以内业务摘要。 |
@@ -53,7 +56,7 @@
 | ReportRenderer | 生成飞书 Markdown 报告内容。 |
 | FeishuReportPublisher | 创建飞书文档并返回链接；测试中用 mock。 |
 
-这不是新写一套竞品分析程序。新增部分只是展示适配层，必须复用 `competitor-set` 已经生成的排序、重合、价值锚点、替代压力、市场验证和报告链接。
+这不是新写一套竞品排序程序。M12D 是独立前置资产，用于把每个 SKU 的成交理由先结构化；`competitor-set` 只消费已发布 M12D，并负责候选选择、pair 评分、Top 3 排序、看板和报告输出。
 
 ## 3. CLI 接口设计
 
@@ -252,48 +255,138 @@ risk_overlap = count(common_negative_codes) / max(1, target_positive_code_count)
 
 价值战场权重最高，因为它结合了尺寸价格、任务、客群、卖点和评论验证，是竞品比较的主语境。
 
-## 6. 价值锚点匹配
+## 6. 已发布 M12D 消费与价值锚点匹配
 
-`ValueAnchorMatcher` 负责把参数、卖点和评论转成业务可读的价值锚点。
+M12D 的生成、验证、全量发布见独立文档：
 
-### 6.1 电视品类首版锚点
+- [M12D SKU成交理由画像需求](../sop_requirements/M12D_sku_purchase_reason_profile_requirements.md)
+- [M12D SKU成交理由画像详细设计](M12D_sku_purchase_reason_profile_design.md)
 
-| 锚点 | 证据来源 |
+竞品分析智能体只读取已发布 M12D，不在 `competitor-set` 中生成或修正 M12D。
+
+### 6.1 M12D 读取契约
+
+`PurchaseReasonProfileReader` 按以下键读取画像：
+
+```text
+category_code + project_id + batch_id + m12d_profile_version + sku_code
+```
+
+读取结果必须包含：
+
+| 字段 | 用途 |
 | --- | --- |
-| 客厅尺寸升级 | 尺寸、尺寸档、评论空间/换新表达、卖点大屏表达。 |
-| 高端画质 | MiniLED/OLED/QD、亮度、分区、HDR、色域、画质芯片、评论画质正负向。 |
-| 影院沉浸 | 大屏、音响、杜比、HDR、评论电影/追剧/客厅沉浸。 |
-| 游戏流畅 | 刷新率、HDMI2.1、VRR、低延迟、评论游戏/主机/运动流畅。 |
-| 智能互联 | AI、语音、投屏、IoT、系统易用、评论投屏/语音/系统体验。 |
-| 护眼长看 | 护眼、低蓝光、无频闪、儿童/家庭长时间观看评论。 |
-| 家装融合 | 壁画、贴墙、超薄、全面屏、外观材质、评论新家/客厅空间。 |
-| 预算价值 | 同尺寸价格位置、配置获得感、补贴、性价比评论。 |
+| `status` | 判断画像是否可消费。 |
+| `core_reasons_cn` | 报告展示目标和竞品成交理由。 |
+| `core_payment_anchors` | 作为目标核心锚点覆盖计算的基准。 |
+| `supporting_anchors` | 作为辅助锚点覆盖。 |
+| `weak_expression_anchors` | 只能作为弱表达，不得推高可替代性。 |
+| `risk_drag_anchors` | 作为风险和扣分信号。 |
+| `anchors[]` | 读取每个锚点的中文名、角色、证据强度、置信度和解释。 |
+| `profile_confidence` | 决定 pair 级评分置信度。 |
 
-### 6.2 锚点匹配结果
+缺失处理：
+
+- 目标 SKU M12D 缺失或未发布：竞品分析返回“成交理由画像待生成/置信度不足”，不输出强排序结论。
+- 候选 SKU M12D 缺失：该候选锚点可替代性降置信度；如候选依赖锚点替代进入 Top 3，应退出 Top 3 或标为需复核。
+- `weak_expression` 不得被下游改写为 `core_payment`。
+- 下游只能做 pair 级覆盖、替代、候选更强和目标独有判断，不得修改 M12D 原始角色。
+
+### 6.2 pair 级关键价值锚点可替代性
+
+`ValueAnchorMatcher` 读取目标和候选的 M12D 画像，按 15 分计算 `anchor_substitutability_score`：
+
+```text
+anchor_substitutability_score =
+  target_core_anchor_coverage      # 0-5
+  + evidence_parity                # 0-4
+  + candidate_relative_advantage   # 0-3
+  + scenario_task_audience_fit     # 0-2
+  + market_comment_validation      # 0-1
+  - penalties
+```
+
+匹配类型：
+
+| match_type | 含义 |
+| --- | --- |
+| `exact_substitute` | 候选在目标核心锚点上形成同类替代，证据强度接近。 |
+| `adjacent_substitute` | 候选覆盖相邻锚点或同一战场内的不同解释方式。 |
+| `candidate_stronger` | 候选在目标核心锚点或关键场景上更强。 |
+| `target_only` | 目标具备，候选无法替代。 |
+| `candidate_only` | 候选具备，但不直接替代目标核心成交理由。 |
+| `weak_expression` | 只有宣传文本、价格价值表达或位置标签，不能作为强替代证据。 |
+| `unsupported` | 数据不足或证据冲突。 |
 
 每个候选输出：
 
 ```json
 {
-  "value_anchor_overlap": 0.68,
-  "shared_anchors": ["高端画质", "影院沉浸", "游戏流畅"],
-  "target_stronger_anchors": ["高亮控光", "技术型游戏能力"],
-  "candidate_stronger_anchors": ["家装融合", "客厅空间表达"],
-  "anchor_substitution_summary_cn": "候选在目标的高端画质和客厅观影支付理由上形成替代。"
+  "anchor_substitutability_score": 12,
+  "anchor_substitutability_level": "strong",
+  "shared_core_anchors": ["高端画质", "游戏流畅"],
+  "target_only_anchors": ["预算内配置获得感"],
+  "candidate_stronger_anchors": ["家装融合"],
+  "weak_expression_anchors": ["预算内配置获得感"],
+  "match_details": [
+    {
+      "target_anchor_cn": "高端画质",
+      "candidate_anchor_cn": "高端画质",
+      "match_type": "exact_substitute",
+      "score": 5,
+      "evidence_comparison_cn": "双方都有参数和卖点支撑，候选评论验证略强。"
+    }
+  ],
+  "anchor_substitution_summary_cn": "候选覆盖目标的高端画质和游戏流畅核心成交理由，但目标的预算价值表达证据较弱，只作为弱表达处理。"
 }
 ```
 
-短摘要只使用业务表达，不列长参数清单。
+短摘要只使用业务表达，不列长参数清单。若目标没有高置信 `core_payment` 锚点，短摘要必须改写为“当前成交理由画像不足，排序置信度降低”，不得用默认词补写“技术型高端体验”或“场景型高端体验”。
 
-## 7. 替代压力分类
+## 7. 替代压力评分与分类
 
-`ReplacementPressureClassifier` 根据购买池、价格差、语义重合、价值锚点和市场验证生成竞品角色。
+`ReplacementPressureClassifier` 生成 pair 级替代压力。它不生成单 SKU 画像，也不重新计算关键价值锚点；它消费购买池、价格差、主辅语义重合、M12D 锚点可替代性、候选优势和市场验证，回答“这个候选会怎样影响目标 SKU 成交”。
 
-### 7.1 分类规则
+### 7.1 替代压力 10 分评分
+
+```text
+replacement_pressure_score =
+  purchase_pool_pressure       # 0-2
+  + purchase_reason_pressure   # 0-3
+  + price_or_config_impact     # 0-2
+  + scenario_mindshare_shift   # 0-1
+  + market_diversion_validation # 0-1
+  + confidence_adjustment       # -1 to +1, capped
+```
+
+| 分项 | 来源 | 判断 |
+| --- | --- | --- |
+| `purchase_pool_pressure` | CandidateBuilder | 同尺寸同价带最高，尺寸或价格偏离则下降。 |
+| `purchase_reason_pressure` | ValueAnchorMatcher | 直接使用关键价值锚点可替代性，目标核心锚点覆盖越高压力越强。 |
+| `price_or_config_impact` | M03B/M07/M12C | 低价保核心锚点、同价更强配置、高价更强理由都会形成冲击。 |
+| `scenario_mindshare_shift` | M09C/M10C/M11C/M05C | 候选是否把同类锚点转成更清晰的家庭、游戏、家装或长看场景。 |
+| `market_diversion_validation` | MarketValidationService | 重叠在售周销量、销额和平台结构是否证明真实分流能力。 |
+| `confidence_adjustment` | evidence completeness | 样本不足、仅厂家主张、服务信号过重或证据冲突时扣分。 |
+
+### 7.2 压力类型选择
+
+主压力类型只选一个，辅助压力类型最多两个。
+
+| 压力类型 | 规则 |
+| --- | --- |
+| `value_substitution` 价值替代压力 | P0/P1 购买池，目标核心锚点可替代，战场/任务/客群综合高。 |
+| `price_suppression` 价格压制压力 | 候选价格更低，且仍覆盖目标核心成交理由。 |
+| `configuration_benchmark` 配置标杆压力 | 候选同价或相邻价位上参数/卖点更强，抬高用户配置预期。 |
+| `scenario_mindshare` 场景心智压力 | 候选在目标关键场景中表达更清晰，例如客厅空间、游戏、家装融合、家庭长看。 |
+| `brand_ecosystem` 品牌/生态压力 | 品牌心智、系统生态或渠道表达使其进入同一候选清单。 |
+| `downtrade_diversion` 下探分流压力 | 用户降低预算后仍能满足部分核心需求。 |
+| `uptrade_alternative` 上探替代压力 | 用户追加预算后获得更明确的高端理由。 |
+
+### 7.3 竞品角色规则
 
 | 角色 | 规则 |
 | --- | --- |
-| 首选直接竞品 | P0/P1 购买池，战场/任务/客群综合高，价值锚点可替代，市场验证有效。 |
+| 首选直接竞品 | P0/P1 购买池，战场/任务/客群综合高，关键价值锚点可替代性强，替代压力高，市场验证有效。 |
 | 强直接竞品 | P0/P1 购买池，语义和锚点强，但替代压力略低或角色偏配置标杆。 |
 | 价格贴身竞品 | 价差极小，但语义或锚点重合明显弱于直接竞品。 |
 | 下探分流竞品 | 价格明显更低，仍保留目标 SKU 部分核心锚点。 |
@@ -301,7 +394,7 @@ risk_overlap = count(common_negative_codes) / max(1, target_positive_code_count)
 | 场景替代竞品 | 购买池偏离，但在目标核心场景中强替代。 |
 | 排除候选 | 只满足局部相似，无法进入最终候选清单。 |
 
-### 7.2 替代压力说明
+### 7.4 替代压力说明
 
 每个 Top 3 候选必须输出：
 
@@ -309,8 +402,18 @@ risk_overlap = count(common_negative_codes) / max(1, target_positive_code_count)
 {
   "pressure_type": "value_substitution",
   "pressure_cn": "价值替代压力",
+  "pressure_score": 8,
+  "secondary_pressure_types": ["scenario_mindshare"],
   "business_reason_cn": "在同一 65 寸高价购买池中，承接目标 SKU 的高端画质、影院沉浸和家庭客厅体验支付理由。",
-  "target_risk_cn": "如果目标 SKU 没有把技术优势转成用户可理解的场景价值，候选会削弱其溢价解释。"
+  "target_risk_cn": "如果目标 SKU 没有把技术优势转成用户可理解的场景价值，候选会削弱其溢价解释。",
+  "score_breakdown": {
+    "purchase_pool_pressure": 2,
+    "purchase_reason_pressure": 3,
+    "price_or_config_impact": 1,
+    "scenario_mindshare_shift": 1,
+    "market_diversion_validation": 1,
+    "confidence_adjustment": 0
+  }
 }
 ```
 
@@ -342,13 +445,14 @@ risk_overlap = count(common_negative_codes) / max(1, target_positive_code_count)
 
 ### 9.1 数据来源
 
-竞品详细报告必须同时读取卖点事实画像和 M12C：
+竞品详细报告必须同时读取卖点事实画像、M12C 和 M12D：
 
 - 卖点画像章节只展示 M04C/M05C/M09C-M11C 等事实与语义支撑：事实卖点、评论支持/反向、参数支撑、需复核表达和共同价值锚点。
 - `sku-claim-value`：单 SKU 的 SKU×卖点价值角色、可比产品价格/销量/销额差异、本品可解释价差/销量差份额和置信度。
 - `claim-contribution`：单 SKU 在价值战场、用户任务、目标客群等市场场景中的本品相对可比产品表现差异。
+- `sku-purchase-reason-profile`：单 SKU 的核心成交理由、关键价值锚点、证据强度、弱表达和拖累标记。
 
-`competitor-set` 在 `answer_style=xiaoao` 或 `with_report != none` 时，除 `sku-fact-brief` 外，还要为目标 SKU 和进入候选池的 SKU 拉取 M12C 结果。M12C 查询失败或无数据不能阻断竞品集合生成，但报告必须展示“卖点价值量化待生成”。
+`competitor-set` 在 `answer_style=xiaoao` 或 `with_report != none` 时，除 `sku-fact-brief` 外，还要为目标 SKU 和进入候选池的 SKU 拉取 M12C 与已发布 M12D 结果。M12C 查询失败或无数据不能阻断竞品集合生成，但报告必须展示“卖点价值量化待生成”。目标 SKU 的 M12D 缺失或未发布时，竞品问答必须降级或阻断，不得按需生成 M12D，也不得使用默认成交理由补写结论；候选 SKU 的 M12D 缺失时，该候选关键价值锚点可替代性降置信度或退出 Top 3。
 
 ### 9.2 卖点价值量化展示
 
@@ -397,9 +501,20 @@ competitor_business_score =
   + battlefield_overlap * 0.25
   + user_task_overlap * 0.15
   + target_group_overlap * 0.15
-  + value_anchor_overlap * 0.15
+  + anchor_substitutability_score * 0.15
   + replacement_pressure_score * 0.10
 ```
+
+换算到报告展示的 100 分时：
+
+| 维度 | 分值 | 来源 |
+| --- | ---: | --- |
+| 购买池 | 20 | CandidateBuilder |
+| 价值战场 | 25 | RoleWeightedOverlapScorer |
+| 用户任务 | 15 | RoleWeightedOverlapScorer |
+| 目标客群 | 15 | RoleWeightedOverlapScorer |
+| 关键价值锚点可替代性 | 15 | ValueAnchorMatcher + M12D |
+| 替代压力 | 10 | ReplacementPressureClassifier |
 
 市场验证不进入主体分，作为置信度和同分排序因素：
 
@@ -418,6 +533,13 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 1. 先选择最高分的首选直接竞品。
 2. 再选择强直接竞品或配置标杆型竞品。
 3. 第三名优先选择具有明确战略压力的下探分流、上探替代或价格贴身竞品。
+
+硬门槛：
+
+- `anchor_substitutability_score < 7/15` 时，候选不能作为首选直接竞品，除非业务角色明确是价格贴身、下探分流或上探替代。
+- 目标 SKU 没有高置信 `core_payment` 锚点时，Top 3 可以输出，但整体置信度必须降低，报告要说明“成交理由画像不足”。
+- 替代压力分低于 5/10 时，不能输出“强替代”“最可能影响最终成交”等高确定性话术。
+- 市场验证不足不直接清零候选，但会降低置信度；若同时购买池偏离和市场验证不足，不进入 Top 3。
 
 若前三名都属于同一角色，允许保留三个直接竞品，但报告必须说明角色相似。
 
@@ -466,7 +588,7 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 - 重合强度必须拆成“价值战场 / 用户任务 / 目标客群”三行，每行同时展示百分比、命中点和成交影响。
 - 不展示内部字段、模块名、原始 code、批次号、表名或长 JSON。
 - 每张卡片只展示 Top 3，不展示全量候选池；全量候选和未选原因留在报告。
-- 卡片消息体必须控制在飞书卡片消息大小限制内，首版只使用摘要、三类重合行、价值锚点、市场验证和按钮。
+- 卡片消息体必须控制在飞书卡片消息大小限制内，首版只使用摘要、三类重合行、关键价值锚点可替代性摘要、市场验证和按钮。
 
 ### 12.2 Dashboard payload
 
@@ -513,6 +635,8 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
         }
       ],
       "shared_anchors_cn": ["智能互联", "高端画质", "游戏流畅"],
+      "anchor_substitutability_cn": "强：覆盖高端画质和游戏流畅核心成交理由，家装融合表达更清晰",
+      "pressure_breakdown_cn": "主压力为价值替代，辅助压力为场景心智",
       "market_validation_cn": "周均约 217 台，具备真实分流能力",
       "evidence_links": [
         {"label_cn": "完整报告", "url": "https://..."},
@@ -536,7 +660,9 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 | `overlap_rows[].strength_cn` | `weighted_overlap` | 转成百分比；缺失时显示“待验证”，不能写 0%。 |
 | `overlap_rows[].matched_points_cn` | `matched_dimensions` | 只取中文业务名，最多 4 个。 |
 | `overlap_rows[].impact_cn` | 固定模板 + 角色 | 价值战场写付费场景，用户任务写购买任务，目标客群写人群争夺。 |
-| `shared_anchors_cn` | `value_anchor.shared_anchors` | 最多 5 个，不列参数长清单。 |
+| `shared_anchors_cn` | `anchor_substitutability.shared_core_anchors` | 最多 5 个，不列参数长清单。 |
+| `anchor_substitutability_cn` | `anchor_substitutability` | 用“强/中/弱 + 覆盖哪些目标核心锚点 + 哪些只是弱表达”生成一句话。 |
+| `pressure_breakdown_cn` | `replacement_pressure` | 展示主压力和最多一个辅助压力，避免卡片堆满分项。 |
 | `market_validation_cn` | `market_validation` | 周均销量用整数台，说明真实分流能力。 |
 | `evidence_links` | `report_url` + 锚点 | 首版至少提供完整报告；有章节锚点时再提供评分依据、横向对比。 |
 
@@ -568,7 +694,7 @@ Top 3 不能机械取最高分前三名，必须保证业务解释完整：
 1. `markdown`：一句话结论。
 2. `column_set` 或连续 `markdown`：Top 3 竞品摘要。
 3. 每个竞品下方展示三行重合结构：`价值战场`、`用户任务`、`目标客群`。
-4. `markdown`：共同价值锚点和市场验证。
+4. `markdown`：关键价值锚点可替代性、替代压力和市场验证。
 5. `button`：查看完整报告、查看评分依据、横向对比、继续分析这款。
 
 卡片限制：
@@ -606,7 +732,7 @@ JSON 2.0 卡片中的报告按钮必须直接作为 `body.elements` 中的 `butt
 
 `CompetitorReportRenderer` 生成 Markdown，交给发布器创建飞书文档。
 
-当前报告章节：
+目标报告章节：
 
 1. `# {目标 SKU} 重点竞品分析报告`
 2. `## 一、分析结论`
@@ -616,16 +742,61 @@ JSON 2.0 卡片中的报告按钮必须直接作为 `body.elements` 中的 `butt
 6. `## 五、{目标 SKU} 产品画像`
 7. `## 六/七/八、前三竞品产品画像`
 
-横向详细对比必须包含市场画像、价值战场画像、用户任务画像、目标客群画像、卖点画像、参数画像和卖点价值量化。卖点画像只展示事实和证据；卖点价值量化独立展示 M12C 的核心卖点商业价值、可比产品价格/销量差异、本品可解释价差/销量差份额、竞品拦截、补强建议和拖后腿卖点。
+`## 二、分析过程` 必须按维度组织，不按候选池组织：
+
+```text
+2.1 综合评分总览
+2.2 购买池比较
+2.3 价值战场比较
+2.4 用户任务比较
+2.5 目标客群比较
+2.6 关键价值锚点可替代性比较
+2.7 替代压力比较
+2.8 市场验证比较
+2.9 候选池与未选原因附录
+```
+
+每个维度章节使用同一模板：
+
+```text
+### 2.x {维度名}比较
+判断口径：说明该维度如何评分、什么算强、什么只算弱证据。
+
+| SKU | 角色 | 得分 | 本品/竞品表现 | 与本品的区别 | 业务判断 |
+| --- | --- | ---: | --- | --- | --- |
+| 目标 SKU | 本品 | - | ... | - | 本品在该维度的基准。 |
+| 竞品 1 | 首选直接竞品 | ... | ... | ... | ... |
+| 竞品 2 | 强直接竞品 | ... | ... | ... | ... |
+| 竞品 3 | 下探分流竞品 | ... | ... | ... | ... |
+
+业务结论：用 1-2 句话说明该维度为什么支持或削弱排序。
+```
+
+维度章节要求：
+
+- 购买池比较必须展示尺寸、价格带、价差和是否进入同一次预算决策。
+- 价值战场、用户任务、目标客群比较必须展示主/辅命中，而不是只展示重合数量。
+- 关键价值锚点可替代性比较必须展示目标 `core_payment` 锚点、候选覆盖情况、弱表达锚点和证据强度。
+- 替代压力比较必须展示主压力类型、辅助压力类型、10 分分项和目标成交影响。
+- 市场验证比较必须说明真实分流能力和置信度，不把销量写成首选竞品的主因。
+- 候选池与未选原因只作为附录或折叠区，不得放在 2.1 之前，也不得替代维度比较。
+
+横向详细对比必须包含市场画像、价值战场画像、用户任务画像、目标客群画像、SKU成交理由画像、卖点画像、参数画像和卖点价值量化。卖点画像只展示事实和证据；SKU成交理由画像展示 M12D 的核心成交理由和关键价值锚点；卖点价值量化独立展示 M12C 的核心卖点商业价值、可比产品价格/销量差异、本品可解释价差/销量差份额、竞品拦截、补强建议和拖后腿卖点。
+
+产品详情链接章节在 Markdown 本地报告中可以使用内部锚点；发布为飞书文档时，必须在文档创建后读取 outline 和第三章列表项，把四个列表项回填为 `文档URL#产品画像标题block_id` 的飞书 block 直达链接。
+
+市场画像必须展示“市场池口径”，即尺寸/匹数段 × 价格带。AC 必须消费 M07 的“匹数段 × 价格带”同池口径，3匹柜机和 3匹以上柜机统一展示为“3匹及以上柜机”，不得重新拆成 `floor_hp_3` 与 `floor_hp_3_plus` 两个可比池。所在池空间和池内排名/份额只代表 SKU 在各自市场池中的位置；当竞品市场池口径与本品不同时，报告必须标注“与本品不同池”，不得暗示这些池内排名和池内份额可直接横比。市场池 SKU 数小于 3 时属于小样本池，所在池空间只能作为背景，报告不得输出“第 1 名、占比 100%”作为竞争力判断，必须显示“样本不足，不做池内排名/份额判断”。
+
+卖点画像中的“参数支撑状态”必须输出业务主题和证据项数，例如“能效/省电3项、智能控制/互联4项、耐用品质1项”。不得直接输出 `authority(2)`、`energy_efficiency(3)`、重复的同名标签或其他原始 key/count 表达。
 
 报告不得输出产品经理策略、导购话术、应对策略、实现过程、原始模块名、批次号或命令输出。
 
 数字和缺失值渲染规则：
 
 - 所有以“台”为单位的销量、周均销量、分配销量和空间销量使用整数展示，采用四舍五入，不输出小数台。
-- 价值战场、用户任务、目标客群的 `market_space` 缺失时，显示“未纳入当前销量空间测算”。
-- SKU 在主辅语义维度没有销量分配时，显示“当前图谱未分配本品销量”。
-- SKU 在机会、拖后腿、厂家主张、评论观察等补充关系中没有销量分配时，显示“未分配销量，仅作机会或观察证据”。
+- 价值战场、用户任务、目标客群的 `market_space` 缺失时，显示“本轮未计算该语义维度销量空间”。
+- SKU 在主辅语义维度没有销量分配时，显示“本轮未分配该 SKU 在此维度的销量”。
+- SKU 在机会、拖后腿、厂家主张、评论观察等补充关系中没有销量分配时，显示“本轮未做销量归因，仅作机会或观察证据”。
 - 禁止在业务报告里输出“图谱空间待生成”“暂无该分类市场空间数据”等技术性错误提示。
 
 ### 13.2 飞书发布器
@@ -643,7 +814,7 @@ class ReportPublisher(Protocol):
 ```python
 @dataclass
 class ReportPublishResult:
-    status: Literal["created", "disabled", "failed"]
+    status: Literal["created", "created_profile_links_failed", "disabled", "failed"]
     url: str | None
     message_cn: str | None
 ```
@@ -652,6 +823,7 @@ class ReportPublishResult:
 
 - `NoopReportPublisher`：本地和测试默认，不调用外部服务。
 - `FeishuCliReportPublisher`：通过 `lark-cli docs +create --api-version v2 --as <CATFORGE_FEISHU_AS> --doc-format markdown` 创建文档；205 默认使用 bot 身份。
+- 创建成功后，发布器用 `docs +fetch --scope outline --detail with-ids` 和第三章 `section` 读取产品画像标题与列表项 block id，再用 `docs +update --command block_replace` 把第三章列表项替换为飞书 block 直达链接。回填失败不删除已创建文档，但返回 `created_profile_links_failed` 供调用方提示。
 
 配置：
 
@@ -764,15 +936,34 @@ python -m app.cli.catforge_analyst competitor-explain \
     "user_task": 0.51,
     "target_group": 0.63
   },
-  "value_anchor": {
-    "score": 0.68,
-    "shared_anchors": ["高端画质", "影院沉浸", "家庭客厅体验"],
-    "candidate_stronger_anchors": ["家装融合"]
+  "candidate_purchase_reason_profile": {
+    "core_reasons_cn": ["高端画质和家庭客厅体验支撑同价段选择"],
+    "core_anchors": ["高端画质", "家装融合"],
+    "weak_expression_anchors": []
+  },
+  "anchor_substitutability": {
+    "score": 12,
+    "level": "strong",
+    "shared_core_anchors": ["高端画质", "游戏流畅"],
+    "target_only_anchors": ["预算内配置获得感"],
+    "candidate_stronger_anchors": ["家装融合"],
+    "weak_expression_anchors": ["预算内配置获得感"],
+    "summary_cn": "覆盖目标主要成交理由，家装融合表达更清晰。"
   },
   "replacement_pressure": {
     "type": "value_substitution",
     "type_cn": "价值替代压力",
-    "reason_cn": "对目标 SKU 的主支付理由形成替代。"
+    "score": 8,
+    "secondary_types": ["scenario_mindshare"],
+    "reason_cn": "对目标 SKU 的主支付理由形成替代。",
+    "score_breakdown": {
+      "purchase_pool_pressure": 2,
+      "purchase_reason_pressure": 3,
+      "price_or_config_impact": 1,
+      "scenario_mindshare_shift": 1,
+      "market_diversion_validation": 1,
+      "confidence_adjustment": 0
+    }
   },
   "market_validation": {
     "level": "strong",
@@ -783,7 +974,35 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-### 15.2 Claim value payload
+### 15.2 Purchase reason profile payload
+
+```json
+{
+  "purchase_reason_profile": {
+    "schema_version": "sku_purchase_reason_profile_v1",
+    "status": "ready",
+    "sku_code": "TV00029112",
+    "core_reasons_cn": [
+      "高端画质和游戏流畅共同支撑高价段升级购买"
+    ],
+    "anchors": [
+      {
+        "anchor_code": "premium_picture",
+        "anchor_cn": "高端画质",
+        "role": "core_payment",
+        "evidence_strength": "strong",
+        "confidence": 0.82,
+        "evidence_domains": ["param_fact", "fact_claim", "claim_value", "battlefield", "market"],
+        "reason_cn": "MiniLED、亮度、分区控光和画质战场共同支撑高端画质升级。"
+      }
+    ],
+    "risk_flags": [],
+    "profile_confidence": 0.76
+  }
+}
+```
+
+### 15.3 Claim value payload
 
 ```json
 {
@@ -808,7 +1027,7 @@ python -m app.cli.catforge_analyst competitor-explain \
 }
 ```
 
-### 15.3 Dashboard and card payload
+### 15.4 Dashboard and card payload
 
 ```json
 {
@@ -828,7 +1047,7 @@ python -m app.cli.catforge_analyst competitor-explain \
 
 `dashboard_payload` 是业务语义层，`feishu_card_payload` 是展示层。测试和后续前端复用应优先断言 `dashboard_payload`，避免把业务规则锁死在飞书卡片组件结构里。
 
-### 15.4 Report payload
+### 15.5 Report payload
 
 ```json
 {
@@ -847,6 +1066,9 @@ python -m app.cli.catforge_analyst competitor-explain \
 
 ```text
 apps/api-server/tests/core3_real_data/test_catforge_analyst_competitor_answer.py
+apps/api-server/tests/core3_real_data/test_sku_purchase_reason_profile.py
+apps/api-server/tests/core3_real_data/test_competitor_anchor_substitutability.py
+apps/api-server/tests/core3_real_data/test_replacement_pressure_score.py
 apps/api-server/tests/core3_real_data/test_competitor_role_weighted_overlap.py
 apps/api-server/tests/core3_real_data/test_competitor_dashboard_payload.py
 apps/api-server/tests/core3_real_data/test_feishu_card_renderer.py
@@ -857,6 +1079,12 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 
 | 测试 | 断言 |
 | --- | --- |
+| M12D 消费契约 | 能读取已发布 M12D 中的 `core_payment`、`supporting`、`weak_expression`、`risk_drag`、证据强度和置信度。 |
+| 弱表达封顶 | 只有 `value_price`、`price_value`、厂家主张或位置标签时，不得生成强核心成交理由。 |
+| M12D 缺失兜底 | 目标画像缺失时降级或阻断；候选画像缺失时锚点可替代性降置信度；不在竞品问答中补跑画像。 |
+| 关键价值锚点可替代性 | 目标核心锚点覆盖高于辅助锚点覆盖；候选只覆盖辅助锚点不能成为首选直接竞品。 |
+| 替代压力评分 | 分项消费购买池、成交理由替代强度、价格/配置冲击、场景心智、市场验证和置信修正。 |
+| 替代压力类型 | 主压力类型只选一个，辅助压力最多两个。 |
 | 主辅加权重合 | 主主命中高于主辅，主辅高于辅辅。 |
 | 负向状态 | 拖后腿和未满足不计入正向重合。 |
 | 价格最近但语义弱 | 不能排在语义强的直接竞品前。 |
@@ -865,7 +1093,7 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 | 短摘要长度 | 不超过 600 中文字符。 |
 | 短摘要安全 | 不包含内部模块、字段、命令、JSON。 |
 | text/json 一致 | 非卡片入口 `--format text` 等于 JSON `short_answer`；带 `feishu_card_delivery` 时 text 优先输出卡片发送状态。 |
-| Dashboard payload | 只包含 Top 3，每个竞品都有价值战场、用户任务、目标客群三行重合结构。 |
+| Dashboard payload | 只包含 Top 3，每个竞品都有价值战场、用户任务、目标客群三行重合结构，并有关键价值锚点可替代性摘要。 |
 | Dashboard 业务语言 | 不包含 `BF_`、`TASK_`、`TG_`、表名或批次号。 |
 | Feishu card payload | 可 JSON 序列化，包含 header/body/config，消息体大小符合飞书卡片限制。 |
 | 卡片结构 | JSON 2.0 正文只使用 `body.elements` 组件；报告入口按钮使用 `button.behaviors.open_url`，不使用 `tag: action`。 |
@@ -874,6 +1102,9 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 | 模糊 SKU | Pro/非 Pro 同时命中时返回 `ambiguous`。 |
 | M12C 报告接入 | 竞品报告新增独立“卖点价值量化”章节，展示业务卖点标签、可比产品差异、本品可解释价差/销量差份额和置信度。 |
 | M12C 缺失兜底 | 报告写“卖点价值量化待生成”，不伪造量化指标。 |
+| 维度化报告结构 | `## 二、分析过程` 下按综合评分、购买池、价值战场、用户任务、目标客群、关键价值锚点、替代压力、市场验证和候选池附录排序。 |
+| 维度章节模板 | 每个维度章节都有判断口径、本品 + Top 3 表格、差异解释和业务结论。 |
+| 候选池降级 | 候选池与未选原因只出现在附录/折叠区，不作为主分析目录。 |
 
 ### 16.2 集成测试
 
@@ -894,7 +1125,8 @@ apps/api-server/tests/core3_real_data/test_competitor_report_renderer.py
 - 小奥 Skill 使用 `--answer-style xiaoao`。
 - `--with-report none` 时不依赖飞书环境。
 - `dashboard_payload` 和 `feishu_card_payload` 只在 `--format json` 中消费；`--format text` 继续只输出短摘要。
-- 飞书佐证文档标题下必须同步插入 Markdown 版“重点竞品看板”，字段与 `dashboard_payload` 同源，先展示 Top 3、重合强度、替代压力，以及价值战场、用户任务、目标客群三行重合证据；详细分析章节仍作为佐证放在看板之后。
+- M12D `SKU成交理由画像` 必须由 M12D 独立模块预先生成、验证并发布；`competitor-set` 只能读取已发布画像，不能按需生成或缓存新画像。
+- 飞书佐证文档标题下必须同步插入 Markdown 版“重点竞品看板”，字段与 `dashboard_payload` 同源，先展示 Top 3、重合强度、关键价值锚点可替代性、替代压力，以及价值战场、用户任务、目标客群三行重合证据；详细分析章节仍作为佐证放在看板之后。
 - 205 上若未配置飞书 CLI，仍可回答短摘要。
 
 ### 17.2 205 部署后验收
@@ -920,7 +1152,10 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 - 只输出 Top 3 和飞书链接。
 - 不出现内部 code 和命令。
 - JSON 输出包含 `dashboard_payload` 和 `feishu_card_payload`；飞书入口能发送卡片，且无论卡片发送成功或失败都能看到短摘要。
+- JSON 输出包含目标 SKU 的 `target_purchase_reason_profile`，每个 Top 3 竞品包含 `candidate_purchase_reason_profile`、`anchor_substitutability` 和 `replacement_pressure.score_breakdown`。
 - 飞书链接可打开；如果当前 batch 找不到该 SKU，必须返回业务化边界提示。
+- 飞书报告 `## 二、分析过程` 下必须按维度展示 2.1-2.9，且每个维度章节有判断口径、本品 + Top 3 表格和业务结论。
+- 价格价值表达或厂家主张只能显示为弱表达，不得作为海信或竞品的强核心成交理由。
 - 飞书报告的“四个产品横向详细对比”和各产品画像中必须同时出现“卖点画像”和“卖点价值量化”；若 latest 批次 M12C 未准备好，卖点价值量化章节必须显示“卖点价值量化待生成”。
 
 ## 18. 后续扩展
@@ -933,3 +1168,96 @@ docker compose -f docker-compose.cloud.yml exec -T api \
 4. 不同品类的价值锚点配置：空调、洗衣机等按品类独立维护。
 5. 链接预览：当用户发送 CatForge 报告链接时，复用 `dashboard_payload` 返回链接预览卡片。
 6. 报告页面图表化：购买池散点、战场重合雷达、候选分桶矩阵。
+
+## 19. Goal 实现任务拆分
+
+后续实现必须拆成两条链，避免把 M12D 资产生产和竞品智能体消费混在一个不可验收的大改里。
+
+### 前置链路：M12D 专项工程
+
+M12D 的分析、需求、详细设计、实现、小批量验证、全量生成和发布，按独立文档推进：
+
+- [M12D SKU成交理由画像需求](../sop_requirements/M12D_sku_purchase_reason_profile_requirements.md)
+- [M12D SKU成交理由画像详细设计](M12D_sku_purchase_reason_profile_design.md)
+
+竞品分析智能体的实现只能在 M12D 有可消费版本后开始。若只做联调，可使用固定 fixture 模拟已发布 M12D，但不能在竞品智能体里实现 M12D 生成逻辑。
+
+### Goal 1：M12D 读取与缺失处理
+
+交付内容：
+
+- 新增 `PurchaseReasonProfileReader`，按 `category_code + project_id + batch_id + m12d_profile_version + sku_code` 读取已发布 M12D。
+- 在 `competitor-set` 输出 `target_purchase_reason_profile` 和 `candidate_purchase_reason_profile`。
+- 目标 M12D 缺失时降级或阻断；候选 M12D 缺失时降低候选锚点可替代性或退出 Top 3。
+
+完成标准：
+
+- `competitor-set` 不生成 M12D，不修改 M12D 锚点角色。
+- 缺失 M12D 时不使用默认“技术型/场景型高端体验”补结论。
+
+### Goal 2：关键价值锚点可替代性
+
+交付内容：
+
+- 改造 `ValueAnchorMatcher`，从已发布 M12D 读取目标和候选画像。
+- 输出 `anchor_substitutability`：15 分、等级、共享核心锚点、目标独有、候选更强、弱表达和逐锚点匹配明细。
+- 把 `anchor_substitutability_score` 接入竞品综合分和 Top 3 硬门槛。
+
+完成标准：
+
+- 候选只覆盖目标辅助锚点时，不能成为首选直接竞品。
+- 锚点可替代性不足时，短摘要和报告不能写“完整替代目标成交理由”。
+
+### Goal 3：替代压力评分
+
+交付内容：
+
+- 改造 `ReplacementPressureClassifier`，输出 10 分分项、主压力类型、辅助压力类型和目标成交影响。
+- 替代压力消费购买池、成交理由替代强度、价格/配置冲击、场景心智、市场验证和证据置信修正。
+- 更新竞品角色规则和硬门槛。
+
+完成标准：
+
+- 替代压力低于 5/10 时，报告不输出高确定性替代话术。
+- 一个候选只有一个主压力类型，辅助压力最多两个。
+
+### Goal 4：竞品报告结构改造
+
+交付内容：
+
+- 改造 `CompetitorReportRenderer`，把 `## 二、分析过程` 改为 2.1-2.9 维度目录。
+- 每个维度章节生成判断口径、本品 + Top 3 横向表、差异解释和业务结论。
+- 候选池与未选原因移动到附录或折叠区。
+- 在横向详细对比和产品画像中加入 `SKU成交理由画像`。
+
+完成标准：
+
+- 飞书文档不再出现“关键价值锚点、替代压力和市场验证依据”合并章节。
+- 业务用户能按任一维度横向比较本品和前三竞品。
+
+### Goal 5：竞品看板、CLI 和小奥 Skill 接入
+
+交付内容：
+
+- `competitor-set --answer-style xiaoao` 输出 `target_purchase_reason_profile`、`candidate_purchase_reason_profile`、`anchor_substitutability` 和新的 `replacement_pressure`。
+- `dashboard_payload` 和飞书卡片展示关键价值锚点可替代性摘要与替代压力摘要。
+- 小奥 Skill 保持只路由和转发，不解析或改写新字段。
+
+完成标准：
+
+- 飞书入口仍能发送卡片；非飞书入口短摘要不超过 600 字。
+- 回答和卡片不出现内部 code、Mxx、字段名或 JSON。
+
+### Goal 6：端到端验证与 205 部署
+
+交付内容：
+
+- 补齐单测、集成测试和报告结构测试。
+- 用海信 65E7Q 验证 Top 3、锚点可替代性、替代压力、飞书报告和小奥入口。
+- 在 205 上部署并生成可打开的飞书报告。
+
+完成标准：
+
+- 关键测试通过。
+- 65E7Q 报告中的成交理由、锚点可替代性和替代压力都有可审计依据。
+- 小奥入口回答与飞书报告的排序、角色和维度解释一致。

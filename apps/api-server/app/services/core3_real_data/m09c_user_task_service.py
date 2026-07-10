@@ -704,7 +704,6 @@ def ac_user_task_taxonomy_v0_1() -> M09CUserTaskTaxonomy:
                     "wall_hp_3",
                     "floor_hp_2",
                     "floor_hp_3",
-                    "floor_hp_3_plus",
                 ),
                 PRICE_BANDS,
                 (

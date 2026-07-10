@@ -531,19 +531,30 @@ class MarketProfileService:
         updated: list[M07SkuMarketMetrics] = []
         for item in metrics:
             size_pool = by_size.get(item.size_segment, [])
-            market_pool = by_market_pool.get(item.market_pool_key or "unknown", [])
             category_price = _percentile(item.price_wavg, [row.price_wavg for row in metrics])
             category_volume = _percentile(item.sales_volume_total, [row.sales_volume_total for row in metrics])
             category_amount = _percentile(item.sales_amount_total, [row.sales_amount_total for row in metrics])
             size_price = _percentile(item.price_wavg, [row.price_wavg for row in size_pool])
             size_volume = _percentile(item.sales_volume_total, [row.sales_volume_total for row in size_pool])
             size_amount = _percentile(item.sales_amount_total, [row.sales_amount_total for row in size_pool])
+            price_band_category = _price_band(category_price, len([row for row in metrics if row.price_wavg is not None]))
+            price_band_size = _price_band(size_price, len([row for row in size_pool if row.price_wavg is not None]))
+            if _category_value(product_category).upper() == "AC":
+                market_pool = _ac_hp_price_band_market_pool(size_pool, price_band_size)
+                market_pool_key = _market_pool_key(
+                    "AC",
+                    item.screen_size_class,
+                    item.main_channel_type,
+                    item.analysis_window,
+                    price_band=price_band_size,
+                )
+            else:
+                market_pool = by_market_pool.get(item.market_pool_key or "unknown", [])
+                market_pool_key = item.market_pool_key
             same_pool_price = _percentile(item.price_wavg, [row.price_wavg for row in market_pool])
             same_pool_volume = _percentile(item.sales_volume_total, [row.sales_volume_total for row in market_pool])
             same_pool_amount = _percentile(item.sales_amount_total, [row.sales_amount_total for row in market_pool])
             price_per_inch_percentile = _percentile(item.price_per_inch, [row.price_per_inch for row in market_pool])
-            price_band_category = _price_band(category_price, len([row for row in metrics if row.price_wavg is not None]))
-            price_band_size = _price_band(size_price, len([row for row in size_pool if row.price_wavg is not None]))
             sample_status = _combined_sample_status(
                 active_week_count=item.active_week_count,
                 category_count=len([row for row in metrics if row.price_wavg is not None]),
@@ -598,6 +609,7 @@ class MarketProfileService:
                         "same_pool_amount_percentile": same_pool_amount,
                         "price_per_inch_percentile": price_per_inch_percentile,
                         "same_pool_sku_count": len(market_pool),
+                        "market_pool_key": market_pool_key,
                         "price_band_category": price_band_category,
                         "price_band_size": price_band_size,
                         "price_gap_to_category_median": price_gap_category,
@@ -619,7 +631,7 @@ class MarketProfileService:
                                 "price_band_category": price_band_category,
                                 "price_band_size": price_band_size,
                                 "price_per_inch_percentile": price_per_inch_percentile,
-                                "market_pool_key": item.market_pool_key,
+                                "market_pool_key": market_pool_key,
                                 "sample_status": sample_status,
                                 "quality_flags": sorted(quality_flags),
                             },
@@ -1387,6 +1399,7 @@ def _ac_size_segment(installation: str | None, horsepower: Decimal | None, cooli
     hp_segment = _ac_horsepower_segment(horsepower)
     if hp_segment == "hp_unknown":
         hp_segment = _ac_cooling_capacity_segment(cooling_capacity)
+    hp_segment = _ac_market_hp_segment(install_segment, hp_segment)
     if install_segment == "unknown" and hp_segment == "hp_unknown":
         return "unknown"
     return f"{install_segment if install_segment != 'unknown' else 'ac'}_{hp_segment}"
@@ -1395,6 +1408,7 @@ def _ac_size_segment(installation: str | None, horsepower: Decimal | None, cooli
 def _ac_size_class(installation: str | None, horsepower: Decimal | None) -> str:
     install_segment = _ac_installation_segment(installation)
     hp_segment = _ac_horsepower_segment(horsepower)
+    hp_segment = _ac_market_hp_segment(install_segment, hp_segment)
     if install_segment == "unknown" and hp_segment == "hp_unknown":
         return "unknown"
     if install_segment == "unknown":
@@ -1443,6 +1457,24 @@ def _ac_cooling_capacity_segment(value: Decimal | None) -> str:
     if value < Decimal("7500"):
         return "hp_3"
     return "hp_3_plus"
+
+
+def _ac_market_hp_segment(install_segment: str, hp_segment: str) -> str:
+    if install_segment == "floor" and hp_segment == "hp_3_plus":
+        return "hp_3"
+    return hp_segment
+
+
+def _ac_hp_price_band_market_pool(size_pool: list[M07SkuMarketMetrics], price_band_size: str) -> list[M07SkuMarketMetrics]:
+    if not size_pool:
+        return []
+    price_values = [row.price_wavg for row in size_pool]
+    price_count = len([row for row in size_pool if row.price_wavg is not None])
+    return [
+        row
+        for row in size_pool
+        if _price_band(_percentile(row.price_wavg, price_values), price_count) == price_band_size
+    ]
 
 
 def _market_size_input_missing(product_category: str, size_input: M07SkuSizeInput | None) -> bool:
@@ -1506,9 +1538,13 @@ def _market_pool_key(
     screen_size_class: str,
     main_channel_type: str | None,
     analysis_window: M07AnalysisWindow | str,
+    *,
+    price_band: str | None = None,
 ) -> str:
     window = analysis_window.value if isinstance(analysis_window, M07AnalysisWindow) else str(analysis_window)
     channel = _pool_key_part(main_channel_type or "unknown")
+    if price_band:
+        return f"{_pool_key_part(category_code)}:{_pool_key_part(screen_size_class)}:{_pool_key_part(price_band)}:{channel}:{_pool_key_part(window)}"
     return f"{_pool_key_part(category_code)}:{_pool_key_part(screen_size_class)}:{channel}:{_pool_key_part(window)}"
 
 

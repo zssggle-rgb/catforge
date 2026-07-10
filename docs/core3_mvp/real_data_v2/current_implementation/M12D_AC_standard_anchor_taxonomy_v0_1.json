@@ -1,0 +1,327 @@
+{
+  "category_code": "AC",
+  "product_category": "AC",
+  "product_category_label_cn": "空调",
+  "taxonomy_version": "m12d_ac_purchase_reason_anchor_taxonomy_v0.1",
+  "taxonomy_status": "human_review_draft",
+  "created_by_task": "AC-M12D-G03",
+  "created_date": "2026-07-08",
+  "source_batch_id": "m00_20260624000202_1150a669",
+  "market_window": "full_observed_window",
+  "source_artifacts": [
+    "docs/core3_mvp/real_data_v2/current_implementation/M12D_AC_evidence_audit_20260708.md",
+    "docs/core3_mvp/real_data_v2/current_implementation/M12D_AC_G02_value_theme_purchase_reason_candidates.json",
+    "docs/core3_mvp/real_data_v2/current_implementation/M12D_AC_G02_value_theme_purchase_reason_candidate_report.md"
+  ],
+  "runtime_boundary": {
+    "published": false,
+    "writes_database": false,
+    "generates_profiles": false,
+    "competitor_agent_consumable": false,
+    "tv_taxonomy_reuse": false
+  },
+  "evidence_domains": [
+    {
+      "code": "param_fact",
+      "name_cn": "参数事实",
+      "source_modules": ["M03B"],
+      "strong_condition_cn": "与购买理由直接相关，且不是 unknown。"
+    },
+    {
+      "code": "fact_claim",
+      "name_cn": "事实卖点",
+      "source_modules": ["M04C"],
+      "strong_condition_cn": "卖点有参数支撑或非纯服务/权益表达。"
+    },
+    {
+      "code": "comment_perception",
+      "name_cn": "评论感知",
+      "source_modules": ["M05C"],
+      "strong_condition_cn": "正向用户感知与购买理由一致，负向评论不主导。"
+    },
+    {
+      "code": "semantic_scene",
+      "name_cn": "语义场景",
+      "source_modules": ["M09C", "M10C", "M11C"],
+      "strong_condition_cn": "能证明卧室、客厅、老人儿童、租房、季节等场景适配。"
+    },
+    {
+      "code": "semantic_market",
+      "name_cn": "语义市场",
+      "source_modules": ["M11D"],
+      "strong_condition_cn": "同任务、客群或战场下有市场空间和 SKU 贡献。"
+    },
+    {
+      "code": "market_acceptance",
+      "name_cn": "市场承接",
+      "source_modules": ["M07"],
+      "strong_condition_cn": "同形态、同匹数或同价位下有销量或价格位置承接。"
+    },
+    {
+      "code": "claim_value",
+      "name_cn": "卖点支付价值",
+      "source_modules": ["M12C"],
+      "strong_condition_cn": "sales_driver_estimated 可正向加分；弱/风险角色不能当正向充分条件。"
+    }
+  ],
+  "value_themes": [
+    {
+      "order": 10,
+      "code": "cooling_heating_capacity_assurance",
+      "name_cn": "冷暖能力确定感",
+      "definition_cn": "用户相信这台空调能覆盖目标空间，冷得快、热得稳，不容易买小或不够用。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene", "market_acceptance", "claim_value"],
+      "primary_claim_dimensions": ["temperature_performance"],
+      "weak_boundary_cn": "只有匹数或型号字样不足以成为购买理由。"
+    },
+    {
+      "order": 20,
+      "code": "energy_cost_efficiency",
+      "name_cn": "长期用电成本效率",
+      "definition_cn": "用户相信长期使用电费更可控，能效、APF 和变频可以解释后续成本。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "market_acceptance", "claim_value"],
+      "primary_claim_dimensions": ["energy_efficiency"],
+      "weak_boundary_cn": "只有一级能效口号时封顶弱表达。"
+    },
+    {
+      "order": 30,
+      "code": "sleep_quiet_comfort",
+      "name_cn": "睡眠静音舒适感",
+      "definition_cn": "用户在卧室或夜间使用时更安静、不扰眠、温控更舒适。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene", "claim_value"],
+      "primary_claim_dimensions": ["airflow_comfort"],
+      "weak_boundary_cn": "只有静音卖点时封顶辅助或弱表达。"
+    },
+    {
+      "order": 40,
+      "code": "comfortable_airflow_health",
+      "name_cn": "舒适风与健康空气",
+      "definition_cn": "用户减少直吹、闷、异味或空气健康担忧。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene", "claim_value"],
+      "primary_claim_dimensions": ["airflow_comfort", "health_clean_air"],
+      "weak_boundary_cn": "新风、净化、除菌单独出现不等于健康空气购买理由。"
+    },
+    {
+      "order": 50,
+      "code": "large_space_coverage",
+      "name_cn": "大空间覆盖感",
+      "definition_cn": "用户相信客厅、大卧室或大面积空间能被快速覆盖。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene", "market_acceptance"],
+      "primary_claim_dimensions": ["temperature_performance"],
+      "weak_boundary_cn": "只有柜机或大匹数标签时不能强判。"
+    },
+    {
+      "order": 60,
+      "code": "installation_space_fit",
+      "name_cn": "安装与空间适配",
+      "definition_cn": "用户相信房型、安装位置和预算条件下能装得下、用得上。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene"],
+      "primary_claim_dimensions": ["installation_design", "service_fulfillment"],
+      "weak_boundary_cn": "安装、送装、售后只能做辅助或风险。"
+    },
+    {
+      "order": 70,
+      "code": "operation_maintenance_convenience",
+      "name_cn": "操作维护省心",
+      "definition_cn": "用户减少清洁、控制、调温和日常维护成本。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene", "claim_value"],
+      "primary_claim_dimensions": ["smart_control", "durability_quality"],
+      "weak_boundary_cn": "只有智能或自清洁口号时封顶弱表达。"
+    },
+    {
+      "order": 80,
+      "code": "budget_configuration_efficiency",
+      "name_cn": "预算配置效率",
+      "definition_cn": "用户在预算内获得足够的核心冷暖、能效或舒适配置。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "market_acceptance", "claim_value"],
+      "primary_claim_dimensions": ["price_value", "energy_efficiency", "temperature_performance"],
+      "weak_boundary_cn": "只有价格、补贴或 price_value 时只能弱表达。"
+    },
+    {
+      "order": 90,
+      "code": "seasonal_reliability",
+      "name_cn": "季节和极端天气可靠性",
+      "definition_cn": "用户相信夏季高温、冬季低温、梅雨潮湿等季节压力下更稳定。",
+      "evidence_domains": ["param_fact", "fact_claim", "comment_perception", "semantic_scene"],
+      "primary_claim_dimensions": ["temperature_performance", "durability_quality"],
+      "weak_boundary_cn": "泛化品质宣传不能单独支撑季节可靠性。"
+    }
+  ],
+  "purchase_reasons": [
+    {
+      "order": 10,
+      "code": "room_size_capacity_match_reduces_risk",
+      "name_cn": "匹数空间匹配降低买小风险",
+      "related_value_theme_codes": ["cooling_heating_capacity_assurance", "installation_space_fit"],
+      "decision_question_cn": "这个 SKU 是否能降低用户买小、买错空间的风险？",
+      "required_evidence_cn": "需要能力参数或安装形态，加上房间/空间任务、评论或市场参照。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["semantic_scene", "comment_perception", "market_acceptance"]],
+      "weak_boundary_cn": "只有型号、匹数字样或大风量口号时不能成立。",
+      "downgrade_rules_cn": ["缺 M09C/M10C/M11C 时场景置信度下降。", "缺 M12C 时最多 supporting。"]
+    },
+    {
+      "order": 20,
+      "code": "large_space_one_step_cooling_heating",
+      "name_cn": "大空间冷暖一步到位",
+      "related_value_theme_codes": ["large_space_coverage", "cooling_heating_capacity_assurance"],
+      "decision_question_cn": "这个 SKU 是否能解释大空间冷暖为什么一步到位？",
+      "required_evidence_cn": "需要大空间任务、能力或柜机事实，以及评论或市场承接。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["semantic_scene"], ["comment_perception", "market_acceptance"]],
+      "weak_boundary_cn": "只有柜机、大匹数或客厅宣传时不能强判。",
+      "downgrade_rules_cn": ["大空间负向评论、制冷慢或高价竞品拦截时降级。"]
+    },
+    {
+      "order": 30,
+      "code": "cooling_heating_performance_justifies_price",
+      "name_cn": "冷暖效果解释更高价格",
+      "related_value_theme_codes": ["cooling_heating_capacity_assurance", "seasonal_reliability"],
+      "decision_question_cn": "这个 SKU 的冷暖效果是否足以解释更高价格？",
+      "required_evidence_cn": "需要中高/高价格位置、冷暖能力事实，以及评论、M12C 或市场承接。",
+      "candidate_gate_domain_groups": [["market_acceptance"], ["param_fact", "fact_claim"], ["comment_perception", "claim_value", "semantic_market"]],
+      "weak_boundary_cn": "只有高价、品牌或冷暖口号，没有体验/市场补证时不能成立。",
+      "downgrade_rules_cn": ["当前 AC 无 premium_driver_estimated，若 M12C 以拦截/机会/弱感知为主，不能直接判 core_payment。"]
+    },
+    {
+      "order": 40,
+      "code": "long_term_energy_saving_offsets_price",
+      "name_cn": "长期省电抵消更高价格",
+      "related_value_theme_codes": ["energy_cost_efficiency", "budget_configuration_efficiency"],
+      "decision_question_cn": "这个 SKU 是否能解释长期省电抵消更高价格？",
+      "required_evidence_cn": "需要 APF/能效事实、长期使用任务或省电评论，以及价格位置或 M12C 补证。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["comment_perception", "semantic_scene"], ["market_acceptance", "claim_value"]],
+      "weak_boundary_cn": "只有一级能效或省电口号时封顶弱表达。",
+      "downgrade_rules_cn": ["耗电负评、APF 缺失或高价无市场承接时降级。"]
+    },
+    {
+      "order": 50,
+      "code": "same_price_efficiency_capacity_gain",
+      "name_cn": "同价位能效/能力获得感",
+      "related_value_theme_codes": ["budget_configuration_efficiency", "energy_cost_efficiency", "cooling_heating_capacity_assurance"],
+      "decision_question_cn": "这个 SKU 是否在同价位中提供更可解释的能效/能力获得感？",
+      "required_evidence_cn": "需要价格/市场证据，以及能效或能力事实；只有性价比表达不够。",
+      "candidate_gate_domain_groups": [["market_acceptance"], ["param_fact", "fact_claim"], ["comment_perception", "claim_value"]],
+      "weak_boundary_cn": "只有 price_value、补贴或低价表达时封顶弱表达。",
+      "downgrade_rules_cn": ["核心能力缺口、销量不承接或 M12C 弱感知时降级。"]
+    },
+    {
+      "order": 60,
+      "code": "low_price_core_ac_experience_intact",
+      "name_cn": "低价不明显牺牲核心冷暖体验",
+      "related_value_theme_codes": ["budget_configuration_efficiency", "cooling_heating_capacity_assurance"],
+      "decision_question_cn": "这个 SKU 是否能解释低价下核心冷暖体验仍然够用？",
+      "required_evidence_cn": "需要低/中低价位置，以及冷暖/能效事实或评论/销量承接。",
+      "candidate_gate_domain_groups": [["market_acceptance"], ["param_fact", "fact_claim"], ["comment_perception", "claim_value"]],
+      "weak_boundary_cn": "只有低价、补贴或性价比表达时不能进入产品核心理由。",
+      "downgrade_rules_cn": ["制冷慢、噪音大、安装差或评论负向集中时转为风险。"]
+    },
+    {
+      "order": 70,
+      "code": "sleep_room_quiet_comfort_assurance",
+      "name_cn": "卧室睡眠更安静舒适",
+      "related_value_theme_codes": ["sleep_quiet_comfort", "comfortable_airflow_health"],
+      "decision_question_cn": "这个 SKU 是否能解释卧室睡眠更安静舒适？",
+      "required_evidence_cn": "需要静音/风感事实，以及卧室/睡眠任务或评论。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["semantic_scene", "comment_perception"]],
+      "weak_boundary_cn": "只有静音卖点，没有噪音参数、卧室任务或评论时封顶辅助/弱表达。",
+      "downgrade_rules_cn": ["噪音负评、风感不适或缺评论时降级。"]
+    },
+    {
+      "order": 80,
+      "code": "elderly_child_soft_wind_comfort",
+      "name_cn": "老人儿童房柔风不直吹",
+      "related_value_theme_codes": ["comfortable_airflow_health", "sleep_quiet_comfort"],
+      "decision_question_cn": "这个 SKU 是否能解释老人儿童房柔风不直吹？",
+      "required_evidence_cn": "需要柔风/防直吹事实，以及老人儿童/卧室任务或风感评论。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["semantic_scene", "comment_perception"]],
+      "weak_boundary_cn": "只有柔风或防直吹表达，缺场景/评论时封顶辅助。",
+      "downgrade_rules_cn": ["直吹、风大、不舒适等负向评论时转为风险。"]
+    },
+    {
+      "order": 90,
+      "code": "fresh_air_health_reduces_stuffy_risk",
+      "name_cn": "新风/净化减少闷和空气担忧",
+      "related_value_theme_codes": ["comfortable_airflow_health", "operation_maintenance_convenience"],
+      "decision_question_cn": "这个 SKU 是否能解释减少闷和空气健康担忧？",
+      "required_evidence_cn": "需要新风/净化参数或事实，以及空气评论、任务或 M12C。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["comment_perception", "semantic_scene", "claim_value"]],
+      "weak_boundary_cn": "只有新风、净化、除菌口号，没有风量/滤网/评论时封顶弱表达。",
+      "downgrade_rules_cn": ["空气感知弱、异味负评或无参数补证时降级。"]
+    },
+    {
+      "order": 100,
+      "code": "humidity_dehumidification_reassurance",
+      "name_cn": "潮湿环境除湿更安心",
+      "related_value_theme_codes": ["seasonal_reliability", "comfortable_airflow_health"],
+      "decision_question_cn": "这个 SKU 是否能解释潮湿环境除湿更安心？",
+      "required_evidence_cn": "需要除湿能力或评论，以及季节/潮湿场景。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["comment_perception", "semantic_scene"]],
+      "weak_boundary_cn": "只有除湿字样而无评论/场景补证时不能强判。",
+      "downgrade_rules_cn": ["G02 命中低于其他候选，后续小批量需重点复核；缺评论时降级。"]
+    },
+    {
+      "order": 110,
+      "code": "self_cleaning_reduces_maintenance_risk",
+      "name_cn": "自清洁/防霉降低维护风险",
+      "related_value_theme_codes": ["operation_maintenance_convenience", "comfortable_airflow_health"],
+      "decision_question_cn": "这个 SKU 是否能解释自清洁/防霉降低维护风险？",
+      "required_evidence_cn": "需要自清洁/防霉事实，以及维护评论或健康空气场景。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["comment_perception", "semantic_scene"]],
+      "weak_boundary_cn": "只有自清洁口号时封顶辅助/弱表达。",
+      "downgrade_rules_cn": ["异味、霉味、清洁无感或服务履约误用时降级。"]
+    },
+    {
+      "order": 120,
+      "code": "small_room_installation_fit",
+      "name_cn": "小房间/租房安装适配",
+      "related_value_theme_codes": ["installation_space_fit", "budget_configuration_efficiency"],
+      "decision_question_cn": "这个 SKU 是否能解释小房间/租房安装更适配？",
+      "required_evidence_cn": "需要安装/小空间事实，以及租房/小房间任务或低价市场承接。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["semantic_scene", "comment_perception", "market_acceptance"]],
+      "weak_boundary_cn": "只有安装服务、低价或小巧宣传时不能强判。",
+      "downgrade_rules_cn": ["安装投诉、外机限制、缺任务语义时降级。"]
+    },
+    {
+      "order": 130,
+      "code": "smart_remote_control_less_friction",
+      "name_cn": "远程/智能控制减少操作摩擦",
+      "related_value_theme_codes": ["operation_maintenance_convenience"],
+      "decision_question_cn": "这个 SKU 是否能解释远程/智能控制减少操作摩擦？",
+      "required_evidence_cn": "需要智能/远程事实，以及评论或智能任务补证。",
+      "candidate_gate_domain_groups": [["param_fact", "fact_claim"], ["comment_perception", "semantic_scene", "claim_value"]],
+      "weak_boundary_cn": "只有智能口号时封顶弱表达。",
+      "downgrade_rules_cn": ["评论无感、系统难用或只有连接卖点时降级。"]
+    }
+  ],
+  "global_role_cap_rules": [
+    {
+      "condition": "missing_m12c_or_m11d",
+      "role_cap": "supporting",
+      "rule_cn": "缺 M12C 或 M11D 时不得直接输出 core_payment。"
+    },
+    {
+      "condition": "missing_comment_or_semantic_scene",
+      "role_cap": "supporting",
+      "rule_cn": "缺 M05C/M09C/M10C/M11C 时，场景型、评论型和人群型理由必须降级。"
+    },
+    {
+      "condition": "single_brand_claim_only",
+      "role_cap": "weak_expression",
+      "rule_cn": "只有一级能效、省电、新风、净化、静音、柔风、防直吹、自清洁、智能等厂家表达时，不得判 core_payment。"
+    },
+    {
+      "condition": "price_or_subsidy_only",
+      "role_cap": "weak_expression",
+      "rule_cn": "只有低价、补贴、性价比或 price_value 时，除非同时有核心能力和市场承接，否则只能弱表达。"
+    },
+    {
+      "condition": "service_fulfillment_only",
+      "role_cap": "not_core_payment",
+      "rule_cn": "安装、售后、送装、权益、认证背书不得单独进入产品核心购买理由。"
+    },
+    {
+      "condition": "risk_or_weak_m12c_role_dominant",
+      "role_cap": "supporting_or_risk_drag",
+      "rule_cn": "M12C 以 high_price_competitor_intercept、opportunity_gap、weak_user_perception_claim、basic_threshold、price_up_opportunity 或 drag_factor 为主时，不得作为正向核心支付理由。"
+    }
+  ]
+}

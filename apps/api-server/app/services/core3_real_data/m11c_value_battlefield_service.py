@@ -851,14 +851,14 @@ def ac_value_battlefield_taxonomy_v0_1() -> M11CValueBattlefieldTaxonomy:
                     "airflow_volume_m3h",
                     "energy_grade_normalized",
                 ),
-                adjacent_size_tiers=("floor_hp_2", "floor_hp_3_plus"),
+                adjacent_size_tiers=("floor_hp_2",),
                 adjacent_price_bands=("low", "high"),
             ),
             _bf(
                 "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH",
                 "3匹及以上柜机高端舒适健康战场",
                 "3匹及以上柜机、高价位，竞争重点是大空间舒适风、健康洁净、智能和品质信任。",
-                ("floor_hp_3", "floor_hp_3_plus"),
+                ("floor_hp_3",),
                 ("mid_high", "high"),
                 ("TASK_LARGE_SPACE_COVERAGE", "TASK_HEALTH_CLEAN_AIR"),
                 (
@@ -2402,6 +2402,8 @@ def _canonical_size_tier(profile: entities.Core3SkuParamProfile) -> str:
     tier = (
         (param_values.get("dimension_tier_profile") or {}).get("size") or ""
     ).strip()
+    if tier == "floor_hp_3_plus":
+        return "floor_hp_3"
     if tier in ALL_CANONICAL_SIZE_TIERS:
         return tier
     ac_tier = _canonical_ac_size_tier(param_values)
@@ -2460,8 +2462,6 @@ def _canonical_ac_size_tier(param_values: Mapping[str, Any]) -> str:
     if horsepower is None:
         return "unknown"
     if is_floor:
-        if horsepower > Decimal("3.0"):
-            return "floor_hp_3_plus"
         if horsepower >= Decimal("2.5"):
             return "floor_hp_3"
         return "floor_hp_2"
