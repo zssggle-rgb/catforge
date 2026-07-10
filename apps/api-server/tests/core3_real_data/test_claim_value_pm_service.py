@@ -172,6 +172,19 @@ def test_concrete_bright_room_outcome_supports_bundle_but_not_single_parameter()
     assert result.perception_weight == 0.5
 
 
+def test_brightness_comment_is_not_misread_as_eye_care_evidence() -> None:
+    definition = next(item for item in TV_VALUE_UNITS if item.code == "tv_long_viewing_comfort")
+    result = attribute_comment_atoms(
+        definition,
+        [_atom("声音也大，亮度也高", subdimension="picture_brightness_hdr")],
+        eligible_sentence_count=1,
+    )
+
+    assert result.direct_sentence_count == 0
+    assert result.indirect_sentence_count == 0
+    assert result.status == "unrecognized"
+
+
 def test_direct_parameter_and_negative_experience_are_kept_separate() -> None:
     definition = TV_VALUE_UNITS[0]
     result = attribute_comment_atoms(

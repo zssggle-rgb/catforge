@@ -128,7 +128,7 @@ TV_VALUE_UNITS: tuple[TvValueUnitDefinition, ...] = (
         param_codes=("low_blue_light_flag", "flicker_free_flag", "eye_care_flag", "anti_reflection_flag", "ambient_light_sensor_flag"),
         claim_codes=("tv_claim_eye_care_display",),
         subdimensions=("picture_eye_care_reflection", "picture_brightness_hdr"),
-        direct_patterns=(r"护眼|低蓝光|无频闪|防反|抗反|环境光"),
+        direct_patterns=(r"护眼|低蓝光|无频闪|防反|抗反|环境光",),
         outcome_patterns=(r"久看.{0,4}(?:不累|舒服)", r"眼睛.{0,4}(?:不累|舒服|不酸)", r"反光.{0,3}(?:少|不明显)"),
         generic_patterns=(r"看着.{0,3}舒服", r"不刺眼"),
     ),
@@ -339,7 +339,7 @@ def build_data_gate(context: ClaimValuePmContext) -> ClaimValuePmDataGate:
                 code="m07_missing",
                 severity="blocking",
                 scope="market",
-                message_cn="缺少价格销量画像，无法判断同价选择和当前价格承接。",
+                message_cn="缺少价格销量画像，无法判断同价销量承接和当前价格承接。",
                 source_modules=["M07"],
                 affected_unit_codes=list(ALL_UNIT_CODES),
             )
@@ -1233,7 +1233,7 @@ def _build_price_scenarios(
                 comparison_choice_share=_round(share, 4),
                 choice_index=_round(choice_index, 1),
                 comparison_revenue_index=_round(revenue_index, 1),
-                status_cn="历史直接竞品条件选择观察，未外推到样本范围外。",
+                status_cn="历史直接竞品条件销量承接观察，未外推到样本范围外。",
             )
         )
     return scenarios
@@ -1686,7 +1686,7 @@ def _headline(gate: ClaimValuePmDataGate, units: Sequence[ClaimValuePmValueUnit]
     received = [item.unit_name_cn for item in units if item.user_understanding.status in {"direct", "outcome_only"} and item.product_fact_status == "confirmed"]
     generic = [item.unit_name_cn for item in units if item.user_understanding.unattributable_sentence_count > 0]
     if conflicts:
-        market_note = "整机市场选择仍可观察" if market.method_level != "L0" else "整机市场样本也不足"
+        market_note = "整机销量承接仍可观察" if market.method_level != "L0" else "整机市场样本也不足"
         return f"当前配置事实链存在冲突，{market_note}，但不能把结果归到具体卖点；先修事实链，再决定保留、升级或价格测试。"
     if received:
         first = "、".join(received[:2])
@@ -1701,7 +1701,7 @@ def _empty_market_pricing(reason: str) -> ClaimValuePmMarketPricing:
         method_level="L0",
         method_name_cn="整机市场位置描述",
         attribution_status="not_available",
-        attribution_status_cn="当前没有可用的选择量化结果。",
+        attribution_status_cn="当前没有可用的销量承接量化结果。",
         holding_gap_status_cn="样本不足，暂不计算选择保持价差。",
         limitations=[reason],
     )
