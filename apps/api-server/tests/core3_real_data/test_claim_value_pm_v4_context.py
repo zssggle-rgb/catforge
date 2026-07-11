@@ -11,8 +11,10 @@ from app.core.database import SessionLocal
 from app.models import entities
 from app.services.core3_real_data.analyst.analyst_repository import (
     AnalystRepository,
+    _v4_multirow_authority,
     _v4_pick_rows_by_key,
     _v4_published_lineage,
+    _v4_select_snapshot_candidates,
     build_sellpoint_value_v4_lineage_gate,
 )
 from app.services.core3_real_data.analyst.analyst_schemas import ResolvedSku
@@ -185,6 +187,81 @@ def test_65e7q_fixture_detects_published_vs_current_lineage_conflict(
         for module in issue.affected_module_codes
     }
     assert {"M03B", "M04C", "M05C", "M12C"} <= conflict_modules
+
+
+def test_same_version_and_batch_with_changed_hash_is_blocked() -> None:
+    published = [
+        _current_authority(module, "v1", f"published-{module}")
+        for module in (
+            "M03B",
+            "M04C",
+            "M05C",
+            "M07",
+            "M09C",
+            "M10C",
+            "M11C",
+            "M11D",
+            "M12C",
+        )
+    ]
+    current = [item.model_copy(deep=True) for item in published]
+    current[0] = current[0].model_copy(update={"source_hash": "current-M03B"})
+
+    result = build_sellpoint_value_v4_lineage_gate(
+        published_lineage=published,
+        current_validation_lineage=current,
+    )
+
+    assert result.status == "stale_conflict"
+    assert result.issues[0].affected_module_codes == ["M03B"]
+
+
+def test_authority_hash_is_independent_of_database_row_order() -> None:
+    refs = [
+        EvidenceRef(
+            module_code="M11D",
+            record_type="allocation",
+            record_id=record_id,
+            result_hash=f"hash-{record_id}",
+            batch_id=BATCH_ID,
+        )
+        for record_id in ("b", "a", "c")
+    ]
+
+    first = _v4_multirow_authority(
+        module_code="M11D",
+        table_name="allocation",
+        rule_version="v1",
+        rows=[],
+        refs=refs,
+        ambiguous_keys=set(),
+    )
+    second = _v4_multirow_authority(
+        module_code="M11D",
+        table_name="allocation",
+        rule_version="v1",
+        rows=[],
+        refs=list(reversed(refs)),
+        ambiguous_keys=set(),
+    )
+
+    assert first.source_hash == second.source_hash
+
+
+def test_snapshot_selection_preserves_declared_roles_beyond_top_three() -> None:
+    candidates = [
+        {
+            "sku_code": f"TV{i}",
+            "slot_code": "same_value" if i <= 3 else "base_value",
+        }
+        for i in range(1, 8)
+    ]
+
+    selected = _v4_select_snapshot_candidates(candidates, limit=4)
+
+    assert len(selected) == 4
+    assert any(item["sku_code"] == "TV4" for item in selected)
+    assert {item["slot_code"] for item in selected} == {"same_value", "base_value"}
 
 
 def test_context_replays_selected_profiles_and_market_cells_deterministically(

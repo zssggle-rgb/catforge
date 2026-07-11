@@ -1396,7 +1396,7 @@ class AnalystRepository:
                 continue
             seen.add(row.candidate_sku_code)
             result.append(row)
-            if len(result) >= 3:
+            if len(result) >= 30:
                 break
         return result
 
@@ -3056,6 +3056,33 @@ def build_sellpoint_value_v4_lineage_gate(
         current_batches = set(current.selected_batch_ids)
         batch_overlap = bool(published_batches & current_batches)
         if published.rule_version == current.rule_version and batch_overlap:
+            if not published.source_hash or not current.source_hash:
+                unresolved = True
+                issues.append(
+                    LineageIssue(
+                        code="lineage_source_hash_missing",
+                        severity="warning",
+                        scope="source",
+                        message_cn=f"{module_code} 缺少可比 source hash，不能确认已发布画像与当前事实一致。",
+                        affected_module_codes=[module_code],
+                    )
+                )
+                continue
+            if published.source_hash == current.source_hash:
+                continue
+            conflict = True
+            issues.append(
+                LineageIssue(
+                    code="version_lineage_conflict",
+                    severity="blocking",
+                    scope="relation",
+                    message_cn=(
+                        f"已发布画像与当前验证使用相同 {module_code} rule version 和批次，"
+                        "但记录 hash 已变化；受影响的价值和价格归因必须暂停。"
+                    ),
+                    affected_module_codes=[module_code],
+                )
+            )
             continue
         if (
             published.rule_version != current.rule_version
@@ -3139,7 +3166,7 @@ def _v4_candidate_references(
     fallback_candidates: Sequence[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
     if selection_rows:
-        return [
+        candidates = [
             {
                 "sku_code": str(row.candidate_sku_code),
                 "brand_name": row.candidate_brand_name,
@@ -3158,9 +3185,10 @@ def _v4_candidate_references(
                     )
                 ],
             }
-            for row in selection_rows[:3]
+            for row in selection_rows[:30]
             if str(row.candidate_sku_code) != target_sku_code
         ]
+        return _v4_select_snapshot_candidates(candidates, limit=12)
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
     for rank, item in enumerate(fallback_candidates or (), start=1):
@@ -3181,9 +3209,56 @@ def _v4_candidate_references(
                 "source_refs": [],
             }
         )
-        if len(result) >= 3:
+        if len(result) >= 30:
             break
-    return result
+    return _v4_select_snapshot_candidates(result, limit=12)
+
+
+def _v4_select_snapshot_candidates(
+    candidates: Sequence[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Keep declared-role coverage before filling the bounded snapshot set."""
+
+    buckets: dict[str, list[dict[str, Any]]] = {
+        "base_value": [],
+        "same_value": [],
+        "stretch_benchmark": [],
+        "unknown": [],
+    }
+    for candidate in candidates:
+        buckets[_v4_declared_candidate_bucket(candidate.get("slot_code"))].append(
+            candidate
+        )
+    selected: list[dict[str, Any]] = []
+    while len(selected) < max(limit, 0):
+        added = False
+        for bucket in (
+            "base_value",
+            "same_value",
+            "stretch_benchmark",
+            "unknown",
+        ):
+            if buckets[bucket] and len(selected) < limit:
+                selected.append(buckets[bucket].pop(0))
+                added = True
+        if not added:
+            break
+    return selected
+
+
+def _v4_declared_candidate_bucket(slot_code: Any) -> str:
+    slot = str(slot_code or "").strip().lower()
+    if slot in {"base_value", "same_value", "stretch_benchmark"}:
+        return slot
+    if any(token in slot for token in ("base", "lower", "down")):
+        return "base_value"
+    if any(token in slot for token in ("stretch", "benchmark", "higher", "upper")):
+        return "stretch_benchmark"
+    if any(token in slot for token in ("same", "direct", "core")):
+        return "same_value"
+    return "unknown"
 
 
 def _v4_row_evidence_ref(
@@ -3217,6 +3292,7 @@ def _v4_configured_authority(
     ambiguous: set[str],
     refs: list[EvidenceRef],
 ) -> SourceAuthority:
+    ordered_refs = _v4_sorted_evidence_refs(refs)
     missing = [sku_code for sku_code in sku_codes if sku_code not in selected and json.dumps(sku_code) not in ambiguous]
     warnings = [*(f"missing_sku:{sku_code}" for sku_code in missing), *(f"ambiguous_current:{key}" for key in sorted(ambiguous))]
     if refs:
@@ -3231,11 +3307,17 @@ def _v4_configured_authority(
         authority_mode="configured_rule",
         rule_version=rule_version,
         taxonomy_version=taxonomy_version,
-        selected_batch_ids=sorted({ref.batch_id for ref in refs if ref.batch_id}),
-        row_count=len(refs),
+        selected_batch_ids=sorted({ref.batch_id for ref in ordered_refs if ref.batch_id}),
+        row_count=len(ordered_refs),
         availability=availability,
         usability=usability,
-        source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]) if refs else None,
+        source_hash=(
+            canonical_v4_hash(
+                [ref.model_dump(mode="json") for ref in ordered_refs]
+            )
+            if ordered_refs
+            else None
+        ),
         selected_reason="configured rule version, taxonomy when available, and serving-scope precedence",
         warnings=warnings,
     )
@@ -3251,19 +3333,39 @@ def _v4_multirow_authority(
     ambiguous_keys: set[str],
 ) -> SourceAuthority:
     del rows
+    ordered_refs = _v4_sorted_evidence_refs(refs)
     warnings = [f"ambiguous_current:{key}" for key in sorted(ambiguous_keys)]
     return SourceAuthority(
         module_code=module_code,
         table_name=table_name,
         authority_mode="configured_rule",
         rule_version=rule_version,
-        selected_batch_ids=sorted({ref.batch_id for ref in refs if ref.batch_id}),
-        row_count=len(refs),
-        availability="present" if refs else "missing",
-        usability=("limited" if warnings else "usable") if refs else "unusable",
-        source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]) if refs else None,
+        selected_batch_ids=sorted({ref.batch_id for ref in ordered_refs if ref.batch_id}),
+        row_count=len(ordered_refs),
+        availability="present" if ordered_refs else "missing",
+        usability=("limited" if warnings else "usable") if ordered_refs else "unusable",
+        source_hash=(
+            canonical_v4_hash(
+                [ref.model_dump(mode="json") for ref in ordered_refs]
+            )
+            if ordered_refs
+            else None
+        ),
         selected_reason="configured rule version and serving-scope precedence; monetary M12C fields excluded",
         warnings=warnings,
+    )
+
+
+def _v4_sorted_evidence_refs(refs: Sequence[EvidenceRef]) -> list[EvidenceRef]:
+    return sorted(
+        refs,
+        key=lambda ref: (
+            ref.module_code,
+            ref.record_type,
+            ref.record_id,
+            ref.result_hash,
+            ref.batch_id or "",
+        ),
     )
 
 

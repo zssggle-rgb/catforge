@@ -430,7 +430,7 @@ def build_counterfactual_assessments(
                 assessment_hash=canonical_v4_hash(payload),
             )
         )
-    return sorted(
+    ordered = sorted(
         assessments,
         key=lambda item: (
             {"base_value": 0, "same_value": 1, "stretch_benchmark": 2}[item.role],
@@ -438,6 +438,14 @@ def build_counterfactual_assessments(
             item.candidate_sku_code,
         ),
     )
+    selected: list[ComparabilityAssessment] = []
+    role_counts = {"base_value": 0, "same_value": 0, "stretch_benchmark": 0}
+    for assessment in ordered:
+        if role_counts[assessment.role] >= 3:
+            continue
+        selected.append(assessment)
+        role_counts[assessment.role] += 1
+    return selected
 
 
 def quantify_sellpoint_value(

@@ -12,9 +12,9 @@
 
 | 门禁 | 状态 |
 | --- | --- |
-| Repair contract 与测试矩阵 | in_progress |
-| Lineage/hash deterministic repair | pending |
-| Candidate recall/snapshot/per-role repair | pending |
+| Repair contract 与测试矩阵 | completed |
+| Lineage/hash deterministic repair | completed |
+| Candidate recall/snapshot/per-role repair | completed |
 | Market-cell bounded trim 与 M11D sample weight | pending |
 | Q5 config v2 + deterministic cluster bootstrap | pending |
 | Pure negative / mixed / data conflict 分离 | pending |
@@ -28,3 +28,14 @@
 3. typed contract 修改不能向 V2 泄漏；
 4. 相关回归、性能或 PM 语义任一未通过时 G09 继续禁止；
 5. 不触碰工作区现有无关 M12D 质量修复。
+
+## 当前结果
+
+- Repair contract 和测试矩阵已冻结；
+- 同版本/同批次必须同时匹配 source hash，缺 hash 为 unresolved，不同 hash 为局部 conflict；
+- authority evidence refs 在 hash 前确定性排序；
+- M14/fallback recall cap 提升到 30，按 declared role 轮转选择最多 12 个 snapshot；
+- 完成实际角色和可比性判断后，每个 computed role 最多保留 3 个；
+- 新增 same-version hash drift、authority order、rank-4 role coverage、per-role cap 回归；
+- 定向 schema/context/counterfactual：33 passed；
+- repository 全文件仍有 7 个 V4 前 Ruff 基线问题，新增 V4 diff 未引入新 lint 问题。

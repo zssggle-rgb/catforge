@@ -276,6 +276,31 @@ def test_three_roles_and_four_provenances_are_preserved_without_money() -> None:
     assert "estimated_price_premium_abs" not in serialized
 
 
+def test_final_assessments_are_capped_to_three_per_computed_role() -> None:
+    context = _base_context()
+    candidates = [
+        _candidate(
+            context,
+            sku_code=f"SAME-{index}",
+            role="same_value",
+            provenance="M14",
+            tier="premium",
+        )
+        for index in range(5)
+    ]
+    context = _with_candidates(context, candidates)
+
+    results = build_counterfactual_assessments(context, _picture_link(context))
+
+    assert len(results) == 3
+    assert {item.role for item in results} == {"same_value"}
+    assert [item.candidate_sku_code for item in results] == [
+        "SAME-0",
+        "SAME-1",
+        "SAME-2",
+    ]
+
+
 @pytest.mark.parametrize(
     ("size", "battlefield", "weeks", "promotion", "price_status", "reason"),
     [
