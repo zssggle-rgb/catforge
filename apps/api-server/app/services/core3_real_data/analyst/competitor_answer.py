@@ -17,6 +17,12 @@ from hashlib import sha256
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from app.services.core3_real_data.analyst.competitor_pm_report import (
+    build_pm_comparison_payload,
+    pm_business_output_issue,
+    render_pm_comparison_report,
+)
+
 
 ReportMode = Literal["none", "markdown", "feishu-doc"]
 FeishuCardPublishStatus = Literal["disabled", "sent", "failed"]
@@ -150,6 +156,56 @@ GROUP_NAMES = {
     "TG_HOME_DECOR_SPACE_FIT": "新家装修空间适配用户",
     "TG_HUMID_SOUTH_USER": "南方潮湿除湿用户",
     "TG_BRAND_QUALITY_TRUST_BUYER": "品牌品质信任用户",
+}
+
+PM_AUDIENCE_LABELS = {
+    "主流家庭观影用户": "重视日常家庭观影",
+    "大屏换新升级用户": "有大屏换新升级需求",
+    "高端影音体验用户": "重视高端影音体验",
+    "巨幕家庭影院用户": "重视巨幕影院沉浸",
+    "性价比理性用户": "重视配置与价格平衡",
+    "游戏体育娱乐用户": "经常观看体育或玩游戏",
+    "儿童家庭长看用户": "重视家庭长时间观看舒适",
+    "长辈友好使用用户": "重视操作简单和长辈易用",
+    "卧室副屏/租房用户": "需要卧室或小空间副屏",
+    "投屏互联智能用户": "重视投屏互联和智能控制",
+    "租房小空间用户": "重视小空间适配",
+    "换新性价比用户": "重视换新成本和配置完整",
+    "卧室睡眠敏感用户": "重视睡眠静音",
+    "家庭长时使用省电用户": "重视长时间使用省电",
+    "儿童老人舒适敏感家庭": "重视儿童老人舒适体验",
+    "客厅大空间用户": "需要客厅大空间覆盖",
+    "智能远程控制用户": "重视智能远程控制",
+    "新家装修空间适配用户": "重视新家装修和空间适配",
+    "南方潮湿除湿用户": "重视潮湿环境除湿",
+    "品牌品质信任用户": "重视品牌品质和长期可靠",
+}
+
+PM_CHOICE_LABELS = {
+    "小屏刚需性价比": "小屏基本功能与价格",
+    "小屏智能易用": "小屏操作和智能功能更方便",
+    "主流家庭性价比": "家庭使用配置与价格平衡",
+    "主流客厅均衡体验": "客厅日常体验更均衡",
+    "大屏换新性价比": "大屏换新是否划算",
+    "大屏家庭影院": "大屏影院沉浸",
+    "高端画质升级": "更好的画质体验",
+    "高配下探价值": "更低预算获得完整高配",
+    "游戏体育流畅": "游戏和体育画面更流畅",
+    "家庭护眼舒适": "长时间观看更舒适",
+    "智能互联体验": "投屏互联和智能控制更方便",
+    "巨幕家庭影院旗舰": "巨幕影院沉浸和旗舰体验",
+    "巨幕价值下探": "更低预算获得巨幕体验",
+    "1匹及以下挂机入门价值": "小房间基本冷暖与价格",
+    "1匹及以下挂机舒适升级": "小房间冷暖舒适升级",
+    "1.5匹挂机主流性价比": "卧室主流冷暖与价格平衡",
+    "1.5匹挂机睡眠舒适升级": "卧室睡眠舒适升级",
+    "2匹挂机大房间均衡": "大房间冷暖能力与舒适平衡",
+    "2匹柜机客厅入门": "客厅柜机基本冷暖与价格",
+    "3匹柜机客厅性价比升级": "大客厅冷暖能力与价格平衡",
+    "3匹及以上柜机高端舒适健康": "大空间冷暖、舒适送风和健康空气",
+    "中高价智能控制升级": "远程控制和智能操作更方便",
+    "中高价健康洁净升级": "空气洁净和健康功能升级",
+    "潮湿除湿场景": "潮湿环境除湿能力",
 }
 
 ROLE_CN = {
@@ -417,12 +473,15 @@ def build_competitor_answer(
     _assign_top_roles(enriched)
     buckets = _bucket_competitors(enriched)
     top_competitors = _select_top_competitors(enriched, target=target, top_n=max(top_n, 0))
-    title = report_title or f"{_display_name(target)} 重点竞品分析报告"
+    target_name = _display_name(target)
+    title = report_title or f"{target_name} 重点竞品识别与分析依据报告"
+    pm_report_title = f"{target_name} 与重点竞品的用户选择对比报告"
     dashboard_payload_for_report = build_competitor_dashboard_payload(
         target=target,
         target_fact_brief=target_fact_brief,
         top_competitors=top_competitors,
         report_url=None,
+        pm_report_url=None,
     )
     markdown = render_competitor_report(
         title=title,
@@ -435,6 +494,22 @@ def build_competitor_answer(
         dashboard_payload=dashboard_payload_for_report,
     )
     publish_result = _publish_report(title=title, markdown=markdown, with_report=with_report)
+    pm_comparison_payload = build_pm_competitor_comparison_payload(
+        title=pm_report_title,
+        target=target,
+        target_fact_brief=target_fact_brief,
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
+        top_competitors=top_competitors,
+        evidence_report_url=publish_result.url,
+    )
+    pm_markdown = render_pm_comparison_report(title=pm_report_title, payload=pm_comparison_payload)
+    pm_output_issue = pm_business_output_issue(pm_markdown)
+    pm_publish_result = (
+        ReportPublishResult(status="failed", message_cn=pm_output_issue)
+        if pm_output_issue
+        else _publish_report(title=pm_report_title, markdown=pm_markdown, with_report=with_report)
+    )
     short_answer = render_short_answer(
         target=target,
         target_fact_brief=target_fact_brief,
@@ -447,11 +522,13 @@ def build_competitor_answer(
         target_fact_brief=target_fact_brief,
         top_competitors=top_competitors,
         report_url=publish_result.url,
+        pm_report_url=pm_publish_result.url,
     )
     feishu_card_payload = render_feishu_card_payload(dashboard_payload)
     return {
         "short_answer": short_answer,
         "report_url": publish_result.url,
+        "evidence_report_url": publish_result.url,
         "report_status": publish_result.status,
         "report_message_cn": publish_result.message_cn,
         "report_payload": {
@@ -459,6 +536,16 @@ def build_competitor_answer(
             "markdown": markdown if with_report == "markdown" else None,
             "url": publish_result.url,
             "status": publish_result.status,
+        },
+        "pm_comparison_report_url": pm_publish_result.url,
+        "pm_comparison_report_status": pm_publish_result.status,
+        "pm_comparison_report_message_cn": pm_publish_result.message_cn,
+        "pm_comparison_report_payload": {
+            "title": pm_report_title,
+            "markdown": pm_markdown if with_report == "markdown" and not pm_output_issue else None,
+            "url": pm_publish_result.url,
+            "status": pm_publish_result.status,
+            "comparison": pm_comparison_payload,
         },
         "dashboard_payload": dashboard_payload,
         "feishu_card_payload": feishu_card_payload,
@@ -570,6 +657,7 @@ def build_competitor_dashboard_payload(
     target_fact_brief: dict[str, Any],
     top_competitors: list[dict[str, Any]],
     report_url: str | None,
+    pm_report_url: str | None = None,
 ) -> dict[str, Any]:
     """Build the business dashboard consumed by Feishu cards and XiaoAo."""
 
@@ -579,6 +667,7 @@ def build_competitor_dashboard_payload(
         for index, item in enumerate(top_competitors[:3], start=1)
     ]
     report_links = _dashboard_report_links(report_url)
+    pm_report_link = _dashboard_pm_report_link(pm_report_url)
     product_compare_link = _dashboard_product_compare_link(target, competitors)
     summary_cn = _dashboard_summary(target_name, competitors, target_fact_brief)
     return {
@@ -595,6 +684,7 @@ def build_competitor_dashboard_payload(
         "summary_cn": summary_cn,
         "competitors": competitors,
         "report_evidence_links": report_links,
+        "pm_comparison_report_link": pm_report_link,
         "product_compare_link": product_compare_link,
         "display_policy": {
             "main_answer": "feishu_card",
@@ -629,13 +719,17 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
         elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品市场验证**"))
         elements.append(_feishu_competitor_market_table(target, competitors))
-    action = _feishu_report_action(dashboard_payload)
-    if action:
+    pm_action = _feishu_pm_report_action(dashboard_payload)
+    evidence_action = _feishu_report_action(dashboard_payload)
+    if pm_action or evidence_action:
         elements.append({"tag": "hr"})
-        elements.append(action)
+    if pm_action:
+        elements.append(pm_action)
+    if evidence_action:
+        elements.append(evidence_action)
     compare_action = _feishu_product_compare_action(dashboard_payload)
     if compare_action:
-        if not action:
+        if not pm_action and not evidence_action:
             elements.append({"tag": "hr"})
         elements.append(compare_action)
     card = {
@@ -1365,6 +1459,9 @@ def _comparison_products(
     top_competitors: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     target_market_scope_key = _market_pool_scope_key(target_sections, target)
+    target_purchase_reason_profile = (
+        top_competitors[0].get("target_purchase_reason_profile") if top_competitors else None
+    ) or {}
     products = [
         {
             "name": target_name,
@@ -1373,6 +1470,7 @@ def _comparison_products(
             "competitor_item": None,
             "claim_value": _extract_claim_value_payload(target_claim_value),
             "claim_contribution": _extract_claim_contribution_payload(target_claim_contribution),
+            "purchase_reason_profile": target_purchase_reason_profile,
             "target_market_scope_key": target_market_scope_key,
         }
     ]
@@ -1386,10 +1484,276 @@ def _comparison_products(
                 "competitor_item": item,
                 "claim_value": _extract_claim_value_payload(item.get("candidate_claim_value") or {}),
                 "claim_contribution": _extract_claim_contribution_payload(item.get("candidate_claim_contribution") or {}),
+                "purchase_reason_profile": item.get("candidate_purchase_reason_profile") or {},
                 "target_market_scope_key": target_market_scope_key,
             }
         )
     return products
+
+
+def build_pm_competitor_comparison_payload(
+    *,
+    title: str,
+    target: dict[str, Any],
+    target_fact_brief: dict[str, Any],
+    target_claim_value: dict[str, Any] | None,
+    target_claim_contribution: dict[str, Any] | None,
+    top_competitors: list[dict[str, Any]],
+    evidence_report_url: str | None,
+) -> dict[str, Any]:
+    """Assemble the PM-facing report from already-published product profiles."""
+
+    target_name = _display_name(target)
+    products = _comparison_products(
+        target_name,
+        target,
+        _fact_sections(target_fact_brief),
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
+        top_competitors=top_competitors[:3],
+    )
+    product_views = [_pm_product_view(product) for product in products]
+    substitution_rows = [_pm_substitution_row(item) for item in top_competitors[:3]]
+    return build_pm_comparison_payload(
+        title=title,
+        product_views=product_views,
+        substitution_rows=[row for row in substitution_rows if row],
+        evidence_report_url=evidence_report_url,
+    )
+
+
+def _pm_product_view(product: dict[str, Any]) -> dict[str, Any]:
+    name = str(product.get("name") or "产品")
+    market = _market_comparison_values(product)
+    sections = product.get("sections") or {}
+    capabilities = _pm_capability_view(sections)
+    choice_criteria = _pm_semantic_view(sections, profile_type="battlefield")
+    usage_needs = _pm_semantic_view(sections, profile_type="task")
+    demand_audiences = _pm_semantic_view(sections, profile_type="group")
+    message_reception = _pm_message_reception_view(sections)
+    purchase_reasons = _pm_purchase_reason_view(product.get("purchase_reason_profile") or {})
+    value_delivery = _pm_value_delivery_view(product.get("purchase_reason_profile") or {})
+    metrics = _market_metrics(sections)
+    sku = product.get("sku") or {}
+    price = metrics.get("price_wavg") or metrics.get("price_latest") or sku.get("weighted_price") or sku.get("price_wavg")
+    weekly_sales = metrics.get("avg_weekly_sales_volume") or sku.get("avg_weekly_sales_volume")
+    market["_price"] = price
+    market["_weekly_sales"] = weekly_sales
+    market["_pool_scope_key"] = "|".join(_market_pool_scope_key(sections, sku))
+    overview = {
+        "价格和周均销量": f"{market.get('均价') or '暂不能判断'}；周均{market.get('周均销量') or '暂不能判断'}",
+        "产品事实最突出的部分": _pm_capability_highlights(capabilities),
+        "主要承接的用户选择": choice_criteria.get("主要比较内容") or "暂不能判断",
+        "用户主要使用需求": usage_needs.get("主要使用需求") or "暂不能判断",
+        "用户已经形成的购买理由": purchase_reasons.get("核心购买理由") or "暂不能判断",
+        "卖点接收情况": _pm_message_reception_summary(message_reception),
+    }
+    return {
+        "name": name,
+        "market": market,
+        "capabilities": capabilities,
+        "choice_criteria": choice_criteria,
+        "usage_needs": usage_needs,
+        "demand_audiences": demand_audiences,
+        "message_reception": message_reception,
+        "purchase_reasons": purchase_reasons,
+        "value_delivery": value_delivery,
+        "overview": overview,
+    }
+
+
+def _pm_semantic_view(sections: dict[str, Any], *, profile_type: str) -> dict[str, Any]:
+    profile_key = {"battlefield": "value_battlefield", "task": "user_task", "group": "target_group"}[profile_type]
+    rows = _semantic_rows(sections.get(profile_key) or {}, profile_type=profile_type)
+    primary_marker = {"battlefield": "主战场", "task": "主任务", "group": "主客群"}[profile_type]
+    secondary_marker = {"battlefield": "辅战场", "task": "辅任务", "group": "辅客群"}[profile_type]
+    primary = [_pm_semantic_label(label, profile_type=profile_type) for _code, label, relation, _reason in rows if primary_marker in relation]
+    supporting = [_pm_semantic_label(label, profile_type=profile_type) for _code, label, relation, _reason in rows if secondary_marker in relation]
+    observed = [
+        _pm_semantic_label(label, profile_type=profile_type)
+        for _code, label, relation, _reason in rows
+        if primary_marker not in relation and secondary_marker not in relation
+    ]
+    labels = {
+        "battlefield": ("主要比较内容", "其他比较内容"),
+        "task": ("主要使用需求", "其他使用需求"),
+        "group": ("主要吸引的需求型用户", "其他可覆盖用户"),
+    }[profile_type]
+    return {
+        labels[0]: _join_cn(primary[:6]) or "暂不能判断",
+        labels[1]: _join_cn(supporting[:6]) or "暂不能判断",
+        "补充表现": _join_cn(observed[:6]) or "暂不能判断",
+        "_primary_tags": _unique_strings(primary),
+        "_supporting_tags": _unique_strings(supporting),
+        "_all_tags": _unique_strings(primary, supporting),
+    }
+
+
+def _pm_capability_view(sections: dict[str, Any]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for dimension, judgement, evidence, _business_meaning in _business_param_profile_rows(sections):
+        values[dimension] = evidence or judgement or "暂不能判断"
+    return values
+
+
+def _pm_semantic_label(label: str, *, profile_type: str) -> str:
+    if profile_type == "battlefield":
+        return PM_CHOICE_LABELS.get(label, label)
+    if profile_type == "group":
+        return PM_AUDIENCE_LABELS.get(label, label.replace("用户", "需求"))
+    return label
+
+
+def _pm_message_reception_view(sections: dict[str, Any]) -> dict[str, Any]:
+    claim = sections.get("claim_fact") or {}
+    comment = sections.get("comment_fact") or {}
+    if not claim and not comment:
+        return {
+            "产品重点表达": "暂不能判断",
+            "用户正向感知": "暂不能判断",
+            "用户反向反馈": "暂不能判断",
+            "尚需确认的表达": "暂不能判断",
+            "fact_tags": [],
+            "supported_tags": [],
+            "contradicted_tags": [],
+            "_all_tags": [],
+        }
+    fact_tags = _labels_for_codes(sorted(set(str(code) for code in claim.get("fact_claim_codes") or [])))
+    supported_tags = _labels_for_codes(sorted(set(str(code) for code in comment.get("supported_claim_codes") or [])))
+    contradicted_tags = _labels_for_codes(sorted(set(str(code) for code in comment.get("contradicted_claim_codes") or [])))
+    unsupported_tags = _labels_for_codes(sorted(set(str(code) for code in claim.get("unsupported_claim_codes") or [])))
+    return {
+        "产品重点表达": _join_cn(fact_tags[:10]) or "暂不能判断",
+        "用户正向感知": _join_cn(supported_tags[:10]) or "当前未识别到稳定正向感知",
+        "用户反向反馈": _join_cn(contradicted_tags[:10]) or "当前未识别到稳定反向反馈",
+        "尚需确认的表达": _join_cn(unsupported_tags[:10]) or "当前未识别到需确认表达",
+        "fact_tags": fact_tags,
+        "supported_tags": supported_tags,
+        "contradicted_tags": contradicted_tags,
+        "_all_tags": _unique_strings(fact_tags, supported_tags),
+    }
+
+
+def _pm_purchase_reason_view(profile: dict[str, Any]) -> dict[str, Any]:
+    if not profile or not profile.get("found"):
+        return {
+            "核心购买理由": "暂不能判断",
+            "辅助购买理由": "暂不能判断",
+            "尚未形成的理由": "暂不能判断",
+            "体验风险": "暂不能判断",
+            "core_tags": [],
+            "_all_tags": [],
+        }
+    core = _clean_pm_labels(_coerce_list(profile.get("core_reasons_cn")))
+    supporting = _clean_pm_labels(_coerce_list(profile.get("supporting_reasons_cn")))
+    weak = _clean_pm_labels(_coerce_list(profile.get("weak_expression_reasons_cn")))
+    risk = _clean_pm_labels(_coerce_list(profile.get("risk_drag_reasons_cn")))
+    return {
+        "核心购买理由": _join_cn(core[:6]) or "未形成稳定核心购买理由",
+        "辅助购买理由": _join_cn(supporting[:6]) or "未形成稳定辅助购买理由",
+        "尚未形成的理由": _join_cn(weak[:6]) or "当前未识别到弱表达理由",
+        "体验风险": _join_cn(risk[:6]) or "当前未识别到稳定体验风险",
+        "core_tags": core,
+        "_all_tags": _unique_strings(core, supporting),
+    }
+
+
+def _pm_value_delivery_view(profile: dict[str, Any]) -> dict[str, str]:
+    if not profile or not profile.get("found"):
+        return {
+            "已形成稳定购买理由": "暂不能判断",
+            "用户已经感知但尚未形成稳定购买理由": "暂不能判断",
+            "只停留在表达": "暂不能判断",
+            "存在体验分歧": "暂不能判断",
+        }
+    complete: list[str] = []
+    perceived: list[str] = []
+    message_only: list[str] = []
+    divided: list[str] = []
+    for anchor in profile.get("anchors") or []:
+        if not isinstance(anchor, dict):
+            continue
+        name = str(anchor.get("anchor_cn") or "").strip()
+        if not name:
+            continue
+        role = str(anchor.get("role") or "")
+        strength = str(anchor.get("evidence_strength") or "")
+        domains = set(str(value) for value in anchor.get("evidence_domains") or [])
+        has_fact = bool(domains & {"param_fact", "fact_claim"})
+        has_comment = "comment_perception" in domains
+        if role == "risk_drag":
+            divided.append(name)
+        elif role == "weak_expression":
+            message_only.append(name)
+        elif role in {"core_payment", "supporting"} and strength in {"medium", "strong"} and has_fact and has_comment:
+            complete.append(name)
+        elif has_fact and has_comment:
+            perceived.append(name)
+    return {
+        "已形成稳定购买理由": _join_cn(complete[:6]) or "暂不能判断",
+        "用户已经感知但尚未形成稳定购买理由": _join_cn(perceived[:6]) or "暂不能判断",
+        "只停留在表达": _join_cn(message_only[:6]) or "暂不能判断",
+        "存在体验分歧": _join_cn(divided[:6]) or "暂不能判断",
+    }
+
+
+def _pm_capability_highlights(capabilities: dict[str, str]) -> str:
+    excluded = {"尺寸空间", "清晰度规格", "匹数/安装能力"}
+    highlights: list[str] = []
+    for label, value in capabilities.items():
+        if label in excluded or not value or value == "暂无稳定证据":
+            continue
+        parts = [part.strip() for part in str(value).split("；") if part.strip()]
+        evidence = parts[1] if len(parts) > 1 else parts[0]
+        highlights.append(f"{label}：{evidence}")
+    return _join_cn(highlights[:3]) or "暂不能判断"
+
+
+def _pm_message_reception_summary(message: dict[str, Any]) -> str:
+    supported = _coerce_list(message.get("supported_tags"))
+    contradicted = _coerce_list(message.get("contradicted_tags"))
+    if supported and contradicted:
+        return f"用户已感知{_join_cn(supported[:4])}；对{_join_cn(contradicted[:3])}存在分歧"
+    if supported:
+        return f"用户已感知{_join_cn(supported[:5])}，当前未识别到稳定反向主题"
+    if contradicted:
+        return f"当前对{_join_cn(contradicted[:4])}存在用户分歧"
+    return "暂不能判断"
+
+
+def _pm_substitution_row(item: dict[str, Any]) -> dict[str, str] | None:
+    profile = item.get("candidate_purchase_reason_profile") or {}
+    if not profile.get("found"):
+        return None
+    candidate = item.get("candidate") or {}
+    anchor = item.get("value_anchor") or {}
+    return {
+        "name": _display_name(candidate),
+        "与本品重合的选择理由": _join_cn(_coerce_list(anchor.get("shared_anchors"))[:6]) or "当前未识别到稳定重合理由",
+        "竞品更突出的理由": _join_cn(_coerce_list(anchor.get("candidate_stronger_anchors"))[:6]) or "当前未识别到竞品更突出理由",
+        "本品保留的理由": _join_cn(_coerce_list(anchor.get("target_stronger_anchors"))[:6]) or "当前未识别到本品保留理由",
+        "替代程度": _pm_pressure_level(item.get("replacement_pressure") or {}),
+    }
+
+
+def _pm_pressure_level(pressure: dict[str, Any]) -> str:
+    score = _decimal(pressure.get("replacement_pressure_score"))
+    if score is None:
+        return "暂不能判断"
+    if score >= 8:
+        level = "较强"
+    elif score >= 5:
+        level = "中等"
+    elif score >= 3:
+        level = "较弱"
+    else:
+        level = "很弱"
+    boundary = "，当前证据有限" if pressure.get("requires_review") else ""
+    return f"{level}（{int(score)}/10{boundary}）"
+
+
+def _clean_pm_labels(values: list[str]) -> list[str]:
+    return _unique_strings([str(value).strip().rstrip("。；;，,") for value in values if str(value).strip()])
 
 
 def _comparison_table_lines(
@@ -4725,7 +5089,13 @@ def _dashboard_evidence_refs(item: dict[str, Any]) -> list[str]:
 def _dashboard_report_links(report_url: str | None) -> list[dict[str, Any]]:
     if not report_url:
         return []
-    return [{"label": "完整竞品分析报告", "url": report_url, "type": "report"}]
+    return [{"label": "查看分析依据", "url": report_url, "type": "evidence_report"}]
+
+
+def _dashboard_pm_report_link(report_url: str | None) -> dict[str, Any] | None:
+    if not report_url:
+        return None
+    return {"label": "查看用户选择对比", "url": report_url, "type": "pm_comparison_report"}
 
 
 def _dashboard_product_compare_link(target: dict[str, Any], competitors: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -4789,7 +5159,7 @@ def _product_encyclopedia_category(target: dict[str, Any]) -> str:
 def _dashboard_action_links(report_url: str | None) -> list[dict[str, Any]]:
     links = [{"label": "查看重合依据", "section_code": "overlap_rows", "type": "section"}]
     if report_url:
-        links.insert(0, {"label": "查看完整报告", "url": report_url, "type": "report"})
+        links.insert(0, {"label": "查看分析依据", "url": report_url, "type": "evidence_report"})
     return links
 
 
@@ -5311,8 +5681,23 @@ def _feishu_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] |
         return None
     return _feishu_open_url_button(
         element_id="view_report",
-        text="查看完整报告",
+        text="查看分析依据",
         url=report_url,
+        button_type="default",
+    )
+
+
+def _feishu_pm_report_action(dashboard_payload: dict[str, Any]) -> dict[str, Any] | None:
+    link = dashboard_payload.get("pm_comparison_report_link") or {}
+    if not isinstance(link, dict):
+        return None
+    url = str(link.get("url") or "")
+    if not url.startswith("http"):
+        return None
+    return _feishu_open_url_button(
+        element_id="view_pm_comparison_report",
+        text=str(link.get("label") or "查看用户选择对比"),
+        url=url,
         button_type="primary",
     )
 
@@ -5368,16 +5753,23 @@ def _trim_feishu_card(card: dict[str, Any]) -> dict[str, Any]:
     max_bytes = 30_000
     if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) <= max_bytes:
         return card
-    elements = list(((card.get("body") or {}).get("elements") or [])[:4])
+    source_elements = list((card.get("body") or {}).get("elements") or [])
+    action_buttons = [element for element in source_elements if isinstance(element, dict) and element.get("tag") == "button"]
+    elements = list(source_elements[:4])
+    elements.extend(button for button in action_buttons if button not in elements)
     compact = {**card, "body": {"elements": elements}}
     if len(json.dumps(compact, ensure_ascii=False).encode("utf-8")) <= max_bytes:
         return compact
     summary = ((card.get("config") or {}).get("summary") or {}).get("content") or "重点竞品看板"
+    fallback_elements: list[dict[str, Any]] = [
+        {"tag": "markdown", "content": "卡片内容过长，已降级为摘要。可继续查看用户选择对比或分析依据。"}
+    ]
+    fallback_elements.extend(action_buttons)
     return {
         "schema": "2.0",
         "config": {"summary": {"content": summary}},
         "header": card.get("header") or {},
-        "body": {"elements": [{"tag": "markdown", "content": "卡片内容过长，已降级为摘要。请查看短回答或完整报告。"}]},
+        "body": {"elements": fallback_elements},
     }
 
 

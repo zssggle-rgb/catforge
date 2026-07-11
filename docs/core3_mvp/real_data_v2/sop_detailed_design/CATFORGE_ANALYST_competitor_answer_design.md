@@ -1261,3 +1261,299 @@ M12D 的分析、需求、详细设计、实现、小批量验证、全量生成
 - 关键测试通过。
 - 65E7Q 报告中的成交理由、锚点可替代性和替代压力都有可审计依据。
 - 小奥入口回答与飞书报告的排序、角色和维度解释一致。
+
+## 20. 业务语义层与产品经理报告重构
+
+### 20.1 分层边界
+
+竞品报告改为四层，禁止报告模板直接解释原始算法 code：
+
+```text
+评分与证据层
+  -> 结构化维度评估 DTO
+  -> 业务语义解析层
+  -> Markdown / 飞书卡片渲染层
+```
+
+- 评分与证据层保留英文稳定 code、分数、证据引用和技术风险标记。
+- 结构化维度评估 DTO 分开保存结果等级、可评估状态、原因、业务影响和复核状态。
+- 业务语义解析层负责把技术 code 转成版本化中文名称、解释和业务动作边界。
+- 渲染层只组合已经解析的中文句块，不读取 `risk_flags`、`gate_reasons` 或 taxonomy code。
+
+### 20.2 统一业务语义对象
+
+```python
+@dataclass(frozen=True)
+class BusinessSemantic:
+    code: str
+    label_cn: str
+    explanation_cn: str
+    action_cn: str
+    display_level: Literal["business", "audit_only"] = "business"
+```
+
+公共 resolver 提供：
+
+- `resolve_business_semantic(code)`：严格解析公共风险、缺失和门槛原因；未知 code 抛出可审计错误。
+- `business_reason_labels(codes)`：输出去重后的中文原因列表。
+- `safe_business_label(code, taxonomy)`：从品类 taxonomy 或显式词典解析业务名称；不得回退原 code。
+- `assert_business_output_safe(text)`：发布前检查已知内部前缀和 snake_case，作为最后一道防线。
+
+结构化 JSON 继续保留原始 code；`short_answer`、`dashboard_payload` 的展示字段、Markdown 和飞书卡片只能使用 `*_cn` 或 `BusinessSemantic`。
+
+### 20.3 替代压力评估契约
+
+```python
+@dataclass(frozen=True)
+class ReplacementPressureAssessment:
+    score: int
+    level: Literal["high", "medium", "low", "very_low"]
+    assessment_status: Literal["supported", "limited", "not_assessable"]
+    primary_pressure_type: PressureType | None
+    auxiliary_pressure_types: tuple[PressureType, ...]
+    business_impact: Literal[
+        "direct_diversion",
+        "potential_diversion",
+        "observe_only",
+        "not_assessable",
+    ]
+    review_required: bool
+    result_cn: str
+    basis_cn: str
+    implication_cn: str
+    evidence_boundary_cn: str
+```
+
+设计约束：
+
+- 低分不再自动产生 `review_required`；是否复核由证据降级、冲突或画像缺失决定。
+- `low_pressure_review` 从压力类型中移除。低压力是 `level`，需复核是 `review_required`。
+- 无法确认明确压力来源时，`primary_pressure_type=None`，报告省略“压力来源”，不能虚构一种类型。
+- `strong_pressure_allowed` 只控制能否输出强替代影响，不控制是否展示低分。
+
+### 20.4 报告句块生成
+
+每个竞品的替代压力使用同一个句块结构：
+
+```text
+判断结果：{candidate} 对 {target} 的替代压力为{level_cn}（{score}/10）。
+判断依据：{basis_cn}
+业务含义：{implication_cn}
+证据边界：{evidence_boundary_cn}  # 仅 limited/not_assessable 时出现
+```
+
+渲染器不得自行添加“威胁”“因此最可能影响成交”等结论。业务影响完全由 `business_impact` 决定。
+
+### 20.5 Top 3 相对排名与绝对门槛
+
+`top3_eligible` 只表示可以进入当前候选 Top 3；`primary_direct_eligible` 和 `strong_pressure_allowed` 决定能否称为直接竞品或强压力。
+
+报告展示增加“竞争成立程度”：
+
+- `direct_confirmed`：成交理由可替代且压力达到强门槛。
+- `potential`：存在部分替代，但证据或压力未达到直接竞品门槛。
+- `observe_only`：同池或市场表现成立，但成交理由替代弱。
+- `not_assessable`：关键画像缺失，不能形成稳定替代判断。
+
+当 Top 3 全部为 `observe_only/not_assessable` 时，标题仍可使用“重点竞品 Top 3”，但结论必须写明“这是当前候选中的相对排序，尚未识别到已证实的强替代竞品”。
+
+### 20.6 报告内容收敛
+
+- 看板：Top 3、相对排名、竞争成立程度、替代压力和市场验证。
+- 分析结论：一段总判断，加每个竞品一条“为何入选 + 压力等级 + 证据边界”。
+- 分析过程：保留 2.1-2.9，每章只输出实际差异，不使用固定强结论文案。
+- 横向详细对比：保留市场、战场、任务、客群、成交理由、卖点和关键参数；同一信息不在产品画像再次完整复制。
+- 产品画像：作为第三章链接落点，只保留单品主项、差异项和证据缺口。
+- 完整卖点量化、逐场景重复明细和技术审计字段不进入产品经理主报告。
+
+### 20.7 测试设计
+
+1. `ReplacementPressureClassifier` 分别覆盖低分且证据充分、低分且证据受限、强压力三类。
+2. 报告快照覆盖 TV 和 AC，校验 Top 1 相对排名与绝对压力门槛。
+3. 所有显式 code 通过语义 resolver 解析；未知 code 测试必须失败关闭。
+4. 报告、卡片和短回答运行内部标识扫描；允许 SKU、型号、单位和产品正式英文名。
+5. 看板和正文市场销量从同一结构化字段读取。
+6. 中文标点规范化测试覆盖重复句号、`。；`、多余空格和产品名粘连。
+
+## 21. 产品经理业务对比报告详细设计
+
+### 21.1 与现有输出的关系
+
+现有 `short_answer` / 飞书卡片继续负责返回重点竞品结论，现有详细 Markdown / 飞书文档重新定位为分析佐证报告。新增独立的产品经理业务对比报告：
+
+```text
+已发布单 SKU 画像 + M12C + M12D + pair 级竞品评估
+    -> PMComparisonAssembler
+    -> PmComparisonReportDTO
+    -> PmBusinessLanguageResolver
+    -> Markdown / 飞书文档
+```
+
+`PMComparisonAssembler` 只做结构化读取、同口径归并和关系判断，不生成新的画像，不计算竞品排名，也不生产策略建议。M12D 仍由 M12D 生产链发布，竞品智能体只消费已发布版本。
+
+发布名称和返回字段固定为：
+
+| 输出物 | 标题模板 | 结构化返回字段 |
+| --- | --- | --- |
+| 飞书结论卡 | `{sku_name} 重点竞品结论` | `feishu_card_payload` |
+| 产品经理业务文档 | `{sku_name} 与重点竞品的用户选择对比报告` | `pm_comparison_report_url` |
+| 原详细分析文档 | `{sku_name} 重点竞品识别与分析依据报告` | `evidence_report_url` |
+
+`pm_comparison_report_url` 和 `evidence_report_url` 是两个不同文档的 URL，任一发布失败不得使用另一个 URL 冒充。结论卡应同时提供两个清晰命名的入口：“查看用户选择对比”和“查看分析依据”。
+
+### 21.2 报告 DTO
+
+```python
+@dataclass(frozen=True)
+class PmComparisonReportDTO:
+    target: PmProductHeader
+    competitors: tuple[PmProductHeader, PmProductHeader, PmProductHeader]
+    market_position: PmComparisonSection | None
+    product_capability: PmComparisonSection | None
+    user_choice_criteria: PmComparisonSection | None
+    usage_needs: PmComparisonSection | None
+    demand_audiences: PmComparisonSection | None
+    message_reception: PmComparisonSection | None
+    purchase_reasons: PmComparisonSection | None
+    substitution_summary: PmSubstitutionSection | None
+    value_delivery: tuple[PmValueDeliverySummary, ...]
+    evidence_report_url: str | None
+
+
+@dataclass(frozen=True)
+class PmComparisonSection:
+    title_cn: str
+    question_cn: str
+    rows: tuple[PmComparisonRow, ...]
+    common_ground_cn: str | None
+    key_difference_cn: str | None
+
+
+@dataclass(frozen=True)
+class PmComparisonRow:
+    label_cn: str
+    target_value: PmProductCell
+    competitor_values: tuple[PmProductCell, PmProductCell, PmProductCell]
+
+
+@dataclass(frozen=True)
+class PmProductCell:
+    display_cn: str
+    relation: Literal[
+        "primary", "supporting", "observed", "not_formed", "not_assessable"
+    ]
+    evidence_refs: tuple[str, ...]
+```
+
+`evidence_refs` 供链接和审计使用，不直接渲染为正文。任何没有中文 `display_cn` 的单元格不得发布。
+
+### 21.3 内部画像到业务章节的映射
+
+| DTO 章节 | 产品经理可见标题 | 输入 | 归并方式 |
+| --- | --- | --- | --- |
+| `market_position` | 四款产品分别卖多少钱、卖得怎么样 | M07 | 同市场池时横比价格、周均销量、排名和份额；不同池只展示各自位置并明确不可直接比较 |
+| `product_capability` | 四款产品真正强在哪里 | M03B/M04C 参数与事实层 | 只选能形成差异的关键参数和功能主题，通用门槛单列为共同能力 |
+| `user_choice_criteria` | 用户购买这类产品时主要比较什么 | M08/M11C 价值战场画像 | 用重点/支撑关系形成统一主题行，不展示 code、权重和销量空间技术提示 |
+| `usage_needs` | 用户买回去主要解决什么问题 | M09C 用户任务画像 | 区分主任务、辅助任务和观察任务，不把任务直接写成购买理由 |
+| `demand_audiences` | 哪些用户需求更容易被产品吸引 | M10C 目标客群画像 | 把客群翻译成需求型描述，过滤无证据的人口学标签 |
+| `message_reception` | 产品重点讲什么，用户实际理解了什么 | M05C/M11D 卖点画像与评论感知 | 每款产品分成重点表达、用户正向感知、稳定反向反馈三行 |
+| `purchase_reasons` | 用户为什么会选择四款产品 | M12D | 展示核心、辅助、未形成理由及证据状态，不展示锚点 code |
+| `substitution_summary` | 用户在四款产品之间会怎样取舍 | pair 级替代压力 | 保留本品基准，三款竞品各占一行，统一展示重合理由、竞品额外理由、本品保留差异和替代程度 |
+
+M12C 不单独生成“卖点值多少钱”章节。它只用于增强 `product_capability`、`message_reception` 和 `purchase_reasons` 中的商业价值证据，并明确区分基础门槛、相对优势和弱表达。观察性价格/销量差不得渲染为用户愿付金额。
+
+### 21.4 横向比较与纵向一致性
+
+报告使用两个互补视角：
+
+1. 横向比较：固定四个产品列，在同一个业务问题下比较共同点和差异。
+2. 纵向一致性：逐产品检查事实、表达、用户感知和购买理由是否围绕同一标准购买理由族连贯。
+
+纵向一致性使用标准购买理由族作为主题归一键，但报告只显示中文业务理由。不得仅凭关键词相同认定链路成立，至少满足：
+
+- 产品事实与卖点表达映射到同一标准理由族。
+- 用户感知证据与该理由族语义一致，不是泛化好评。
+- “形成购买理由”必须读取 M12D 已发布核心或辅助理由，不能由报告层推导。
+- 反向评论只影响对应主题，不得把单一主题风险扩展为整机负面判断。
+
+市场表现只在纵向结果右侧并列显示：
+
+```text
+事实 -> 表达 -> 用户感知 -> 购买理由    | 价格、周均销量、池内位置
+```
+
+渲染器不得生成“因为该购买理由所以销量高”或“销量低证明卖点无效”的因果句。
+
+### 21.5 业务状态判定
+
+```python
+ValueDeliveryState = Literal[
+    "complete",          # 事实、表达、正向感知、M12D 理由完整
+    "perceived",         # 事实与正向感知成立，M12D 理由未形成
+    "message_only",      # 事实与表达成立，用户侧未形成稳定感知
+    "experience_divided",# 同主题存在稳定反向证据
+    "not_assessable",    # 关键输入缺失
+]
+```
+
+一个产品可以在不同购买理由族上处于不同状态，不生成整机总分。产品经理报告显示具体主题状态，例如“高亮度画质已被用户感知”，不得显示一个无法解释的综合“传达效率 76 分”。
+
+横向结论只允许使用以下五类句式：
+
+- 共同点：四款都具备或共同重点承接的内容。
+- 本品差异：本品有证据支持、其他三款未同时具备的内容。
+- 竞品差异：某款竞品有证据支持、本品未形成的内容。
+- 体验分歧：产品表达与稳定反向感知同时存在的内容。
+- 暂不能判断：关键输入不足，整行或整章不发布结论。
+
+### 21.6 报告目录与渲染
+
+```text
+# {本品型号} 与重点竞品的用户选择对比
+
+## 一、四款产品分别卖多少钱、卖得怎么样
+## 二、四款产品真正强在哪里
+## 三、用户购买这类产品时主要比较什么
+## 四、用户买回去主要解决什么问题
+## 五、哪些用户需求更容易被各款产品吸引
+## 六、产品重点讲什么，用户实际理解了什么
+## 七、用户为什么会选择四款产品
+## 八、用户在四款产品之间会怎样取舍
+## 九、四款产品的用户价值是否传达完整
+```
+
+渲染规则：
+
+- 第一屏先展示四款产品总览，不出现竞品评分和入选过程。
+- 每个核心章节只有一张四产品横向表；本品列保持固定位置和视觉强调。
+- 每张表后最多两句结论，先写共同点，再写差异。
+- `not_assessable` 单元格超过两个产品时，整行省略；某章没有至少两行有效比较时，整章省略。
+- 目标客群只显示需求型名称，不显示推测的人口属性。
+- 替代关系虽然来自 pair 级计算，但三款竞品合并展示在一张表内。
+- 详细评分、门槛、证据计数和候选池不进入正文；报告底部只保留“查看分析依据”链接。
+- 不生成“应保持、应补强、应降价、建议验证、销量追赶”等策略章节。
+
+### 21.7 海信 65E7Q 样例首屏口径
+
+首屏总览使用四列，不把三个竞品合并为一个“竞品表现”：
+
+| 业务问题 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |
+| --- | --- | --- | --- | --- |
+| 价格和周均销量 | 5,949 元；251 台 | 5,637 元；217 台 | 5,522 元；194 台 | 4,415 元；322 台 |
+| 产品事实最突出的部分 | 5200nit、芯片、AI 画质、杜比、护眼 | 量子点 MiniLED、贴墙、纤薄、材质 | 4500nit、量子点 MiniLED、AI 能力、贴墙 | 2016 分区、量子点 MiniLED、300Hz、贴墙与游戏 |
+| 主要承接的用户选择 | 高端画质、体育游戏、观看舒适 | 高端画质、智能体验、观看舒适 | 高端画质、智能体验、体育游戏 | 高端画质、客厅综合体验、体育游戏 |
+| 用户主要使用需求 | 影院沉浸、高端画质、体育观看 | 高端画质、日常客厅、护眼 | 高端画质、护眼、智能控制 | 影院沉浸、高端画质、体育观看 |
+| 卖点接收情况 | 多项核心卖点有正向感知，当前未识别到稳定反向主题 | 贴墙和影院体验存在正反分歧 | HDR、MiniLED 和影院体验存在正反分歧 | 多项核心卖点有正向感知，当前未识别到稳定反向主题 |
+
+该总览只使用当前已有稳定证据。M12D 核心/辅助购买理由和替代程度必须读取对应已发布记录后再补入，不能沿用旧报告中的抽象兜底句。
+
+### 21.8 验收测试设计
+
+1. TV 和 AC 各生成一份产品经理报告快照，验证目录使用业务问题而非内部维度名。
+2. 快照固定包含一个本品列和三个独立竞品列，不允许出现合并的“竞品表现”列。
+3. 缺少目标客群或 M12D 的样例必须省略无效章节，不输出空表或泛化兜底结论。
+4. 同一主题分别出现在价值战场、用户任务和 M12D 时，快照必须呈现三种不同业务含义。
+5. 四款都具备的基础参数不得被标成某一款独有优势。
+6. 正向感知、反向感知和 M12D 购买理由必须来自不同结构化字段，禁止相互代填。
+7. 报告不得出现竞品排序过程、维度分数、内部 code、策略建议、销量预测和因果性销量解释。
+8. 产品经理报告与分析佐证报告分别发布，两个 URL 均可从结构化结果读取。

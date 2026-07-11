@@ -856,6 +856,7 @@ def _attach_purchase_reason_pair_scores(
                 limitations=[message],
                 message_cn=message,
             )
+        target_purchase_reason_profile = _m12d_business_profile_summary(target_contract)
         candidate_summaries: list[dict[str, Any]] = []
         requires_review_count = 0
         found_candidate_count = 0
@@ -874,6 +875,8 @@ def _attach_purchase_reason_pair_scores(
             )
             if candidate_contract.found:
                 found_candidate_count += 1
+            item["target_purchase_reason_profile"] = target_purchase_reason_profile
+            item["candidate_purchase_reason_profile"] = _m12d_business_profile_summary(candidate_contract)
             anchor_result = matcher.match(
                 target_contract=target_contract,
                 candidate_contract=candidate_contract,
@@ -1057,6 +1060,53 @@ def _m12d_contract_summary(contract: Any) -> dict[str, Any]:
         "downstream_action": contract.downstream_action,
         "profile_confidence": float(profile.profile_confidence) if profile is not None and profile.profile_confidence is not None else None,
         "degradation_reasons": list(profile.degradation_reasons) if profile is not None else [],
+    }
+
+
+def _m12d_business_profile_summary(contract: Any) -> dict[str, Any]:
+    profile = contract.profile
+    if not contract.found or profile is None:
+        return {
+            "found": False,
+            "consumption_state": contract.consumption_state,
+            "core_reasons_cn": [],
+            "supporting_reasons_cn": [],
+            "weak_expression_reasons_cn": [],
+            "risk_drag_reasons_cn": [],
+            "anchors": [],
+        }
+    anchor_index = {str(anchor.anchor_code): anchor for anchor in profile.anchors}
+
+    def enum_value(value: Any) -> str:
+        return str(getattr(value, "value", value))
+
+    def names(codes: list[str]) -> list[str]:
+        return [
+            str(anchor_index[code].anchor_cn)
+            for code in codes
+            if code in anchor_index and str(anchor_index[code].anchor_cn).strip()
+        ]
+
+    anchors = [
+        {
+            "anchor_cn": str(anchor.anchor_cn),
+            "role": enum_value(anchor.role),
+            "evidence_strength": enum_value(anchor.evidence_strength),
+            "evidence_domains": [enum_value(value) for value in anchor.evidence_domains],
+            "support_summary_cn": str(anchor.support_summary_cn or ""),
+            "weakness_summary_cn": str(anchor.weakness_summary_cn or ""),
+        }
+        for anchor in profile.anchors
+    ]
+    return {
+        "found": True,
+        "consumption_state": contract.consumption_state,
+        "profile_confidence": float(profile.profile_confidence),
+        "core_reasons_cn": list(profile.core_reasons_cn),
+        "supporting_reasons_cn": names(list(profile.supporting_anchors)),
+        "weak_expression_reasons_cn": names(list(profile.weak_expression_anchors)),
+        "risk_drag_reasons_cn": names(list(profile.risk_drag_anchors)),
+        "anchors": anchors,
     }
 
 

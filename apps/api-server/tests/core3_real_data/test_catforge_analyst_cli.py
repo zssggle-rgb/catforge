@@ -4053,6 +4053,15 @@ def test_ac_competitor_set_consumes_published_m12d_without_tv_fallback() -> None
     assert "舒适健康体验值得多花钱" in markdown
     assert "MiniLED" not in markdown
     assert "影院沉浸观影" not in markdown
+    pm_markdown = result["result"]["competitor_answer"]["pm_comparison_report_payload"]["markdown"]
+    assert pm_markdown.startswith("# 美的 KFR-88LW/N8KS1-1U 与重点竞品的用户选择对比报告")
+    assert "## 七、用户为什么会选择" in pm_markdown
+    assert "## 八、用户在" in pm_markdown
+    assert "## 九、本品与重点竞品的用户价值是否传达完整" in pm_markdown
+    assert "大空间快速冷暖" in pm_markdown
+    assert "舒适健康体验值得多花钱" in pm_markdown
+    assert "低替代压力复核" not in pm_markdown
+    assert "risk_flags" not in pm_markdown
 
 
 def test_semantic_overlap_returns_task_group_battlefield_matches() -> None:
@@ -4536,7 +4545,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert answer["top_competitors"][0]["role"] == "primary_direct"
     assert answer["top_competitors"][0]["weighted_overlap"]["target_group"] >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
     markdown = answer["report_payload"]["markdown"]
-    assert markdown.startswith("# 海信 65E7Q 重点竞品分析报告")
+    assert markdown.startswith("# 海信 65E7Q 重点竞品识别与分析依据报告")
     assert "## 重点竞品看板" in markdown
     assert markdown.index("## 重点竞品看板") < markdown.index("## 一、分析结论")
     dashboard_section = markdown.split("## 一、分析结论", 1)[0]
@@ -4801,7 +4810,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert competitor["score_cn"] == "82分"
     assert competitor["strength_cn"] == "强重合"
     assert competitor["action_links"][0]["url"] == "https://my.feishu.cn/docx/ReportToken"
-    assert dashboard["report_evidence_links"] == [{"label": "完整竞品分析报告", "url": "https://my.feishu.cn/docx/ReportToken", "type": "report"}]
+    assert dashboard["report_evidence_links"] == [{"label": "查看分析依据", "url": "https://my.feishu.cn/docx/ReportToken", "type": "evidence_report"}]
     assert {row["dimension_cn"] for row in competitor["overlap_rows"]} == {"价值战场", "用户任务", "目标客群"}
     assert all("重合" in row["strength_cn"] for row in competitor["overlap_rows"])
     assert all("impact_cn" in row for row in competitor["overlap_rows"])
@@ -4810,7 +4819,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
 
     card = competitor_answer.render_feishu_card_payload(dashboard)
     card_json = json.dumps(card, ensure_ascii=False)
-    assert "查看完整报告" in card_json
+    assert "查看分析依据" in card_json
     assert "https://my.feishu.cn/docx/ReportToken" in card_json
     assert '"tag": "action"' not in card_json
     assert [element["tag"] for element in card["body"]["elements"]] == [
