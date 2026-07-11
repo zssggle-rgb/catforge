@@ -1,0 +1,331 @@
+{
+  "contract_version": "sellpoint_value_pm_v5_contract_v1",
+  "implementation_target": "Pydantic v2; extra=forbid; deterministic canonical hashing",
+  "reuse": {
+    "v4_models": ["EvidenceRef", "SourceAuthority", "LineageGate", "SkuIdentity", "MarketCellRow", "SkuEvidenceSnapshot", "SellpointBundle"],
+    "rule": "V5 composes or extends V4 typed context; it does not copy upstream snapshot schemas"
+  },
+  "enums": {
+    "Availability": ["present", "missing"],
+    "Usability": ["usable", "limited", "unusable"],
+    "AnalysisState": ["ready", "partial", "blocked"],
+    "ValueStatus": ["observed_positive", "observed_mixed", "observed_negative", "partial", "not_observed", "conflicted", "unknown"],
+    "MeasureStatus": ["available", "degraded", "blocked", "unidentifiable", "not_applicable"],
+    "CounterfactualQuestion": ["user_realization", "relative_highlight", "without_value_baseline", "price_realization", "volume_realization", "strict_bundle_price_interval", "battlefield_portfolio"],
+    "CounterfactualMethod": ["direct_sku", "same_budget_pool", "same_brand_size_ladder", "param_tier_pool", "same_claim_realization", "own_price_curve", "market_synthetic", "performance_archetype"],
+    "CandidateStage": ["recalled", "screened", "eligible", "rejected"],
+    "ComparabilityGrade": ["A", "B", "C", "unusable"],
+    "HighlightType": ["user_realization", "relative_value", "price_realization", "volume_realization"],
+    "BattlefieldMembership": ["primary", "secondary", "opportunity", "user_observed", "drag", "excluded"],
+    "BattlefieldOptionType": ["strengthen_existing", "expand_excluded"],
+    "StrengthenPath": ["communication_activation", "capability_completion", "market_activation", "portfolio_priority", "maintain_or_cap"],
+    "ExpansionStage": ["recalled", "eligible", "rejected", "deferred_unknown"],
+    "GapChangeType": ["communication", "capability", "price", "size", "product_form", "unknown"],
+    "IncrementClaimType": ["current_allocation", "observational_gross", "observational_cannibalization", "observational_net"],
+    "AmountMethod": ["none", "matched_equal_choice_price_gap"],
+    "ArchetypeRole": ["high_performance", "neutral", "low_performance", "unstable"]
+  },
+  "models": {
+    "SellpointValueV5Context": {
+      "required": ["schema_version", "project_id", "category_code", "v4_context", "market_universe", "battlefield_taxonomy", "method_configs", "input_hash"],
+      "fields": {
+        "schema_version": "literal:sellpoint_value_v5_context_v1",
+        "project_id": "str",
+        "category_code": "str",
+        "v4_context": "SellpointValueV4Context",
+        "market_universe": "list[SkuEvidenceSnapshot]",
+        "battlefield_taxonomy": "list[BattlefieldDefinitionSnapshot]",
+        "method_configs": "MethodConfigManifest",
+        "source_authorities": "list[SourceAuthority]",
+        "evidence_refs": "list[EvidenceRef]",
+        "input_hash": "sha256"
+      }
+    },
+    "CounterfactualCandidate": {
+      "required": ["method", "question", "stage", "candidate_key", "provenance", "control_dimensions", "reject_reasons"],
+      "fields": {
+        "method": "CounterfactualMethod",
+        "question": "CounterfactualQuestion",
+        "stage": "CandidateStage",
+        "candidate_key": "str",
+        "candidate_sku_codes": "list[str]",
+        "provenance": "str",
+        "value_tier_relation": "lower|same|higher|unknown",
+        "control_dimensions": "dict[str,object]",
+        "common_week_count": "int>=0",
+        "common_platform_count": "int>=0",
+        "observed_price_overlap": "float[0,1]|null",
+        "other_bundle_difference_count": "int>=0|null",
+        "promotion_suspect": "bool|null",
+        "inventory_status": "unknown|available|unavailable",
+        "comparability_grade": "ComparabilityGrade|null",
+        "eligible_measures": "list[str]",
+        "reject_reasons": "list[str]",
+        "sample_manifest_hash": "sha256|null",
+        "source_refs": "list[EvidenceRef]"
+      }
+    },
+    "CounterfactualSet": {
+      "required": ["bundle_code", "question", "candidates", "highest_available_method", "selection_reasons", "set_hash"],
+      "fields": {
+        "bundle_code": "str",
+        "question": "CounterfactualQuestion",
+        "candidates": "list[CounterfactualCandidate]",
+        "highest_available_method": "CounterfactualMethod|null",
+        "selection_reasons": "list[str]",
+        "degradation_reasons": "list[str]",
+        "set_hash": "sha256"
+      }
+    },
+    "BalanceMetric": {
+      "required": ["covariate_code", "before_smd", "after_smd", "status"],
+      "fields": {
+        "covariate_code": "str",
+        "before_smd": "float|null",
+        "after_smd": "float|null",
+        "status": "balanced|limited|failed|unknown"
+      }
+    },
+    "SyntheticControlResult": {
+      "required": ["status", "target_sku_code", "bundle_code", "donor_weights", "balance", "diagnostics", "causal_claim", "result_hash"],
+      "fields": {
+        "status": "MeasureStatus",
+        "target_sku_code": "str",
+        "bundle_code": "str",
+        "donor_weights": "dict[str,float[0,1]]",
+        "effective_donor_count": "float|null",
+        "balance": "list[BalanceMetric]",
+        "observed_window": "dict",
+        "price_difference": "IntervalEstimate|null",
+        "sales_difference": "IntervalEstimate|null",
+        "share_difference": "IntervalEstimate|null",
+        "amount_difference": "IntervalEstimate|null",
+        "diagnostics": "SyntheticDiagnostics",
+        "limitations": "list[str]",
+        "causal_claim": "literal:false",
+        "method_config_version": "str",
+        "sample_manifest_hash": "sha256",
+        "result_hash": "sha256"
+      }
+    },
+    "SyntheticDiagnostics": {
+      "required": ["donor_count", "max_weight", "overlap_pass", "balance_pass", "leave_one_sign_consistency", "placebo_percentile", "gate_pass"],
+      "fields": {
+        "donor_count": "int>=0",
+        "max_weight": "float[0,1]|null",
+        "overlap_pass": "bool",
+        "balance_pass": "bool",
+        "leave_one_sign_consistency": "float[0,1]|null",
+        "placebo_percentile": "float[0,1]|null",
+        "common_week_count": "int>=0",
+        "common_platform_count": "int>=0",
+        "gate_pass": "bool",
+        "failed_gates": "list[str]"
+      }
+    },
+    "PerformanceArchetype": {
+      "required": ["role", "metric", "sku_count", "bundle_prevalence", "stability", "causal_claim", "result_hash"],
+      "fields": {
+        "role": "ArchetypeRole",
+        "metric": "log1p_sales_residual|choice_share_residual",
+        "sku_count": "int>=0",
+        "representative_sku_codes": "list[str]",
+        "bundle_prevalence": "dict[str,float[0,1]]",
+        "user_outcome_prevalence": "dict[str,float[0,1]]",
+        "price_interval": "IntervalEstimate|null",
+        "volume_interval": "IntervalEstimate|null",
+        "residual_interval": "IntervalEstimate|null",
+        "stability": "float[0,1]",
+        "limitations": "list[str]",
+        "causal_claim": "literal:false",
+        "method_config_version": "str",
+        "sample_manifest_hash": "sha256",
+        "result_hash": "sha256"
+      }
+    },
+    "IntervalEstimate": {
+      "required": ["estimate", "low", "high", "unit", "observational"],
+      "fields": {
+        "estimate": "float|null",
+        "low": "float|null",
+        "high": "float|null",
+        "unit": "str",
+        "observational": "bool",
+        "currency": "str|null"
+      }
+    },
+    "PriceRealization": {
+      "required": ["status", "current_price", "market_position", "strict_bundle_interval", "limitations"],
+      "fields": {
+        "status": "MeasureStatus",
+        "current_price": "float|null",
+        "market_position": "dict",
+        "direct_and_pool_gaps": "list[dict]",
+        "own_price_curve": "dict|null",
+        "strict_bundle_interval": "BundlePriceInterval|null",
+        "limitations": "list[str]"
+      }
+    },
+    "VolumeRealization": {
+      "required": ["status", "raw_market_position", "controlled_residual", "synthetic_difference", "limitations"],
+      "fields": {
+        "status": "MeasureStatus",
+        "raw_market_position": "dict",
+        "controlled_residual": "IntervalEstimate|null",
+        "synthetic_difference": "IntervalEstimate|null",
+        "choice_association": "dict|null",
+        "limitations": "list[str]"
+      }
+    },
+    "BattlefieldAllocation": {
+      "required": ["battlefield_code", "allocated_sales_volume", "allocated_sales_amount", "allocation_weight", "incremental", "source_lineage_hash"],
+      "fields": {
+        "battlefield_code": "str",
+        "allocated_sales_volume": "float|null",
+        "allocated_sales_amount": "float|null",
+        "allocation_weight": "float[0,1]|null",
+        "incremental": "literal:false",
+        "source_lineage_hash": "sha256",
+        "lineage_status": "str"
+      }
+    },
+    "IncrementDecomposition": {
+      "required": ["gross_status", "cannibalization_status", "net_status", "gross", "cannibalization", "net", "claim_types"],
+      "fields": {
+        "gross_status": "MeasureStatus",
+        "cannibalization_status": "MeasureStatus",
+        "net_status": "MeasureStatus",
+        "gross": "IntervalEstimate|null",
+        "cannibalization": "IntervalEstimate|null",
+        "net": "IntervalEstimate|null",
+        "claim_types": "list[IncrementClaimType]",
+        "overlap_risk": "unknown|low|medium|high",
+        "limitations": "list[str]",
+        "causal_claim": "literal:false"
+      }
+    },
+    "BundlePriceInterval": {
+      "required": ["status", "method", "estimate", "gate_results", "causal_claim", "psychological_max_price"],
+      "fields": {
+        "status": "MeasureStatus",
+        "method": "AmountMethod",
+        "estimate": "IntervalEstimate|null",
+        "reference_price": "float|null",
+        "pair_count": "int>=0",
+        "model_family_count": "int>=0",
+        "gate_results": "dict[str,bool]",
+        "limitations": "list[str]",
+        "causal_claim": "literal:false",
+        "psychological_max_price": "literal:false",
+        "method_config_version": "str"
+      }
+    },
+    "ExpansionGap": {
+      "required": ["gap_code", "change_type", "mutable_in_scope", "status", "evidence"],
+      "fields": {
+        "gap_code": "str",
+        "change_type": "GapChangeType",
+        "mutable_in_scope": "bool",
+        "status": "present|missing|unknown|blocking",
+        "evidence": "list[EvidenceRef]"
+      }
+    },
+    "ExpansionEligibility": {
+      "required": ["stage", "current_membership", "immutable_market_gate_pass", "gaps", "donor_count", "eligible", "reasons"],
+      "fields": {
+        "stage": "ExpansionStage",
+        "current_membership": "literal:excluded",
+        "immutable_market_gate_pass": "bool|null",
+        "task_group_adjacency": "float[0,1]|null",
+        "gaps": "list[ExpansionGap]",
+        "donor_count": "int>=0",
+        "overlap_risk": "unknown|low|medium|high",
+        "eligible": "bool",
+        "reasons": "list[str]"
+      }
+    },
+    "BattlefieldPortfolioOption": {
+      "required": ["option_type", "battlefield_code", "current_membership", "market_space", "evidence_boundary"],
+      "fields": {
+        "option_type": "BattlefieldOptionType",
+        "battlefield_code": "str",
+        "current_membership": "BattlefieldMembership",
+        "strengthen_path": "StrengthenPath|null",
+        "expansion_eligibility": "ExpansionEligibility|null",
+        "market_space": "dict",
+        "current_allocation": "BattlefieldAllocation|null",
+        "price_reference": "PriceRealization|null",
+        "volume_reference": "VolumeRealization|null",
+        "increment": "IncrementDecomposition|null",
+        "evidence_boundary": "str",
+        "limitations": "list[str]"
+      }
+    },
+    "ValueHighlight": {
+      "required": ["highlight_type", "bundle_code", "title_cn", "reason_cn", "comparison_basis_cn", "evidence_boundary_cn"],
+      "fields": {
+        "highlight_type": "HighlightType",
+        "bundle_code": "str",
+        "title_cn": "str",
+        "reason_cn": "str",
+        "comparison_basis_cn": "str",
+        "price_realization_cn": "str|null",
+        "volume_realization_cn": "str|null",
+        "evidence_boundary_cn": "str",
+        "internal_rank_components": "dict[str,float]"
+      }
+    },
+    "ValueAccountRow": {
+      "required": ["battlefield", "perceived_user_value", "sellpoint_bundle", "value_status", "counterfactual_summary_cn", "price_realization", "volume_realization", "boundary_cn"],
+      "fields": {
+        "battlefield": "dict",
+        "perceived_user_value": "dict",
+        "sellpoint_bundle": "SellpointBundle",
+        "value_status": "ValueStatus",
+        "highlight_types": "list[HighlightType]",
+        "counterfactual_sets": "list[CounterfactualSet]",
+        "counterfactual_summary_cn": "str",
+        "price_realization": "PriceRealization",
+        "volume_realization": "VolumeRealization",
+        "battlefield_allocation": "BattlefieldAllocation|null",
+        "increment": "IncrementDecomposition|null",
+        "boundary_cn": "str",
+        "confidence_label_cn": "str",
+        "limitations": "list[str]",
+        "source_refs": "list[EvidenceRef]"
+      }
+    },
+    "PmDecisionSummary": {
+      "required": ["highlights", "price_summary_cn", "volume_summary_cn", "existing_battlefield_summary_cn", "expansion_summary_cn"],
+      "fields": {
+        "highlights": "list[ValueHighlight]; length 0..3",
+        "no_highlight_reason_cn": "str|null",
+        "price_summary_cn": "str",
+        "volume_summary_cn": "str",
+        "existing_battlefield_summary_cn": "str",
+        "expansion_summary_cn": "str"
+      }
+    },
+    "SkuPerceivedValueMarketRealizationReport": {
+      "required": ["schema_version", "target", "analysis_state", "decision_summary", "value_account_rows", "market_reference", "battlefield_options", "overall_boundary_cn", "audit", "result_hash"],
+      "fields": {
+        "schema_version": "literal:sellpoint_value_pm_v5_report_v1",
+        "target": "SkuIdentity",
+        "analysis_state": "AnalysisState",
+        "decision_summary": "PmDecisionSummary",
+        "value_account_rows": "list[ValueAccountRow]",
+        "market_reference": "dict containing synthetic baseline and high/low archetypes",
+        "battlefield_options": "list[BattlefieldPortfolioOption]",
+        "overall_boundary_cn": "str",
+        "data_scope_cn": "str",
+        "audit": "dict",
+        "result_hash": "sha256"
+      }
+    }
+  },
+  "hash_contract": {
+    "input_hash": "sha256(canonical V4 context hash + market universe hashes + taxonomy hash + method configs)",
+    "result_hash": "sha256(canonical business DTO excluding generated_at and delivery URLs)",
+    "ordering": "all sets, candidates, refs and business rows use explicit stable keys"
+  }
+}
