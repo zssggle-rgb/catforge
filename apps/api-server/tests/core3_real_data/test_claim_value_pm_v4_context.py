@@ -58,6 +58,27 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
 ) -> None:
     session = SessionLocal()
     statements: list[str] = []
+    pending_profile = entities.Core3SkuMarketProfile(
+        project_id="g08-pending-probe",
+        category_code="TV",
+        batch_id="g08-pending-batch",
+        sku_code="TVG08PENDING",
+        brand_name="probe",
+        model_name="probe",
+        analysis_window="full_observed_window",
+        screen_size_inch=Decimal("65"),
+        size_segment="size_65_75",
+        price_band_size="premium",
+        active_week_count=1,
+        market_row_count=1,
+        platform_count=1,
+        promotion_suspect_flag=False,
+        input_fingerprint="g08-pending",
+        result_hash="g08-pending",
+        rule_version=CORE3_M07_RULE_VERSION,
+        is_current=True,
+    )
+    session.add(pending_profile)
 
     def capture_statement(
         _conn, _cursor, statement, _parameters, _context, _executemany
@@ -101,6 +122,7 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
             ],
         )
         multi_candidate_query_count = len(statements)
+        pending_remained_unflushed = pending_profile in session.new
     finally:
         event.remove(session.bind, "before_cursor_execute", capture_statement)
         session.close()
@@ -113,6 +135,7 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
     assert multi_candidate_query_count == single_candidate_query_count
     assert set(sql_verbs) <= {"SELECT", "PRAGMA"}
     assert not {"INSERT", "UPDATE", "DELETE"} & set(sql_verbs)
+    assert pending_remained_unflushed is True
     assert context.target.sku_code == "TV00029112"
     assert context.target_snapshot.identity.model_name == "65E7Q"
     assert context.lineage_gate.status == "unresolved"

@@ -18,7 +18,7 @@
 | Market-cell bounded trim 与 M11D sample weight | completed |
 | Q5 config v2 + deterministic cluster bootstrap | completed |
 | Pure negative / mixed / data conflict 分离 | completed |
-| Frozen cohort/hash 真回放 | pending |
+| Frozen cohort/hash 真回放 | completed |
 | 309+ 回归、覆盖率、性能和三审 | pending |
 
 ## 停止条件
@@ -52,3 +52,7 @@
 - bootstrap seed 只来自 input hash、relation hash、candidate SKU 和 config version，同输入完整结果相同；bootstrap 不稳时金额为空；
 - 市场空间主表新增尺寸档、观察窗口和实际平台覆盖；schema/service 过时阶段说明已修正；
 - G08R1 schema contract addendum 已落盘；V4 全量 87 passed，新增/修改 V4 文件 Ruff passed。
+- 新增 frozen cohort 专属测试，先用 G01 artifact manifest 校验整个 cohort manifest SHA-256，再逐条消费实际 SKU、尺寸、战场、参数档位、时间周数和版本字段；
+- C01 candidate-only、C02 same-value-only、C03 bundle-only、C04 single-week、C05 version conflict 均按 frozen payload 回放；不再用只核对 ID 后另造无关样例冒充回放；
+- pending SessionLocal entity 在 V4 查询后仍保持 unflushed，SQL 仍只有 SELECT/PRAGMA，read-only 运行边界有显式回归；
+- frozen cohort + counterfactual + quantification 39 passed；context 12 passed。
