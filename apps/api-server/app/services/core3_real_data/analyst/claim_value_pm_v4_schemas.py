@@ -1,8 +1,8 @@
 """Typed read-only context contracts for sellpoint value analysis V4.
 
-G03 intentionally stops at observable facts, source authority, and lineage.
-Business linkage, counterfactual roles, quantification, and rendering belong to
-later goals and must not be added to this module during G03.
+The module grows by approved goal: G03 owns observable context and lineage;
+G04 adds reason/value/bundle linkage. Counterfactuals, quantification, and
+rendering remain outside the G04 boundary.
 """
 
 from __future__ import annotations
@@ -17,6 +17,9 @@ Usability = Literal["usable", "limited", "unusable"]
 IssueSeverity = Literal["info", "warning", "blocking"]
 LineageStatus = Literal["aligned", "stale_revalidated", "stale_conflict", "unresolved"]
 AuthorityMode = Literal["published_release", "configured_rule", "fallback"]
+ValueStatus = Literal["established", "partial", "not_observed", "conflicted"]
+LinkStatus = Literal["supported", "partial", "conflicted", "insufficient"]
+BusinessTier = Literal["unknown", "base", "enhanced", "premium", "flagship"]
 
 
 class SellpointValueV4BaseModel(BaseModel):
@@ -183,6 +186,48 @@ class ComparablePoolTierFact(SellpointValueV4BaseModel):
         return self
 
 
+class BundleMember(SellpointValueV4BaseModel):
+    capability_code: str = Field(min_length=1)
+    capability_name_cn: str = Field(min_length=1)
+    fact_status: Literal["confirmed", "partial", "conflict", "unknown"]
+    business_tier: BusinessTier
+    fact_summary_cn: str = ""
+    user_result_support: str = "not_observed"
+    source_refs: list[EvidenceRef] = Field(default_factory=list)
+
+
+class SellpointBundle(SellpointValueV4BaseModel):
+    bundle_code: str = Field(min_length=1)
+    bundle_name_cn: str = Field(min_length=1)
+    bundle_family: str = Field(min_length=1)
+    business_tier: BusinessTier
+    members: list[BundleMember]
+    collinearity_group: str | None = None
+    independently_identifiable: bool = False
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ReasonValueBundleLink(SellpointValueV4BaseModel):
+    battlefield_code: str = Field(min_length=1)
+    battlefield_name_cn: str = ""
+    battlefield_market_space: dict[str, Any] | None = None
+    purchase_reason_code: str = Field(min_length=1)
+    purchase_reason_name_cn: str = ""
+    purchase_reason_family: str | None = None
+    purchase_reason_source_status: LineageStatus = "unresolved"
+    realized_value_code: str = Field(min_length=1)
+    realized_value_name_cn: str = ""
+    scenario_cn: str = ""
+    outcome_cn: str = ""
+    bundle: SellpointBundle
+    link_status: LinkStatus
+    value_status: ValueStatus
+    evidence_domains: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    source_refs: list[EvidenceRef] = Field(default_factory=list)
+    relation_hash: str = Field(min_length=1)
+
+
 class SellpointValueV4Context(SellpointValueV4BaseModel):
     schema_version: Literal["sellpoint_value_v4_context_v1"]
     project_id: str = Field(min_length=1)
@@ -216,12 +261,15 @@ class SellpointValueV4Context(SellpointValueV4BaseModel):
 
 
 __all__ = [
+    "BundleMember",
     "ComparablePoolTierFact",
     "EvidenceRef",
     "LineageGate",
     "LineageIssue",
     "MarketCellRow",
     "PurchaseReasonSnapshot",
+    "ReasonValueBundleLink",
+    "SellpointBundle",
     "SellpointValueV4Context",
     "SkuEvidenceSnapshot",
     "SkuIdentity",
