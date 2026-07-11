@@ -1,0 +1,38 @@
+{
+  "rc_version": "sellpoint-value-pm-v4-rc1-1653bff",
+  "source_commit": "1653bff5bf3eb1f66da262a5dcddd1203ccbc9bd",
+  "comparison_base_commit": "2a985f8",
+  "package": {
+    "filename": "sellpoint-value-pm-v4-rc1-1653bff.tar.gz",
+    "sha256": "8c1b62ddde63add4196cb424856a06269870c4720fbcba55a2d46b45d0925b95",
+    "bytes": 132256,
+    "runtime_file_count": 9
+  },
+  "comparison_change_summary": {
+    "file_count": 22,
+    "insertions": 1717,
+    "deletions": 62,
+    "runtime_files_changed": 4,
+    "test_files_changed": 7,
+    "artifact_and_review_files_changed": 11
+  },
+  "deployment_files": [
+    "apps/api-server/app/cli/catforge_analyst.py",
+    "apps/api-server/app/services/core3_real_data/analyst/ability_registry.py",
+    "apps/api-server/app/services/core3_real_data/analyst/analyst_repository.py",
+    "apps/api-server/app/services/core3_real_data/analyst/analyst_service.py",
+    "apps/api-server/app/services/core3_real_data/analyst/atomic_handlers.py",
+    "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_answer.py",
+    "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_schemas.py",
+    "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_service.py",
+    "apps/api-server/app/services/core3_real_data/analyst/sop_orchestrators.py"
+  ],
+  "deployment_rationale": "The RC carries nine complete runtime files from the closure commit because the 205 host does not yet contain the full G03-G07 runtime chain. Deployment is file-scoped and must not mirror the local dirty worktree.",
+  "guards": {
+    "feature_flag_default": false,
+    "natural_language_default_route": false,
+    "explicit_v4_only": true,
+    "database_writes_allowed": false,
+    "g10_allowed": false
+  }
+}
