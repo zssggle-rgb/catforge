@@ -7,4 +7,5 @@
 - 入口：`sellpoint-value-pm-v5 --enable-v5`，CLI pre-session 和 orchestrator pre-context 双门禁；自然语言默认路由保持 V2；
 - 测试：G07 15 passed；V5 68 passed；V4 related 40 passed；analyst CLI 88 passed；overall coverage 92%、answer 85%；ruff/compileall passed；
 - 复核：PM P0=0/P1=0/P2=2；engineering P0=0/P1=0/P2=2；
-- 当前状态：待精确提交、manifest/回执、删除定时器并关闭 Goal。
+- 主提交：`cad1bd48eae865111438c897884f2fd4cd94b19d`；
+- 当前状态：manifest/回执已生成，待关闭 Goal。
