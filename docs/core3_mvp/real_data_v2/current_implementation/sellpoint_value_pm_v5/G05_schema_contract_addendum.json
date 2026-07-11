@@ -1,0 +1,24 @@
+{
+  "addendum_version": "sellpoint_value_pm_v5_g05_battlefield_input_v1",
+  "new_model": "BattlefieldPortfolioInput",
+  "purpose": "Typed normalization boundary between M11C/M11D/market references and the portfolio optimizer.",
+  "required_fields": [
+    "battlefield_code",
+    "source_membership",
+    "user_value_status",
+    "claim_support",
+    "capability_status",
+    "capability_gaps",
+    "market_realization_status",
+    "role_capped",
+    "immutable_market_gate_pass",
+    "product_form_gate_pass",
+    "task_group_adjacency",
+    "donor_count",
+    "market_space",
+    "current_allocation",
+    "overlap_risk",
+    "lineage_blocking"
+  ],
+  "semantic_guard": "source_membership must equal membership derived from the locked target M11C snapshot; context wins and mismatch blocks."
+}

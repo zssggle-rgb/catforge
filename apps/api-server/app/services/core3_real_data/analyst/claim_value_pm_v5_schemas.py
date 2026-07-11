@@ -403,12 +403,40 @@ class ExpansionEligibility(SellpointValueV5BaseModel):
         if self.eligible and (
             self.immutable_market_gate_pass is not True
             or self.donor_count < 5
-            or any(gap.status == "blocking" or not gap.mutable_in_scope for gap in self.gaps)
+            or any(
+                gap.status == "blocking"
+                or (
+                    gap.status in {"missing", "unknown"}
+                    and not gap.mutable_in_scope
+                )
+                for gap in self.gaps
+            )
         ):
             raise ValueError("eligible expansion requires market gate, donors and mutable gaps")
         if not self.eligible and not self.reasons:
             raise ValueError("ineligible expansion requires reasons")
         return self
+
+
+class BattlefieldPortfolioInput(SellpointValueV5BaseModel):
+    battlefield_code: str = Field(min_length=1)
+    battlefield_name_cn: str = ""
+    source_membership: BattlefieldMembership
+    user_value_status: ValueStatus
+    claim_support: Literal["strong", "weak", "missing", "unknown"]
+    capability_status: Literal["complete", "partial", "missing", "unknown"]
+    capability_gaps: list[ExpansionGap]
+    market_realization_status: MeasureStatus
+    role_capped: bool
+    immutable_market_gate_pass: bool | None
+    product_form_gate_pass: bool | None
+    task_group_adjacency: float | None = Field(ge=0.0, le=1.0)
+    donor_count: int = Field(ge=0)
+    market_space: dict[str, Any]
+    current_allocation: BattlefieldAllocation | None
+    overlap_risk: Literal["unknown", "low", "medium", "high"]
+    lineage_blocking: bool
+    source_refs: list[EvidenceRef] = Field(default_factory=list)
 
 
 class BattlefieldPortfolioOption(SellpointValueV5BaseModel):
@@ -510,6 +538,7 @@ __all__ = [
     "BattlefieldDefinitionSnapshot",
     "BattlefieldMembership",
     "BattlefieldOptionType",
+    "BattlefieldPortfolioInput",
     "BattlefieldPortfolioOption",
     "BundlePriceInterval",
     "CandidateStage",

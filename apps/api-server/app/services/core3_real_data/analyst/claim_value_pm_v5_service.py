@@ -23,7 +23,10 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
     BalanceMetric,
+    BattlefieldPortfolioInput,
+    BattlefieldPortfolioOption,
     CounterfactualCandidate,
+    ExpansionEligibility,
     IntervalEstimate,
     PerformanceArchetype,
     SellpointValueV5Context,
@@ -34,6 +37,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
 
 SYNTHETIC_CONFIG_VERSION = "sellpoint_value_pm_v5_synthetic_control_v1"
 ARCHETYPE_CONFIG_VERSION = "sellpoint_value_pm_v5_performance_archetype_v1"
+EXPANSION_CONFIG_VERSION = "sellpoint_value_pm_v5_expansion_gate_v1"
 MIN_DONORS = 5
 MIN_EFFECTIVE_DONORS = 3.0
 MAX_DONOR_WEIGHT = 0.50
@@ -386,6 +390,156 @@ def build_performance_archetypes(
             brand_tier_unknown=brand_tier_unknown,
         ),
     ]
+
+
+def build_battlefield_portfolio_options(
+    context: SellpointValueV5Context,
+    inputs: Sequence[BattlefieldPortfolioInput],
+) -> list[BattlefieldPortfolioOption]:
+    """Separate existing-battlefield strengthening from true expansion."""
+
+    memberships = _target_battlefield_memberships(context.v4_context.target_snapshot)
+    options: list[BattlefieldPortfolioOption] = []
+    seen: set[str] = set()
+    for row in sorted(inputs, key=lambda item: item.battlefield_code):
+        if row.battlefield_code in seen:
+            raise ValueError(f"duplicate battlefield input: {row.battlefield_code}")
+        seen.add(row.battlefield_code)
+        actual_membership = memberships.get(row.battlefield_code, "excluded")
+        if actual_membership != row.source_membership:
+            raise ValueError(
+                "battlefield membership mismatch: "
+                f"{row.battlefield_code} context={actual_membership} input={row.source_membership}"
+            )
+        if actual_membership == "excluded":
+            options.append(_expansion_option(row))
+        else:
+            options.append(_strengthening_option(row, actual_membership))
+    return sorted(
+        options,
+        key=lambda item: (
+            0 if item.option_type == "strengthen_existing" else 1,
+            item.battlefield_code,
+        ),
+    )
+
+
+def _strengthening_option(
+    row: BattlefieldPortfolioInput,
+    membership: str,
+) -> BattlefieldPortfolioOption:
+    if row.role_capped:
+        path = "portfolio_priority"
+    elif row.capability_status in {"partial", "missing"}:
+        path = "capability_completion"
+    elif (
+        row.user_value_status in {"observed_positive", "observed_mixed", "partial"}
+        and row.claim_support in {"weak", "missing"}
+    ):
+        path = "communication_activation"
+    elif (
+        row.user_value_status in {"observed_positive", "observed_mixed", "partial"}
+        and row.market_realization_status != "available"
+    ):
+        path = "market_activation"
+    else:
+        path = "maintain_or_cap"
+    boundary = {
+        "portfolio_priority": "该价值战场已经成立，当前问题是产品组合中的优先级，而不是进入新战场。",
+        "capability_completion": "该价值战场已经进入，但能力仍有缺口；当前只能比较补全路径，不能承诺新增销量。",
+        "communication_activation": "用户价值已有观察，但产品表达支撑偏弱；这是已有战场的表达激活。",
+        "market_activation": "能力和用户价值已存在，但市场量价承接不足；这是已有战场的市场激活。",
+        "maintain_or_cap": "该战场已进入，当前没有证据支持继续加码，先保持或控制重叠。",
+    }[path]
+    limitations = []
+    if row.lineage_blocking:
+        limitations.append("battlefield_lineage_conflict")
+    if membership == "drag":
+        limitations.append("drag_battlefield_not_positive_growth_option")
+    return BattlefieldPortfolioOption(
+        option_type="strengthen_existing",
+        battlefield_code=row.battlefield_code,
+        current_membership=membership,  # type: ignore[arg-type]
+        strengthen_path=path,  # type: ignore[arg-type]
+        market_space=row.market_space,
+        current_allocation=row.current_allocation,
+        evidence_boundary=boundary,
+        limitations=limitations,
+    )
+
+
+def _expansion_option(row: BattlefieldPortfolioInput) -> BattlefieldPortfolioOption:
+    hard_reasons: list[str] = []
+    unknown_reasons: list[str] = []
+    recall_reasons: list[str] = []
+    if row.immutable_market_gate_pass is False:
+        hard_reasons.append("immutable_size_price_market_gate_failed")
+    elif row.immutable_market_gate_pass is None:
+        unknown_reasons.append("immutable_size_price_market_gate_unknown")
+    if row.product_form_gate_pass is False:
+        hard_reasons.append("product_form_gate_failed")
+    elif row.product_form_gate_pass is None:
+        unknown_reasons.append("product_form_gate_unknown")
+    if row.lineage_blocking:
+        hard_reasons.append("battlefield_lineage_conflict")
+    for gap in row.capability_gaps:
+        if gap.status == "blocking" or (
+            gap.status in {"missing", "unknown"} and not gap.mutable_in_scope
+        ):
+            hard_reasons.append(f"immutable_gap:{gap.gap_code}")
+        elif gap.status == "unknown":
+            unknown_reasons.append(f"gap_unknown:{gap.gap_code}")
+    if row.task_group_adjacency is None:
+        unknown_reasons.append("task_group_adjacency_unknown")
+    elif row.task_group_adjacency < 0.50:
+        recall_reasons.append("task_group_adjacency_insufficient")
+    if row.donor_count < MIN_DONORS:
+        recall_reasons.append("expansion_donor_count_insufficient")
+    if not _has_positive_market_space(row.market_space):
+        hard_reasons.append("battlefield_market_space_missing")
+
+    combined_market_gate = (
+        True
+        if row.immutable_market_gate_pass is True and row.product_form_gate_pass is True
+        else False
+        if row.immutable_market_gate_pass is False or row.product_form_gate_pass is False
+        else None
+    )
+    reasons = sorted(set([*hard_reasons, *unknown_reasons, *recall_reasons]))
+    if hard_reasons:
+        stage = "rejected"
+    elif unknown_reasons:
+        stage = "deferred_unknown"
+    elif recall_reasons:
+        stage = "recalled"
+    else:
+        stage = "eligible"
+    eligibility = ExpansionEligibility(
+        stage=stage,  # type: ignore[arg-type]
+        current_membership="excluded",
+        immutable_market_gate_pass=combined_market_gate,
+        task_group_adjacency=row.task_group_adjacency,
+        gaps=row.capability_gaps,
+        donor_count=row.donor_count,
+        overlap_risk=row.overlap_risk,
+        eligible=stage == "eligible",
+        reasons=reasons,
+    )
+    boundary = {
+        "eligible": "当前是可比较的新战场拓展候选；只允许展示进入条件和观察性市场参照。",
+        "recalled": "当前只召回了相邻战场，真实市场对照或任务相邻性仍不足，不能作为拓展方案。",
+        "deferred_unknown": "关键进入条件仍未知，暂不能判断是否可拓展。",
+        "rejected": "当前存在不可改变的尺寸、形态、能力或市场门槛，不属于本 SKU 的可拓展战场。",
+    }[stage]
+    return BattlefieldPortfolioOption(
+        option_type="expand_excluded",
+        battlefield_code=row.battlefield_code,
+        current_membership="excluded",
+        expansion_eligibility=eligibility,
+        market_space=row.market_space,
+        evidence_boundary=boundary,
+        limitations=[EXPANSION_CONFIG_VERSION, *reasons],
+    )
 
 
 def _failed_synthetic(
@@ -902,6 +1056,79 @@ def _tier_rank(value: Any) -> int | None:
     return None
 
 
+def _target_battlefield_memberships(
+    snapshot: SkuEvidenceSnapshot,
+) -> dict[str, str]:
+    memberships: dict[str, str] = {}
+    priority = {
+        "primary": 0,
+        "secondary": 1,
+        "user_observed": 2,
+        "opportunity": 3,
+        "drag": 4,
+    }
+
+    def assign(code: Any, membership: str) -> None:
+        if not isinstance(code, str) or not code:
+            return
+        existing = memberships.get(code)
+        if existing is None or priority[membership] < priority[existing]:
+            memberships[code] = membership
+
+    for row in snapshot.battlefields:
+        assign(row.get("primary_battlefield_code"), "primary")
+        for code in _as_string_list(
+            row.get("secondary_battlefield_codes")
+            or row.get("secondary_battlefield_codes_json")
+        ):
+            assign(code, "secondary")
+        for code in _as_string_list(
+            row.get("opportunity_battlefield_codes")
+            or row.get("opportunity_battlefield_codes_json")
+        ):
+            assign(code, "opportunity")
+        for code in _as_string_list(row.get("user_observed_battlefield_codes")):
+            assign(code, "user_observed")
+        for code in _as_string_list(
+            row.get("drag_factor_battlefield_codes")
+            or row.get("drag_factor_battlefield_codes_json")
+        ):
+            assign(code, "drag")
+        for detail in row.get("battlefield_rows") or []:
+            relation = detail.get("relation_status")
+            membership = {
+                "primary_battlefield": "primary",
+                "secondary_battlefield": "secondary",
+                "opportunity_battlefield": "opportunity",
+                "user_observed_battlefield": "user_observed",
+                "drag_factor_battlefield": "drag",
+            }.get(relation)
+            if membership:
+                assign(detail.get("battlefield_code"), membership)
+    return memberships
+
+
+def _as_string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
+def _has_positive_market_space(market_space: dict[str, Any]) -> bool:
+    for key in (
+        "estimated_sales_volume",
+        "estimated_sales_amount",
+        "estimated_avg_weekly_sales_volume",
+    ):
+        value = market_space.get(key)
+        try:
+            if value is not None and float(value) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def _supported_cell_keys(
     cells: Sequence[MarketCellRow],
     target_code: str,
@@ -1034,7 +1261,9 @@ def _canonical_hash(payload: Any) -> str:
 
 __all__ = [
     "ARCHETYPE_CONFIG_VERSION",
+    "EXPANSION_CONFIG_VERSION",
     "SYNTHETIC_CONFIG_VERSION",
+    "build_battlefield_portfolio_options",
     "build_market_synthetic_control",
     "build_performance_archetypes",
 ]
