@@ -40,6 +40,7 @@ LOW_AMOUNT_RATIO_THRESHOLD = Decimal("0.90")
 NOT_WEAK_SALES_RATIO_THRESHOLD = Decimal("0.90")
 NOT_WEAK_AMOUNT_RATIO_THRESHOLD = Decimal("1.00")
 MIN_OVERLAP_WEEKS = 4
+V5_FALLBACK_SNAPSHOT_LIMIT = 3
 
 
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
@@ -172,7 +173,7 @@ class SopOrchestrators:
                 query=query,
                 sku_code=sku_code,
                 model_name=model_name,
-                limit=30,
+                limit=V5_FALLBACK_SNAPSHOT_LIMIT,
             )
             atom_results.append(fallback_result)
             fallback_payload = fallback_result.get("result") or {}

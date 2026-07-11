@@ -46,6 +46,30 @@ class _FakeAtomicHandlers:
         }
 
 
+class _FakeAtomicHandlersWithMarketPool(_FakeAtomicHandlers):
+    def __init__(self) -> None:
+        super().__init__()
+        self.repository = object()
+        self.candidate_limit = None
+
+    def same_size_price_candidates(self, context, **kwargs):
+        del context
+        self.candidate_limit = kwargs["limit"]
+        return {
+            "status": "ok",
+            "result": {
+                "candidate_search": {
+                    "candidates": [
+                        {"sku_code": "CANDIDATE", "model_name": "候选产品"}
+                    ]
+                }
+            },
+            "atoms_used": [],
+            "evidence": [],
+            "limitations": [],
+        }
+
+
 def test_cli_command_exists_but_is_default_off() -> None:
     parser = catforge_analyst.build_parser()
 
@@ -112,6 +136,18 @@ def test_explicit_command_returns_one_report_for_all_renderers() -> None:
         "查看用户选择对比",
         "查看分析依据",
     ]
+
+
+def test_live_market_fallback_keeps_full_evidence_snapshots_bounded() -> None:
+    handlers = _FakeAtomicHandlersWithMarketPool()
+    orchestrator = SopOrchestrators(handlers)  # type: ignore[arg-type]
+
+    result = orchestrator.sellpoint_value_pm_v5(
+        _analyst_context(), sku_code="TV00029112", enable_v5=True
+    )
+
+    assert result["status"] == "ok"
+    assert handlers.candidate_limit == 3
 
 
 def test_natural_language_route_remains_on_v2() -> None:
