@@ -1,0 +1,16 @@
+{
+  "goal": "V5-G03",
+  "status": "complete",
+  "primary_commit": "d930be2efe8718afdcc93e1c7f9f2efbe7c71088",
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "tests": {"v5_passed": 24, "related_v4_v5_passed": 47, "coverage_percent": 94, "ruff": "passed"},
+  "artifacts": [
+    {"path": "claim_value_pm_v5_schemas.py", "sha256": "9a40e38554185eea713a8d430b29407b1f73637b819a66d9bc6432ee9d74a316"},
+    {"path": "claim_value_pm_v5_counterfactuals.py", "sha256": "b23339b4897848229de9f5e2d49fe6eaed2d27639f1fe89bee4734998513349c"},
+    {"path": "test_claim_value_pm_v5_schemas.py", "sha256": "84335069727ebc361b749cd390c7b5d2b542a1f15d204ee6053f4c0159a9b1ed"},
+    {"path": "test_claim_value_pm_v5_counterfactuals.py", "sha256": "6393ed095c08b22a08e2f31878d3060be002a27c7bf5fdb214169c69571b0034"},
+    {"path": "G03_schema_contract_addendum.json", "sha256": "db6ca10c75bddd9713e9f587e90276bc0f29ab8f5a040444e99c1b1974eb9497"}
+  ],
+  "next_goal": "V5-G04"
+}
