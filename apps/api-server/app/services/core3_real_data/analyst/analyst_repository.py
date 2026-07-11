@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+from collections import defaultdict
+from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from typing import Any, Iterable, Sequence
 
 from sqlalchemy import case, desc, func, or_, select
@@ -11,21 +16,44 @@ from sqlalchemy.orm import Session
 
 from app.models import entities
 from app.services.core3_real_data.analyst.analyst_schemas import ResolvedSku
+from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
+    ComparablePoolTierFact,
+    EvidenceRef,
+    LineageGate,
+    LineageIssue,
+    MarketCellRow,
+    PurchaseReasonSnapshot,
+    SellpointValueV4Context,
+    SkuEvidenceSnapshot,
+    SkuIdentity,
+    SourceAuthority,
+    SourceStatus,
+)
 from app.services.core3_real_data.analyst.competitor_answer import weighted_overlap_from_roles
+from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
+    PurchaseReasonProfileLookupKey,
+    PurchaseReasonProfileReader,
+    RepositoryPurchaseReasonProfileReader,
+)
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_TV_TAXONOMY_VERSION,
     CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M05C_AC_RULE_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
+    CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
     CORE3_M09C_AC_RULE_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
+    CORE3_M09C_TV_TAXONOMY_VERSION,
     CORE3_M10C_AC_RULE_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
+    CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
+    CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
     CORE3_M14_RULE_VERSION,
@@ -727,6 +755,593 @@ class AnalystRepository:
             },
             "evidence_ids": evidence_ids,
         }
+
+    def sellpoint_value_v4_context(
+        self,
+        *,
+        batch_id: str,
+        sku: ResolvedSku,
+        product_category: str,
+        market_window: str,
+        analysis_population: str,
+        fallback_candidates: Sequence[dict[str, Any]] | None = None,
+        m12d_profile_version: str | None = None,
+        purchase_reason_reader: PurchaseReasonProfileReader | None = None,
+    ) -> SellpointValueV4Context:
+        """Build the immutable read-only V4 evidence context.
+
+        This method deliberately returns facts and lineage only. It does not
+        infer user value, assign counterfactual roles, or calculate WTP.
+        """
+
+        normalized_category = product_category.upper()
+        if normalized_category != "TV":
+            raise ValueError("sellpoint value V4 currently supports TV only")
+        serving_batch_ids = tuple(batch_ids_from_scope(batch_id)) or (batch_id,)
+
+        selection_rows = self._sellpoint_competitor_selections(
+            batch_id=batch_id,
+            target_sku_code=sku.sku_code,
+        )
+        candidate_refs = _v4_candidate_references(
+            target_sku_code=sku.sku_code,
+            selection_rows=selection_rows,
+            fallback_candidates=fallback_candidates,
+        )
+        sku_codes = _dedupe_texts([sku.sku_code, *(item["sku_code"] for item in candidate_refs)])
+
+        profile_specs: dict[str, dict[str, Any]] = {
+            "M03B": {
+                "model": entities.Core3SkuParamProfile,
+                "table_name": "core3_sku_param_profile",
+                "rule_version": CORE3_M03B_RULE_VERSION,
+                "record_id_attr": "sku_param_profile_id",
+                "result_hash_attr": "profile_hash",
+                "requires_current": False,
+            },
+            "M04C": {
+                "model": entities.Core3SkuClaimFactProfile,
+                "table_name": "core3_sku_claim_fact_profile",
+                "rule_version": CORE3_M04C_TV_RULE_VERSION,
+                "taxonomy_version": CORE3_M04C_TV_TAXONOMY_VERSION,
+                "record_id_attr": "claim_profile_id",
+                "result_hash_attr": "profile_hash",
+            },
+            "M05C": {
+                "model": entities.Core3SkuCommentFactProfile,
+                "table_name": "core3_sku_comment_fact_profile",
+                "rule_version": CORE3_M05C_TV_RULE_VERSION,
+                "taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
+                "record_id_attr": "comment_profile_id",
+                "result_hash_attr": "profile_hash",
+            },
+            "M07": {
+                "model": entities.Core3SkuMarketProfile,
+                "table_name": "core3_sku_market_profile",
+                "rule_version": CORE3_M07_RULE_VERSION,
+                "record_id_attr": "profile_id",
+                "result_hash_attr": "result_hash",
+                "extra_filters": {"analysis_window": market_window},
+            },
+            "M09C": {
+                "model": entities.Core3M09cSkuUserTaskProfile,
+                "table_name": "core3_m09c_sku_user_task_profile",
+                "rule_version": CORE3_M09C_TV_RULE_VERSION,
+                "taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
+                "record_id_attr": "profile_id",
+                "result_hash_attr": "profile_hash",
+            },
+            "M10C": {
+                "model": entities.Core3M10cSkuTargetGroupProfile,
+                "table_name": "core3_m10c_sku_target_group_profile",
+                "rule_version": CORE3_M10C_TV_RULE_VERSION,
+                "taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
+                "record_id_attr": "profile_id",
+                "result_hash_attr": "profile_hash",
+            },
+            "M11C": {
+                "model": entities.Core3SkuValueBattlefieldProfile,
+                "table_name": "core3_sku_value_battlefield_profile",
+                "rule_version": CORE3_M11C_TV_RULE_VERSION,
+                "taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+                "record_id_attr": "profile_id",
+                "result_hash_attr": "profile_hash",
+            },
+        }
+        selected_by_module: dict[str, dict[str, Any]] = {}
+        ambiguous_by_module: dict[str, set[str]] = {}
+        current_authorities: list[SourceAuthority] = []
+        for module_code, spec in profile_specs.items():
+            rows = self._v4_configured_profile_rows(
+                batch_id=batch_id,
+                sku_codes=sku_codes,
+                product_category=normalized_category,
+                **spec,
+            )
+            selected, ambiguous = _v4_pick_rows_by_key(
+                rows,
+                requested_batch_id=batch_id,
+                key_fn=lambda row: str(row.sku_code),
+            )
+            selected_by_module[module_code] = selected
+            ambiguous_by_module[module_code] = ambiguous
+            refs = [
+                _v4_row_evidence_ref(
+                    module_code,
+                    row,
+                    record_type=spec["table_name"],
+                    record_id_attr=spec["record_id_attr"],
+                    result_hash_attr=spec["result_hash_attr"],
+                )
+                for row in selected.values()
+            ]
+            current_authorities.append(
+                _v4_configured_authority(
+                    module_code=module_code,
+                    table_name=spec["table_name"],
+                    rule_version=spec["rule_version"],
+                    taxonomy_version=spec.get("taxonomy_version"),
+                    sku_codes=sku_codes,
+                    selected=selected,
+                    ambiguous=ambiguous,
+                    refs=refs,
+                )
+            )
+
+        allocation_rows, summary_rows, m11d_ambiguous = self._v4_semantic_market_rows(
+            batch_id=batch_id,
+            sku_codes=sku_codes,
+            product_category=normalized_category,
+            market_window=market_window,
+            analysis_population=analysis_population,
+        )
+        allocation_by_sku: dict[str, list[Any]] = defaultdict(list)
+        for row in allocation_rows:
+            allocation_by_sku[str(row.sku_code)].append(row)
+        m11d_refs = [
+            *[
+                _v4_row_evidence_ref(
+                    "M11D",
+                    row,
+                    record_type="core3_semantic_market_allocation",
+                    record_id_attr="allocation_id",
+                    result_hash_attr="result_hash",
+                )
+                for row in allocation_rows
+            ],
+            *[
+                _v4_row_evidence_ref(
+                    "M11D",
+                    row,
+                    record_type="core3_semantic_market_dimension_summary",
+                    record_id_attr="summary_id",
+                    result_hash_attr="result_hash",
+                )
+                for row in summary_rows
+            ],
+        ]
+        current_authorities.append(
+            _v4_multirow_authority(
+                module_code="M11D",
+                table_name="core3_semantic_market_allocation+core3_semantic_market_dimension_summary",
+                rule_version=CORE3_M11D_RULE_VERSION,
+                rows=[*allocation_rows, *summary_rows],
+                refs=m11d_refs,
+                ambiguous_keys=m11d_ambiguous,
+            )
+        )
+
+        m12c_pool_tiers, m12c_rows_by_sku, m12c_refs, m12c_ambiguous = self._v4_m12c_pool_tiers(
+            batch_id=batch_id,
+            sku_codes=sku_codes,
+            product_category=normalized_category,
+            market_window=market_window,
+            analysis_population=analysis_population,
+        )
+        current_authorities.append(
+            _v4_multirow_authority(
+                module_code="M12C",
+                table_name="core3_sku_claim_value_quantification+core3_claim_value_context_pool",
+                rule_version=CORE3_M12C_RULE_VERSION,
+                rows=m12c_refs,
+                refs=m12c_refs,
+                ambiguous_keys=m12c_ambiguous,
+            )
+        )
+
+        comment_atoms = self._v4_comment_atoms(
+            selected_profiles=selected_by_module["M05C"],
+            product_category=normalized_category,
+        )
+        atoms_by_sku: dict[str, list[Any]] = defaultdict(list)
+        for row in comment_atoms:
+            atoms_by_sku[str(row.sku_code)].append(row)
+
+        weekly_rows = self._v4_market_weekly_rows(selected_profiles=selected_by_module["M07"])
+        market_cells = _v4_market_cells(
+            weekly_rows=weekly_rows,
+            market_profiles=selected_by_module["M07"],
+            battlefield_profiles=selected_by_module["M11C"],
+            allocation_rows=allocation_rows,
+        )[:2000]
+
+        reader = purchase_reason_reader or RepositoryPurchaseReasonProfileReader(self.db)
+        purchase_contract = reader.read(
+            PurchaseReasonProfileLookupKey(
+                project_id=self.project_id,
+                category_code=self.category_code,
+                batch_id=batch_id,
+                sku_code=sku.sku_code,
+                m12d_profile_version=m12d_profile_version,
+            )
+        )
+        published_lineage = _v4_published_lineage(purchase_contract)
+        lineage_gate = build_sellpoint_value_v4_lineage_gate(
+            published_lineage=published_lineage,
+            current_validation_lineage=current_authorities,
+        )
+        purchase_snapshot, m12d_authority = _v4_purchase_reason_snapshot(
+            purchase_contract,
+            lineage_status=lineage_gate.status,
+        )
+
+        m14_authority = _v4_candidate_authority(
+            selection_rows=selection_rows,
+            candidate_refs=candidate_refs,
+        )
+        authority_manifest = [*current_authorities, m12d_authority, m14_authority]
+
+        snapshots: dict[str, SkuEvidenceSnapshot] = {}
+        for sku_code in sku_codes:
+            snapshots[sku_code] = _v4_sku_snapshot(
+                sku_code=sku_code,
+                target_fallback=sku if sku_code == sku.sku_code else None,
+                candidate_ref=next((item for item in candidate_refs if item["sku_code"] == sku_code), None),
+                selected_by_module=selected_by_module,
+                ambiguous_by_module=ambiguous_by_module,
+                allocation_rows=allocation_by_sku.get(sku_code, []),
+                summary_rows=summary_rows,
+                m11d_ambiguous=m11d_ambiguous,
+                m12c_present=bool(m12c_rows_by_sku.get(sku_code)),
+                m12c_ambiguous=m12c_ambiguous,
+                comment_atoms=atoms_by_sku.get(sku_code, []),
+            )
+
+        candidate_snapshots = [
+            snapshots[item["sku_code"]]
+            for item in candidate_refs
+            if item["sku_code"] in snapshots
+        ]
+        all_refs = _v4_dedupe_evidence_refs(
+            [
+                *snapshots[sku.sku_code].source_refs,
+                *(ref for snapshot in candidate_snapshots for ref in snapshot.source_refs),
+                *m11d_refs,
+                *m12c_refs,
+                *(ref for item in candidate_refs for ref in (item.get("source_refs") or [])),
+                *(cell.source_ref for cell in market_cells),
+                *purchase_snapshot.source_refs,
+            ]
+        )
+        target_identity = snapshots[sku.sku_code].identity
+        context_payload = {
+            "schema_version": "sellpoint_value_v4_context_v1",
+            "project_id": self.project_id,
+            "category_code": normalized_category,
+            "requested_batch_id": batch_id,
+            "serving_batch_ids": list(serving_batch_ids),
+            "market_window": market_window,
+            "target": target_identity,
+            "authority_manifest": authority_manifest,
+            "lineage_gate": lineage_gate,
+            "target_snapshot": snapshots[sku.sku_code],
+            "purchase_reason_profile": purchase_snapshot,
+            "candidate_snapshots": candidate_snapshots,
+            "market_cells": market_cells,
+            "m12c_pool_tiers": m12c_pool_tiers,
+            "evidence_refs": all_refs,
+        }
+        return SellpointValueV4Context(
+            **context_payload,
+            input_hash=canonical_v4_hash(context_payload),
+        )
+
+    def _v4_configured_profile_rows(
+        self,
+        *,
+        model: type[Any],
+        batch_id: str,
+        sku_codes: Sequence[str],
+        product_category: str,
+        table_name: str,
+        rule_version: str,
+        record_id_attr: str,
+        result_hash_attr: str,
+        taxonomy_version: str | None = None,
+        requires_current: bool = True,
+        extra_filters: dict[str, Any] | None = None,
+    ) -> list[Any]:
+        del table_name, record_id_attr, result_hash_attr
+        stmt = (
+            select(model)
+            .where(model.project_id == self.project_id)
+            .where(model.category_code == self.category_code)
+            .where(_batch_filter(model.batch_id, batch_id))
+            .where(model.sku_code.in_(tuple(sku_codes)))
+            .where(model.rule_version == rule_version)
+        )
+        if hasattr(model, "product_category"):
+            stmt = stmt.where(model.product_category == product_category)
+        if taxonomy_version is not None and hasattr(model, "taxonomy_version"):
+            stmt = stmt.where(model.taxonomy_version == taxonomy_version)
+        if requires_current and hasattr(model, "is_current"):
+            stmt = stmt.where(model.is_current.is_(True))
+        for field_name, value in (extra_filters or {}).items():
+            stmt = stmt.where(getattr(model, field_name) == value)
+        return list(self.db.execute(stmt).scalars())
+
+    def _v4_semantic_market_rows(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+        product_category: str,
+        market_window: str,
+        analysis_population: str,
+    ) -> tuple[list[Any], list[Any], set[str]]:
+        allocation_stmt = (
+            select(entities.Core3SemanticMarketAllocation)
+            .where(entities.Core3SemanticMarketAllocation.project_id == self.project_id)
+            .where(entities.Core3SemanticMarketAllocation.category_code == self.category_code)
+            .where(_batch_filter(entities.Core3SemanticMarketAllocation.batch_id, batch_id))
+            .where(entities.Core3SemanticMarketAllocation.product_category == product_category)
+            .where(entities.Core3SemanticMarketAllocation.analysis_population == analysis_population)
+            .where(entities.Core3SemanticMarketAllocation.market_window == market_window)
+            .where(entities.Core3SemanticMarketAllocation.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3SemanticMarketAllocation.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketAllocation.is_current.is_(True))
+        )
+        allocation_candidates = list(self.db.execute(allocation_stmt).scalars())
+        selected_allocations, allocation_ambiguous = _v4_pick_rows_by_key(
+            allocation_candidates,
+            requested_batch_id=batch_id,
+            key_fn=lambda row: (str(row.sku_code), str(row.dimension_type), str(row.dimension_code)),
+        )
+        allocation_rows = sorted(
+            selected_allocations.values(),
+            key=lambda row: (str(row.sku_code), str(row.dimension_type), -float(row.allocation_weight), str(row.dimension_code)),
+        )
+
+        dimension_keys = {(str(row.dimension_type), str(row.dimension_code)) for row in allocation_rows}
+        if not dimension_keys:
+            return allocation_rows, [], allocation_ambiguous
+        summary_stmt = (
+            select(entities.Core3SemanticMarketDimensionSummary)
+            .where(entities.Core3SemanticMarketDimensionSummary.project_id == self.project_id)
+            .where(entities.Core3SemanticMarketDimensionSummary.category_code == self.category_code)
+            .where(_batch_filter(entities.Core3SemanticMarketDimensionSummary.batch_id, batch_id))
+            .where(entities.Core3SemanticMarketDimensionSummary.product_category == product_category)
+            .where(entities.Core3SemanticMarketDimensionSummary.analysis_population == analysis_population)
+            .where(entities.Core3SemanticMarketDimensionSummary.market_window == market_window)
+            .where(entities.Core3SemanticMarketDimensionSummary.rule_version == CORE3_M11D_RULE_VERSION)
+            .where(entities.Core3SemanticMarketDimensionSummary.is_current.is_(True))
+        )
+        summary_candidates = [
+            row
+            for row in self.db.execute(summary_stmt).scalars()
+            if (str(row.dimension_type), str(row.dimension_code)) in dimension_keys
+        ]
+        selected_summaries, summary_ambiguous = _v4_pick_rows_by_key(
+            summary_candidates,
+            requested_batch_id=batch_id,
+            key_fn=lambda row: (str(row.dimension_type), str(row.dimension_code)),
+        )
+        summary_rows = sorted(
+            selected_summaries.values(),
+            key=lambda row: (str(row.dimension_type), str(row.dimension_code)),
+        )
+        return allocation_rows, summary_rows, allocation_ambiguous | summary_ambiguous
+
+    def _v4_m12c_pool_tiers(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+        product_category: str,
+        market_window: str,
+        analysis_population: str,
+    ) -> tuple[list[ComparablePoolTierFact], dict[str, list[Any]], list[EvidenceRef], set[str]]:
+        quant = entities.Core3SkuClaimValueQuantification
+        quant_stmt = (
+            select(
+                quant.sku_claim_value_id,
+                quant.pool_id,
+                quant.batch_id,
+                quant.sku_code,
+                quant.claim_code,
+                quant.claim_name,
+                quant.claim_dimension,
+                quant.claim_value_role,
+                quant.context_type,
+                quant.context_code,
+                quant.size_tier,
+                quant.price_band_group,
+                quant.supporting_dimensions_json,
+                quant.evidence_ids_json,
+                quant.result_hash,
+                quant.rule_version,
+            )
+            .where(quant.project_id == self.project_id)
+            .where(quant.category_code == self.category_code)
+            .where(_batch_filter(quant.batch_id, batch_id))
+            .where(quant.product_category == product_category)
+            .where(quant.market_window == market_window)
+            .where(quant.analysis_population == analysis_population)
+            .where(quant.sku_code.in_(tuple(sku_codes)))
+            .where(quant.rule_version == CORE3_M12C_RULE_VERSION)
+            .where(quant.is_current.is_(True))
+        )
+        quant_candidates = list(self.db.execute(quant_stmt).all())
+        selected_quant, quant_ambiguous = _v4_pick_rows_by_key(
+            quant_candidates,
+            requested_batch_id=batch_id,
+            key_fn=lambda row: (
+                str(row.sku_code),
+                str(row.claim_code),
+                str(row.context_type),
+                str(row.context_code),
+                str(row.size_tier),
+                str(row.price_band_group),
+            ),
+        )
+        quant_rows = list(selected_quant.values())
+        pool_ids = _dedupe_texts(row.pool_id for row in quant_rows if row.pool_id)
+        pools: list[Any] = []
+        if pool_ids:
+            pool = entities.Core3ClaimValueContextPool
+            pool_stmt = (
+                select(pool)
+                .where(pool.project_id == self.project_id)
+                .where(pool.category_code == self.category_code)
+                .where(pool.pool_id.in_(tuple(pool_ids)))
+                .where(pool.rule_version == CORE3_M12C_RULE_VERSION)
+                .where(pool.is_current.is_(True))
+            )
+            pools = list(self.db.execute(pool_stmt).scalars())
+        pools_by_id = {str(row.pool_id): row for row in pools}
+        facts: list[ComparablePoolTierFact] = []
+        for row in sorted(pools, key=lambda item: (str(item.claim_code), str(item.context_type), str(item.context_code))):
+            quality_flags = [str(item) for item in (row.quality_flags_json or [])]
+            comparison_basis = next(
+                (item.removeprefix("comparison_basis:") for item in quality_flags if item.startswith("comparison_basis:")),
+                "claim_presence",
+            )
+            comparison_param_code = next(
+                (item.removeprefix("comparison_param:") for item in quality_flags if item.startswith("comparison_param:")),
+                None,
+            )
+            facts.append(
+                ComparablePoolTierFact(
+                    claim_code=str(row.claim_code),
+                    bundle_code=str(row.claim_code),
+                    context_code=str(row.context_code),
+                    comparison_basis=comparison_basis,
+                    comparison_param_code=comparison_param_code,
+                    pool_sku_count=int(row.pool_sku_count),
+                    with_count=int(row.with_claim_sku_count),
+                    without_count=int(row.without_claim_sku_count),
+                    unknown_count=int(row.unknown_claim_sku_count),
+                    sample_status=str(row.sample_status),
+                    quality_flags=quality_flags,
+                    pool_hash=str(row.pool_hash),
+                )
+            )
+        refs = [
+            *[
+                EvidenceRef(
+                    module_code="M12C",
+                    record_type="core3_sku_claim_value_quantification",
+                    record_id=str(row.sku_claim_value_id),
+                    result_hash=str(row.result_hash),
+                    batch_id=str(row.batch_id),
+                    rule_version=str(row.rule_version),
+                    evidence_ids=list(row.evidence_ids_json or []),
+                )
+                for row in quant_rows
+            ],
+            *[
+                EvidenceRef(
+                    module_code="M12C",
+                    record_type="core3_claim_value_context_pool",
+                    record_id=str(row.pool_id),
+                    result_hash=str(row.pool_hash),
+                    batch_id=str(row.batch_id),
+                    rule_version=str(row.rule_version),
+                    evidence_ids=[],
+                )
+                for row in pools
+            ],
+        ]
+        rows_by_sku: dict[str, list[Any]] = defaultdict(list)
+        for row in quant_rows:
+            rows_by_sku[str(row.sku_code)].append(row)
+        missing_pool_ids = {str(row.pool_id) for row in quant_rows if row.pool_id and str(row.pool_id) not in pools_by_id}
+        ambiguous = quant_ambiguous | {f"missing_pool:{pool_id}" for pool_id in missing_pool_ids}
+        return facts, rows_by_sku, _v4_dedupe_evidence_refs(refs), ambiguous
+
+    def _v4_comment_atoms(
+        self,
+        *,
+        selected_profiles: dict[str, Any],
+        product_category: str,
+    ) -> list[entities.Core3CommentFactAtom]:
+        if not selected_profiles:
+            return []
+        profile_batches = {sku_code: str(row.batch_id) for sku_code, row in selected_profiles.items()}
+        stmt = (
+            select(entities.Core3CommentFactAtom)
+            .where(entities.Core3CommentFactAtom.project_id == self.project_id)
+            .where(entities.Core3CommentFactAtom.category_code == self.category_code)
+            .where(entities.Core3CommentFactAtom.batch_id.in_(tuple(set(profile_batches.values()))))
+            .where(entities.Core3CommentFactAtom.product_category == product_category)
+            .where(entities.Core3CommentFactAtom.sku_code.in_(tuple(profile_batches)))
+            .where(entities.Core3CommentFactAtom.taxonomy_version == CORE3_M05C_TV_TAXONOMY_VERSION)
+            .where(entities.Core3CommentFactAtom.rule_version == CORE3_M05C_TV_RULE_VERSION)
+            .where(entities.Core3CommentFactAtom.is_current.is_(True))
+            .order_by(
+                entities.Core3CommentFactAtom.sku_code,
+                entities.Core3CommentFactAtom.source_comment_key,
+                entities.Core3CommentFactAtom.sentence_seq,
+                entities.Core3CommentFactAtom.subdimension_code,
+            )
+        )
+        result: list[entities.Core3CommentFactAtom] = []
+        seen: set[tuple[str, str, int | None, str]] = set()
+        for row in self.db.execute(stmt).scalars():
+            if str(row.batch_id) != profile_batches.get(str(row.sku_code)):
+                continue
+            key = (str(row.sku_code), str(row.source_comment_key), row.sentence_seq, str(row.subdimension_code))
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(row)
+        return result
+
+    def _v4_market_weekly_rows(
+        self,
+        *,
+        selected_profiles: dict[str, Any],
+    ) -> list[entities.Core3CleanMarketWeekly]:
+        if not selected_profiles:
+            return []
+        profile_batches = {sku_code: str(row.batch_id) for sku_code, row in selected_profiles.items()}
+        stmt = (
+            select(entities.Core3CleanMarketWeekly)
+            .where(entities.Core3CleanMarketWeekly.project_id == self.project_id)
+            .where(entities.Core3CleanMarketWeekly.category_code == self.category_code)
+            .where(entities.Core3CleanMarketWeekly.batch_id.in_(tuple(set(profile_batches.values()))))
+            .where(entities.Core3CleanMarketWeekly.sku_code.in_(tuple(profile_batches)))
+            .where(entities.Core3CleanMarketWeekly.period_week_index.is_not(None))
+            .where(entities.Core3CleanMarketWeekly.record_status == "active")
+            .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
+            .order_by(
+                entities.Core3CleanMarketWeekly.period_week_index,
+                entities.Core3CleanMarketWeekly.platform_type,
+                entities.Core3CleanMarketWeekly.sku_code,
+                entities.Core3CleanMarketWeekly.source_row_id,
+            )
+        )
+        result: list[entities.Core3CleanMarketWeekly] = []
+        seen: set[str] = set()
+        for row in self.db.execute(stmt).scalars():
+            if str(row.batch_id) != profile_batches.get(str(row.sku_code)):
+                continue
+            key = str(row.clean_record_key)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(row)
+        return result
 
     def _sellpoint_competitor_selections(
         self,
@@ -2362,6 +2977,720 @@ class AnalystRepository:
     @staticmethod
     def _sku_prefix(product_category: str) -> str:
         return "AC" if product_category == "AC" else "TV"
+
+
+def canonical_v4_hash(payload: Any) -> str:
+    """Return a deterministic SHA-256 for V4 context inputs."""
+
+    if hasattr(payload, "model_dump"):
+        payload = payload.model_dump(mode="json")
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_v4_json_default,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_sellpoint_value_v4_lineage_gate(
+    *,
+    published_lineage: Sequence[SourceAuthority],
+    current_validation_lineage: Sequence[SourceAuthority],
+) -> LineageGate:
+    """Compare published M12D inputs with the configured current facts.
+
+    A changed version and changed hash is a conflict until a later goal adds a
+    substantive revalidation rule. Missing versions are unresolved, never
+    silently treated as aligned.
+    """
+
+    current_by_module = {item.module_code: item for item in current_validation_lineage}
+    published_by_module = {item.module_code: item for item in published_lineage}
+    required_modules = ("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C")
+    issues: list[LineageIssue] = []
+    stale_revalidated = False
+    conflict = False
+    unresolved = False
+    for module_code in required_modules:
+        published = published_by_module.get(module_code)
+        current = current_by_module.get(module_code)
+        if published is None:
+            unresolved = True
+            issues.append(
+                LineageIssue(
+                    code="published_lineage_missing",
+                    severity="warning",
+                    scope="source",
+                    message_cn=f"已发布采购理由画像没有保存 {module_code} 的可比版本线谱。",
+                    affected_module_codes=[module_code],
+                )
+            )
+            continue
+        if current is None or current.availability == "missing":
+            unresolved = True
+            issues.append(
+                LineageIssue(
+                    code="current_validation_source_missing",
+                    severity="warning",
+                    scope="source",
+                    message_cn=f"当前验证范围缺少 {module_code}，不能核对已发布画像。",
+                    affected_module_codes=[module_code],
+                )
+            )
+            continue
+        if not published.rule_version or not current.rule_version:
+            unresolved = True
+            issues.append(
+                LineageIssue(
+                    code="lineage_rule_version_missing",
+                    severity="warning",
+                    scope="source",
+                    message_cn=f"{module_code} 缺少可比 rule version，不能判断是否对齐。",
+                    affected_module_codes=[module_code],
+                )
+            )
+            continue
+        published_batches = set(published.selected_batch_ids)
+        current_batches = set(current.selected_batch_ids)
+        batch_overlap = bool(published_batches & current_batches)
+        if published.rule_version == current.rule_version and batch_overlap:
+            continue
+        if (
+            published.rule_version != current.rule_version
+            and published.source_hash
+            and published.source_hash == current.source_hash
+        ):
+            stale_revalidated = True
+            continue
+        conflict = True
+        issues.append(
+            LineageIssue(
+                code="version_lineage_conflict",
+                severity="blocking",
+                scope="relation",
+                message_cn=(
+                    f"已发布画像使用 {module_code} {published.rule_version}，当前验证使用 "
+                    f"{current.rule_version}，且记录 hash 不一致；受影响的价值和价格归因必须暂停。"
+                ),
+                affected_module_codes=[module_code],
+            )
+        )
+    if conflict:
+        status = "stale_conflict"
+    elif unresolved:
+        status = "unresolved"
+    elif stale_revalidated:
+        status = "stale_revalidated"
+    else:
+        status = "aligned"
+    blocked = sorted({issue.code for issue in issues if issue.severity == "blocking"})
+    return LineageGate(
+        status=status,
+        published_lineage=list(published_lineage),
+        current_validation_lineage=list(current_validation_lineage),
+        issues=issues,
+        blocked_reason_codes=blocked,
+    )
+
+
+def _v4_json_default(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, set):
+        return sorted(value)
+    raise TypeError(f"unsupported canonical JSON type: {type(value).__name__}")
+
+
+def _v4_pick_rows_by_key(
+    rows: Sequence[Any],
+    *,
+    requested_batch_id: str,
+    key_fn: Any,
+) -> tuple[dict[Any, Any], set[str]]:
+    scope = tuple(batch_ids_from_scope(requested_batch_id)) or (requested_batch_id,)
+    batch_rank = {batch_id: rank for rank, batch_id in enumerate(scope)}
+    grouped: dict[Any, list[Any]] = defaultdict(list)
+    for row in rows:
+        grouped[key_fn(row)].append(row)
+    selected: dict[Any, Any] = {}
+    ambiguous: set[str] = set()
+    for key, candidates in grouped.items():
+        best_rank = min(batch_rank.get(str(row.batch_id), len(batch_rank)) for row in candidates)
+        winners = [row for row in candidates if batch_rank.get(str(row.batch_id), len(batch_rank)) == best_rank]
+        if len(winners) != 1:
+            ambiguous.add(json.dumps(key, ensure_ascii=False, sort_keys=True, default=str))
+            continue
+        selected[key] = winners[0]
+    return selected, ambiguous
+
+
+def _v4_candidate_references(
+    *,
+    target_sku_code: str,
+    selection_rows: Sequence[entities.Core3CompetitorSelection],
+    fallback_candidates: Sequence[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    if selection_rows:
+        return [
+            {
+                "sku_code": str(row.candidate_sku_code),
+                "brand_name": row.candidate_brand_name,
+                "model_name": row.candidate_model_name,
+                "provenance": "M14",
+                "selection_rank": int(row.selection_rank),
+                "slot_code": row.slot_code,
+                "selection_confidence": _number(row.confidence),
+                "source_refs": [
+                    _v4_row_evidence_ref(
+                        "M14",
+                        row,
+                        record_type="core3_competitor_selection",
+                        record_id_attr="competitor_selection_id",
+                        result_hash_attr="result_hash",
+                    )
+                ],
+            }
+            for row in selection_rows[:3]
+            if str(row.candidate_sku_code) != target_sku_code
+        ]
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for rank, item in enumerate(fallback_candidates or (), start=1):
+        candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else item
+        sku_code = str((candidate or {}).get("sku_code") or "").strip()
+        if not sku_code or sku_code == target_sku_code or sku_code in seen:
+            continue
+        seen.add(sku_code)
+        result.append(
+            {
+                "sku_code": sku_code,
+                "brand_name": (candidate or {}).get("brand_name"),
+                "model_name": (candidate or {}).get("model_name"),
+                "provenance": "competitor_set_fallback",
+                "selection_rank": rank,
+                "slot_code": item.get("competitor_role") or item.get("role") or "existing_competitor_sop",
+                "selection_confidence": _number(item.get("confidence")) or _number(item.get("business_score")),
+                "source_refs": [],
+            }
+        )
+        if len(result) >= 3:
+            break
+    return result
+
+
+def _v4_row_evidence_ref(
+    module_code: str,
+    row: Any,
+    *,
+    record_type: str,
+    record_id_attr: str,
+    result_hash_attr: str,
+) -> EvidenceRef:
+    evidence_ids = getattr(row, "evidence_ids", None) or getattr(row, "evidence_ids_json", None) or []
+    return EvidenceRef(
+        module_code=module_code,
+        record_type=record_type,
+        record_id=str(getattr(row, record_id_attr)),
+        result_hash=str(getattr(row, result_hash_attr)),
+        batch_id=str(getattr(row, "batch_id")) if getattr(row, "batch_id", None) else None,
+        rule_version=str(getattr(row, "rule_version")) if getattr(row, "rule_version", None) else None,
+        evidence_ids=list(evidence_ids),
+    )
+
+
+def _v4_configured_authority(
+    *,
+    module_code: str,
+    table_name: str,
+    rule_version: str,
+    taxonomy_version: str | None,
+    sku_codes: Sequence[str],
+    selected: dict[str, Any],
+    ambiguous: set[str],
+    refs: list[EvidenceRef],
+) -> SourceAuthority:
+    missing = [sku_code for sku_code in sku_codes if sku_code not in selected and json.dumps(sku_code) not in ambiguous]
+    warnings = [*(f"missing_sku:{sku_code}" for sku_code in missing), *(f"ambiguous_current:{key}" for key in sorted(ambiguous))]
+    if refs:
+        availability = "present"
+        usability = "limited" if warnings else "usable"
+    else:
+        availability = "missing"
+        usability = "unusable"
+    return SourceAuthority(
+        module_code=module_code,
+        table_name=table_name,
+        authority_mode="configured_rule",
+        rule_version=rule_version,
+        taxonomy_version=taxonomy_version,
+        selected_batch_ids=sorted({ref.batch_id for ref in refs if ref.batch_id}),
+        row_count=len(refs),
+        availability=availability,
+        usability=usability,
+        source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]) if refs else None,
+        selected_reason="configured rule version, taxonomy when available, and serving-scope precedence",
+        warnings=warnings,
+    )
+
+
+def _v4_multirow_authority(
+    *,
+    module_code: str,
+    table_name: str,
+    rule_version: str,
+    rows: Sequence[Any],
+    refs: list[EvidenceRef],
+    ambiguous_keys: set[str],
+) -> SourceAuthority:
+    del rows
+    warnings = [f"ambiguous_current:{key}" for key in sorted(ambiguous_keys)]
+    return SourceAuthority(
+        module_code=module_code,
+        table_name=table_name,
+        authority_mode="configured_rule",
+        rule_version=rule_version,
+        selected_batch_ids=sorted({ref.batch_id for ref in refs if ref.batch_id}),
+        row_count=len(refs),
+        availability="present" if refs else "missing",
+        usability=("limited" if warnings else "usable") if refs else "unusable",
+        source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]) if refs else None,
+        selected_reason="configured rule version and serving-scope precedence; monetary M12C fields excluded",
+        warnings=warnings,
+    )
+
+
+def _v4_candidate_authority(
+    *,
+    selection_rows: Sequence[entities.Core3CompetitorSelection],
+    candidate_refs: Sequence[dict[str, Any]],
+) -> SourceAuthority:
+    if selection_rows:
+        refs = _v4_dedupe_evidence_refs(
+            [ref for item in candidate_refs for ref in (item.get("source_refs") or [])]
+        )
+        return SourceAuthority(
+            module_code="M14",
+            table_name="core3_competitor_selection",
+            authority_mode="configured_rule",
+            rule_version=CORE3_M14_RULE_VERSION,
+            selected_batch_ids=sorted({ref.batch_id for ref in refs if ref.batch_id}),
+            row_count=len(refs),
+            availability="present",
+            usability="usable",
+            source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]),
+            selected_reason="current successful reviewed M14 selection run",
+        )
+    if candidate_refs:
+        payload = [
+            {key: value for key, value in item.items() if key != "source_refs"}
+            for item in candidate_refs
+        ]
+        return SourceAuthority(
+            module_code="M14",
+            table_name="existing_competitor_sop",
+            authority_mode="fallback",
+            rule_version=None,
+            selected_batch_ids=[],
+            row_count=len(candidate_refs),
+            availability="present",
+            usability="limited",
+            source_hash=canonical_v4_hash(payload),
+            selected_reason="M14 unavailable for target; caller supplied existing competitor analysis identifiers",
+            warnings=["fallback_provenance_not_m14"],
+        )
+    return SourceAuthority(
+        module_code="M14",
+        table_name="core3_competitor_selection",
+        authority_mode="configured_rule",
+        rule_version=CORE3_M14_RULE_VERSION,
+        selected_batch_ids=[],
+        row_count=0,
+        availability="missing",
+        usability="unusable",
+        source_hash=None,
+        selected_reason="no current eligible M14 run and no explicit fallback candidates",
+        warnings=["candidate_source_missing"],
+    )
+
+
+def _v4_external_ref(payload: dict[str, Any]) -> EvidenceRef:
+    extra = payload.get("extra") if isinstance(payload.get("extra"), dict) else {}
+    result_hash = str(payload.get("result_hash") or "").strip() or canonical_v4_hash(payload)
+    return EvidenceRef(
+        module_code=str(payload.get("module_code") or "unknown"),
+        record_type=str(payload.get("table_name") or "unknown"),
+        record_id=str(payload.get("record_id") or canonical_v4_hash(payload)),
+        result_hash=result_hash,
+        batch_id=str(extra.get("batch_id")) if extra.get("batch_id") else None,
+        rule_version=str(extra.get("rule_version")) if extra.get("rule_version") else None,
+        evidence_ids=[str(item) for item in (payload.get("evidence_ids") or [])],
+    )
+
+
+def _v4_published_lineage(contract: Any) -> list[SourceAuthority]:
+    if not contract.found or contract.profile is None:
+        return []
+    grouped: dict[str, list[tuple[dict[str, Any], EvidenceRef]]] = defaultdict(list)
+    for raw in contract.profile.source_refs:
+        if not isinstance(raw, dict) or not raw.get("module_code"):
+            continue
+        grouped[str(raw["module_code"])].append((raw, _v4_external_ref(raw)))
+    result: list[SourceAuthority] = []
+    for module_code, pairs in sorted(grouped.items()):
+        refs = _v4_dedupe_evidence_refs([ref for _, ref in pairs])
+        rule_versions = sorted(
+            {
+                str((raw.get("extra") or {}).get("rule_version"))
+                for raw, _ in pairs
+                if (raw.get("extra") or {}).get("rule_version")
+            }
+        )
+        taxonomies = sorted(
+            {
+                str((raw.get("extra") or {}).get("taxonomy_version"))
+                for raw, _ in pairs
+                if (raw.get("extra") or {}).get("taxonomy_version")
+            }
+        )
+        tables = sorted({ref.record_type for ref in refs})
+        warnings = [] if len(rule_versions) <= 1 else ["multiple_published_rule_versions"]
+        result.append(
+            SourceAuthority(
+                module_code=module_code,
+                table_name="+".join(tables),
+                authority_mode="published_release",
+                rule_version=rule_versions[0] if len(rule_versions) == 1 else None,
+                taxonomy_version=taxonomies[0] if len(taxonomies) == 1 else None,
+                release_id=contract.profile.m12d_profile_version,
+                selected_batch_ids=list(contract.profile.source_batch_ids),
+                row_count=len(refs),
+                availability="present",
+                usability="limited" if warnings else "usable",
+                source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]),
+                selected_reason="source refs frozen inside the published M12D profile",
+                warnings=warnings,
+            )
+        )
+    return result
+
+
+def _v4_purchase_reason_snapshot(
+    contract: Any,
+    *,
+    lineage_status: str,
+) -> tuple[PurchaseReasonSnapshot, SourceAuthority]:
+    if not contract.found or contract.profile is None:
+        return (
+            PurchaseReasonSnapshot(
+                found=False,
+                lineage_status="unresolved",
+                profile_version=None,
+                release_id=None,
+                anchors=[],
+                review_required=False,
+                source_refs=[],
+            ),
+            SourceAuthority(
+                module_code="M12D",
+                table_name="core3_sku_purchase_reason_profile",
+                authority_mode="published_release",
+                rule_version=None,
+                selected_batch_ids=[],
+                row_count=0,
+                availability="missing",
+                usability="unusable",
+                source_hash=None,
+                selected_reason="no published M12D profile found for the target in serving scope",
+                warnings=["published_profile_missing"],
+            ),
+        )
+    profile = contract.profile
+    profile_payload = profile.model_dump(mode="json")
+    profile_ref = EvidenceRef(
+        module_code="M12D",
+        record_type="core3_sku_purchase_reason_profile",
+        record_id=f"{profile.sku_code}:{profile.m12d_profile_version}",
+        result_hash=canonical_v4_hash(profile_payload),
+        batch_id=profile.batch_id,
+        rule_version=profile.rule_version,
+        evidence_ids=[],
+    )
+    source_refs = _v4_dedupe_evidence_refs(
+        [profile_ref, *[_v4_external_ref(raw) for raw in profile.source_refs if isinstance(raw, dict)]]
+    )
+    usability = {
+        "published_ready": "usable",
+        "published_degraded": "limited",
+        "published_unusable": "unusable",
+    }.get(str(contract.consumption_state), "unusable")
+    return (
+        PurchaseReasonSnapshot(
+            found=True,
+            lineage_status=lineage_status,
+            profile_version=profile.m12d_profile_version,
+            release_id=profile.m12d_profile_version,
+            anchors=[anchor.model_dump(mode="json") for anchor in profile.anchors],
+            review_required=bool(profile.review_required),
+            source_refs=source_refs,
+        ),
+        SourceAuthority(
+            module_code="M12D",
+            table_name="core3_sku_purchase_reason_profile",
+            authority_mode="published_release",
+            rule_version=profile.rule_version,
+            schema_version=profile.schema_version,
+            release_id=profile.m12d_profile_version,
+            selected_batch_ids=[profile.batch_id],
+            row_count=1,
+            availability="present",
+            usability=usability,
+            source_hash=profile_ref.result_hash,
+            selected_reason="published M12D downstream read contract",
+            warnings=list(profile.degradation_reasons),
+        ),
+    )
+
+
+def _v4_sku_snapshot(
+    *,
+    sku_code: str,
+    target_fallback: ResolvedSku | None,
+    candidate_ref: dict[str, Any] | None,
+    selected_by_module: dict[str, dict[str, Any]],
+    ambiguous_by_module: dict[str, set[str]],
+    allocation_rows: Sequence[Any],
+    summary_rows: Sequence[Any],
+    m11d_ambiguous: set[str],
+    m12c_present: bool,
+    m12c_ambiguous: set[str],
+    comment_atoms: Sequence[entities.Core3CommentFactAtom],
+) -> SkuEvidenceSnapshot:
+    rows = {module: selected.get(sku_code) for module, selected in selected_by_module.items()}
+    identity = _v4_sku_identity(
+        sku_code=sku_code,
+        market=rows.get("M07"),
+        param=rows.get("M03B"),
+        target_fallback=target_fallback,
+        candidate_ref=candidate_ref,
+    )
+    source_status: dict[str, SourceStatus] = {}
+    for module_code in ("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C"):
+        ambiguous = json.dumps(sku_code) in ambiguous_by_module.get(module_code, set())
+        if ambiguous:
+            source_status[module_code] = SourceStatus(
+                availability="present",
+                usability="unusable",
+                issue_codes=["multiple_current_same_rule"],
+            )
+        elif rows.get(module_code) is not None:
+            source_status[module_code] = SourceStatus(availability="present", usability="usable")
+        else:
+            source_status[module_code] = SourceStatus(
+                availability="missing",
+                usability="unusable",
+                issue_codes=["configured_source_missing"],
+            )
+    m11d_issues = ["multiple_current_same_rule"] if any(sku_code in key for key in m11d_ambiguous) else []
+    source_status["M11D"] = SourceStatus(
+        availability="present" if allocation_rows else "missing",
+        usability="limited" if allocation_rows and m11d_issues else ("usable" if allocation_rows else "unusable"),
+        issue_codes=m11d_issues or ([] if allocation_rows else ["configured_source_missing"]),
+    )
+    m12c_issues = ["multiple_current_same_rule"] if any(sku_code in key for key in m12c_ambiguous) else []
+    source_status["M12C"] = SourceStatus(
+        availability="present" if m12c_present else "missing",
+        usability="limited" if m12c_present and m12c_issues else ("usable" if m12c_present else "unusable"),
+        issue_codes=m12c_issues or ([] if m12c_present else ["configured_source_missing"]),
+    )
+    summary_by_dimension = {(str(row.dimension_type), str(row.dimension_code)): row for row in summary_rows}
+    semantic_market = []
+    for row in allocation_rows:
+        summary = summary_by_dimension.get((str(row.dimension_type), str(row.dimension_code)))
+        item = _allocation_payload(row)
+        item["market_space"] = (
+            {
+                "estimated_sales_volume": _number(summary.estimated_sales_volume),
+                "estimated_sales_amount": _number(summary.estimated_sales_amount),
+                "allocated_sku_count": int(summary.allocated_sku_count),
+                "allocation_coverage_rate": _number(summary.allocation_coverage_rate),
+                "causal_purchase_attribution": False,
+            }
+            if summary is not None
+            else None
+        )
+        semantic_market.append(item)
+    facts = {
+        "parameter_fact": _param_payload(rows.get("M03B")),
+        "claim_fact": _claim_payload(rows.get("M04C")),
+        "comment_fact": _comment_payload(rows.get("M05C")),
+    }
+    if candidate_ref is not None:
+        facts["candidate_source"] = {
+            "provenance": candidate_ref["provenance"],
+            "selection_rank": candidate_ref.get("selection_rank"),
+            "slot_code": candidate_ref.get("slot_code"),
+            "selection_confidence": candidate_ref.get("selection_confidence"),
+        }
+    market = _market_payload(rows.get("M07"))
+    tasks_payload = _user_task_payload(rows.get("M09C"))
+    groups_payload = _target_group_payload(rows.get("M10C"))
+    battlefields_payload = _battlefield_payload(rows.get("M11C"))
+    refs = [
+        *[
+            _v4_profile_ref_for_module(module_code, row)
+            for module_code, row in rows.items()
+            if row is not None
+        ],
+        *[
+            _v4_row_evidence_ref(
+                "M11D",
+                row,
+                record_type="core3_semantic_market_allocation",
+                record_id_attr="allocation_id",
+                result_hash_attr="result_hash",
+            )
+            for row in allocation_rows
+        ],
+        *[
+            _v4_row_evidence_ref(
+                "M05C",
+                row,
+                record_type="core3_comment_fact_atom",
+                record_id_attr="comment_fact_id",
+                result_hash_attr="fact_hash",
+            )
+            for row in comment_atoms
+        ],
+        *(candidate_ref.get("source_refs") or [] if candidate_ref is not None else []),
+    ]
+    payload = {
+        "identity": identity,
+        "source_status": source_status,
+        "facts": facts,
+        "comment_outcomes": [_sellpoint_comment_atom_payload(row) for row in comment_atoms],
+        "market": market,
+        "tasks": [tasks_payload] if tasks_payload else [],
+        "target_groups": [groups_payload] if groups_payload else [],
+        "battlefields": [battlefields_payload] if battlefields_payload else [],
+        "semantic_market": semantic_market,
+        "source_refs": _v4_dedupe_evidence_refs(refs),
+    }
+    return SkuEvidenceSnapshot(**payload, snapshot_hash=canonical_v4_hash(payload))
+
+
+def _v4_profile_ref_for_module(module_code: str, row: Any) -> EvidenceRef:
+    config = {
+        "M03B": ("core3_sku_param_profile", "sku_param_profile_id", "profile_hash"),
+        "M04C": ("core3_sku_claim_fact_profile", "claim_profile_id", "profile_hash"),
+        "M05C": ("core3_sku_comment_fact_profile", "comment_profile_id", "profile_hash"),
+        "M07": ("core3_sku_market_profile", "profile_id", "result_hash"),
+        "M09C": ("core3_m09c_sku_user_task_profile", "profile_id", "profile_hash"),
+        "M10C": ("core3_m10c_sku_target_group_profile", "profile_id", "profile_hash"),
+        "M11C": ("core3_sku_value_battlefield_profile", "profile_id", "profile_hash"),
+    }[module_code]
+    return _v4_row_evidence_ref(
+        module_code,
+        row,
+        record_type=config[0],
+        record_id_attr=config[1],
+        result_hash_attr=config[2],
+    )
+
+
+def _v4_sku_identity(
+    *,
+    sku_code: str,
+    market: Any | None,
+    param: Any | None,
+    target_fallback: ResolvedSku | None,
+    candidate_ref: dict[str, Any] | None,
+) -> SkuIdentity:
+    param_values = (param.param_values_json or {}) if param is not None else {}
+    screen_size = _number(market.screen_size_inch) if market is not None else None
+    if screen_size is None:
+        screen_size = _number(((param_values.get("dimension_tier_profile") or {}).get("screen_size_inch")))
+    if screen_size is None and target_fallback is not None:
+        screen_size = _number(target_fallback.screen_size_inch)
+    return SkuIdentity(
+        sku_code=sku_code,
+        brand_name=(market.brand_name or market.brand) if market is not None else (candidate_ref or {}).get("brand_name") or (target_fallback.brand_name if target_fallback else None),
+        model_name=(market.model_name if market is not None else None) or (param.model_name if param is not None else None) or (candidate_ref or {}).get("model_name") or (target_fallback.model_name if target_fallback else None),
+        product_category="TV",
+        screen_size_inch=screen_size,
+        size_tier=(market.size_segment if market is not None else None) or _param_size_tier(param) or (target_fallback.size_tier if target_fallback else None),
+        price_band=(market.price_band_size if market is not None else None) or (target_fallback.price_band_in_size_tier if target_fallback else None),
+    )
+
+
+def _v4_market_cells(
+    *,
+    weekly_rows: Sequence[entities.Core3CleanMarketWeekly],
+    market_profiles: dict[str, entities.Core3SkuMarketProfile],
+    battlefield_profiles: dict[str, entities.Core3SkuValueBattlefieldProfile],
+    allocation_rows: Sequence[entities.Core3SemanticMarketAllocation],
+) -> list[MarketCellRow]:
+    allocation_weight = {
+        (str(row.sku_code), str(row.dimension_code)): _number(row.allocation_weight)
+        for row in allocation_rows
+        if str(row.dimension_type) == "value_battlefield"
+    }
+    result: list[MarketCellRow] = []
+    for row in weekly_rows:
+        sku_code = str(row.sku_code)
+        market = market_profiles.get(sku_code)
+        battlefield = battlefield_profiles.get(sku_code)
+        battlefield_code = str(battlefield.primary_battlefield_code or "unknown") if battlefield is not None else "unknown"
+        result.append(
+            MarketCellRow(
+                sku_code=sku_code,
+                battlefield_code=battlefield_code,
+                period_week_index=int(row.period_week_index),
+                platform_type=row.platform_type or "unknown",
+                channel_type=row.channel_type,
+                avg_price=_number(row.avg_price),
+                sales_volume=_number(row.sales_volume),
+                sales_amount=_number(row.sales_amount),
+                battlefield_allocation_weight=allocation_weight.get((sku_code, battlefield_code)),
+                value_bundle_tiers={},
+                other_bundle_tiers={},
+                brand_name=row.brand_name or (market.brand_name if market is not None else None),
+                series_name=market.series if market is not None else None,
+                price_check_status=str(row.price_check_status),
+                promotion_suspect=bool(market.promotion_suspect_flag) if market is not None else False,
+                inventory_status="unavailable",
+                quality_flags=list(row.quality_flags or []),
+                source_ref=EvidenceRef(
+                    module_code="M07",
+                    record_type="core3_clean_market_weekly",
+                    record_id=str(row.clean_market_id),
+                    result_hash=str(row.clean_hash),
+                    batch_id=str(row.batch_id),
+                    rule_version=str(row.clean_version),
+                    evidence_ids=[str(row.source_row_id)],
+                ),
+            )
+        )
+    return result
+
+
+def _v4_dedupe_evidence_refs(refs: Sequence[EvidenceRef]) -> list[EvidenceRef]:
+    result: list[EvidenceRef] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for ref in refs:
+        key = (ref.module_code, ref.record_type, ref.record_id, ref.result_hash)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(ref)
+    return sorted(result, key=lambda ref: (ref.module_code, ref.record_type, ref.record_id, ref.result_hash))
 
 
 def format_serving_scope_batch_id(product_category: str, batch_ids: Sequence[str]) -> str:
