@@ -1,0 +1,16 @@
+{
+  "goal": "V5-G05",
+  "status": "complete",
+  "primary_commit": "2cd435b5a516c808c6e1dda288ec3afb667bcebf",
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "tests": {"g05_passed": 12, "related_passed": 58, "overall_coverage_percent": 93, "service_coverage_percent": 91, "ruff": "passed"},
+  "artifacts": [
+    {"path": "claim_value_pm_v5_schemas.py", "sha256": "b592a09b4ef4ee9730da7bca1bf62d150962cb0d3d097f8299a14264fdb2d455"},
+    {"path": "claim_value_pm_v5_service.py", "sha256": "e8bb6dce47f9583cf2e24da47a1b6bfe2e67175592b4d635dc71fe2f57f21642"},
+    {"path": "test_claim_value_pm_v5_battlefield_portfolio.py", "sha256": "48328028bd78033b446fc6faededf109d8b21bb8a877ebc603fa4bd40053adaa"},
+    {"path": "G05_business_review.md", "sha256": "084d32bc513f9e91001e94a0179b59ff170e7548be4c394bb1540f8b63f822ae"},
+    {"path": "G05_schema_contract_addendum.json", "sha256": "948c180bf5d52eb264928e767f51913ad5da70c406e926dd71b549009a6790d3"}
+  ],
+  "next_goal": "V5-G06"
+}
