@@ -19,7 +19,7 @@
 | Q5 config v2 + deterministic cluster bootstrap | completed |
 | Pure negative / mixed / data conflict 分离 | completed |
 | Frozen cohort/hash 真回放 | completed |
-| 309+ 回归、覆盖率、性能和三审 | in_progress |
+| 309+ 回归、覆盖率、性能和三审 | completed |
 
 ## 停止条件
 
@@ -60,3 +60,13 @@
 - V4 92 tests，schema/service/answer coverage 93%；10,000 rows peak 25.413MB，Q5 report P95 0.016519s，65E7Q-like P95 0.000490s，Markdown P95 0.000076s；
 - G02-G08 artifact commit hash 全匹配；G01 发现历史 pointer 指向 core commit、但 progress hash 来自 closure commit，已把 artifact_commit 纠正为四项均匹配的 `6c3525c`；
 - PM 主表现显示“尺寸档、观察窗口、实际平台；市场空间”，并去除“已感知/已观察到”的重复表达。
+
+## 最终状态
+
+- B01-B08：全部关闭；
+- 方法复审：PASS；
+- 工程复审：PASS；
+- 产品经理业务语言复审：PASS；
+- G08R1 验收：PASSED；
+- G09 shadow validation：allowed；
+- G10/default route switch：not allowed without separate approval。
