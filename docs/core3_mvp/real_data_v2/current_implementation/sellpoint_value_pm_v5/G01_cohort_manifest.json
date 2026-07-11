@@ -1,0 +1,64 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_g01_cohort_manifest_v1",
+  "captured_date": "2026-07-11",
+  "read_only": true,
+  "cohort_manifest_sha256": "ae3ea428f5293a9016e2d88ca6e908ae8c4f842af671953aa7d6a1fa3defb450",
+  "cohorts": [
+    {
+      "cohort_id": "C01_65E7Q_MULTI_LAYER",
+      "sku_codes": ["TV00029112", "TV00027541", "TV00029020", "TV00027899"],
+      "models": ["海信 65E7Q", "海信 65E5Q", "小米 L65MC-SP", "索尼 K-65XR50"],
+      "purpose": "多层反事实、lineage、bundle 共线和严格金额阻断",
+      "input_sha256": "d05a8d9267d86984351468883de82be4c6e53e48ed87adc9dc07960055f746ef"
+    },
+    {
+      "cohort_id": "C02_DIRECT_TIER",
+      "sku_codes": ["TV00027524", "TV00027913"],
+      "models": ["海信 75E5Q", "海信 75E5Q-PRO"],
+      "purpose": "同品牌同尺寸直接参数档位候选",
+      "input_sha256": "eb07b92324514c433dcc43ec2dce62d2f677d7bff07557f5931c9c27d5da3d19"
+    },
+    {
+      "cohort_id": "C03_SYNTHETIC_DONOR_RICH",
+      "sku_codes": ["TV00029173", "TV00028835", "TV00030138"],
+      "models": ["雷鸟 75R69A-A", "创维 75A28F", "海信 75E3S-PRO+"],
+      "purpose": "broad donor 丰富时验证平衡、overlap 和 placebo",
+      "input_sha256": "781536cc1e2246255d3b16f1464b65eb1622dc045f32e527c2f5c7762f5c942d"
+    },
+    {
+      "cohort_id": "C04_SAME_CLAIM_DIFFERENT_REALIZATION",
+      "sku_codes": ["TV00027942", "TV00027935", "TV00027690"],
+      "models": ["雷鸟 85S595C ULTRA", "雷鸟 75S595C PRO", "VIDDA 85VX5Q"],
+      "purpose": "同宣称不同用户兑现和负向兑现",
+      "input_sha256": "858c03e62f17feea50a5fd5a18bbf4ec5eda2c6c308bdbdb46c0e4d7cd5f94f2"
+    },
+    {
+      "cohort_id": "C05_NO_STRONG_OWN_PRICE_CURVE",
+      "sku_codes": ["TV00025519", "TV00027039", "TV00027055"],
+      "models": ["红米 L55RA-RA", "小米 L100MB-SP", "TCL 75J7K-JN"],
+      "purpose": "单平台时自身价格曲线必须降级",
+      "input_sha256": "c9eb850a56a1db3342e6f4063b9da5de69f6b4e5cfcafd9761384347309b7cc3"
+    },
+    {
+      "cohort_id": "C06_EXISTING_AND_EXCLUDED_BATTLEFIELD",
+      "sku_codes": ["TV00029112"],
+      "models": ["海信 65E7Q"],
+      "purpose": "机会/用户观察已进入战场与 excluded 召回严格分离",
+      "input_sha256": "f1ce47859352d3297714bbcf4ba656ff73e246ca9c17f637cdc75ca1a4e65a16"
+    },
+    {
+      "cohort_id": "C07_NO_OBSERVABLE_EXPANSION",
+      "sku_codes": ["TV00025500", "TV00025501", "TV00025519"],
+      "models": ["TV00025500", "TV00025501", "红米 L55RA-RA"],
+      "purpose": "无可观察 expansion candidate 时合法空结果",
+      "input_sha256": "586e1136c32abd0e4c7b8769607053306281408dd227229b722ab6f1545aca72"
+    },
+    {
+      "cohort_id": "C08_NEGATIVE_MIXED_USER_VALUE",
+      "sku_codes": ["TV00028087"],
+      "models": ["32F195C"],
+      "purpose": "pure negative、mixed 和事实冲突保持分离",
+      "input_sha256": "88045115e6816f50eae656a34bf61fa9c9c4c1f872095c16c5608ce9addf5621"
+    }
+  ]
+}

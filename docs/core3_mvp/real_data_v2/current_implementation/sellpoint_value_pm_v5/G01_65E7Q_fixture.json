@@ -1,0 +1,84 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_g01_65e7q_fixture_v1",
+  "captured_date": "2026-07-11",
+  "source_environment": "205/catforge_dev",
+  "read_only": true,
+  "target": {
+    "sku_code": "TV00029112",
+    "brand_name": "海信",
+    "model_name": "65E7Q",
+    "screen_size_inch": 65,
+    "market": {
+      "price_wavg": 5949.3917,
+      "sales_volume_total": 6023,
+      "sales_amount_total": 35833186.49,
+      "active_week_count": 24,
+      "platform_count": 2,
+      "price_min": 4764.8919,
+      "price_max": 7055.8294,
+      "price_volatility": 0.10876,
+      "same_pool_price_percentile": 0.962963,
+      "same_pool_volume_percentile": 0.135802,
+      "same_pool_amount_percentile": 0.728395
+    },
+    "entered_battlefields": {
+      "primary": ["BF_PREMIUM_PICTURE_UPGRADE"],
+      "secondary": ["BF_SMART_CONNECTED_EXPERIENCE", "BF_GAMING_SPORTS_FLUENCY"],
+      "opportunity_or_user_observed": ["BF_MAINSTREAM_LIVING_BALANCE", "BF_EYE_CARE_FAMILY_COMFORT"]
+    },
+    "excluded_battlefields": [
+      "BF_GIANT_HOME_THEATER_FLAGSHIP",
+      "BF_GIANT_SCREEN_VALUE_DOWNTRADE",
+      "BF_LARGE_SCREEN_FAMILY_CINEMA",
+      "BF_LARGE_SCREEN_VALUE_UPGRADE",
+      "BF_MAINSTREAM_FAMILY_VALUE",
+      "BF_PREMIUM_VALUE_DOWNTRADE",
+      "BF_SMALL_SCREEN_ESSENTIAL_VALUE",
+      "BF_SMALL_SMART_EASY_USE"
+    ],
+    "observable_expansion_recall": [
+      "BF_LARGE_SCREEN_FAMILY_CINEMA",
+      "BF_MAINSTREAM_FAMILY_VALUE",
+      "BF_PREMIUM_VALUE_DOWNTRADE"
+    ],
+    "observable_expansion_recall_is_eligible": false,
+    "expansion_blocker": "M11C status reasons say size/price gate or evidence threshold is not met"
+  },
+  "counterfactual_coverage": {
+    "same_market_pool_peer_count": 51,
+    "same_brand_size_peer_count": 8,
+    "same_budget_15pct_peer_count": 3,
+    "broad_synthetic_donor_count": 9,
+    "param_tier_roles": ["lower", "same", "higher"],
+    "own_price_curve_strong": true
+  },
+  "same_budget_peers": [
+    {"sku_code": "TV00029020", "model": "小米 L65MC-SP", "price_wavg": 5852.5774, "sales_volume": 3756},
+    {"sku_code": "TV00029936", "model": "创维 65A7H PRO", "price_wavg": 5637.0483, "sales_volume": 5199},
+    {"sku_code": "TV00027801", "model": "TCL 65Q9L PRO", "price_wavg": 5521.9676, "sales_volume": 4268}
+  ],
+  "same_claim_realization_contrast": {
+    "peer_contradicted": ["tv_claim_hdr_high_brightness", "tv_claim_miniled_display", "tv_claim_theater_scene"],
+    "peer_not_realized": ["tv_claim_gaming_low_latency", "tv_claim_high_refresh_rate"]
+  },
+  "m11d_current_sales_allocation": [
+    {"battlefield_code": "BF_PREMIUM_PICTURE_UPGRADE", "allocation_weight": 0.43811, "allocated_sales_volume": 2638.7365},
+    {"battlefield_code": "BF_GAMING_SPORTS_FLUENCY", "allocation_weight": 0.292731, "allocated_sales_volume": 1763.1188},
+    {"battlefield_code": "BF_EYE_CARE_FAMILY_COMFORT", "allocation_weight": 0.269159, "allocated_sales_volume": 1621.1447}
+  ],
+  "quantification_boundary": {
+    "m11d_allocation_is_incremental": false,
+    "synthetic_increment_allowed_now": false,
+    "strict_amount_allowed_now": false,
+    "blockers": ["published_lineage_conflict", "bundle_collinearity", "synthetic_balance_not_run"]
+  },
+  "source_hashes": {
+    "market": "sha256:m07-profile-percentile-v1:9c2cb2015bbb033d17a8735931bff89248e9dd9649c04433373e1bd31ab2fe30",
+    "m03b": "sha256:m03b-sku-param-profile-v1:47a7d1b91ff7cd3f1c1d87170cd031ec3796fbe73f471e79dec2581cc08980a5",
+    "m04c": "sha256:m04c-claim-profile-v1:ed4a6a0126b8f1e9ca60f55608991e0cea62da2dc9c6438072f23d71dbba23bc",
+    "m05c": "sha256:m05c-comment-profile-v1:8f37de0dd0bc6b4032215dc588a577d57d921adac8e9c6bec138052febb44976",
+    "m11c": "sha256:m11c-value-battlefield-profile-v2:d99d3d6cadfeb2759c93b98d1ca1941419df32b18416fd9dafe298d81acdd129",
+    "m12d": "bfc463d9512b5cc816f4a198d5cce7dd213221d21f4ae0fb0dddce955506845f"
+  },
+  "input_sha256": "d05a8d9267d86984351468883de82be4c6e53e48ed87adc9dc07960055f746ef"
+}

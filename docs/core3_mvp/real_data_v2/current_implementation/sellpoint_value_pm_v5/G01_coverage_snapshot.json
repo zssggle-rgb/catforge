@@ -1,0 +1,81 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_g01_coverage_v1",
+  "captured_date": "2026-07-11",
+  "source_environment": "205/catforge_dev",
+  "read_only": true,
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "category_code": "TV",
+  "source_versions": {
+    "M03B": "m03b_tv_param_profile_v0.2",
+    "M04C": "m04c_tv_claim_fact_profile_v0.2",
+    "M05C": "m05c_tv_comment_fact_profile_v0.2",
+    "M07": "m07_market_profile_v2/full_observed_window",
+    "M11C": "m11c_tv_value_battlefield_profile_v0.4",
+    "M11D": "m11d_semantic_market_allocation_v0.1",
+    "M12D": "m12d_sku_purchase_reason_profile_v0.1",
+    "M14": "core3_mvp_real_data_v2_m14_v1/review_required"
+  },
+  "universe": {
+    "market_target_skus": 377,
+    "m03b_skus": 377,
+    "m04c_skus": 328,
+    "m05c_skus": 348,
+    "m11c_skus": 348,
+    "m11d_skus": 335,
+    "m12d_skus": 377
+  },
+  "counterfactual_coverage": {
+    "market_pool_baseline": 375,
+    "same_budget": 367,
+    "same_budget_battlefield": 332,
+    "same_budget_primary_battlefield": 311,
+    "battlefield_peer_ge3": 315,
+    "battlefield_peer_ge5": 284,
+    "primary_battlefield_peer_ge3": 246,
+    "primary_battlefield_peer_ge5": 193,
+    "same_brand_size": 346,
+    "param_tier_comparable": 367,
+    "own_price_curve_strong": 312,
+    "advertised_claim": 328,
+    "advertised_claim_realized": 287,
+    "same_claim_peer_not_realized": 249,
+    "same_claim_peer_contradicted": 263,
+    "synthetic_donor_ge5_broad_recall": 327
+  },
+  "parameter_tier_roles": {
+    "lower": 357,
+    "same": 367,
+    "higher": 361,
+    "all_three": 351
+  },
+  "battlefield_coverage": {
+    "taxonomy_count": 13,
+    "profile_skus": 348,
+    "secondary_nonempty": 218,
+    "opportunity_nonempty": 335,
+    "average_opportunity_count": 3.3103,
+    "average_entered_count": 5.2557,
+    "observable_expansion_recall_skus": 288,
+    "observable_expansion_recall_is_eligibility": false
+  },
+  "m14": {
+    "raw_target_skus": 84,
+    "raw_selected_slots": 147,
+    "eligible_runs": 0,
+    "status": "review_required"
+  },
+  "method_boundaries": {
+    "inventory": "unavailable",
+    "promotion": "suspect_flag_only",
+    "synthetic_recall_is_balanced_control": false,
+    "residual_archetype_is_causal": false,
+    "m11d_allocation_is_incremental": false,
+    "strict_amount_allowed_by_g01": false
+  },
+  "determinism": {
+    "stdout_sha256_run_1": "d6c0bd60d9c35cef56cfb275c1a0d0d5375cf400b85b22dcd2f39e2bf1f468d6",
+    "stdout_sha256_run_2": "d6c0bd60d9c35cef56cfb275c1a0d0d5375cf400b85b22dcd2f39e2bf1f468d6",
+    "probe_result_sha256": "e74fcfb73d72e149daae048079fb6f34b51fc772134f09fc2355f474a45d785a",
+    "cohort_manifest_sha256": "ae3ea428f5293a9016e2d88ca6e908ae8c4f842af671953aa7d6a1fa3defb450"
+  }
+}
