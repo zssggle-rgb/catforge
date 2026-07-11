@@ -1,0 +1,38 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_goal_artifact_manifest_v1",
+  "goal_id": "G09",
+  "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
+  "predecessor_commit": "1653bff",
+  "rc_metadata_commit": "295f575",
+  "artifact_commit": "dd30e0b",
+  "captured_at": "2026-07-11T22:23:00+08:00",
+  "artifacts": [
+    {"path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G09_rc_manifest.json", "sha256": "3f02e735433262d65c9b9beba9770d0826bf67ab418ecbd8f38d0818af73348a"},
+    {"path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G09_shadow_acceptance_report.md", "sha256": "84977bc88d44ad7aed3678757ae6acfa1810e49b8043912b245e1002f542d0d7"},
+    {"path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G09_rollback_receipt.md", "sha256": "1a9dd5311c7fa815133a9dde76c14259ab48ca45abbdda7a05ef1fe93b92b198"}
+  ],
+  "mutable_artifacts_excluded": ["G09_progress.md"],
+  "self_hash_policy": "manifest, closure receipt, and mutable progress metadata are excluded from the artifact hash list",
+  "validation": {
+    "acceptance_status": "passed_default_off_shadow",
+    "rc_package_sha256": "8c1b62ddde63add4196cb424856a06269870c4720fbcba55a2d46b45d0925b95",
+    "rollback_package_sha256": "dba311341c081840a78a69179e365bc48882be74470c5c97c4172f0e0a1d3f0a",
+    "runtime_hash_match_count": 9,
+    "cohort_double_run_pass_count": 5,
+    "real_sku_amount_non_null_count": 0,
+    "cross_carrier_result_hash_match": true,
+    "feishu_readback": "passed",
+    "context_query_count": 17,
+    "latest_authority_resolution_query_count": 10,
+    "endpoint_total_query_count": 27,
+    "concurrent_run_count": 8,
+    "database_tuple_write_delta": 0,
+    "rollback_drill": "passed",
+    "v2_business_regression": "passed",
+    "health_ready": "passed",
+    "default_route_unchanged": true
+  },
+  "g09_shadow_validation_completed": true,
+  "g10_default_route_switch_allowed": false,
+  "g10_recommendation": "not_recommended_until_live_lineage_and_counterfactuals_are_ready"
+}
