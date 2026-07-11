@@ -1,7 +1,7 @@
 # G08 本地综合验收与独立评审进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`in_progress`
+- Goal 状态：`completed_with_failed_acceptance`
 - 定时器：`catforge-v4-g08-10`
 - 验收提交范围：`b903c2a^..095016d`（G03-G07）
 - 前置 G07 artifact commit：`1e10a04`
@@ -46,3 +46,10 @@
 - 独立对抗审查返回 8 个候选问题；逐项回读后 7 个成立，`Session autoflush` 候选因 CatForge `SessionLocal(autoflush=False)` 不成立；
 - 产品经理业务语言审查确认 pure negative 与 mixed 共用 `conflicted`，导致纯负向评论被写成“正反并存”；
 - 综合验收结论为 `FAILED — G09 NOT ALLOWED`，需要独立 G08R1 修复后重新验收。
+
+## 关闭状态
+
+- G08 验收任务已完成；
+- 被验收实现未通过，G09 准入为 false；
+- 允许创建 G08R1 修复 Goal；
+- artifact commit：`b54418e`。

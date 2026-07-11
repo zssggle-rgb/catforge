@@ -1,0 +1,51 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_goal_artifact_manifest_v1",
+  "goal_id": "G08",
+  "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
+  "predecessor_commit": "095016d",
+  "artifact_commit": "b54418e",
+  "captured_at": "2026-07-11T21:20:41+08:00",
+  "artifacts": [
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G08_acceptance_report.md",
+      "sha256": "dea94c7e58e152e0bd9d9767fdc9a358e93151c178e914ef42d20a5beba49d20"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G08_engineering_review.md",
+      "sha256": "80560cf70b8c8f463daa5411bc82a300af0392f96532030c83c40e8e32a42c5f"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G08_method_review.md",
+      "sha256": "877ef6c59503f544084bca81dcfafaa04fd5c0f0c7703048d18dd1eaf7aab0ea"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G08_pm_language_review.md",
+      "sha256": "861dd4614454835e1cadd538b3994039c0e640317cf3d547e3c7edfccda03f88"
+    }
+  ],
+  "mutable_artifacts_excluded": [
+    "G08_progress.md"
+  ],
+  "self_hash_policy": "manifest, closure receipt, and mutable progress metadata are excluded from the artifact hash list",
+  "validation": {
+    "acceptance_status": "failed",
+    "g09_allowed": false,
+    "related_test_pass_count": 309,
+    "v4_coverage_percent": 93,
+    "artifact_hash_match_count": 23,
+    "artifact_hash_total_count": 23,
+    "query_budget_max": 20,
+    "synthetic_row_count": 10000,
+    "synthetic_peak_memory_mb": 25.413,
+    "fixture_p95_seconds": 0.000325,
+    "markdown_p95_seconds": 0.000060,
+    "critical_blocker_count": 2,
+    "total_blocker_count": 8,
+    "database_write_count": 0,
+    "server_file_write_count": 0,
+    "git_diff_check": "passed"
+  },
+  "next_goal": "G08R1",
+  "next_goal_allowed": true,
+  "g09_allowed": false
+}
