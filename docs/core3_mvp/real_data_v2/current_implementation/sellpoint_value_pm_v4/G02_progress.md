@@ -1,7 +1,7 @@
 # G02 详细设计、模型合同与测试计划进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`ready_to_close`
+- Goal 状态：`completed`
 - 定时器：`catforge-v4-g02-10`
 - 前置 G01 artifact commit：`26aaf84`
 - 前置 G01 closure commit：`6c3525c`
@@ -41,3 +41,7 @@
 - 修复项：将 Q5 的“两条独立 A 级 pair 且跨两个 model family”同步进 typed schema、测试 fixture 和需求追溯；
 - 运行范围仍为 3 个新增文件、2 层新增业务能力、默认关闭的显式 V4 路由；
 - 多 SKU 结构需求模型因当前数据无法处理价格内生性而退出首版，不作为静默待办。
+
+## 下一步
+
+G02 已完成，允许进入 G03。G03 只实现只读 context、authority、lineage gate 和 typed schema；不得提前生成用户价值结论、反事实或 WTP。

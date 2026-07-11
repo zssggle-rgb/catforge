@@ -1,0 +1,44 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_goal_artifact_manifest_v1",
+  "goal_id": "G02",
+  "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
+  "predecessor_commit": "6c3525c",
+  "artifact_commit": "f62b68f",
+  "captured_at": "2026-07-11T19:02:00+08:00",
+  "artifacts": [
+    {
+      "path": "docs/core3_mvp/real_data_v2/sop_detailed_design/CATFORGE_ANALYST_sellpoint_value_pm_v4_design.md",
+      "sha256": "ebb21569b186458f2fc412a29c8680ed63534ad37b8a625659e83c003b61fd33"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G02_schema_contract.json",
+      "sha256": "aea8c36474653a001cbc02feb0f3b6f80bc27b4986c3d7705f65d1af40bb69cf"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G02_requirements_traceability.md",
+      "sha256": "780b4f327777a2fbac466183e05414094de8f0e257bdeb890c26d743a3cf416f"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G02_test_plan.md",
+      "sha256": "ef63593330c274c1f754085290ae1daa4e042e4f3fc1c9a04b55610d9dc4d949"
+    }
+  ],
+  "mutable_artifacts_excluded": [
+    "G02_progress.md"
+  ],
+  "self_hash_policy": "manifest, closure receipt, and mutable progress metadata are excluded from the artifact hash list",
+  "validation": {
+    "schema_json_valid": true,
+    "requirements_fully_traced": true,
+    "plan_eng_review_status": "clean",
+    "unresolved_decisions": 0,
+    "critical_gaps": 0,
+    "issues_found_and_fixed": 1,
+    "git_diff_check": "passed",
+    "runtime_file_write_count": 0,
+    "database_write_count": 0,
+    "server_file_write_count": 0
+  },
+  "next_goal": "G03",
+  "next_goal_allowed": true
+}
