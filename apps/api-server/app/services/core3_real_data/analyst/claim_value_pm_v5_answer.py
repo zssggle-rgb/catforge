@@ -105,7 +105,9 @@ def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValu
     universe = [v4_context.target_snapshot, *v4_context.candidate_snapshots]
     by_code = {row.identity.sku_code: row for row in universe}
     ordered = [by_code[code] for code in sorted(by_code)]
-    battlefield_names: dict[str, str] = {}
+    battlefield_names: dict[str, str] = (
+        dict(TV_BATTLEFIELD_CN) if v4_context.category_code == "TV" else {}
+    )
     for snapshot in ordered:
         for item in snapshot.semantic_market:
             code = str(item.get("dimension_code") or "").strip()
@@ -455,7 +457,13 @@ def render_v5_markdown(
         ]
     )
     existing = [row for row in report.battlefield_options if row.option_type == "strengthen_existing"]
-    expansion = [row for row in report.battlefield_options if row.option_type == "expand_excluded"]
+    expansion = [
+        row
+        for row in report.battlefield_options
+        if row.option_type == "expand_excluded"
+        and row.expansion_eligibility is not None
+        and row.expansion_eligibility.stage != "rejected"
+    ]
     width = max(len(existing), len(expansion), 1)
     for index in range(width):
         left = existing[index] if index < len(existing) else None

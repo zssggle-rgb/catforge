@@ -44,6 +44,7 @@ def test_v4_adapter_is_deterministic_and_reuses_only_existing_snapshots() -> Non
     assert first.method_configs.amount_version == (
         "sellpoint_value_pm_v4_matched_wtp_config_v2"
     )
+    assert len(first.battlefield_taxonomy) >= 13
 
 
 def test_v4_adapter_does_not_treat_task_or_group_dimensions_as_battlefields() -> None:
@@ -143,6 +144,7 @@ def test_opportunity_is_existing_and_unknown_excluded_is_not_expansion() -> None
 
     assert opportunity.option_type == "strengthen_existing"
     assert opportunity.strengthen_path == "portfolio_priority"
+    assert any(row.option_type == "expand_excluded" for row in report.battlefield_options)
     assert not any(
         row.expansion_eligibility and row.expansion_eligibility.eligible
         for row in report.battlefield_options
