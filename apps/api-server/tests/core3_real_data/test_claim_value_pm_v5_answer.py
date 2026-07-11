@@ -11,6 +11,9 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     render_v5_markdown,
     render_v5_short_answer,
 )
+from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
+    LineageIssue,
+)
 from tests.core3_real_data.test_claim_value_pm_v4_quantification import (
     _synthetic_context,
 )
@@ -78,6 +81,32 @@ def test_no_evidence_does_not_force_a_highlight() -> None:
     assert report.decision_summary.no_highlight_reason_cn == (
         "当前未识别出同时具备具体用户结果和可靠相对证据的亮点。"
     )
+
+
+def test_blocked_lineage_suppresses_all_highlights() -> None:
+    v4 = _synthetic_context()
+    gate = v4.lineage_gate.model_copy(
+        update={
+            "status": "stale_conflict",
+            "issues": [
+                LineageIssue(
+                    code="version_lineage_conflict",
+                    severity="blocking",
+                    scope="report",
+                    message_cn="来源版本冲突",
+                    affected_module_codes=["M05C"],
+                )
+            ],
+            "blocked_reason_codes": ["version_lineage_conflict"],
+        }
+    )
+    report = build_perceived_value_market_report(
+        adapt_v4_context_to_v5(v4.model_copy(update={"lineage_gate": gate}))
+    )
+
+    assert report.analysis_state == "blocked"
+    assert report.decision_summary.highlights == []
+    assert "来源版本存在冲突" in report.decision_summary.no_highlight_reason_cn
 
 
 def test_opportunity_is_existing_and_unknown_excluded_is_not_expansion() -> None:

@@ -274,13 +274,14 @@ def build_perceived_value_market_report(
         context,
         _portfolio_inputs(context, links, allocations),
     )
-    highlights = _select_highlights(rows)
+    analysis_state = _analysis_state(context, rows)
+    highlights = [] if analysis_state == "blocked" else _select_highlights(rows)
     decision = PmDecisionSummary(
         highlights=highlights,
         no_highlight_reason_cn=(
             None
             if highlights
-            else "当前未识别出同时具备具体用户结果和可靠相对证据的亮点。"
+            else _no_highlight_reason_cn(context, analysis_state)
         ),
         price_summary_cn=_overall_price_summary(rows),
         volume_summary_cn=_overall_volume_summary(rows),
@@ -288,7 +289,6 @@ def build_perceived_value_market_report(
         expansion_summary_cn=_expansion_summary(options, context),
     )
     market_reference = _market_reference_cn(rows, synthetic_by_bundle, archetypes)
-    analysis_state = _analysis_state(context, rows)
     payload: dict[str, Any] = {
         "schema_version": "sellpoint_value_pm_v5_report_v1",
         "target": context.v4_context.target,
@@ -722,7 +722,23 @@ def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
             )
         )
     candidates.sort(key=lambda item: (-item[0], item[1].bundle_code))
-    return [item for _, item in candidates[:3]]
+    result = []
+    seen: set[str] = set()
+    for _, item in candidates:
+        key = "＋".join(sorted(part.strip() for part in item.title_cn.split("＋")))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+        if len(result) == 3:
+            break
+    return result
+
+
+def _no_highlight_reason_cn(context, analysis_state):
+    if analysis_state == "blocked" and context.v4_context.lineage_gate.status == "stale_conflict":
+        return "当前来源版本存在冲突，亮点判断已暂停；不能把尚未对齐的用户价值与市场参照合并成结论。"
+    return "当前未识别出同时具备具体用户结果和可靠相对证据的亮点。"
 
 
 def _eligible_highlight_types(value_status, sets, accounting, synthetic_control):
