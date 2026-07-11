@@ -8,4 +8,6 @@
 - 已完成：表结构和版本实时探针、M14 可用性、M11C/M11D、价格曲线、多层反事实覆盖、C01-C08 cohort 和 65E7Q 快照；
 - 确定性：完整 stdout 双跑 SHA-256 均为 `d6c0bd60d9c35cef56cfb275c1a0d0d5375cf400b85b22dcd2f39e2bf1f468d6`；
 - 关键修正：288 是 excluded 可召回候选，不是已通过尺寸/价格门槛的可拓展战场；
-- 待完成：JSON/脚本校验、精确提交、manifest/关闭回执、删除定时器并关闭 Goal。
+- 校验：Python compile、3 个 JSON `jq empty`、trailing-space 和精确 staged diff 均通过；
+- 主提交：`32413611297e753efd7b6673486ef70474508385`；
+- 当前状态：待提交 manifest/关闭回执、删除定时器并关闭 Goal。

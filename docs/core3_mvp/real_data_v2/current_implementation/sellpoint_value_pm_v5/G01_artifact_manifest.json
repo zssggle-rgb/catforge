@@ -1,0 +1,21 @@
+{
+  "goal": "V5-G01",
+  "status": "complete",
+  "primary_commit": "32413611297e753efd7b6673486ef70474508385",
+  "runtime_code_changes": 0,
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "live_probe": {
+    "stdout_sha256": "d6c0bd60d9c35cef56cfb275c1a0d0d5375cf400b85b22dcd2f39e2bf1f468d6",
+    "probe_result_sha256": "e74fcfb73d72e149daae048079fb6f34b51fc772134f09fc2355f474a45d785a",
+    "cohort_manifest_sha256": "ae3ea428f5293a9016e2d88ca6e908ae8c4f842af671953aa7d6a1fa3defb450"
+  },
+  "artifacts": [
+    {"path": "G01_readonly_probe.py", "sha256": "17cd37d110dd38a01ca39ec19e24782827ebacf5ba94b037b54f5616da9dfddd"},
+    {"path": "G01_data_feasibility_matrix.md", "sha256": "6764b34463818dc346c3a04f7bf30e695121e502eccffc368a6665c0ee7f356d"},
+    {"path": "G01_coverage_snapshot.json", "sha256": "8b18d8968c5be7d2b1a25fdc3d9a8a7d4845d99d61bed79b1f069932f84fcac8"},
+    {"path": "G01_cohort_manifest.json", "sha256": "2d27414182cba70134726909c257798e94468fe95741898f70038fe51560232f"},
+    {"path": "G01_65E7Q_fixture.json", "sha256": "4c6920941597b572954e6a589474ded45646ab44f2d1d9c1ff3611c9ff9d635e"}
+  ],
+  "next_goal": "V5-G02"
+}
