@@ -232,7 +232,7 @@ def build_perceived_value_market_report(
                     "outcome_cn": link.outcome_cn,
                     "status_cn": VALUE_STATUS_CN[value_status],
                 },
-                sellpoint_bundle=link.bundle,
+                sellpoint_bundle=_pm_bundle(link.bundle),
                 value_status=value_status,
                 highlight_types=_eligible_highlight_types(
                     value_status, sets, accounting, synthetic
@@ -585,6 +585,17 @@ def _pm_counterfactual_sets(
         )
         for row in sets
     ]
+
+
+def _pm_bundle(bundle):
+    return bundle.model_copy(
+        update={
+            "members": [
+                member.model_copy(update={"source_refs": []})
+                for member in bundle.members
+            ]
+        }
+    )
 
 
 def _battlefield_allocations(context: SellpointValueV5Context) -> list[BattlefieldAllocation]:

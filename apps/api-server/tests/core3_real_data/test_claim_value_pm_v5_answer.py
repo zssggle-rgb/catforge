@@ -176,6 +176,11 @@ def test_business_dto_does_not_duplicate_large_evidence_payloads() -> None:
         for candidate in counterfactual_set.candidates
     )
     assert all(not row.source_refs for row in report.value_account_rows)
+    assert all(
+        not member.source_refs
+        for row in report.value_account_rows
+        for member in row.sellpoint_bundle.members
+    )
 
 
 def test_report_and_renderers_are_deterministic() -> None:

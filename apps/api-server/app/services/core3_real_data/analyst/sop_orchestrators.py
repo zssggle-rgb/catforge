@@ -167,20 +167,17 @@ class SopOrchestrators:
             )
         atom_results: list[dict[str, Any]] = []
         if fallback_candidates is None and getattr(self.atomic_handlers, "repository", None) is not None:
-            fallback_result = self.competitor_set(
+            fallback_result = self.atomic_handlers.same_size_price_candidates(
                 context,
                 query=query,
                 sku_code=sku_code,
                 model_name=model_name,
                 limit=30,
-                answer_style="raw",
-                with_report="none",
             )
             atom_results.append(fallback_result)
             fallback_payload = fallback_result.get("result") or {}
             fallback_candidates = (
-                (fallback_payload.get("competitor_set") or {}).get("candidates")
-                or (fallback_payload.get("competitor_answer") or {}).get("top_competitors")
+                (fallback_payload.get("candidate_search") or {}).get("candidates")
                 or []
             )
         context_atom = self.atomic_handlers.sellpoint_value_v4_context(
