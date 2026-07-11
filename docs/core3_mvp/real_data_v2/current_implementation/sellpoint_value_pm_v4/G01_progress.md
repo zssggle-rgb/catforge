@@ -1,7 +1,7 @@
 # G01 数据可行性与真实 cohort 冻结进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`completed_pending_receipt`
+- Goal 状态：`completed`
 - 定时器：`catforge-v4-g01-10`
 - 前置 G00 commit：`d8f972b`
 - 审计时间：2026-07-11 18:32-18:55 CST
@@ -31,4 +31,4 @@
 
 ## 下一步
 
-G01 关闭回执完成后，允许进入 G02：冻结详细设计、typed schema、权威版本解析规则、反事实识别状态机和测试计划。
+G01 已完成，允许进入 G02：冻结详细设计、typed schema、权威版本解析规则、反事实识别状态机和测试计划。
