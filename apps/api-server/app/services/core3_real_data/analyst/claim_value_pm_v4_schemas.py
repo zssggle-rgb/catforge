@@ -1,8 +1,8 @@
 """Typed read-only context contracts for sellpoint value analysis V4.
 
 The module grows by approved goal: G03 owns observable context and lineage;
-G04 adds reason/value/bundle linkage. Counterfactuals, quantification, and
-rendering remain outside the G04 boundary.
+G04 adds reason/value/bundle linkage; G05 adds counterfactual comparability.
+Choice, price acceptance, WTP calculation, and rendering remain out of scope.
 """
 
 from __future__ import annotations
@@ -20,6 +20,19 @@ AuthorityMode = Literal["published_release", "configured_rule", "fallback"]
 ValueStatus = Literal["established", "partial", "not_observed", "conflicted"]
 LinkStatus = Literal["supported", "partial", "conflicted", "insufficient"]
 BusinessTier = Literal["unknown", "base", "enhanced", "premium", "flagship"]
+QuantificationLevel = Literal[
+    "Q0_NOT_OBSERVED",
+    "Q1_USER_VALUE_ESTABLISHED",
+    "Q2_RELATIVE_EXPERIENCE",
+    "Q3_MARKET_CHOICE_ASSOCIATION",
+    "Q4_WHOLE_PRODUCT_PRICE_ACCEPTANCE",
+    "Q5_MARKET_IMPLIED_WTP",
+]
+CounterfactualRole = Literal["base_value", "same_value", "stretch_benchmark"]
+CandidateProvenance = Literal[
+    "M14", "competitor_set_fallback", "M12C_pool", "same_family_search"
+]
+IsolationGrade = Literal["A", "B", "C", "unusable"]
 
 
 class SellpointValueV4BaseModel(BaseModel):
@@ -228,6 +241,28 @@ class ReasonValueBundleLink(SellpointValueV4BaseModel):
     relation_hash: str = Field(min_length=1)
 
 
+class ComparabilityAssessment(SellpointValueV4BaseModel):
+    candidate_sku_code: str = Field(min_length=1)
+    role: CounterfactualRole
+    provenance: CandidateProvenance
+    isolation_grade: IsolationGrade
+    exact_size_match: bool = False
+    battlefield_overlap: float = Field(default=0.0, ge=0.0, le=1.0)
+    reason_overlap: float = Field(default=0.0, ge=0.0, le=1.0)
+    value_tier_relation: Literal["lower", "same", "higher", "unknown"] = "unknown"
+    common_cell_count: int = Field(default=0, ge=0)
+    common_week_count: int = Field(default=0, ge=0)
+    price_overlap: bool = False
+    other_bundle_difference_count: int = Field(default=0, ge=0)
+    promotion_clean_cell_count: int = Field(default=0, ge=0)
+    inventory_status: Literal["unavailable"] = "unavailable"
+    comment_comparable: bool = False
+    eligible: bool
+    eligible_quantification_levels: list[QuantificationLevel]
+    reject_reasons: list[str] = Field(default_factory=list)
+    assessment_hash: str = ""
+
+
 class SellpointValueV4Context(SellpointValueV4BaseModel):
     schema_version: Literal["sellpoint_value_v4_context_v1"]
     project_id: str = Field(min_length=1)
@@ -262,6 +297,7 @@ class SellpointValueV4Context(SellpointValueV4BaseModel):
 
 __all__ = [
     "BundleMember",
+    "ComparabilityAssessment",
     "ComparablePoolTierFact",
     "EvidenceRef",
     "LineageGate",
