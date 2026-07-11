@@ -9,4 +9,5 @@
 - 测试：G04 8 passed；V5/V4 quantification related 54 passed；service coverage 91%；ruff passed；
 - 性能：40 SKU × 12 周 × 2 平台在 3 秒门禁内通过；
 - 复核：P0=0、P1=0、P2=3；
-- 待完成：精确提交、manifest/回执、删除定时器并关闭 Goal。
+- 主提交：`b5497eaad2024f6fa76cd9d5338738513ad17cfd`；
+- 当前状态：待提交 manifest/回执、删除定时器并关闭 Goal。

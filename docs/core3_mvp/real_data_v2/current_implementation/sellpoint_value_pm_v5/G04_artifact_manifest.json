@@ -1,0 +1,14 @@
+{
+  "goal": "V5-G04",
+  "status": "complete",
+  "primary_commit": "b5497eaad2024f6fa76cd9d5338738513ad17cfd",
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "tests": {"g04_passed": 8, "related_passed": 54, "service_coverage_percent": 91, "ruff": "passed"},
+  "artifacts": [
+    {"path": "claim_value_pm_v5_service.py", "sha256": "6245d8fee5341dde00bd6166828110c508da622671c2fd5efc0501fb3612a796"},
+    {"path": "test_claim_value_pm_v5_market_reference.py", "sha256": "689a79cc6ed849cb4b6513545d444d99918cffe6f5365496b05ed57304b338c9"},
+    {"path": "G04_method_review.md", "sha256": "50bd3b2295d75847e61121c031a6a6bb4a9893d31bc7388f5593724ebb3f6f8c"}
+  ],
+  "next_goal": "V5-G05"
+}
