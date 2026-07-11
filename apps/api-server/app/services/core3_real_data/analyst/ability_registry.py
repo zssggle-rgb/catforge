@@ -164,6 +164,15 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
 
 SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
+        code="sellpoint-value-pm-v5",
+        ability_type="sop",
+        description_cn="显式启用后生成用户感知价值、相对亮点、量价承接、市场合成参照和战场组合；默认不参与自然语言路由。",
+        required_inputs=("sku_code|query", "enable_v5"),
+        optional_inputs=("with_report", "max_chat_chars", "report_title"),
+        source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12D", "M14"),
+        status="implemented_default_off",
+    ),
+    AbilityDefinition(
         code="sellpoint-value-pm-v4",
         ability_type="sop",
         description_cn="显式启用后生成 SKU 用户价值账、卖点组合反事实、市场选择与价格兑现边界；默认不参与自然语言路由。",

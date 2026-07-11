@@ -1,0 +1,25 @@
+{
+  "goal": "V5-G07",
+  "schema_version": "sellpoint_value_pm_v5_report_v1",
+  "single_source_dto": "SkuPerceivedValueMarketRealizationReport",
+  "carriers": ["json", "short_answer", "markdown", "feishu_card"],
+  "first_screen": [
+    "zero_to_three_evidence_gated_highlights",
+    "price_realization_summary",
+    "volume_realization_summary",
+    "existing_battlefield_strengthening",
+    "true_excluded_battlefield_expansion"
+  ],
+  "default_route": "sellpoint-value-pm-v2",
+  "explicit_command": "sellpoint-value-pm-v5 --enable-v5",
+  "pre_query_gate": true,
+  "feature_default": "off",
+  "forbidden_business_claims": [
+    "internal_module_codes",
+    "wtp_term",
+    "causal_sales_increase",
+    "psychological_maximum_price",
+    "generic_next_step_list",
+    "automatic_price_or_configuration_instruction"
+  ]
+}

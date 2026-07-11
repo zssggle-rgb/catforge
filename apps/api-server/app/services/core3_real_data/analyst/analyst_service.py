@@ -36,6 +36,7 @@ ATOM_COMMANDS = {
 }
 
 SOP_COMMANDS = {
+    "sellpoint-value-pm-v5",
     "sellpoint-value-pm-v4",
     "sellpoint-value-pm",
     "competitor-set",

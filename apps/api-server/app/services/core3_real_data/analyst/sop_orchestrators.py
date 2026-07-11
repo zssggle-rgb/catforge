@@ -20,6 +20,11 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_answer import (
     build_product_value_realization_report,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import SellpointValueV4Context
+from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
+    adapt_v4_context_to_v5,
+    build_perceived_value_market_report,
+    build_v5_answer_artifacts,
+)
 from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 from app.services.core3_real_data.analyst.low_sales_answer import build_low_sales_answer
 from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
@@ -38,6 +43,14 @@ MIN_OVERLAP_WEEKS = 4
 
 
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
+    "sellpoint-value-pm-v5": (
+        "resolve-sku",
+        "sellpoint-value-v4-context",
+        "v5-multilayer-counterfactual",
+        "v5-market-reference",
+        "v5-realization-accounting",
+        "v5-product-manager-report",
+    ),
     "sellpoint-value-pm-v4": (
         "resolve-sku",
         "sellpoint-value-v4-context",
@@ -111,6 +124,7 @@ class SopOrchestrators:
 
     def dispatch(self, command: str, context: AnalystContext, **kwargs: Any) -> dict[str, Any]:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
+            "sellpoint-value-pm-v5": self.sellpoint_value_pm_v5,
             "sellpoint-value-pm-v4": self.sellpoint_value_pm_v4,
             "sellpoint-value-pm": self.sellpoint_value_pm,
             "competitor-set": self.competitor_set,
@@ -125,6 +139,97 @@ class SopOrchestrators:
         if handler is None:
             return self.planned_sop(context, command=command, **kwargs)
         return handler(context, **kwargs)
+
+    def sellpoint_value_pm_v5(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        with_report: str = "none",
+        max_chat_chars: int = 900,
+        report_title: str | None = None,
+        enable_v5: bool = False,
+        selection_compare_url: str | None = None,
+        evidence_report_url: str | None = None,
+        m12d_profile_version: str | None = None,
+        fallback_candidates: list[dict[str, Any]] | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        if not enable_v5:
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                limitations=["V5 默认关闭，必须由显式命令参数启用。"],
+                message_cn="用户卖点价值 V5 默认关闭；请使用显式 enable_v5 参数。",
+            )
+        atom_results: list[dict[str, Any]] = []
+        if fallback_candidates is None and getattr(self.atomic_handlers, "repository", None) is not None:
+            fallback_result = self.competitor_set(
+                context,
+                query=query,
+                sku_code=sku_code,
+                model_name=model_name,
+                limit=30,
+                answer_style="raw",
+                with_report="none",
+            )
+            atom_results.append(fallback_result)
+            fallback_payload = fallback_result.get("result") or {}
+            fallback_candidates = (
+                (fallback_payload.get("competitor_set") or {}).get("candidates")
+                or (fallback_payload.get("competitor_answer") or {}).get("top_competitors")
+                or []
+            )
+        context_atom = self.atomic_handlers.sellpoint_value_v4_context(
+            context,
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+            fallback_candidates=fallback_candidates,
+            m12d_profile_version=m12d_profile_version,
+        )
+        atom_results.append(context_atom)
+        if not _ok(context_atom):
+            return _sop_error(
+                command="sellpoint-value-pm-v5",
+                context=context,
+                atom_results=atom_results,
+                message_cn="用户卖点价值分析前未能唯一解析目标或加载只读上下文。",
+            )
+        v4_context = SellpointValueV4Context.model_validate(
+            ((context_atom.get("result") or {}).get("sellpoint_value_v4_context"))
+        )
+        v5_context = adapt_v4_context_to_v5(v4_context)
+        report = build_perceived_value_market_report(v5_context)
+        answer = build_v5_answer_artifacts(
+            report,
+            with_report=with_report,
+            max_chat_chars=max_chat_chars,
+            report_title=report_title,
+            selection_compare_url=selection_compare_url,
+            evidence_report_url=evidence_report_url,
+        )
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-pm-v5",
+            context=context,
+            target=context_atom.get("target"),
+            result={
+                "sellpoint_value_pm_v5": report.model_dump(mode="json"),
+                "sellpoint_value_pm_v5_answer": answer,
+            },
+            sop_steps=[
+                {"step_code": code, "status": "ok", "run_count": 1}
+                for code in SOP_STEP_MAP["sellpoint-value-pm-v5"]
+            ],
+            atoms_used=_atoms_used(atom_results),
+            evidence=_evidence(atom_results),
+            limitations=_limitations(atom_results),
+            answer_outline=[answer["short_answer"]],
+        )
 
     def sellpoint_value_pm_v4(
         self,
