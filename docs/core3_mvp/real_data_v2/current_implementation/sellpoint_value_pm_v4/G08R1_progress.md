@@ -1,7 +1,7 @@
 # G08R1 核心合同修复与重新验收进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`in_progress`
+- Goal 状态：`completed`
 - 定时器：`catforge-v4-g08r1-10`
 - 前置 G08 artifact commit：`b54418e`
 - 前置 G08 closure commit：`2a985f8`
@@ -70,3 +70,10 @@
 - G08R1 验收：PASSED；
 - G09 shadow validation：allowed；
 - G10/default route switch：not allowed without separate approval。
+
+## 关闭信息
+
+- artifact commit：`ab13a74`；
+- acceptance：passed；
+- G09 shadow validation：allowed；
+- timer：ready to delete。
