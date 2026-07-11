@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.services.core3_real_data.analyst.ability_registry import ABILITIES_BY_CODE, get_ability, list_abilities
+from app.services.core3_real_data.analyst.ability_registry import get_ability, list_abilities
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
@@ -36,6 +36,7 @@ ATOM_COMMANDS = {
 }
 
 SOP_COMMANDS = {
+    "sellpoint-value-pm-v4",
     "sellpoint-value-pm",
     "competitor-set",
     "why-sales-diff",

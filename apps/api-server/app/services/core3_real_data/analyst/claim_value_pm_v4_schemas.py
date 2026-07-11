@@ -52,6 +52,7 @@ MonetizationStatus = Literal[
     "unidentifiable",
 ]
 WtpMethod = Literal["none", "matched_equal_choice_price_gap"]
+AnalysisStatus = Literal["ready", "partial", "blocked"]
 
 
 class SellpointValueV4BaseModel(BaseModel):
@@ -393,6 +394,32 @@ class QuantificationResult(SellpointValueV4BaseModel):
         return self
 
 
+class ProductValueStructureRow(SellpointValueV4BaseModel):
+    battlefield: dict[str, Any]
+    purchase_reason: dict[str, Any]
+    realized_user_value: dict[str, Any]
+    sellpoint_bundle: dict[str, Any]
+    counterfactual_result: dict[str, Any]
+    selection_price_realization: QuantificationResult
+    product_role: ProductRole
+    confidence_label_cn: str = ""
+    drilldown: dict[str, Any] = Field(default_factory=dict)
+
+
+class SkuProductValueRealizationReport(SellpointValueV4BaseModel):
+    schema_version: Literal["sellpoint_value_pm_v4_result_v1"]
+    analysis_status: AnalysisStatus
+    target: SkuIdentity
+    headline_cn: str = Field(min_length=1)
+    value_structure_rows: list[ProductValueStructureRow]
+    overall_quantification_boundary: dict[str, Any]
+    data_scope_note_cn: str = Field(min_length=1)
+    limitations: list[str] = Field(default_factory=list)
+    qa_appendix: dict[str, Any] = Field(default_factory=dict)
+    input_hash: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
+
+
 class SellpointValueV4Context(SellpointValueV4BaseModel):
     schema_version: Literal["sellpoint_value_v4_context_v1"]
     project_id: str = Field(min_length=1)
@@ -436,12 +463,14 @@ __all__ = [
     "MarketImpliedWtp",
     "MarketCellRow",
     "PurchaseReasonSnapshot",
+    "ProductValueStructureRow",
     "QuantificationResult",
     "ReasonValueBundleLink",
     "SellpointBundle",
     "SellpointValueV4Context",
     "SkuEvidenceSnapshot",
     "SkuIdentity",
+    "SkuProductValueRealizationReport",
     "SourceAuthority",
     "SourceStatus",
 ]

@@ -63,6 +63,7 @@ ATOM_COMMAND_ORDER = (
 )
 
 SOP_COMMAND_ORDER = (
+    "sellpoint-value-pm-v4",
     "sellpoint-value-pm",
     "competitor-set",
     "why-sales-diff",
@@ -77,6 +78,14 @@ SOP_COMMAND_ORDER = (
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "sellpoint-value-pm-v4" and not getattr(args, "enable_v4", False):
+        result = {
+            "status": AnalystStatus.ERROR.value,
+            "command": args.command,
+            "message_cn": "用户卖点价值 V4 默认关闭；请显式传入 --enable-v4。",
+        }
+        emit_result(result, args.format)
+        return 1
     try:
         with SessionLocal() as db:
             if args.command == "sku-purchase-reason":
@@ -127,6 +136,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     top_n=getattr(args, "top_n", None),
                     max_chat_chars=getattr(args, "max_chat_chars", None),
                     report_title=getattr(args, "report_title", None),
+                    enable_v4=getattr(args, "enable_v4", False),
+                    selection_compare_url=getattr(args, "selection_compare_url", None),
+                    evidence_report_url=getattr(args, "evidence_report_url", None),
                 )
                 attach_feishu_card_delivery(result, args)
     except (CatForgeAnalystError, M12DSkuPurchaseReasonPreviewError) as exc:
@@ -187,6 +199,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_dimension_args(command_parser)
         command_parser.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
         add_answer_args(command_parser)
+        if command == "sellpoint-value-pm-v4":
+            command_parser.add_argument(
+                "--enable-v4",
+                action="store_true",
+                help="Explicitly enable the default-off V4 analysis for this invocation.",
+            )
+            command_parser.add_argument("--selection-compare-url")
+            command_parser.add_argument("--evidence-report-url")
         add_format_arg(command_parser)
 
     ask = subparsers.add_parser("ask", help="Route a natural-language analyst question to an atom or SOP.")
@@ -1256,6 +1276,7 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
     sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
+    sellpoint_value_pm_v4_answer = payload.get("sellpoint_value_pm_v4_answer") or {}
     answer_key = ""
     card = None
     if competitor_answer.get("feishu_card_payload"):
@@ -1267,6 +1288,9 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     elif sellpoint_value_pm_answer.get("feishu_card_payload"):
         answer_key = "sellpoint_value_pm_answer"
         card = sellpoint_value_pm_answer.get("feishu_card_payload")
+    elif sellpoint_value_pm_v4_answer.get("feishu_card_payload"):
+        answer_key = "sellpoint_value_pm_v4_answer"
+        card = sellpoint_value_pm_v4_answer.get("feishu_card_payload")
     else:
         return
     if chat_id:
@@ -1294,6 +1318,8 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
         delivery_payload["message_cn"] = "已发送飞书用户卖点价值看板卡片。"
     if answer_key == "sellpoint_value_pm_answer" and delivery_payload.get("status") == "sent":
         delivery_payload["message_cn"] = "已发送飞书卖点经营盘卡片。"
+    if answer_key == "sellpoint_value_pm_v4_answer" and delivery_payload.get("status") == "sent":
+        delivery_payload["message_cn"] = "已发送飞书用户价值结构与市场兑现卡片。"
     if not isinstance(result.get("result"), dict):
         result["result"] = {}
     if not isinstance(result["result"].get(answer_key), dict):
@@ -1340,10 +1366,12 @@ def _feishu_card_delivery(result: dict[str, Any]) -> dict[str, Any]:
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
     sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
+    sellpoint_value_pm_v4_answer = payload.get("sellpoint_value_pm_v4_answer") or {}
     delivery = (
         competitor_answer.get("feishu_card_delivery")
         or claim_value_answer.get("feishu_card_delivery")
         or sellpoint_value_pm_answer.get("feishu_card_delivery")
+        or sellpoint_value_pm_v4_answer.get("feishu_card_delivery")
     )
     return delivery if isinstance(delivery, dict) else {}
 
@@ -1353,6 +1381,7 @@ def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
     competitor_answer = payload.get("competitor_answer") or {}
     claim_value_answer = payload.get("claim_value_answer") or {}
     sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
+    sellpoint_value_pm_v4_answer = payload.get("sellpoint_value_pm_v4_answer") or {}
     delivery = _feishu_card_delivery(result)
     if delivery.get("status") == "sent":
         return str(delivery.get("message_cn") or "已发送飞书竞品看板卡片。")
@@ -1366,6 +1395,7 @@ def format_feishu_card_delivery_text(result: dict[str, Any]) -> str:
         competitor_answer.get("short_answer")
         or claim_value_answer.get("short_answer")
         or sellpoint_value_pm_answer.get("short_answer")
+        or sellpoint_value_pm_v4_answer.get("short_answer")
         or ""
     )
 
@@ -1383,6 +1413,12 @@ def format_business_text(result: dict[str, Any]) -> str:
     sellpoint_value_pm_answer = payload.get("sellpoint_value_pm_answer") or {}
     if sellpoint_value_pm_answer.get("short_answer"):
         return str(sellpoint_value_pm_answer["short_answer"])
+    sellpoint_value_pm_v4_answer = payload.get("sellpoint_value_pm_v4_answer") or {}
+    if sellpoint_value_pm_v4_answer.get("short_answer"):
+        return str(sellpoint_value_pm_v4_answer["short_answer"])
+    if "sellpoint_value_pm_v4" in payload:
+        report = payload.get("sellpoint_value_pm_v4") or {}
+        return str(report.get("headline_cn") or "已生成产品经理用户价值账。")
     if "sellpoint_value_pm" in payload:
         analysis = payload.get("sellpoint_value_pm") or {}
         return str(analysis.get("headline_cn") or "已生成产品经理版卖点称重结果。")

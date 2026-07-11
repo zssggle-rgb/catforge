@@ -7,6 +7,9 @@ from typing import Any
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository, unique_skus
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.claim_value_answer import build_claim_value_answer
+from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
+    RepositoryPurchaseReasonProfileReader,
+)
 
 
 class AtomicAnalystHandlers:
@@ -161,6 +164,67 @@ class AtomicAnalystHandlers:
                 f"{len(evidence_context.get('market_weekly_rows') or [])} 条周度市场行和 "
                 f"{len(evidence_context.get('competitors') or [])} 个既有竞品。"
             ],
+        )
+
+    def sellpoint_value_v4_context(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        fallback_candidates: list[dict[str, Any]] | None = None,
+        m12d_profile_version: str | None = None,
+    ) -> dict[str, Any]:
+        """Load the immutable V4 context; no analysis or writes happen here."""
+
+        resolved = self._resolve_one(
+            context,
+            command="sellpoint-value-pm-v4",
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+        )
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        candidate = resolved["candidate"]
+        v4_context = self.repository.sellpoint_value_v4_context(
+            batch_id=context.batch_id,
+            sku=candidate,
+            product_category=context.product_category,
+            market_window=context.market_window,
+            analysis_population=context.analysis_population,
+            fallback_candidates=fallback_candidates,
+            m12d_profile_version=m12d_profile_version,
+            purchase_reason_reader=RepositoryPurchaseReasonProfileReader(
+                self.repository.db
+            ),
+        )
+        limitations = [issue.message_cn for issue in v4_context.lineage_gate.issues]
+        if not v4_context.purchase_reason_profile.found:
+            limitations.append("没有找到可用的已发布采购理由画像。")
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-pm-v4",
+            context=context,
+            target=candidate.to_dict(),
+            result={
+                "sellpoint_value_v4_context": v4_context.model_dump(mode="json")
+            },
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {"ability_code": "sellpoint-value-v4-context", "status": "ok"},
+            ],
+            evidence=[
+                {
+                    "source_module": item.module_code,
+                    "row_count": item.row_count,
+                    "availability": item.availability,
+                }
+                for item in v4_context.authority_manifest
+            ],
+            limitations=limitations,
+            answer_outline=["已加载只读的用户价值、反事实和市场量价上下文。"],
         )
 
     def semantic_dimension_space(

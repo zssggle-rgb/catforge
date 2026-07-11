@@ -15,6 +15,11 @@ from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHa
 from app.services.core3_real_data.analyst.claim_value_pm_answer import build_claim_value_pm_answer
 from app.services.core3_real_data.analyst.claim_value_pm_schemas import ClaimValuePmContext
 from app.services.core3_real_data.analyst.claim_value_pm_service import analyze_sellpoint_value_pm
+from app.services.core3_real_data.analyst.claim_value_pm_v4_answer import (
+    build_product_value_answer_artifacts,
+    build_product_value_realization_report,
+)
+from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import SellpointValueV4Context
 from app.services.core3_real_data.analyst.competitor_answer import build_competitor_answer
 from app.services.core3_real_data.analyst.low_sales_answer import build_low_sales_answer
 from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
@@ -33,6 +38,14 @@ MIN_OVERLAP_WEEKS = 4
 
 
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
+    "sellpoint-value-pm-v4": (
+        "resolve-sku",
+        "sellpoint-value-v4-context",
+        "reason-value-bundle-linkage",
+        "counterfactual-qualification",
+        "market-quantification",
+        "product-manager-report",
+    ),
     "sellpoint-value-pm": (
         "resolve-sku",
         "sellpoint-value-evidence",
@@ -98,6 +111,7 @@ class SopOrchestrators:
 
     def dispatch(self, command: str, context: AnalystContext, **kwargs: Any) -> dict[str, Any]:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
+            "sellpoint-value-pm-v4": self.sellpoint_value_pm_v4,
             "sellpoint-value-pm": self.sellpoint_value_pm,
             "competitor-set": self.competitor_set,
             "sku-business-brief": self.sku_business_brief,
@@ -111,6 +125,79 @@ class SopOrchestrators:
         if handler is None:
             return self.planned_sop(context, command=command, **kwargs)
         return handler(context, **kwargs)
+
+    def sellpoint_value_pm_v4(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        answer_style: str = "raw",
+        with_report: str = "none",
+        max_chat_chars: int = 700,
+        report_title: str | None = None,
+        enable_v4: bool = False,
+        selection_compare_url: str | None = None,
+        evidence_report_url: str | None = None,
+        m12d_profile_version: str | None = None,
+        fallback_candidates: list[dict[str, Any]] | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        if not enable_v4:
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command="sellpoint-value-pm-v4",
+                context=context,
+                limitations=["V4 默认关闭，必须由显式命令参数启用。"],
+                message_cn="用户卖点价值 V4 默认关闭；请使用显式 enable_v4 参数。",
+            )
+        context_atom = self.atomic_handlers.sellpoint_value_v4_context(
+            context,
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+            fallback_candidates=fallback_candidates,
+            m12d_profile_version=m12d_profile_version,
+        )
+        if not _ok(context_atom):
+            return _sop_error(
+                command="sellpoint-value-pm-v4",
+                context=context,
+                atom_results=[context_atom],
+                message_cn="用户卖点价值分析前未能唯一解析目标或加载只读上下文。",
+            )
+        v4_context = SellpointValueV4Context.model_validate(
+            ((context_atom.get("result") or {}).get("sellpoint_value_v4_context"))
+        )
+        report = build_product_value_realization_report(v4_context)
+        result_payload: dict[str, Any] = {
+            "sellpoint_value_pm_v4": report.model_dump(mode="json")
+        }
+        if answer_style == "xiaoao" or with_report != "none":
+            result_payload["sellpoint_value_pm_v4_answer"] = build_product_value_answer_artifacts(
+                report,
+                with_report=with_report,
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+                selection_compare_url=selection_compare_url,
+                evidence_report_url=evidence_report_url,
+            )
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-pm-v4",
+            context=context,
+            target=context_atom.get("target"),
+            result=result_payload,
+            sop_steps=[
+                {"step_code": code, "status": "ok", "run_count": 1}
+                for code in SOP_STEP_MAP["sellpoint-value-pm-v4"]
+            ],
+            atoms_used=_atoms_used([context_atom]),
+            evidence=_evidence([context_atom]),
+            limitations=_dedupe_strings([*_limitations([context_atom]), *report.limitations]),
+            answer_outline=[report.headline_cn],
+        )
 
     def sellpoint_value_pm(
         self,
