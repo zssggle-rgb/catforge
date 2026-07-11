@@ -1,7 +1,7 @@
 # G04 采购理由、用户实际价值与卖点组合进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`ready_to_close`
+- Goal 状态：`completed`
 - 定时器：`catforge-v4-g04-10`
 - 前置 G03 artifact commit：`b903c2a`
 - 前置 G03 closure commit：`7f8baf5`
@@ -66,3 +66,7 @@
 - G01 的脱敏 65E7Q fixture 未冻结原始 M05C comment atoms，因此固定回放只能验证“不发明购后价值”；真实评论结果留待 G09 205 影子回放；
 - business tier 只读取当前 context 已有确定性档位，无法识别时保持 `unknown`；
 - G04 只标记组合共线和独立资格，不做跨 SKU 共线统计，后者属于 G05。
+
+## 下一步
+
+G04 已完成，允许进入 G05。G05 只构建 base-value、same-value、stretch 三类候选和可比性/隔离等级，不计算 WTP。
