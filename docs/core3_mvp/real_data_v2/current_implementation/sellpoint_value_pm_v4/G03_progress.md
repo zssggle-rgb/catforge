@@ -1,7 +1,7 @@
 # G03 V4 只读 context、authority 与 lineage gate 进度
 
 - Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
-- Goal 状态：`ready_to_close`
+- Goal 状态：`completed`
 - 定时器：`catforge-v4-g03-10`
 - 前置 G02 artifact commit：`f62b68f`
 - 前置 G02 closure commit：`261457e`
@@ -67,3 +67,7 @@
 - `test_ac_competitor_set_consumes_published_m12d_without_tv_fallback` 失败。
 
 G03 未修改上述 repository、schema 或测试，也不绕过质量门禁。V2 卖点 service/answer 的 29 项定向回归全部通过。
+
+## 下一步
+
+G03 已完成，允许进入 G04。G04 只实现采购理由到用户实际价值再到卖点组合的关系层；不得构建反事实或计算选择贡献/WTP。

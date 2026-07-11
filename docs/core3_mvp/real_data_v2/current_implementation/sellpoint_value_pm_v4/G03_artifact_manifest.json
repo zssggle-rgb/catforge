@@ -1,0 +1,44 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_goal_artifact_manifest_v1",
+  "goal_id": "G03",
+  "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
+  "predecessor_commit": "261457e",
+  "artifact_commit": "b903c2a",
+  "captured_at": "2026-07-11T19:30:25+08:00",
+  "artifacts": [
+    {
+      "path": "apps/api-server/app/services/core3_real_data/analyst/analyst_repository.py",
+      "sha256": "106f0b3c3131fb4fd82f1af334cad0629b35df0c4b61abdb08f8a6aadd7e47e1"
+    },
+    {
+      "path": "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_schemas.py",
+      "sha256": "a6469cd1ef2357b84d3d228caf03efbd364c44d3e1c60b1b1a791ba57575fad7"
+    },
+    {
+      "path": "apps/api-server/tests/core3_real_data/test_claim_value_pm_v4_schemas.py",
+      "sha256": "e62cee86da754dae52020c47219af619dbdf6b00e7bf16f44ca93de0ebf547ab"
+    },
+    {
+      "path": "apps/api-server/tests/core3_real_data/test_claim_value_pm_v4_context.py",
+      "sha256": "9e2e83b739b7d7c323cfc5e3f572e8ab524d8949d5eb4ab0d7c682dbe18a8733"
+    }
+  ],
+  "mutable_artifacts_excluded": [
+    "G03_progress.md"
+  ],
+  "self_hash_policy": "manifest, closure receipt, and mutable progress metadata are excluded from the artifact hash list",
+  "validation": {
+    "g03_test_count": 18,
+    "g03_plus_v2_pass_count": 47,
+    "schema_coverage_percent": 96,
+    "g02_runtime_contract_exact_match": true,
+    "query_budget_max": 20,
+    "candidate_query_count_invariant": true,
+    "database_write_count": 0,
+    "server_file_write_count": 0,
+    "known_unrelated_baseline_failures": 2,
+    "git_diff_check": "passed"
+  },
+  "next_goal": "G04",
+  "next_goal_allowed": true
+}
