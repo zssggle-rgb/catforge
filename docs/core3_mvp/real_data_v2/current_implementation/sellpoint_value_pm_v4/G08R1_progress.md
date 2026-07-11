@@ -17,7 +17,7 @@
 | Candidate recall/snapshot/per-role repair | completed |
 | Market-cell bounded trim 与 M11D sample weight | completed |
 | Q5 config v2 + deterministic cluster bootstrap | pending |
-| Pure negative / mixed / data conflict 分离 | pending |
+| Pure negative / mixed / data conflict 分离 | completed |
 | Frozen cohort/hash 真回放 | pending |
 | 309+ 回归、覆盖率、性能和三审 | pending |
 
@@ -43,3 +43,6 @@
 - 超限写入 M07 authority warning，PM limitation 明示裁剪，Q5 金额 blocked，但描述性 choice 可保留；
 - pair 的真实 target/candidate 销量和 share 不变，observation weight 使用总销量乘 target/candidate allocation 的保守最小解释权重；缺失权重显式记录 limitation；
 - 新增完整 group 裁剪、truncation 阻断金额和 allocation sample-weight 边界测试；context/counterfactual/quantification/answer 56 passed。
+- ValueStatus 已改为 established/partial/negative/mixed/not_observed；lineage/data conflict 继续由 LineageGate/LinkStatus 表达；
+- pure negative 输出“用户实际获得的是负向体验”，positive+negative 输出“不同用户或场景体验分化”，两者均不能进入 Q1+ 或金额；
+- pure negative、mixed 和 data conflict 跨报告语义测试通过；schema/linkage/quantification/answer 55 passed。

@@ -45,7 +45,8 @@ VALUE_STATUS_CN = {
     "established": "用户已实际感知到这项价值",
     "partial": "用户只感知到部分价值",
     "not_observed": "现有购后证据尚未观察到这项价值",
-    "conflicted": "用户实际体验存在正反冲突",
+    "negative": "用户实际获得的是负向体验",
+    "mixed": "不同用户或场景的实际体验正反并存",
 }
 WTP_EXCLUSION_CN = {
     "version_lineage_conflict": "事实版本存在冲突，价格归因暂停",
@@ -561,10 +562,12 @@ def _confidence_label(
     link: ReasonValueBundleLink,
     quantification: QuantificationResult,
 ) -> str:
-    if link.value_status == "conflicted":
-        return "用户体验正反并存，市场量化已暂停"
     if quantification.wtp.status == "blocked":
         return "存在事实冲突，受影响判断已暂停"
+    if link.value_status == "negative":
+        return "用户实际获得的是负向体验，市场量化已暂停"
+    if link.value_status == "mixed":
+        return "不同用户或场景体验分化，市场量化已暂停"
     if link.value_status == "established" and quantification.wtp.status == "available":
         return "用户价值和市场量价证据均通过严格门禁"
     if link.value_status == "established":
@@ -601,8 +604,10 @@ def _market_realization_cn(quantification: QuantificationResult) -> str:
         )
     if quantification.value_status == "not_observed":
         return "用户实际价值尚未观察到，不能进入卖点选择和价格量化"
-    if quantification.value_status == "conflicted":
-        return "用户实际体验存在冲突，不能进入卖点选择和价格量化"
+    if quantification.value_status == "negative":
+        return "用户实际获得的是负向体验，不能进入卖点选择和价格量化"
+    if quantification.value_status == "mixed":
+        return "不同用户或场景体验分化，不能进入卖点选择和价格量化"
     return "用户价值已观察，但缺少可比购后体验和市场对照，金额保持为空"
 
 

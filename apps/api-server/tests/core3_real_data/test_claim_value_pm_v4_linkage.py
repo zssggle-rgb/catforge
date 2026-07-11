@@ -322,7 +322,7 @@ def test_no_comment_keeps_capability_confirmed_but_value_not_observed() -> None:
     assert picture.link_status == "partial"
 
 
-def test_negative_and_positive_picture_evidence_stays_conflicted() -> None:
+def test_negative_and_positive_picture_evidence_stays_mixed() -> None:
     links = build_reason_value_bundle_links(
         _context(
             atoms=[
@@ -342,8 +342,8 @@ def test_negative_and_positive_picture_evidence_stays_conflicted() -> None:
         for item in links
         if item.realized_value_code == "picture_upgrade_perception"
     )
-    assert picture.value_status == "conflicted"
-    assert picture.link_status == "conflicted"
+    assert picture.value_status == "mixed"
+    assert picture.link_status == "partial"
     assert "正反并存" in picture.outcome_cn
 
 

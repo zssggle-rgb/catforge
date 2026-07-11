@@ -178,11 +178,33 @@ def test_negative_user_experience_is_a_business_result_not_a_data_conflict() -> 
 
     assert (
         report.value_structure_rows[0].selection_price_realization.value_status
-        == "conflicted"
+        == "negative"
     )
-    assert "用户实际体验存在正反冲突" in markdown
-    assert "用户体验正反并存，市场量化已暂停" in markdown
+    assert "用户实际获得的是负向体验" in markdown
+    assert "用户实际获得的是负向体验，市场量化已暂停" in markdown
+    assert "正反并存" not in markdown
     assert "存在事实冲突，受影响判断已暂停" not in markdown
+
+
+def test_mixed_user_experience_is_distinct_from_pure_negative() -> None:
+    context = _context(
+        atoms=[
+            _atom("白天画面很清楚", key="positive-bright"),
+            _atom(
+                "暗场漏光明显",
+                key="negative-bright",
+                polarity="negative",
+                contradicted_params=["local_dimming_zone_count"],
+            ),
+        ]
+    )
+
+    report = build_product_value_realization_report(context)
+    markdown = render_product_value_markdown(report)
+
+    assert report.value_structure_rows[0].selection_price_realization.value_status == "mixed"
+    assert "不同用户或场景的实际体验正反并存" in markdown
+    assert "用户实际获得的是负向体验，市场量化已暂停" not in markdown
 
 
 def test_65e7q_redacted_fixture_keeps_value_and_amount_unobserved(

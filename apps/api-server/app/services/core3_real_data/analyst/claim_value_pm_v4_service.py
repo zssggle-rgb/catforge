@@ -635,13 +635,13 @@ def _value_status(understandings: Sequence[Any]) -> str:
     negative = any(item in {"negative", "mixed"} for item in statuses)
     positive = positive_count > 0
     if positive and negative:
-        return "conflicted"
+        return "mixed"
     if positive_count == len(understandings):
         return "established"
     if positive:
         return "partial"
     if negative:
-        return "conflicted"
+        return "negative"
     return "not_observed"
 
 
@@ -651,7 +651,7 @@ def _link_status(
     bundle: SellpointBundle,
     lineage_conflict: bool,
 ) -> str:
-    if lineage_conflict or value_status == "conflicted":
+    if lineage_conflict:
         return "conflicted"
     confirmed = any(member.fact_status == "confirmed" for member in bundle.members)
     if value_status == "established" and confirmed:
@@ -680,7 +680,9 @@ def _link_limitations(
     result = ["用户价值仅来自购后体验证据，不代表购买前传播心智或心理最高价。"]
     if value_status == "not_observed":
         result.append("当前用户评论未观察到该项实际价值。")
-    if value_status == "conflicted":
+    if value_status == "negative":
+        result.append("用户反馈只观察到反向体验，产品能力不能写成用户价值已兑现。")
+    if value_status == "mixed":
         result.append("用户反馈存在反向或正反并存体验，不能写成已稳定兑现。")
     if any(item.status == "unrecognized" for item in understandings):
         result.append("泛化好评只保留在组合层，未拆分为单一技术能力证据。")
@@ -697,8 +699,10 @@ def _observed_outcome_cn(
 ) -> str:
     if value_status == "established":
         return f"用户购后反馈已观察到：{expected_outcome_cn}。"
-    if value_status == "conflicted":
-        return f"用户购后反馈对“{expected_outcome_cn}”正反并存或出现反向体验。"
+    if value_status == "negative":
+        return f"用户购后反馈只观察到反向体验，未获得预期的“{expected_outcome_cn}”。"
+    if value_status == "mixed":
+        return f"用户购后反馈对“{expected_outcome_cn}”正反并存，体验存在分化。"
     if value_status == "partial":
         return f"用户购后反馈只部分支持：{expected_outcome_cn}。"
     return f"当前用户购后反馈尚未观察到：{expected_outcome_cn}。"

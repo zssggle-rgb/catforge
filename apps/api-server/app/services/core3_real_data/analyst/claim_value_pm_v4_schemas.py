@@ -17,7 +17,13 @@ Usability = Literal["usable", "limited", "unusable"]
 IssueSeverity = Literal["info", "warning", "blocking"]
 LineageStatus = Literal["aligned", "stale_revalidated", "stale_conflict", "unresolved"]
 AuthorityMode = Literal["published_release", "configured_rule", "fallback"]
-ValueStatus = Literal["established", "partial", "not_observed", "conflicted"]
+ValueStatus = Literal[
+    "established",
+    "partial",
+    "negative",
+    "mixed",
+    "not_observed",
+]
 LinkStatus = Literal["supported", "partial", "conflicted", "insufficient"]
 BusinessTier = Literal["unknown", "base", "enhanced", "premium", "flagship"]
 QuantificationLevel = Literal[
