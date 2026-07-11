@@ -1,0 +1,32 @@
+{
+  "goal": "V5-G00",
+  "status": "complete",
+  "primary_commit": "792b69d0be27a6c5a79534a64906e35ec36d5088",
+  "runtime_code_changes": 0,
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "artifacts": [
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v5/V5_requirements.md",
+      "sha256": "83a8e1e05f61296d7494d7d0c4a4d3d5d7fd482fb3ffd14960d9cd7268976252"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v5/V5_detailed_design.md",
+      "sha256": "ecd2b95786b7b6de5d5d24ae6f39cb839458acc333fa0590c0d6f57719de8d29"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v5/V5_acceptance_matrix.md",
+      "sha256": "9d90c43e156090fa134eacf472932a4b7e8e7f61cb09b68dcfd9e293f31ff045"
+    },
+    {
+      "path": "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v5/V5_goal_dispatch.md",
+      "sha256": "d7e7852d0acc0bb508aeeeaabcc26bbc276171b20c8586c6315adee834615857"
+    }
+  ],
+  "checks": [
+    "git diff --cached --check",
+    "cross-document concept grep",
+    "exact staged file review"
+  ],
+  "next_goal": "V5-G01"
+}
