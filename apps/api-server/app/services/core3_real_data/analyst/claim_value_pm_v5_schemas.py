@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     EvidenceRef,
+    MarketImpliedWtp,
     SellpointBundle,
     SellpointValueV4Context,
     SkuEvidenceSnapshot,
@@ -377,6 +378,33 @@ class IncrementDecomposition(SellpointValueV5BaseModel):
         return self
 
 
+class RealizationAccountingInput(SellpointValueV5BaseModel):
+    current_price: float | None
+    current_sales_volume: float | None
+    price_percentile: float | None = Field(ge=0.0, le=1.0)
+    volume_percentile: float | None = Field(ge=0.0, le=1.0)
+    amount_percentile: float | None = Field(ge=0.0, le=1.0)
+    direct_and_pool_gaps: list[dict[str, Any]]
+    own_price_curve: dict[str, Any] | None
+    controlled_residual: IntervalEstimate | None
+    choice_association: dict[str, Any] | None
+    synthetic_control: SyntheticControlResult | None
+    battlefield_allocations: list[BattlefieldAllocation]
+    cannibalization: IntervalEstimate | None
+    overlap_risk: Literal["unknown", "low", "medium", "high"]
+    strict_market_wtp: MarketImpliedWtp | None
+    limitations: list[str] = Field(default_factory=list)
+
+
+class RealizationAccountingResult(SellpointValueV5BaseModel):
+    price: PriceRealization
+    volume: VolumeRealization
+    battlefield_allocations: list[BattlefieldAllocation]
+    increment: IncrementDecomposition
+    limitations: list[str]
+    result_hash: str = Field(min_length=1)
+
+
 class ExpansionGap(SellpointValueV5BaseModel):
     gap_code: str = Field(min_length=1)
     change_type: GapChangeType
@@ -560,6 +588,8 @@ __all__ = [
     "PerformanceArchetype",
     "PmDecisionSummary",
     "PriceRealization",
+    "RealizationAccountingInput",
+    "RealizationAccountingResult",
     "SellpointValueV5BaseModel",
     "SellpointValueV5Context",
     "SkuPerceivedValueMarketRealizationReport",

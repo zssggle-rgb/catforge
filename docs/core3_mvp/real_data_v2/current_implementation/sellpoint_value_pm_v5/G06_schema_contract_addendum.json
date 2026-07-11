@@ -1,0 +1,18 @@
+{
+  "addendum_version": "sellpoint_value_pm_v5_g06_realization_accounting_v1",
+  "new_models": ["RealizationAccountingInput", "RealizationAccountingResult"],
+  "accounts": [
+    "whole_product_price_realization",
+    "volume_realization",
+    "m11d_current_allocation",
+    "observational_gross_cannibalization_net",
+    "strict_bundle_price_interval"
+  ],
+  "guards": [
+    "M11D allocation incremental is always false",
+    "synthetic sales difference can only populate observational gross",
+    "net requires both gross and cannibalization with identical units",
+    "strict bundle amount requires an already-valid V4 MarketImpliedWtp",
+    "market space and legacy M12C amount cannot populate any increment account"
+  ]
+}
