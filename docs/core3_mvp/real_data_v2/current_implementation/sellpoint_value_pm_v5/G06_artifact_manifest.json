@@ -1,0 +1,39 @@
+{
+  "goal": "V5-G06",
+  "status": "complete",
+  "primary_commit": "c365bef33e9a084ceebf43950b1937532616562b",
+  "database_writes": 0,
+  "server_205_writes": 0,
+  "tests": {
+    "g06_passed": 9,
+    "v5_passed": 53,
+    "related_passed": 30,
+    "overall_coverage_percent": 93,
+    "realization_coverage_percent": 98,
+    "service_coverage_percent": 91,
+    "ruff": "passed"
+  },
+  "artifacts": [
+    {
+      "path": "claim_value_pm_v5_schemas.py",
+      "sha256": "cb4a3041a7a7eeb1b40e82ee56413de12faf01397f335b18f6d469d8ef2a5378"
+    },
+    {
+      "path": "claim_value_pm_v5_realization.py",
+      "sha256": "ed29472aabd40021fea2f40d785bbcbdeecd689d7f3072f4c01d29bd172dbb66"
+    },
+    {
+      "path": "test_claim_value_pm_v5_realization_accounting.py",
+      "sha256": "5ae314340950d998c6176c116068667c38395dd0e27d06e5b7a815d6830a1ce3"
+    },
+    {
+      "path": "G06_method_review.md",
+      "sha256": "f8f6fff29b63abf2b607386eba371cf3c1df7556ff1d8242c694206111681ef0"
+    },
+    {
+      "path": "G06_schema_contract_addendum.json",
+      "sha256": "cf0a02d1b6e796fdab10dc962558de9934023fc51fbb49b87d0bdccb1b447cd2"
+    }
+  ],
+  "next_goal": "V5-G07"
+}

@@ -8,4 +8,5 @@
 - 模块边界：G06 已拆入独立 realization module，G04/G05 源码护栏保持通过；
 - 测试：G06 9 passed；V5 53 passed；V4 + M11D related 30 passed；overall coverage 93%、realization 98%、service 91%；ruff passed；
 - 方法复核：P0=0、P1=0、P2=2；
-- 当前状态：待精确提交、manifest/回执、删除定时器并关闭 Goal。
+- 主提交：`c365bef33e9a084ceebf43950b1937532616562b`；
+- 当前状态：manifest/回执已生成，待关闭 Goal。
