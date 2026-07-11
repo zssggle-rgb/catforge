@@ -19,7 +19,7 @@
 | Q5 config v2 + deterministic cluster bootstrap | completed |
 | Pure negative / mixed / data conflict 分离 | completed |
 | Frozen cohort/hash 真回放 | completed |
-| 309+ 回归、覆盖率、性能和三审 | pending |
+| 309+ 回归、覆盖率、性能和三审 | in_progress |
 
 ## 停止条件
 
@@ -56,3 +56,7 @@
 - C01 candidate-only、C02 same-value-only、C03 bundle-only、C04 single-week、C05 version conflict 均按 frozen payload 回放；不再用只核对 ID 后另造无关样例冒充回放；
 - pending SessionLocal entity 在 V4 查询后仍保持 unflushed，SQL 仍只有 SELECT/PRAGMA，read-only 运行边界有显式回归；
 - frozen cohort + counterfactual + quantification 39 passed；context 12 passed。
+- 相关回归分组完整退出：V4+V2 122、analyst CLI 88、M11C/M11D/M12C 43、M12D/reader 71，合计 324 passed；
+- V4 92 tests，schema/service/answer coverage 93%；10,000 rows peak 25.413MB，Q5 report P95 0.016519s，65E7Q-like P95 0.000490s，Markdown P95 0.000076s；
+- G02-G08 artifact commit hash 全匹配；G01 发现历史 pointer 指向 core commit、但 progress hash 来自 closure commit，已把 artifact_commit 纠正为四项均匹配的 `6c3525c`；
+- PM 主表现显示“尺寸档、观察窗口、实际平台；市场空间”，并去除“已感知/已观察到”的重复表达。

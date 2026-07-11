@@ -3,7 +3,7 @@
   "goal_id": "G01",
   "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
   "predecessor_commit": "d8f972b",
-  "artifact_commit": "26aaf84",
+  "artifact_commit": "6c3525c",
   "captured_at": "2026-07-11T18:55:00+08:00",
   "artifacts": [
     {

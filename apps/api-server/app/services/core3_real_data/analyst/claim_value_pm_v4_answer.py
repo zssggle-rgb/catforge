@@ -717,6 +717,10 @@ def _market_space_cn(value: dict[str, Any] | None) -> str:
 def _realized_value_cn(row: ProductValueStructureRow) -> str:
     status = _dict_text(row.realized_user_value, "status_cn")
     outcome = _dict_text(row.realized_user_value, "outcome_cn")
+    if status == "用户已实际感知到这项价值" and outcome.startswith(
+        "用户购后反馈已观察到："
+    ):
+        return f"{status}：{outcome.removeprefix('用户购后反馈已观察到：')}"
     return f"{status}：{outcome}" if outcome else status
 
 
