@@ -11,11 +11,11 @@
 
 ## 任务状态
 
-1. `[in_progress]` 已冻结 RC、精确变更清单、文件 checksum 和部署包；待完成线上逐文件回滚包；
-2. `[in_progress]` 记录 205 部署前 commit、配置边界、health/ready、进程和数据库写计数；
-3. `[pending]` 默认关闭影子部署，复核 health/ready、V2 默认路由与显式 V4；
-4. `[pending]` 65E7Q 与五 cohort 双跑 hash、跨载体、金额边界、异常语义、性能/并发/写边界；
-5. `[pending]` 回滚演练、恢复 RC、形成 G09 验收和关闭回执。
+1. `[completed]` 冻结 RC、精确变更清单、文件 checksum、部署包和线上逐文件回滚包；
+2. `[completed]` 记录 205 部署前 commit、配置边界、health/ready、进程和数据库写计数；
+3. `[completed]` 默认关闭影子部署，复核 health/ready、V2 默认路由与显式 V4；
+4. `[completed]` 65E7Q 与五 cohort 双跑 hash、跨载体、金额边界、异常语义、性能/并发/写边界；
+5. `[completed]` 回滚演练并恢复 RC；G09 验收通过，G10 默认路由暂不建议准入。
 
 ## 205 部署前事实
 
@@ -38,3 +38,13 @@
 ## 立即停止条件
 
 health/ready 异常、默认路由泄漏、连续运行 hash 不一致、Q5 v2 门禁越级、M12C 旧金额进入、真实 SKU 异常金额、数据库业务写入、范围外文件变化，任一出现即停止并恢复部署前 9 文件。
+
+## 最终状态
+
+- 205 处于 RC 影子态，API `running/healthy`；
+- 无 flag 拒绝，自然语言默认路由仍为 `sku-claim-value`；
+- 65E7Q 与 C01-C05 双跑确定；
+- 真实飞书文档已发布并回读；
+- 数据库 tuple 写计数前后不变；
+- 回滚与 RC 再恢复演练通过；
+- G09 passed，G10 default route not recommended until live lineage and counterfactual availability are repaired.
