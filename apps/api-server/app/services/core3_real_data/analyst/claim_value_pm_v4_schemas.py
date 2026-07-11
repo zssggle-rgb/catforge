@@ -1,8 +1,7 @@
-"""Typed read-only context contracts for sellpoint value analysis V4.
+"""Typed contracts for the read-only sellpoint-value V4 analysis chain.
 
-The module grows by approved goal: G03 owns observable context and lineage;
-G04 adds reason/value/bundle linkage; G05 adds counterfactual comparability.
-Choice, price acceptance, WTP calculation, and rendering remain out of scope.
+The module covers observable context, lineage, reason/value/bundle linkage,
+counterfactual comparability, market quantification, and the PM report DTO.
 """
 
 from __future__ import annotations
@@ -318,7 +317,7 @@ class ChoiceAssociation(SellpointValueV4BaseModel):
 class MarketImpliedWtp(SellpointValueV4BaseModel):
     status: Literal["available", "insufficient", "unstable", "blocked"]
     method: WtpMethod
-    method_config_version: Literal["sellpoint_value_pm_v4_matched_wtp_config_v1"]
+    method_config_version: Literal["sellpoint_value_pm_v4_matched_wtp_config_v2"]
     estimate_low: float | None = None
     estimate_high: float | None = None
     reference_price: float | None = None
@@ -350,6 +349,32 @@ class MarketImpliedWtp(SellpointValueV4BaseModel):
                 )
             if self.estimate_low > self.estimate_high:  # type: ignore[operator]
                 raise ValueError("WTP estimate_low cannot exceed estimate_high")
+            required_sensitivity = {
+                "leave_one_week_out",
+                "cluster_week_bootstrap",
+                "joint_crossing_stability",
+                "pair_quality_weights",
+                "weighted_median_center",
+                "conservative_interval_components",
+            }
+            if not required_sensitivity <= set(self.sensitivity_summary):
+                raise ValueError(
+                    "available WTP requires v2 bootstrap and conservative interval evidence"
+                )
+            bootstrap = self.sensitivity_summary["cluster_week_bootstrap"]
+            joint = self.sensitivity_summary["joint_crossing_stability"]
+            if (
+                len(bootstrap) < 2
+                or not all(item.get("stable") is True for item in bootstrap.values())
+                or len(joint) < 2
+                or not all(item.get("stable") is True for item in joint.values())
+            ):
+                raise ValueError("available WTP requires two stable bootstrap pairs")
+            center = self.sensitivity_summary["weighted_median_center"]
+            if not isinstance(center, (int, float)) or not (
+                self.estimate_low <= center <= self.estimate_high  # type: ignore[operator]
+            ):
+                raise ValueError("WTP interval must contain the weighted median center")
         elif any(value is not None for value in amounts):
             raise ValueError("unavailable WTP cannot expose amount fields")
         return self

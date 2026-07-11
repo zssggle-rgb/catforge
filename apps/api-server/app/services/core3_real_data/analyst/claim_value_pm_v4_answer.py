@@ -61,7 +61,10 @@ WTP_EXCLUSION_CN = {
     "price_direction_consistency_failed": "价格与选择方向不稳定",
     "equal_choice_crossing_count_below_2": "观测范围内缺少稳定的五五开交点",
     "leave_one_week_out_stability_failed": "移除单周后结果不稳定",
+    "cluster_bootstrap_stability_failed": "按周聚类重采样后结果不稳定",
+    "joint_interval_stability_failed": "重采样与移除单周的联合区间不稳定",
     "qualified_model_family_count_below_2": "通过全部门禁的独立产品族不足",
+    "qualified_pair_count_below_2": "通过全部稳定性门禁的独立对照不足两组",
     "market_cells_truncated": "市场单元超过首页预算并已裁剪，金额识别暂停",
 }
 
@@ -390,6 +393,7 @@ def _build_business_row(
         battlefield={
             "name_cn": link.battlefield_name_cn or "当前价值战场",
             "market_space_cn": _market_space_cn(link.battlefield_market_space),
+            "scope_cn": _market_scope_cn(context),
         },
         purchase_reason={
             "name_cn": link.purchase_reason_name_cn,
@@ -628,7 +632,46 @@ def _acceptance_state_cn(value: dict[str, Any] | None) -> str:
 def _battlefield_cn(row: ProductValueStructureRow) -> str:
     name = _dict_text(row.battlefield, "name_cn")
     space = _dict_text(row.battlefield, "market_space_cn")
-    return f"{name}（{space}）" if space and space != "市场空间暂不可量化" else name
+    scope = _dict_text(row.battlefield, "scope_cn")
+    details = [item for item in (scope, space) if item and item != "市场空间暂不可量化"]
+    return f"{name}（{'；'.join(details)}）" if details else name
+
+
+def _market_scope_cn(context: SellpointValueV4Context) -> str:
+    size_tier = context.target.size_tier or _size_tier_from_inches(
+        context.target.screen_size_inch
+    )
+    size = {
+        "size_under_55": "55 英寸以下",
+        "size_55_65": "55-65 英寸档",
+        "size_65_75": "65-75 英寸档",
+        "size_75_plus": "75 英寸以上",
+    }.get(size_tier, size_tier or "目标尺寸档")
+    window = {
+        "full_observed_window": "完整观察期",
+        "latest_week": "最近一周",
+    }.get(context.market_window, context.market_window)
+    platforms = sorted(
+        {
+            str(cell.platform_type)
+            for cell in context.market_cells
+            if str(cell.platform_type).strip()
+        }
+    )
+    platform_cn = f"{'+'.join(platforms)} 平台" if platforms else "现有平台范围"
+    return f"{size}、{window}、{platform_cn}"
+
+
+def _size_tier_from_inches(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if value < 55:
+        return "size_under_55"
+    if value < 65:
+        return "size_55_65"
+    if value < 75:
+        return "size_65_75"
+    return "size_75_plus"
 
 
 def _market_space_cn(value: dict[str, Any] | None) -> str:

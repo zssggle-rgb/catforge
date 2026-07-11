@@ -140,7 +140,7 @@ def test_two_independent_families_recover_bounded_400_500_wtp() -> None:
     assert first.wtp.status == "available"
     assert first.wtp.method == "matched_equal_choice_price_gap"
     assert (
-        first.wtp.method_config_version == "sellpoint_value_pm_v4_matched_wtp_config_v1"
+        first.wtp.method_config_version == "sellpoint_value_pm_v4_matched_wtp_config_v2"
     )
     assert first.wtp.pair_count == 2
     assert first.wtp.model_family_count == 2
@@ -150,6 +150,11 @@ def test_two_independent_families_recover_bounded_400_500_wtp() -> None:
     assert first.wtp.estimate_low <= 500 <= first.wtp.estimate_high
     assert first.wtp.causal_claim is False
     assert first.wtp.psychological_max_price is False
+    bootstrap = first.wtp.sensitivity_summary["cluster_week_bootstrap"]
+    assert set(bootstrap) == {"BASE-1", "BASE-2"}
+    assert all(item["iterations"] == 200 for item in bootstrap.values())
+    assert all(item["stable"] is True for item in bootstrap.values())
+    assert first.wtp.sensitivity_summary["weighted_median_center"] == 400.0
     assert first.choice_association is not None
     assert first.choice_association.method == "pair_curve_same_price"
     assert first.whole_product_price_acceptance is not None
@@ -262,6 +267,38 @@ def test_leave_one_week_out_failure_makes_amount_unstable_and_null() -> None:
     assert any(
         not item["stable"]
         for item in result.wtp.sensitivity_summary["leave_one_week_out"].values()
+    )
+
+
+def test_bootstrap_failure_blocks_amount_even_when_other_gates_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.core3_real_data.analyst import claim_value_pm_v4_service
+
+    monkeypatch.setattr(
+        claim_value_pm_v4_service,
+        "_cluster_week_bootstrap",
+        lambda _curve, *, seed_material: {
+            "stable": False,
+            "seed_hash": seed_material,
+            "iterations": 200,
+            "successful_crossing_count": 100,
+            "success_rate": 0.5,
+            "crossing_ratio_p10": 0.01,
+            "crossing_ratio_p90": 0.2,
+            "crossing_span": 0.19,
+        },
+    )
+
+    result = _quantify(_synthetic_context())
+
+    assert result.wtp.status == "unstable"
+    assert result.wtp.estimate_low is None
+    assert result.wtp.estimate_high is None
+    assert result.wtp.exclusion_reasons == ["cluster_bootstrap_stability_failed"]
+    assert all(
+        not item["stable"]
+        for item in result.wtp.sensitivity_summary["cluster_week_bootstrap"].values()
     )
 
 
@@ -483,7 +520,7 @@ def test_g06_models_match_frozen_contract(repo_root: Path) -> None:
 
 def test_wtp_schema_rejects_amounts_without_full_gate() -> None:
     base = {
-        "method_config_version": "sellpoint_value_pm_v4_matched_wtp_config_v1",
+        "method_config_version": "sellpoint_value_pm_v4_matched_wtp_config_v2",
         "causal_claim": False,
         "psychological_max_price": False,
     }
@@ -497,6 +534,31 @@ def test_wtp_schema_rejects_amounts_without_full_gate() -> None:
             pair_count=1,
             model_family_count=1,
             **base,
+        )
+    with pytest.raises(ValidationError, match="bootstrap and conservative interval"):
+        MarketImpliedWtp(
+            status="available",
+            method="matched_equal_choice_price_gap",
+            estimate_low=400,
+            estimate_high=500,
+            reference_price=5000,
+            pair_count=2,
+            model_family_count=2,
+            **base,
+        )
+
+    with pytest.raises(ValidationError):
+        MarketImpliedWtp(
+            status="insufficient",
+            method="none",
+            estimate_low=None,
+            estimate_high=None,
+            reference_price=None,
+            pair_count=0,
+            model_family_count=0,
+            causal_claim=False,
+            psychological_max_price=False,
+            method_config_version="sellpoint_value_pm_v4_matched_wtp_config_v1",
         )
     with pytest.raises(ValidationError):
         MarketImpliedWtp(

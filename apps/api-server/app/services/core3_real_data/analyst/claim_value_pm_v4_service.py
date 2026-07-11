@@ -1,12 +1,9 @@
-"""Deterministic V4 linkage and sellpoint-level counterfactual qualification.
-
-G04 links published reasons, realized value, and sellpoint bundles. G05 adds
-candidate roles and comparability gates, but never calculates choice, price
-acceptance, or WTP.
-"""
+"""Deterministic V4 linkage, counterfactual, choice, and WTP qualification."""
 
 from __future__ import annotations
 
+import hashlib
+import random
 from dataclasses import dataclass
 from statistics import median
 from typing import Any, Sequence
@@ -127,7 +124,11 @@ FAMILY_TIER_KEYS: dict[str, tuple[str, ...]] = {
     "space_aesthetic": ("aesthetic", "appearance", "外观"),
 }
 VALID_MARKET_PRICE_STATUSES = {"ok", "uncheckable", "unchecked", ""}
-WTP_METHOD_CONFIG_VERSION = "sellpoint_value_pm_v4_matched_wtp_config_v1"
+WTP_METHOD_CONFIG_VERSION = "sellpoint_value_pm_v4_matched_wtp_config_v2"
+WTP_BOOTSTRAP_ITERATIONS = 200
+WTP_BOOTSTRAP_MIN_SUCCESS_RATE = 0.80
+WTP_BOOTSTRAP_MAX_CROSSING_SPAN = 0.06
+WTP_JOINT_MAX_CROSSING_SPAN = 0.08
 
 
 @dataclass(frozen=True)
@@ -1570,10 +1571,34 @@ def _market_implied_wtp(
     leave_one_out = {
         item.candidate_sku_code: _leave_one_week_out(item) for item in with_crossing
     }
+    bootstrap = {
+        item.candidate_sku_code: _cluster_week_bootstrap(
+            item,
+            seed_material="|".join(
+                (
+                    context.input_hash,
+                    link.relation_hash,
+                    item.candidate_sku_code,
+                    WTP_METHOD_CONFIG_VERSION,
+                )
+            ),
+        )
+        for item in with_crossing
+    }
+    joint_stability = {
+        item.candidate_sku_code: _joint_crossing_stability(
+            item,
+            leave_one_out[item.candidate_sku_code],
+            bootstrap[item.candidate_sku_code],
+        )
+        for item in with_crossing
+    }
     qualified = [
         item
         for item in with_crossing
         if leave_one_out[item.candidate_sku_code]["stable"]
+        and bootstrap[item.candidate_sku_code]["stable"]
+        and joint_stability[item.candidate_sku_code]["stable"]
         and item.model_family
         and item.candidate_reference_price
     ]
@@ -1610,8 +1635,23 @@ def _market_implied_wtp(
         exclusions.append("price_direction_consistency_failed")
     elif len(with_crossing) < 2:
         exclusions.append("equal_choice_crossing_count_below_2")
-    elif len(qualified) < 2:
+    elif any(
+        not leave_one_out[item.candidate_sku_code]["stable"]
+        for item in with_crossing
+    ):
         exclusions.append("leave_one_week_out_stability_failed")
+    elif any(
+        not bootstrap[item.candidate_sku_code]["stable"]
+        for item in with_crossing
+    ):
+        exclusions.append("cluster_bootstrap_stability_failed")
+    elif any(
+        not joint_stability[item.candidate_sku_code]["stable"]
+        for item in with_crossing
+    ):
+        exclusions.append("joint_interval_stability_failed")
+    elif len(qualified) < 2:
+        exclusions.append("qualified_pair_count_below_2")
     elif family_count < 2:
         exclusions.append("qualified_model_family_count_below_2")
     available = (
@@ -1634,15 +1674,41 @@ def _market_implied_wtp(
         status = "unstable"
     else:
         status = "insufficient"
-    amounts = [
-        float(item.crossing_ratio) * float(item.candidate_reference_price)
-        for item in qualified
-        if item.crossing_ratio is not None and item.candidate_reference_price
-    ]
     reference_prices = [
         float(item.candidate_reference_price)
         for item in qualified
         if item.candidate_reference_price
+    ]
+    pair_quality_weights = {
+        item.candidate_sku_code: _pair_quality_weight(
+            item,
+            bootstrap[item.candidate_sku_code],
+        )
+        for item in qualified
+    }
+    weighted_center = _weighted_median(
+        [
+            (
+                float(item.crossing_ratio) * float(item.candidate_reference_price),
+                pair_quality_weights[item.candidate_sku_code],
+            )
+            for item in qualified
+            if item.crossing_ratio is not None and item.candidate_reference_price
+        ]
+    )
+    interval_components = {
+        item.candidate_sku_code: _pair_amount_interval_components(
+            item,
+            leave_one_out[item.candidate_sku_code],
+            bootstrap[item.candidate_sku_code],
+        )
+        for item in qualified
+    }
+    conservative_amounts = [
+        value
+        for components in interval_components.values()
+        for value in components.values()
+        if value is not None
     ]
     price_ranges = [
         value
@@ -1662,6 +1728,11 @@ def _market_implied_wtp(
             for item in with_crossing
         },
         "leave_one_week_out": leave_one_out,
+        "cluster_week_bootstrap": bootstrap,
+        "joint_crossing_stability": joint_stability,
+        "pair_quality_weights": pair_quality_weights,
+        "weighted_median_center": _v4_round(weighted_center, 2),
+        "conservative_interval_components": interval_components,
         "eligible_a_base_pair_count": len(base_curves),
         "explicit_model_family_count": family_count_before,
     }
@@ -1669,8 +1740,16 @@ def _market_implied_wtp(
         status=status,
         method=("matched_equal_choice_price_gap" if base_curves else "none"),
         method_config_version=WTP_METHOD_CONFIG_VERSION,
-        estimate_low=_v4_round(min(amounts), 2) if available else None,
-        estimate_high=_v4_round(max(amounts), 2) if available else None,
+        estimate_low=(
+            _v4_round(min(conservative_amounts), 2)
+            if available and conservative_amounts
+            else None
+        ),
+        estimate_high=(
+            _v4_round(max(conservative_amounts), 2)
+            if available and conservative_amounts
+            else None
+        ),
         reference_price=(_v4_round(median(reference_prices), 2) if available else None),
         currency="CNY",
         pair_count=len(qualified),
@@ -1747,6 +1826,180 @@ def _leave_one_week_out(curve: _V4PairCurve) -> dict[str, Any]:
         "coverage": _v4_round(coverage, 6),
         "crossing_ratio_min": _v4_round(min(crossings), 6) if crossings else None,
         "crossing_ratio_max": _v4_round(max(crossings), 6) if crossings else None,
+    }
+
+
+def _cluster_week_bootstrap(
+    curve: _V4PairCurve,
+    *,
+    seed_material: str,
+) -> dict[str, Any]:
+    weeks = sorted({item[3] for item in curve.raw_points})
+    by_week = {
+        week: [item for item in curve.raw_points if item[3] == week]
+        for week in weeks
+    }
+    seed = int.from_bytes(
+        hashlib.sha256(seed_material.encode("utf-8")).digest()[:8],
+        "big",
+    )
+    rng = random.Random(seed)
+    crossings: list[float] = []
+    for _ in range(WTP_BOOTSTRAP_ITERATIONS):
+        sampled_weeks = rng.choices(weeks, k=len(weeks)) if weeks else []
+        sampled = [point for week in sampled_weeks for point in by_week[week]]
+        crossing = _crossing_from_resampled_points(sampled)
+        if crossing is not None:
+            crossings.append(crossing)
+    success_rate = (
+        len(crossings) / WTP_BOOTSTRAP_ITERATIONS
+        if WTP_BOOTSTRAP_ITERATIONS
+        else 0.0
+    )
+    p10 = _percentile(crossings, 0.10) if crossings else None
+    p90 = _percentile(crossings, 0.90) if crossings else None
+    span = (p90 - p10) if p10 is not None and p90 is not None else None
+    stable = (
+        len(weeks) >= 8
+        and success_rate >= WTP_BOOTSTRAP_MIN_SUCCESS_RATE
+        and p10 is not None
+        and p10 > 0
+        and p90 is not None
+        and span is not None
+        and span <= WTP_BOOTSTRAP_MAX_CROSSING_SPAN
+    )
+    return {
+        "stable": stable,
+        "seed_hash": hashlib.sha256(seed_material.encode("utf-8")).hexdigest(),
+        "iterations": WTP_BOOTSTRAP_ITERATIONS,
+        "successful_crossing_count": len(crossings),
+        "success_rate": _v4_round(success_rate, 6),
+        "crossing_ratio_p10": _v4_round(p10, 6),
+        "crossing_ratio_p90": _v4_round(p90, 6),
+        "crossing_span": _v4_round(span, 6),
+    }
+
+
+def _crossing_from_resampled_points(
+    points: Sequence[tuple[float, float, float, int]],
+) -> float | None:
+    if len(points) < 8:
+        return None
+    binned = _bin_choice_points(points)
+    bins = sorted(item[0] for item in binned)
+    if len(bins) < 4 or _raw_direction_consistency(binned) is None:
+        return None
+    if float(_raw_direction_consistency(binned) or 0) < 0.75:
+        return None
+    gap_min = min(item[0] for item in points)
+    gap_max = max(item[0] for item in points)
+    if not (gap_min <= 0 <= gap_max) or not _interpolation_supported(bins, 0.0):
+        return None
+    fitted = pava_nonincreasing(binned)
+    same_share = evaluate_choice_curve(
+        fitted,
+        0.0,
+        observed_min=gap_min,
+        observed_max=gap_max,
+    )
+    if same_share is None or same_share <= 0.5:
+        return None
+    crossing = choice_share_crossing(
+        fitted,
+        threshold=0.5,
+        start_gap=0.0,
+        observed_min=gap_min,
+        observed_max=gap_max,
+    )
+    if crossing is None or crossing <= 0 or not _gap_locally_supported(bins, crossing):
+        return None
+    return crossing
+
+
+def _joint_crossing_stability(
+    curve: _V4PairCurve,
+    leave_one_out: dict[str, Any],
+    bootstrap: dict[str, Any],
+) -> dict[str, Any]:
+    values = [
+        value
+        for value in (
+            curve.crossing_ratio,
+            leave_one_out.get("crossing_ratio_min"),
+            leave_one_out.get("crossing_ratio_max"),
+            bootstrap.get("crossing_ratio_p10"),
+            bootstrap.get("crossing_ratio_p90"),
+        )
+        if value is not None
+    ]
+    span = max(values) - min(values) if values else None
+    return {
+        "stable": bool(
+            leave_one_out.get("stable")
+            and bootstrap.get("stable")
+            and span is not None
+            and span <= WTP_JOINT_MAX_CROSSING_SPAN
+        ),
+        "crossing_ratio_min": _v4_round(min(values), 6) if values else None,
+        "crossing_ratio_max": _v4_round(max(values), 6) if values else None,
+        "crossing_span": _v4_round(span, 6),
+    }
+
+
+def _pair_quality_weight(
+    curve: _V4PairCurve,
+    bootstrap: dict[str, Any],
+) -> float:
+    cell_score = min(curve.cell_count / 24, 1.0)
+    week_score = min(curve.week_count / 12, 1.0)
+    direction_score = float(curve.direction_consistency or 0)
+    bootstrap_score = float(bootstrap.get("success_rate") or 0)
+    return max(
+        _v4_round(
+            cell_score * week_score * direction_score * bootstrap_score,
+            6,
+        )
+        or 0,
+        0.000001,
+    )
+
+
+def _weighted_median(values: Sequence[tuple[float, float]]) -> float | None:
+    ordered = sorted((value, max(weight, 0.0)) for value, weight in values)
+    total = sum(weight for _, weight in ordered)
+    if not ordered or total <= 0:
+        return None
+    threshold = total / 2
+    cumulative = 0.0
+    for index, (value, weight) in enumerate(ordered):
+        cumulative += weight
+        if cumulative > threshold:
+            return value
+        if cumulative == threshold and index + 1 < len(ordered):
+            return (value + ordered[index + 1][0]) / 2
+    return ordered[-1][0]
+
+
+def _pair_amount_interval_components(
+    curve: _V4PairCurve,
+    leave_one_out: dict[str, Any],
+    bootstrap: dict[str, Any],
+) -> dict[str, float | None]:
+    reference_price = float(curve.candidate_reference_price or 0)
+
+    def amount(value: Any) -> float | None:
+        return (
+            _v4_round(float(value) * reference_price, 2)
+            if value is not None and reference_price > 0
+            else None
+        )
+
+    return {
+        "pair_point": amount(curve.crossing_ratio),
+        "leave_one_week_out_low": amount(leave_one_out.get("crossing_ratio_min")),
+        "leave_one_week_out_high": amount(leave_one_out.get("crossing_ratio_max")),
+        "bootstrap_p10": amount(bootstrap.get("crossing_ratio_p10")),
+        "bootstrap_p90": amount(bootstrap.get("crossing_ratio_p90")),
     }
 
 

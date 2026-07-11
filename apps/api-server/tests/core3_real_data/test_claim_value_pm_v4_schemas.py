@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
+from typing import get_args
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from app.services.core3_real_data.analyst.analyst_repository import (
     build_sellpoint_value_v4_lineage_gate,
@@ -14,7 +16,9 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     EvidenceRef,
     LineageGate,
     MarketCellRow,
+    MarketImpliedWtp,
     SourceAuthority,
+    ValueStatus,
 )
 
 
@@ -120,6 +124,28 @@ def test_canonical_hash_ignores_mapping_order_but_not_value_changes() -> None:
 
     assert canonical_v4_hash(left) == canonical_v4_hash(right)
     assert canonical_v4_hash(left) != canonical_v4_hash({"b": [1, 2], "a": {"x": "值"}})
+
+
+def test_g08r1_contract_addendum_matches_runtime(repo_root) -> None:
+    contract = json.loads(
+        (
+            repo_root
+            / "docs/core3_mvp/real_data_v2/current_implementation/sellpoint_value_pm_v4/G08R1_schema_contract_addendum.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    expected_statuses = contract["overrides"]["enums.ValueStatus"]
+    assert list(get_args(ValueStatus)) == expected_statuses
+    for status in expected_statuses:
+        assert TypeAdapter(ValueStatus).validate_python(status) == status
+    with pytest.raises(ValidationError):
+        TypeAdapter(ValueStatus).validate_python("conflicted")
+
+    expected_method = contract["overrides"][
+        "models.MarketImpliedWtp.fields.method_config_version"
+    ]
+    field = MarketImpliedWtp.model_fields["method_config_version"]
+    assert get_args(field.annotation) == (expected_method,)
 
 
 def test_lineage_is_aligned_only_when_rule_and_record_hash_match() -> None:

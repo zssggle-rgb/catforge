@@ -16,7 +16,7 @@
 | Lineage/hash deterministic repair | completed |
 | Candidate recall/snapshot/per-role repair | completed |
 | Market-cell bounded trim 与 M11D sample weight | completed |
-| Q5 config v2 + deterministic cluster bootstrap | pending |
+| Q5 config v2 + deterministic cluster bootstrap | completed |
 | Pure negative / mixed / data conflict 分离 | completed |
 | Frozen cohort/hash 真回放 | pending |
 | 309+ 回归、覆盖率、性能和三审 | pending |
@@ -46,3 +46,9 @@
 - ValueStatus 已改为 established/partial/negative/mixed/not_observed；lineage/data conflict 继续由 LineageGate/LinkStatus 表达；
 - pure negative 输出“用户实际获得的是负向体验”，positive+negative 输出“不同用户或场景体验分化”，两者均不能进入 Q1+ 或金额；
 - pure negative、mixed 和 data conflict 跨报告语义测试通过；schema/linkage/quantification/answer 55 passed。
+- Q5 method config 已升级到 v2；每个 pair 运行 200 次确定性 week-cluster bootstrap，并与 leave-one-week-out 形成联合 crossing 稳定性门禁；
+- 多 pair 计算质量权重和 weighted median center，金额区间由 pair point、LOO、bootstrap P10/P90 组成联合保守包络；
+- available WTP schema 强制要求两个 stable bootstrap pair、完整 sensitivity keys，且区间必须包含 weighted center；v1 结果不能冒充 v2；
+- bootstrap seed 只来自 input hash、relation hash、candidate SKU 和 config version，同输入完整结果相同；bootstrap 不稳时金额为空；
+- 市场空间主表新增尺寸档、观察窗口和实际平台覆盖；schema/service 过时阶段说明已修正；
+- G08R1 schema contract addendum 已落盘；V4 全量 87 passed，新增/修改 V4 文件 Ruff passed。

@@ -37,6 +37,7 @@ def test_report_builds_one_pm_value_account_from_the_same_analysis() -> None:
     assert len(first.value_structure_rows) == 1
     row = first.value_structure_rows[0]
     assert row.purchase_reason["name_cn"] == "画质配置解释加价"
+    assert row.battlefield["scope_cn"] == "65-75 英寸档、完整观察期、jd+tmall 平台"
     assert row.realized_user_value["status_cn"] == "用户已实际感知到这项价值"
     assert row.selection_price_realization.wtp.status == "available"
     assert row.selection_price_realization.wtp.estimate_low == 400
@@ -58,6 +59,7 @@ def test_markdown_is_the_fixed_seven_column_pm_table_without_internal_codes() ->
         in markdown
     )
     assert "画质配置解释加价" in markdown
+    assert "65-75 英寸档、完整观察期、jd+tmall 平台" in markdown
     assert "市场隐含支付区间约 400-500 元" in markdown
     assert "无法量化不等于没有价值" in markdown
     assert pm_business_output_issue(markdown) is None

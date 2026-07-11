@@ -1,0 +1,32 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_repair_contract_v1",
+  "base_contract": "G02_schema_contract.json",
+  "reason": "G08 verified method and PM-semantic blockers",
+  "overrides": {
+    "enums.ValueStatus": [
+      "established",
+      "partial",
+      "negative",
+      "mixed",
+      "not_observed"
+    ],
+    "models.MarketImpliedWtp.fields.method_config_version": "sellpoint_value_pm_v4_matched_wtp_config_v2",
+    "models.MarketImpliedWtp.available_required_sensitivity": [
+      "leave_one_week_out",
+      "cluster_week_bootstrap",
+      "joint_crossing_stability",
+      "pair_quality_weights",
+      "weighted_median_center",
+      "conservative_interval_components"
+    ]
+  },
+  "invariants": {
+    "negative_or_mixed_q1_plus_allowed": false,
+    "available_wtp_requires_two_stable_bootstrap_pairs": true,
+    "available_wtp_interval_contains_weighted_median_center": true,
+    "causal_claim": false,
+    "psychological_max_price": false,
+    "legacy_m12c_amount_allowed": false,
+    "m11d_allocation_is_purchase_attribution": false
+  }
+}
