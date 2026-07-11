@@ -1,0 +1,452 @@
+{
+  "contract_version": "sellpoint_value_pm_v4_contract_v1",
+  "implementation_target": "Pydantic v2 extra=forbid",
+  "enums": {
+    "Availability": ["present", "missing"],
+    "Usability": ["usable", "limited", "unusable"],
+    "IssueSeverity": ["info", "warning", "blocking"],
+    "LineageStatus": ["aligned", "stale_revalidated", "stale_conflict", "unresolved"],
+    "ValueStatus": ["established", "partial", "not_observed", "conflicted"],
+    "QuantificationLevel": [
+      "Q0_NOT_OBSERVED",
+      "Q1_USER_VALUE_ESTABLISHED",
+      "Q2_RELATIVE_EXPERIENCE",
+      "Q3_MARKET_CHOICE_ASSOCIATION",
+      "Q4_WHOLE_PRODUCT_PRICE_ACCEPTANCE",
+      "Q5_MARKET_IMPLIED_WTP"
+    ],
+    "ProductRole": [
+      "core_differentiated_value",
+      "basic_threshold",
+      "supporting_choice_value",
+      "customer_captured_value",
+      "configuration_support",
+      "price_pressure",
+      "undetermined"
+    ],
+    "MonetizationStatus": [
+      "not_measured",
+      "choice_supported",
+      "whole_product_only",
+      "partially_captured",
+      "fully_captured",
+      "over_captured",
+      "unidentifiable"
+    ],
+    "CounterfactualRole": ["base_value", "same_value", "stretch_benchmark"],
+    "CandidateProvenance": ["M14", "competitor_set_fallback", "M12C_pool", "same_family_search"],
+    "IsolationGrade": ["A", "B", "C", "unusable"],
+    "BusinessTier": ["unknown", "base", "enhanced", "premium", "flagship"],
+    "LinkStatus": ["supported", "partial", "conflicted", "insufficient"],
+    "AnalysisStatus": ["ready", "partial", "blocked"],
+    "WtpMethod": ["none", "matched_equal_choice_price_gap"]
+  },
+  "models": {
+    "EvidenceRef": {
+      "required": ["module_code", "record_type", "record_id", "result_hash"],
+      "fields": {
+        "module_code": "str",
+        "record_type": "str",
+        "record_id": "str",
+        "result_hash": "str",
+        "batch_id": "str|null",
+        "rule_version": "str|null",
+        "evidence_ids": "list[str]"
+      }
+    },
+    "SourceAuthority": {
+      "required": [
+        "module_code",
+        "table_name",
+        "authority_mode",
+        "availability",
+        "usability",
+        "selected_batch_ids",
+        "row_count",
+        "selected_reason"
+      ],
+      "fields": {
+        "module_code": "str",
+        "table_name": "str",
+        "authority_mode": "published_release|configured_rule|fallback",
+        "rule_version": "str|null",
+        "schema_version": "str|null",
+        "taxonomy_version": "str|null",
+        "release_id": "str|null",
+        "selected_batch_ids": "list[str]",
+        "row_count": "int>=0",
+        "availability": "Availability",
+        "usability": "Usability",
+        "source_hash": "str|null",
+        "selected_reason": "str",
+        "warnings": "list[str]"
+      }
+    },
+    "LineageIssue": {
+      "required": ["code", "severity", "scope", "message_cn"],
+      "fields": {
+        "code": "str",
+        "severity": "IssueSeverity",
+        "scope": "source|relation|bundle|quantification|report",
+        "message_cn": "str",
+        "affected_module_codes": "list[str]",
+        "affected_reason_codes": "list[str]",
+        "affected_bundle_codes": "list[str]",
+        "source_refs": "list[EvidenceRef]"
+      }
+    },
+    "LineageGate": {
+      "required": ["status", "published_lineage", "current_validation_lineage"],
+      "fields": {
+        "status": "LineageStatus",
+        "published_lineage": "list[SourceAuthority]",
+        "current_validation_lineage": "list[SourceAuthority]",
+        "issues": "list[LineageIssue]",
+        "blocked_reason_codes": "list[str]"
+      }
+    },
+    "SkuIdentity": {
+      "required": ["sku_code", "product_category"],
+      "fields": {
+        "sku_code": "str",
+        "brand_name": "str|null",
+        "model_name": "str|null",
+        "product_category": "str",
+        "screen_size_inch": "float|null",
+        "size_tier": "str|null",
+        "price_band": "str|null"
+      }
+    },
+    "MarketCellRow": {
+      "required": [
+        "sku_code",
+        "battlefield_code",
+        "period_week_index",
+        "platform_type",
+        "price_check_status",
+        "promotion_suspect",
+        "inventory_status"
+      ],
+      "fields": {
+        "sku_code": "str",
+        "battlefield_code": "str",
+        "period_week_index": "int",
+        "platform_type": "str",
+        "channel_type": "str|null",
+        "avg_price": "float|null",
+        "sales_volume": "float|null",
+        "sales_amount": "float|null",
+        "battlefield_allocation_weight": "float[0,1]|null",
+        "value_bundle_tiers": "dict[str,BusinessTier]",
+        "other_bundle_tiers": "dict[str,BusinessTier]",
+        "brand_name": "str|null",
+        "series_name": "str|null",
+        "price_check_status": "str",
+        "promotion_suspect": "bool",
+        "inventory_status": "unavailable",
+        "quality_flags": "list[str]",
+        "source_ref": "EvidenceRef"
+      }
+    },
+    "SkuEvidenceSnapshot": {
+      "required": ["identity", "source_status", "facts", "market", "source_refs", "snapshot_hash"],
+      "fields": {
+        "identity": "SkuIdentity",
+        "source_status": "dict[str,Availability|Usability]",
+        "facts": "dict",
+        "comment_outcomes": "list[dict]",
+        "market": "dict",
+        "tasks": "list[dict]",
+        "target_groups": "list[dict]",
+        "battlefields": "list[dict]",
+        "semantic_market": "list[dict]",
+        "source_refs": "list[EvidenceRef]",
+        "snapshot_hash": "str"
+      }
+    },
+    "PurchaseReasonSnapshot": {
+      "required": ["found", "lineage_status", "profile_version", "anchors"],
+      "fields": {
+        "found": "bool",
+        "lineage_status": "LineageStatus",
+        "profile_version": "str|null",
+        "release_id": "str|null",
+        "anchors": "list[dict]",
+        "review_required": "bool",
+        "source_refs": "list[EvidenceRef]"
+      }
+    },
+    "ComparablePoolTierFact": {
+      "required": [
+        "claim_code",
+        "bundle_code",
+        "context_code",
+        "pool_sku_count",
+        "with_count",
+        "without_count",
+        "unknown_count",
+        "sample_status",
+        "pool_hash"
+      ],
+      "fields": {
+        "claim_code": "str",
+        "bundle_code": "str",
+        "context_code": "str",
+        "comparison_basis": "str",
+        "comparison_param_code": "str|null",
+        "pool_sku_count": "int>=0",
+        "with_count": "int>=0",
+        "without_count": "int>=0",
+        "unknown_count": "int>=0",
+        "sample_status": "str",
+        "quality_flags": "list[str]",
+        "pool_hash": "str"
+      }
+    },
+    "SellpointValueV4Context": {
+      "required": [
+        "schema_version",
+        "project_id",
+        "category_code",
+        "requested_batch_id",
+        "serving_batch_ids",
+        "market_window",
+        "target",
+        "authority_manifest",
+        "lineage_gate",
+        "target_snapshot",
+        "purchase_reason_profile",
+        "candidate_snapshots",
+        "market_cells",
+        "m12c_pool_tiers",
+        "input_hash"
+      ],
+      "fields": {
+        "schema_version": "literal:sellpoint_value_v4_context_v1",
+        "project_id": "str",
+        "category_code": "str",
+        "requested_batch_id": "str",
+        "serving_batch_ids": "list[str]",
+        "market_window": "str",
+        "target": "SkuIdentity",
+        "authority_manifest": "list[SourceAuthority]",
+        "lineage_gate": "LineageGate",
+        "target_snapshot": "SkuEvidenceSnapshot",
+        "purchase_reason_profile": "PurchaseReasonSnapshot",
+        "candidate_snapshots": "list[SkuEvidenceSnapshot]",
+        "market_cells": "list[MarketCellRow]",
+        "m12c_pool_tiers": "list[ComparablePoolTierFact]",
+        "evidence_refs": "list[EvidenceRef]",
+        "input_hash": "str"
+      }
+    },
+    "BundleMember": {
+      "required": ["capability_code", "capability_name_cn", "fact_status", "business_tier"],
+      "fields": {
+        "capability_code": "str",
+        "capability_name_cn": "str",
+        "fact_status": "confirmed|partial|conflict|unknown",
+        "business_tier": "BusinessTier",
+        "fact_summary_cn": "str",
+        "user_result_support": "str",
+        "source_refs": "list[EvidenceRef]"
+      }
+    },
+    "SellpointBundle": {
+      "required": ["bundle_code", "bundle_name_cn", "bundle_family", "business_tier", "members"],
+      "fields": {
+        "bundle_code": "str",
+        "bundle_name_cn": "str",
+        "bundle_family": "str",
+        "business_tier": "BusinessTier",
+        "members": "list[BundleMember]",
+        "collinearity_group": "str|null",
+        "independently_identifiable": "bool",
+        "limitations": "list[str]"
+      }
+    },
+    "ReasonValueBundleLink": {
+      "required": [
+        "battlefield_code",
+        "purchase_reason_code",
+        "realized_value_code",
+        "bundle",
+        "link_status",
+        "value_status",
+        "relation_hash"
+      ],
+      "fields": {
+        "battlefield_code": "str",
+        "battlefield_name_cn": "str",
+        "battlefield_market_space": "dict|null",
+        "purchase_reason_code": "str",
+        "purchase_reason_name_cn": "str",
+        "purchase_reason_family": "str|null",
+        "purchase_reason_source_status": "LineageStatus",
+        "realized_value_code": "str",
+        "realized_value_name_cn": "str",
+        "scenario_cn": "str",
+        "outcome_cn": "str",
+        "bundle": "SellpointBundle",
+        "link_status": "LinkStatus",
+        "value_status": "ValueStatus",
+        "evidence_domains": "list[str]",
+        "limitations": "list[str]",
+        "source_refs": "list[EvidenceRef]",
+        "relation_hash": "str"
+      }
+    },
+    "ComparabilityAssessment": {
+      "required": [
+        "candidate_sku_code",
+        "role",
+        "provenance",
+        "isolation_grade",
+        "eligible",
+        "eligible_quantification_levels"
+      ],
+      "fields": {
+        "candidate_sku_code": "str",
+        "role": "CounterfactualRole",
+        "provenance": "CandidateProvenance",
+        "isolation_grade": "IsolationGrade",
+        "exact_size_match": "bool",
+        "battlefield_overlap": "float[0,1]",
+        "reason_overlap": "float[0,1]",
+        "value_tier_relation": "lower|same|higher|unknown",
+        "common_cell_count": "int>=0",
+        "common_week_count": "int>=0",
+        "price_overlap": "bool",
+        "other_bundle_difference_count": "int>=0",
+        "promotion_clean_cell_count": "int>=0",
+        "inventory_status": "unavailable",
+        "comment_comparable": "bool",
+        "eligible": "bool",
+        "eligible_quantification_levels": "list[QuantificationLevel]",
+        "reject_reasons": "list[str]",
+        "assessment_hash": "str"
+      }
+    },
+    "ChoiceAssociation": {
+      "required": ["status", "method", "pair_count", "cell_count", "week_count"],
+      "fields": {
+        "status": "available|insufficient|unstable",
+        "method": "pair_curve_same_price|near_same_price|none",
+        "same_price_choice_share": "float[0,1]|null",
+        "choice_difference_pp": "float|null",
+        "pair_count": "int>=0",
+        "cell_count": "int>=0",
+        "week_count": "int>=0",
+        "observed_price_gap_range": "list[float]",
+        "direction_consistency": "float[0,1]|null",
+        "limitations": "list[str]"
+      }
+    },
+    "MarketImpliedWtp": {
+      "required": [
+        "status",
+        "method",
+        "method_config_version",
+        "pair_count",
+        "model_family_count",
+        "causal_claim",
+        "psychological_max_price"
+      ],
+      "fields": {
+        "status": "available|insufficient|unstable|blocked",
+        "method": "WtpMethod",
+        "method_config_version": "literal:sellpoint_value_pm_v4_matched_wtp_config_v1",
+        "estimate_low": "float|null",
+        "estimate_high": "float|null",
+        "reference_price": "float|null",
+        "currency": "str",
+        "pair_count": "int>=0",
+        "model_family_count": "int>=0",
+        "cell_count": "int>=0",
+        "week_count": "int>=0",
+        "observed_price_range": "list[float]",
+        "observed_value_tiers": "list[BusinessTier]",
+        "sensitivity_summary": "dict",
+        "assumptions": "list[str]",
+        "exclusion_reasons": "list[str]",
+        "causal_claim": "literal:false",
+        "psychological_max_price": "literal:false"
+      }
+    },
+    "QuantificationResult": {
+      "required": ["level", "value_status", "product_role", "monetization_status", "wtp"],
+      "fields": {
+        "level": "QuantificationLevel",
+        "value_status": "ValueStatus",
+        "product_role": "ProductRole",
+        "monetization_status": "MonetizationStatus",
+        "relative_experience": "dict|null",
+        "choice_association": "ChoiceAssociation|null",
+        "whole_product_price_acceptance": "dict|null",
+        "wtp": "MarketImpliedWtp",
+        "gate_results": "list[dict]",
+        "limitations": "list[str]"
+      }
+    },
+    "ProductValueStructureRow": {
+      "required": [
+        "battlefield",
+        "purchase_reason",
+        "realized_user_value",
+        "sellpoint_bundle",
+        "counterfactual_result",
+        "selection_price_realization",
+        "product_role"
+      ],
+      "fields": {
+        "battlefield": "dict",
+        "purchase_reason": "dict",
+        "realized_user_value": "dict",
+        "sellpoint_bundle": "dict",
+        "counterfactual_result": "dict",
+        "selection_price_realization": "QuantificationResult",
+        "product_role": "ProductRole",
+        "confidence_label_cn": "str",
+        "drilldown": "dict"
+      }
+    },
+    "SkuProductValueRealizationReport": {
+      "required": [
+        "schema_version",
+        "analysis_status",
+        "target",
+        "headline_cn",
+        "value_structure_rows",
+        "overall_quantification_boundary",
+        "data_scope_note_cn",
+        "input_hash",
+        "result_hash"
+      ],
+      "fields": {
+        "schema_version": "literal:sellpoint_value_pm_v4_result_v1",
+        "analysis_status": "AnalysisStatus",
+        "target": "SkuIdentity",
+        "headline_cn": "str",
+        "value_structure_rows": "list[ProductValueStructureRow]",
+        "overall_quantification_boundary": "dict",
+        "data_scope_note_cn": "str",
+        "limitations": "list[str]",
+        "qa_appendix": "dict",
+        "input_hash": "str",
+        "result_hash": "str"
+      }
+    }
+  },
+  "invariants": [
+    "unknown is never coerced to false or zero",
+    "quantification levels are monotonic and cannot be skipped",
+    "Q5 requires MarketImpliedWtp.status=available",
+    "Q5 requires at least two independent A-grade pairs from at least two model families",
+    "WTP method is never sourced from M12C allocated amounts",
+    "same_value_only cannot reach Q5",
+    "full_collinearity prevents single capability WTP",
+    "version_lineage_conflict blocks affected price attribution",
+    "business DTO does not contain automatic configuration or pricing actions",
+    "result_hash excludes generated_at and delivery URLs"
+  ]
+}
