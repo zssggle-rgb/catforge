@@ -237,7 +237,7 @@ def build_perceived_value_market_report(
                 highlight_types=_eligible_highlight_types(
                     value_status, sets, accounting, synthetic
                 ),
-                counterfactual_sets=sets,
+                counterfactual_sets=_pm_counterfactual_sets(sets),
                 counterfactual_summary_cn=_counterfactual_summary_cn(sets),
                 price_realization=accounting.price,
                 volume_realization=accounting.volume,
@@ -248,7 +248,7 @@ def build_perceived_value_market_report(
                 limitations=sorted(
                     set([*link.limitations, *accounting.limitations])
                 ),
-                source_refs=link.source_refs,
+                source_refs=[],
             )
         )
         qa_relations.append(
@@ -338,7 +338,10 @@ def build_v5_answer_artifacts(
     delivery = _publish_report(title=title, markdown=markdown, with_report=with_report)
     links = _report_links(selection_compare_url, evidence_report_url or delivery.url)
     return {
-        "report": report.model_dump(mode="json"),
+        "report_ref": {
+            "schema_version": report.schema_version,
+            "result_hash": report.result_hash,
+        },
         "short_answer": render_v5_short_answer(
             report, links=links, max_chat_chars=max_chat_chars
         ),
@@ -564,6 +567,24 @@ def _synthetic_for_bundle(
             reject_reasons=["broad_donor_pool_insufficient"],
         )
     return build_market_synthetic_control(context, candidate, bundle_code=bundle_code)
+
+
+def _pm_counterfactual_sets(
+    sets: Sequence[CounterfactualSet],
+) -> list[CounterfactualSet]:
+    """Strip evidence payloads already represented by hashes in the PM DTO."""
+
+    return [
+        row.model_copy(
+            update={
+                "candidates": [
+                    candidate.model_copy(update={"source_refs": []})
+                    for candidate in row.candidates
+                ]
+            }
+        )
+        for row in sets
+    ]
 
 
 def _battlefield_allocations(context: SellpointValueV5Context) -> list[BattlefieldAllocation]:

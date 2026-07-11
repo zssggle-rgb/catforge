@@ -159,9 +159,23 @@ def test_artifacts_share_one_result_hash_and_renderers_do_not_recalculate() -> N
     )
 
     assert artifacts["result_hash"] == report.result_hash
-    assert artifacts["report"]["result_hash"] == report.result_hash
+    assert artifacts["report_ref"]["result_hash"] == report.result_hash
     assert artifacts["report_delivery"]["status"] == "disabled"
     assert artifacts["markdown"] is None
+
+
+def test_business_dto_does_not_duplicate_large_evidence_payloads() -> None:
+    report = _report()
+    payload = json.dumps(report.model_dump(mode="json"), ensure_ascii=False)
+
+    assert len(payload.encode("utf-8")) < 1_000_000
+    assert all(
+        not candidate.source_refs
+        for row in report.value_account_rows
+        for counterfactual_set in row.counterfactual_sets
+        for candidate in counterfactual_set.candidates
+    )
+    assert all(not row.source_refs for row in report.value_account_rows)
 
 
 def test_report_and_renderers_are_deterministic() -> None:
