@@ -33,6 +33,25 @@ CandidateProvenance = Literal[
     "M14", "competitor_set_fallback", "M12C_pool", "same_family_search"
 ]
 IsolationGrade = Literal["A", "B", "C", "unusable"]
+ProductRole = Literal[
+    "core_differentiated_value",
+    "basic_threshold",
+    "supporting_choice_value",
+    "customer_captured_value",
+    "configuration_support",
+    "price_pressure",
+    "undetermined",
+]
+MonetizationStatus = Literal[
+    "not_measured",
+    "choice_supported",
+    "whole_product_only",
+    "partially_captured",
+    "fully_captured",
+    "over_captured",
+    "unidentifiable",
+]
+WtpMethod = Literal["none", "matched_equal_choice_price_gap"]
 
 
 class SellpointValueV4BaseModel(BaseModel):
@@ -263,6 +282,117 @@ class ComparabilityAssessment(SellpointValueV4BaseModel):
     assessment_hash: str = ""
 
 
+class ChoiceAssociation(SellpointValueV4BaseModel):
+    status: Literal["available", "insufficient", "unstable"]
+    method: Literal["pair_curve_same_price", "near_same_price", "none"]
+    same_price_choice_share: float | None = Field(default=None, ge=0.0, le=1.0)
+    choice_difference_pp: float | None = None
+    pair_count: int = Field(ge=0)
+    cell_count: int = Field(ge=0)
+    week_count: int = Field(ge=0)
+    observed_price_gap_range: list[float] = Field(default_factory=list)
+    direction_consistency: float | None = Field(default=None, ge=0.0, le=1.0)
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_available(self) -> "ChoiceAssociation":
+        if self.status == "available" and (
+            self.method == "none" or self.same_price_choice_share is None
+        ):
+            raise ValueError("available choice association requires an observed share")
+        if (
+            self.same_price_choice_share is not None
+            and self.choice_difference_pp is None
+        ):
+            raise ValueError("choice share requires choice_difference_pp")
+        return self
+
+
+class MarketImpliedWtp(SellpointValueV4BaseModel):
+    status: Literal["available", "insufficient", "unstable", "blocked"]
+    method: WtpMethod
+    method_config_version: Literal["sellpoint_value_pm_v4_matched_wtp_config_v1"]
+    estimate_low: float | None = None
+    estimate_high: float | None = None
+    reference_price: float | None = None
+    currency: str = "CNY"
+    pair_count: int = Field(ge=0)
+    model_family_count: int = Field(ge=0)
+    cell_count: int = Field(default=0, ge=0)
+    week_count: int = Field(default=0, ge=0)
+    observed_price_range: list[float] = Field(default_factory=list)
+    observed_value_tiers: list[BusinessTier] = Field(default_factory=list)
+    sensitivity_summary: dict[str, Any] = Field(default_factory=dict)
+    assumptions: list[str] = Field(default_factory=list)
+    exclusion_reasons: list[str] = Field(default_factory=list)
+    causal_claim: Literal[False]
+    psychological_max_price: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_amount_boundary(self) -> "MarketImpliedWtp":
+        amounts = (self.estimate_low, self.estimate_high, self.reference_price)
+        if self.status == "available":
+            if (
+                self.method != "matched_equal_choice_price_gap"
+                or any(value is None for value in amounts)
+                or self.pair_count < 2
+                or self.model_family_count < 2
+            ):
+                raise ValueError(
+                    "available WTP requires two pairs, two families, and amounts"
+                )
+            if self.estimate_low > self.estimate_high:  # type: ignore[operator]
+                raise ValueError("WTP estimate_low cannot exceed estimate_high")
+        elif any(value is not None for value in amounts):
+            raise ValueError("unavailable WTP cannot expose amount fields")
+        return self
+
+
+class QuantificationResult(SellpointValueV4BaseModel):
+    level: QuantificationLevel
+    value_status: ValueStatus
+    product_role: ProductRole
+    monetization_status: MonetizationStatus
+    relative_experience: dict[str, Any] | None = None
+    choice_association: ChoiceAssociation | None = None
+    whole_product_price_acceptance: dict[str, Any] | None = None
+    wtp: MarketImpliedWtp
+    gate_results: list[dict[str, Any]] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_monotonic_level(self) -> "QuantificationResult":
+        rank = {
+            "Q0_NOT_OBSERVED": 0,
+            "Q1_USER_VALUE_ESTABLISHED": 1,
+            "Q2_RELATIVE_EXPERIENCE": 2,
+            "Q3_MARKET_CHOICE_ASSOCIATION": 3,
+            "Q4_WHOLE_PRODUCT_PRICE_ACCEPTANCE": 4,
+            "Q5_MARKET_IMPLIED_WTP": 5,
+        }[self.level]
+        if rank >= 1 and self.value_status not in {"established", "partial"}:
+            raise ValueError("Q1+ requires established or partial user value")
+        if rank >= 2 and self.relative_experience is None:
+            raise ValueError("Q2+ requires relative_experience")
+        if rank >= 3 and (
+            self.choice_association is None
+            or self.choice_association.status != "available"
+        ):
+            raise ValueError("Q3+ requires available choice association")
+        if rank >= 4 and (
+            self.whole_product_price_acceptance is None
+            or self.whole_product_price_acceptance.get("status") != "available"
+        ):
+            raise ValueError("Q4+ requires available whole-product price acceptance")
+        if rank == 5 and self.wtp.status != "available":
+            raise ValueError("Q5 requires available WTP")
+        if rank < 5 and (
+            self.wtp.estimate_low is not None or self.wtp.estimate_high is not None
+        ):
+            raise ValueError("Q0-Q4 cannot expose WTP amounts")
+        return self
+
+
 class SellpointValueV4Context(SellpointValueV4BaseModel):
     schema_version: Literal["sellpoint_value_v4_context_v1"]
     project_id: str = Field(min_length=1)
@@ -298,12 +428,15 @@ class SellpointValueV4Context(SellpointValueV4BaseModel):
 __all__ = [
     "BundleMember",
     "ComparabilityAssessment",
+    "ChoiceAssociation",
     "ComparablePoolTierFact",
     "EvidenceRef",
     "LineageGate",
     "LineageIssue",
+    "MarketImpliedWtp",
     "MarketCellRow",
     "PurchaseReasonSnapshot",
+    "QuantificationResult",
     "ReasonValueBundleLink",
     "SellpointBundle",
     "SellpointValueV4Context",

@@ -7,6 +7,8 @@ acceptance, or WTP.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from statistics import median
 from typing import Any, Sequence
 
 from app.services.core3_real_data.analyst.analyst_repository import canonical_v4_hash
@@ -16,14 +18,24 @@ from app.services.core3_real_data.analyst.claim_value_pm_schemas import (
 from app.services.core3_real_data.analyst.claim_value_pm_service import (
     TV_VALUE_UNITS,
     TvValueUnitDefinition,
+    _bin_choice_points,
     _fact_relation,
+    _gap_locally_supported,
+    _interpolation_supported,
+    _percentile,
     _unit_product_facts,
     attribute_comment_atoms,
+    choice_share_crossing,
+    evaluate_choice_curve,
+    pava_nonincreasing,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     BundleMember,
+    ChoiceAssociation,
     ComparabilityAssessment,
     EvidenceRef,
+    MarketImpliedWtp,
+    QuantificationResult,
     ReasonValueBundleLink,
     SellpointBundle,
     SellpointValueV4Context,
@@ -115,6 +127,31 @@ FAMILY_TIER_KEYS: dict[str, tuple[str, ...]] = {
     "space_aesthetic": ("aesthetic", "appearance", "外观"),
 }
 VALID_MARKET_PRICE_STATUSES = {"ok", "uncheckable", "unchecked", ""}
+WTP_METHOD_CONFIG_VERSION = "sellpoint_value_pm_v4_matched_wtp_config_v1"
+
+
+@dataclass(frozen=True)
+class _V4PairCurve:
+    candidate_sku_code: str
+    model_family: str | None
+    role: str
+    isolation_grade: str
+    raw_points: tuple[tuple[float, float, float, int], ...]
+    curve_points: tuple[tuple[float, float, float, float, float], ...]
+    sample_level: str
+    same_price_method: str | None
+    same_price_share: float | None
+    crossing_ratio: float | None
+    candidate_reference_price: float | None
+    direction_consistency: float | None
+    observed_gap_min: float | None
+    observed_gap_max: float | None
+    observed_price_min: float | None
+    observed_price_max: float | None
+    candidate_tier: str
+    cell_count: int
+    week_count: int
+    limitations: tuple[str, ...]
 
 
 V4_EXTRA_VALUE_UNITS: tuple[TvValueUnitDefinition, ...] = (
@@ -400,6 +437,79 @@ def build_counterfactual_assessments(
             {"A": 0, "B": 1, "C": 2, "unusable": 3}[item.isolation_grade],
             item.candidate_sku_code,
         ),
+    )
+
+
+def quantify_sellpoint_value(
+    context: SellpointValueV4Context,
+    link: ReasonValueBundleLink,
+    assessments: Sequence[ComparabilityAssessment],
+) -> QuantificationResult:
+    """Quantify only the highest level supported by observed market cells."""
+
+    curves = [
+        _build_v4_pair_curve(context, link, assessment)
+        for assessment in assessments
+        if assessment.eligible and assessment.role in {"base_value", "same_value"}
+    ]
+    relative_experience = _relative_experience(assessments)
+    choice = _apply_choice_value_gate(
+        _choice_association(curves),
+        value_status=link.value_status,
+        relative_experience_available=relative_experience is not None,
+    )
+    whole_product = _whole_product_price_acceptance(curves, choice)
+    wtp = _market_implied_wtp(
+        context,
+        link,
+        assessments,
+        curves,
+        relative_experience_available=relative_experience is not None,
+    )
+    level = _quantification_level(
+        value_status=link.value_status,
+        relative_experience=relative_experience,
+        choice=choice,
+        whole_product=whole_product,
+        wtp=wtp,
+    )
+    product_role = _product_role(
+        value_status=link.value_status,
+        assessments=assessments,
+        choice=choice,
+        wtp=wtp,
+    )
+    monetization_status = _monetization_status(
+        level=level,
+        whole_product=whole_product,
+    )
+    limitations = _dedupe_texts(
+        [
+            *link.limitations,
+            *(choice.limitations if choice is not None else []),
+            *wtp.exclusion_reasons,
+            "库存状态不可得，结果未声称控制库存。",
+            "市场隐含结果是观察性关联，不是因果效应或用户心理最高价。",
+        ]
+    )
+    gate_results = _quantification_gate_results(
+        link=link,
+        relative_experience=relative_experience,
+        choice=choice,
+        whole_product=whole_product,
+        wtp=wtp,
+    )
+    return QuantificationResult(
+        level=level,
+        value_status=link.value_status,
+        product_role=product_role,
+        monetization_status=monetization_status,
+        relative_experience=relative_experience,
+        choice_association=choice,
+        whole_product_price_acceptance=whole_product,
+        wtp=wtp,
+        gate_results=gate_results,
+        limitations=limitations,
     )
 
 
@@ -968,6 +1078,720 @@ def _eligible_levels(**values: Any) -> list[str]:
     return levels
 
 
+def _build_v4_pair_curve(
+    context: SellpointValueV4Context,
+    link: ReasonValueBundleLink,
+    assessment: ComparabilityAssessment,
+) -> _V4PairCurve:
+    candidate = next(
+        (
+            item
+            for item in context.candidate_snapshots
+            if item.identity.sku_code == assessment.candidate_sku_code
+        ),
+        None,
+    )
+    if candidate is None:
+        return _empty_v4_pair_curve(assessment, "候选 SKU snapshot 不存在。")
+    target_rows = _sku_cells(
+        context, context.target_snapshot.identity.sku_code, link.battlefield_code
+    )
+    candidate_rows = _sku_cells(
+        context, assessment.candidate_sku_code, link.battlefield_code
+    )
+    common_keys = sorted(set(target_rows) & set(candidate_rows))
+    raw: list[tuple[float, float, float, int]] = []
+    observed_prices: list[float] = []
+    candidate_prices: list[float] = []
+    excluded = 0
+    for key in common_keys:
+        target_row = target_rows[key]
+        candidate_row = candidate_rows[key]
+        if target_row.promotion_suspect or candidate_row.promotion_suspect:
+            excluded += 1
+            continue
+        target_sales = float(target_row.sales_volume or 0)
+        candidate_sales = float(candidate_row.sales_volume or 0)
+        target_price = float(target_row.avg_price or 0)
+        candidate_price = float(candidate_row.avg_price or 0)
+        if (
+            target_sales <= 0
+            or candidate_sales <= 0
+            or target_price <= 0
+            or candidate_price <= 0
+        ):
+            excluded += 1
+            continue
+        gap = (target_price - candidate_price) / candidate_price
+        if gap < -0.60 or gap > 1.50:
+            excluded += 1
+            continue
+        total_sales = target_sales + candidate_sales
+        raw.append((gap, target_sales / total_sales, total_sales, key[1]))
+        observed_prices.extend([target_price, candidate_price])
+        candidate_prices.append(candidate_price)
+    if not raw:
+        return _empty_v4_pair_curve(
+            assessment,
+            "没有同战场、同周、同平台且非促销疑似的正销量价格单元。",
+            model_family=_candidate_model_family(context, candidate),
+            candidate_tier=_snapshot_family_tier(candidate, link.bundle.bundle_family),
+        )
+    weight_cap = _percentile([item[2] for item in raw], 0.90)
+    capped = [(x, y, min(weight, weight_cap), week) for x, y, weight, week in raw]
+    binned = _bin_choice_points(capped)
+    observed_bins = sorted(item[0] for item in binned)
+    curve = pava_nonincreasing(binned)
+    gap_min = min(item[0] for item in raw)
+    gap_max = max(item[0] for item in raw)
+    gap_span = gap_max - gap_min
+    week_count = len({item[3] for item in raw})
+    local_zero = _interpolation_supported(observed_bins, 0.0)
+    if (
+        len(raw) >= 12
+        and week_count >= 8
+        and len(binned) >= 6
+        and gap_span >= 0.08
+        and gap_min <= 0 <= gap_max
+        and local_zero
+    ):
+        sample_level = "strong"
+    elif len(raw) >= 6 and week_count >= 4 and len(binned) >= 3 and gap_span >= 0.04:
+        sample_level = "medium"
+    elif len(raw) >= 4 and len(binned) >= 2:
+        sample_level = "weak"
+    else:
+        sample_level = "insufficient"
+    same_price_method: str | None = None
+    same_price_share: float | None = None
+    if gap_min <= 0 <= gap_max and local_zero and sample_level in {"strong", "medium"}:
+        same_price_method = "pair_curve_same_price"
+        same_price_share = evaluate_choice_curve(
+            curve,
+            0.0,
+            observed_min=gap_min,
+            observed_max=gap_max,
+        )
+    elif (
+        observed_bins
+        and min(abs(item) for item in observed_bins) <= 0.03
+        and sample_level in {"strong", "medium"}
+    ):
+        same_price_method = "near_same_price"
+        nearest = min(observed_bins, key=abs)
+        same_price_share = evaluate_choice_curve(
+            curve,
+            nearest,
+            observed_min=gap_min,
+            observed_max=gap_max,
+        )
+    crossing: float | None = None
+    if same_price_method == "pair_curve_same_price" and (same_price_share or 0) > 0.5:
+        candidate_crossing = choice_share_crossing(
+            curve,
+            threshold=0.5,
+            start_gap=0.0,
+            observed_min=gap_min,
+            observed_max=gap_max,
+        )
+        if candidate_crossing is not None and _gap_locally_supported(
+            observed_bins, candidate_crossing
+        ):
+            crossing = candidate_crossing
+    direction_consistency = _raw_direction_consistency(binned)
+    limitations: list[str] = []
+    if excluded:
+        limitations.append(f"{excluded} 个共同单元因促销疑似或无效量价被排除。")
+    if not (gap_min <= 0 <= gap_max):
+        limitations.append("观测价差没有覆盖同价位置。")
+    elif not local_zero:
+        limitations.append("同价附近存在样本空洞，未做插值。")
+    if sample_level in {"weak", "insufficient"}:
+        limitations.append("共同单元、周数、价差跨度或分箱数量不足。")
+    if direction_consistency is not None and direction_consistency < 0.75:
+        limitations.append("原始分箱的价格方向不稳定。")
+    if crossing is None:
+        limitations.append("观测范围内没有局部支持的五五开 crossing。")
+    return _V4PairCurve(
+        candidate_sku_code=assessment.candidate_sku_code,
+        model_family=_candidate_model_family(context, candidate),
+        role=assessment.role,
+        isolation_grade=assessment.isolation_grade,
+        raw_points=tuple(capped),
+        curve_points=tuple(curve),
+        sample_level=sample_level,
+        same_price_method=same_price_method,
+        same_price_share=_v4_round(same_price_share, 6),
+        crossing_ratio=_v4_round(crossing, 6),
+        candidate_reference_price=_v4_round(median(candidate_prices), 2),
+        direction_consistency=_v4_round(direction_consistency, 6),
+        observed_gap_min=_v4_round(gap_min, 6),
+        observed_gap_max=_v4_round(gap_max, 6),
+        observed_price_min=_v4_round(min(observed_prices), 2),
+        observed_price_max=_v4_round(max(observed_prices), 2),
+        candidate_tier=_snapshot_family_tier(candidate, link.bundle.bundle_family),
+        cell_count=len(raw),
+        week_count=week_count,
+        limitations=tuple(limitations),
+    )
+
+
+def _empty_v4_pair_curve(
+    assessment: ComparabilityAssessment,
+    limitation: str,
+    *,
+    model_family: str | None = None,
+    candidate_tier: str = "unknown",
+) -> _V4PairCurve:
+    return _V4PairCurve(
+        candidate_sku_code=assessment.candidate_sku_code,
+        model_family=model_family,
+        role=assessment.role,
+        isolation_grade=assessment.isolation_grade,
+        raw_points=(),
+        curve_points=(),
+        sample_level="insufficient",
+        same_price_method=None,
+        same_price_share=None,
+        crossing_ratio=None,
+        candidate_reference_price=None,
+        direction_consistency=None,
+        observed_gap_min=None,
+        observed_gap_max=None,
+        observed_price_min=None,
+        observed_price_max=None,
+        candidate_tier=candidate_tier,
+        cell_count=0,
+        week_count=0,
+        limitations=(limitation,),
+    )
+
+
+def _candidate_model_family(
+    context: SellpointValueV4Context,
+    candidate: SkuEvidenceSnapshot,
+) -> str | None:
+    source = candidate.facts.get("candidate_source") or {}
+    declared = str(source.get("model_family") or "").strip()
+    if declared:
+        return declared
+    values = {
+        str(row.series_name).strip()
+        for row in context.market_cells
+        if row.sku_code == candidate.identity.sku_code and row.series_name
+    }
+    if len(values) == 1:
+        return next(iter(values))
+    return None
+
+
+def _raw_direction_consistency(
+    binned: Sequence[tuple[float, float, float]],
+) -> float | None:
+    ordered = sorted(binned, key=lambda item: item[0])
+    if len(ordered) < 2:
+        return None
+    comparisons = [left[1] >= right[1] for left, right in zip(ordered, ordered[1:])]
+    return sum(comparisons) / len(comparisons)
+
+
+def _relative_experience(
+    assessments: Sequence[ComparabilityAssessment],
+) -> dict[str, Any] | None:
+    comparable = [
+        item
+        for item in assessments
+        if item.comment_comparable
+        and item.exact_size_match
+        and item.battlefield_overlap >= 0.5
+        and item.reason_overlap >= 0.5
+        and item.role in {"base_value", "same_value", "stretch_benchmark"}
+    ]
+    if not comparable:
+        return None
+    return {
+        "status": "available",
+        "basis": "comparable_post_purchase_value_theme",
+        "base_value_candidate_count": sum(
+            item.role == "base_value" for item in comparable
+        ),
+        "same_value_candidate_count": sum(
+            item.role == "same_value" for item in comparable
+        ),
+        "stretch_candidate_count": sum(
+            item.role == "stretch_benchmark" for item in comparable
+        ),
+        "strength_comparison": "not_ranked_from_comment_counts",
+        "limitation": "评论只确认同一价值主题是否被实际感知，不按评论数量排序体验强弱。",
+    }
+
+
+def _choice_association(curves: Sequence[_V4PairCurve]) -> ChoiceAssociation:
+    exact = [
+        item
+        for item in curves
+        if item.same_price_method == "pair_curve_same_price"
+        and item.same_price_share is not None
+        and item.sample_level in {"strong", "medium"}
+    ]
+    near = [
+        item
+        for item in curves
+        if item.same_price_method == "near_same_price"
+        and item.same_price_share is not None
+        and item.sample_level in {"strong", "medium"}
+    ]
+    selected = exact or near
+    if not selected:
+        return ChoiceAssociation(
+            status="insufficient",
+            method="none",
+            pair_count=0,
+            cell_count=sum(item.cell_count for item in curves),
+            week_count=max((item.week_count for item in curves), default=0),
+            limitations=_dedupe_texts(
+                [
+                    "没有同价或近同价且局部样本充分的可比 pair。",
+                    *(text for item in curves for text in item.limitations),
+                ]
+            ),
+        )
+    total_weight = sum(max(item.cell_count, 1) for item in selected)
+    share = (
+        sum(
+            float(item.same_price_share) * max(item.cell_count, 1)
+            for item in selected
+            if item.same_price_share is not None
+        )
+        / total_weight
+    )
+    direction_values = [
+        item.direction_consistency
+        for item in selected
+        if item.direction_consistency is not None
+    ]
+    direction = (
+        sum(direction_values) / len(direction_values) if direction_values else None
+    )
+    status = "unstable" if direction is not None and direction < 0.60 else "available"
+    ranges = [
+        value
+        for item in selected
+        for value in (item.observed_gap_min, item.observed_gap_max)
+        if value is not None
+    ]
+    limitations = _dedupe_texts(
+        [
+            *(text for item in selected for text in item.limitations),
+            *(
+                ["不同价差分箱的选择方向不稳定，选择差异仅作观察。"]
+                if status == "unstable"
+                else []
+            ),
+        ]
+    )
+    return ChoiceAssociation(
+        status=status,
+        method="pair_curve_same_price" if exact else "near_same_price",
+        same_price_choice_share=_v4_round(share, 6),
+        choice_difference_pp=_v4_round((share - 0.5) * 100, 2),
+        pair_count=len(selected),
+        cell_count=sum(item.cell_count for item in selected),
+        week_count=max(item.week_count for item in selected),
+        observed_price_gap_range=(
+            [_v4_round(min(ranges), 6), _v4_round(max(ranges), 6)] if ranges else []
+        ),
+        direction_consistency=_v4_round(direction, 6),
+        limitations=limitations,
+    )
+
+
+def _apply_choice_value_gate(
+    choice: ChoiceAssociation,
+    *,
+    value_status: str,
+    relative_experience_available: bool,
+) -> ChoiceAssociation:
+    if value_status not in {"established", "partial"}:
+        reason = "用户实际价值尚未成立，市场量价不能归因到该卖点组合。"
+    elif not relative_experience_available:
+        reason = "缺少可比购后体验证据，市场量价不能越级标记为卖点选择贡献。"
+    else:
+        return choice
+    return ChoiceAssociation(
+        status="insufficient",
+        method="none",
+        pair_count=0,
+        cell_count=choice.cell_count,
+        week_count=choice.week_count,
+        observed_price_gap_range=choice.observed_price_gap_range,
+        direction_consistency=choice.direction_consistency,
+        limitations=_dedupe_texts([reason, *choice.limitations]),
+    )
+
+
+def _whole_product_price_acceptance(
+    curves: Sequence[_V4PairCurve],
+    choice: ChoiceAssociation,
+) -> dict[str, Any] | None:
+    if choice.status != "available":
+        return None
+    selected = [
+        item
+        for item in curves
+        if item.same_price_method == choice.method and item.curve_points
+    ]
+    current: list[tuple[float, float, float]] = []
+    for item in selected:
+        latest_week = max((point[3] for point in item.raw_points), default=None)
+        if latest_week is None:
+            continue
+        latest = [point for point in item.raw_points if point[3] == latest_week]
+        total_weight = sum(point[2] for point in latest)
+        if total_weight <= 0:
+            continue
+        gap = sum(point[0] * point[2] for point in latest) / total_weight
+        if item.observed_gap_min is None or item.observed_gap_max is None:
+            continue
+        share = evaluate_choice_curve(
+            item.curve_points,
+            gap,
+            observed_min=item.observed_gap_min,
+            observed_max=item.observed_gap_max,
+        )
+        if share is not None:
+            current.append((gap, share, max(item.cell_count, 1)))
+    if not current:
+        return {
+            "status": "insufficient",
+            "method": "observed_current_gap",
+            "attribution_scope": "whole_product_only",
+        }
+    total_weight = sum(item[2] for item in current)
+    current_gap = sum(item[0] * item[2] for item in current) / total_weight
+    current_share = sum(item[1] * item[2] for item in current) / total_weight
+    if current_share >= 0.55:
+        state = "advantage_remains"
+    elif current_share >= 0.48:
+        state = "market_balance"
+    else:
+        state = "price_pressure"
+    return {
+        "status": "available",
+        "method": "observed_current_gap",
+        "attribution_scope": "whole_product_only",
+        "current_relative_price_gap": _v4_round(current_gap, 6),
+        "current_choice_share": _v4_round(current_share, 6),
+        "same_price_choice_share": choice.same_price_choice_share,
+        "acceptance_state": state,
+        "causal_claim": False,
+    }
+
+
+def _market_implied_wtp(
+    context: SellpointValueV4Context,
+    link: ReasonValueBundleLink,
+    assessments: Sequence[ComparabilityAssessment],
+    curves: Sequence[_V4PairCurve],
+    *,
+    relative_experience_available: bool,
+) -> MarketImpliedWtp:
+    assessments_by_sku = {item.candidate_sku_code: item for item in assessments}
+    base_curves = [
+        item
+        for item in curves
+        if item.role == "base_value"
+        and item.isolation_grade == "A"
+        and assessments_by_sku[item.candidate_sku_code].value_tier_relation == "lower"
+    ]
+    family_count_before = len(
+        {item.model_family for item in base_curves if item.model_family}
+    )
+    strong = [item for item in base_curves if item.sample_level == "strong"]
+    direction_ready = [
+        item for item in strong if (item.direction_consistency or 0) >= 0.75
+    ]
+    with_crossing = [
+        item
+        for item in direction_ready
+        if item.same_price_method == "pair_curve_same_price"
+        and item.crossing_ratio is not None
+        and item.crossing_ratio > 0
+    ]
+    leave_one_out = {
+        item.candidate_sku_code: _leave_one_week_out(item) for item in with_crossing
+    }
+    qualified = [
+        item
+        for item in with_crossing
+        if leave_one_out[item.candidate_sku_code]["stable"]
+        and item.model_family
+        and item.candidate_reference_price
+    ]
+    family_count = len({item.model_family for item in qualified if item.model_family})
+    lineage_conflict = _has_relevant_lineage_conflict(context)
+    exclusions: list[str] = []
+    if lineage_conflict:
+        exclusions.append("version_lineage_conflict")
+    elif link.value_status != "established":
+        exclusions.append("user_value_not_fully_established")
+    elif not relative_experience_available:
+        exclusions.append("relative_experience_not_comparable")
+    elif not base_curves:
+        if any(item.role == "base_value" for item in assessments):
+            exclusions.append("base_counterfactual_not_eligible")
+        elif any(item.role == "same_value" for item in assessments):
+            exclusions.append("same_value_only")
+        else:
+            exclusions.append("base_counterfactual_missing")
+    elif len(base_curves) < 2:
+        exclusions.append("independent_a_pair_count_below_2")
+    elif family_count_before < 2:
+        exclusions.append("model_family_count_below_2")
+    elif len(strong) < 2:
+        exclusions.append("strong_pair_curve_count_below_2")
+    elif len(direction_ready) < 2:
+        exclusions.append("price_direction_consistency_failed")
+    elif len(with_crossing) < 2:
+        exclusions.append("equal_choice_crossing_count_below_2")
+    elif len(qualified) < 2:
+        exclusions.append("leave_one_week_out_stability_failed")
+    elif family_count < 2:
+        exclusions.append("qualified_model_family_count_below_2")
+    available = (
+        link.value_status == "established"
+        and relative_experience_available
+        and not lineage_conflict
+        and len(qualified) >= 2
+        and family_count >= 2
+    )
+    if available:
+        status = "available"
+    elif lineage_conflict:
+        status = "blocked"
+    elif (
+        len(base_curves) >= 2
+        and family_count_before >= 2
+        and (len(direction_ready) < 2 or len(with_crossing) < 2 or len(qualified) < 2)
+    ):
+        status = "unstable"
+    else:
+        status = "insufficient"
+    amounts = [
+        float(item.crossing_ratio) * float(item.candidate_reference_price)
+        for item in qualified
+        if item.crossing_ratio is not None and item.candidate_reference_price
+    ]
+    reference_prices = [
+        float(item.candidate_reference_price)
+        for item in qualified
+        if item.candidate_reference_price
+    ]
+    price_ranges = [
+        value
+        for item in base_curves
+        for value in (item.observed_price_min, item.observed_price_max)
+        if value is not None
+    ]
+    tiers = _dedupe_texts(
+        [link.bundle.business_tier, *(item.candidate_tier for item in base_curves)]
+    )
+    sensitivity_summary = {
+        "pair_crossing_ratio": {
+            item.candidate_sku_code: item.crossing_ratio for item in with_crossing
+        },
+        "pair_direction_consistency": {
+            item.candidate_sku_code: item.direction_consistency
+            for item in with_crossing
+        },
+        "leave_one_week_out": leave_one_out,
+        "eligible_a_base_pair_count": len(base_curves),
+        "explicit_model_family_count": family_count_before,
+    }
+    return MarketImpliedWtp(
+        status=status,
+        method=("matched_equal_choice_price_gap" if base_curves else "none"),
+        method_config_version=WTP_METHOD_CONFIG_VERSION,
+        estimate_low=_v4_round(min(amounts), 2) if available else None,
+        estimate_high=_v4_round(max(amounts), 2) if available else None,
+        reference_price=(_v4_round(median(reference_prices), 2) if available else None),
+        currency="CNY",
+        pair_count=len(qualified),
+        model_family_count=family_count,
+        cell_count=sum(item.cell_count for item in qualified),
+        week_count=max((item.week_count for item in qualified), default=0),
+        observed_price_range=(
+            [_v4_round(min(price_ranges), 2), _v4_round(max(price_ranges), 2)]
+            if price_ranges
+            else []
+        ),
+        observed_value_tiers=tiers,
+        sensitivity_summary=sensitivity_summary,
+        assumptions=[
+            "同周同平台匹配用于控制共同时间与渠道环境。",
+            "促销疑似单元已排除，但库存状态不可得。",
+            "品牌和其他未观察差异仍可能混杂，结果不作因果解释。",
+        ],
+        exclusion_reasons=[] if available else _dedupe_texts(exclusions),
+        causal_claim=False,
+        psychological_max_price=False,
+    )
+
+
+def _leave_one_week_out(curve: _V4PairCurve) -> dict[str, Any]:
+    weeks = sorted({item[3] for item in curve.raw_points})
+    crossings: list[float] = []
+    for excluded_week in weeks:
+        remaining = [item for item in curve.raw_points if item[3] != excluded_week]
+        if len(remaining) < 8:
+            continue
+        binned = _bin_choice_points(remaining)
+        bins = sorted(item[0] for item in binned)
+        if not bins:
+            continue
+        gap_min = min(item[0] for item in remaining)
+        gap_max = max(item[0] for item in remaining)
+        if not (gap_min <= 0 <= gap_max) or not _interpolation_supported(bins, 0.0):
+            continue
+        fitted = pava_nonincreasing(binned)
+        same_share = evaluate_choice_curve(
+            fitted,
+            0.0,
+            observed_min=gap_min,
+            observed_max=gap_max,
+        )
+        if same_share is None or same_share <= 0.5:
+            continue
+        crossing = choice_share_crossing(
+            fitted,
+            threshold=0.5,
+            start_gap=0.0,
+            observed_min=gap_min,
+            observed_max=gap_max,
+        )
+        if (
+            crossing is not None
+            and crossing > 0
+            and _gap_locally_supported(bins, crossing)
+        ):
+            crossings.append(crossing)
+    coverage = len(crossings) / len(weeks) if weeks else 0.0
+    crossing_span = max(crossings) - min(crossings) if crossings else None
+    stable = (
+        len(weeks) >= 8
+        and coverage == 1.0
+        and crossing_span is not None
+        and crossing_span <= 0.04
+    )
+    return {
+        "stable": stable,
+        "week_count": len(weeks),
+        "successful_leave_out_count": len(crossings),
+        "coverage": _v4_round(coverage, 6),
+        "crossing_ratio_min": _v4_round(min(crossings), 6) if crossings else None,
+        "crossing_ratio_max": _v4_round(max(crossings), 6) if crossings else None,
+    }
+
+
+def _quantification_level(
+    *,
+    value_status: str,
+    relative_experience: dict[str, Any] | None,
+    choice: ChoiceAssociation,
+    whole_product: dict[str, Any] | None,
+    wtp: MarketImpliedWtp,
+) -> str:
+    if value_status not in {"established", "partial"}:
+        return "Q0_NOT_OBSERVED"
+    if relative_experience is None:
+        return "Q1_USER_VALUE_ESTABLISHED"
+    if choice.status != "available":
+        return "Q2_RELATIVE_EXPERIENCE"
+    if whole_product is None or whole_product.get("status") != "available":
+        return "Q3_MARKET_CHOICE_ASSOCIATION"
+    if wtp.status == "available":
+        return "Q5_MARKET_IMPLIED_WTP"
+    return "Q4_WHOLE_PRODUCT_PRICE_ACCEPTANCE"
+
+
+def _product_role(
+    *,
+    value_status: str,
+    assessments: Sequence[ComparabilityAssessment],
+    choice: ChoiceAssociation,
+    wtp: MarketImpliedWtp,
+) -> str:
+    if value_status not in {"established", "partial"}:
+        return "undetermined"
+    if wtp.status == "available":
+        return "core_differentiated_value"
+    if choice.status == "available":
+        if (choice.same_price_choice_share or 0) < 0.5:
+            return "price_pressure"
+        eligible_roles = {item.role for item in assessments if item.eligible}
+        if eligible_roles and eligible_roles <= {"same_value"}:
+            return "basic_threshold"
+        return "supporting_choice_value"
+    return "configuration_support"
+
+
+def _monetization_status(
+    *,
+    level: str,
+    whole_product: dict[str, Any] | None,
+) -> str:
+    if level == "Q5_MARKET_IMPLIED_WTP" and whole_product is not None:
+        return {
+            "advantage_remains": "partially_captured",
+            "market_balance": "fully_captured",
+            "price_pressure": "over_captured",
+        }.get(str(whole_product.get("acceptance_state")), "whole_product_only")
+    if level == "Q4_WHOLE_PRODUCT_PRICE_ACCEPTANCE":
+        return "whole_product_only"
+    if level == "Q3_MARKET_CHOICE_ASSOCIATION":
+        return "choice_supported"
+    return "not_measured"
+
+
+def _quantification_gate_results(
+    *,
+    link: ReasonValueBundleLink,
+    relative_experience: dict[str, Any] | None,
+    choice: ChoiceAssociation,
+    whole_product: dict[str, Any] | None,
+    wtp: MarketImpliedWtp,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "gate_code": "user_value_established",
+            "passed": link.value_status in {"established", "partial"},
+        },
+        {
+            "gate_code": "relative_experience_comparable",
+            "passed": relative_experience is not None,
+        },
+        {
+            "gate_code": "market_choice_association_available",
+            "passed": choice.status == "available",
+        },
+        {
+            "gate_code": "whole_product_price_acceptance_available",
+            "passed": bool(
+                whole_product and whole_product.get("status") == "available"
+            ),
+        },
+        {
+            "gate_code": "market_implied_wtp_available",
+            "passed": wtp.status == "available",
+            "exclusion_reasons": wtp.exclusion_reasons,
+        },
+    ]
+
+
+def _v4_round(value: float | None, digits: int) -> float | None:
+    return None if value is None else round(float(value), digits)
+
+
 def _normalize_tier(value: Any) -> str:
     text = str(value or "").lower()
     for tier in ("flagship", "premium", "enhanced", "base"):
@@ -1077,4 +1901,5 @@ def _reason_rank(code: str, reasons_by_code: dict[str, Any]) -> int:
 __all__ = [
     "build_counterfactual_assessments",
     "build_reason_value_bundle_links",
+    "quantify_sellpoint_value",
 ]

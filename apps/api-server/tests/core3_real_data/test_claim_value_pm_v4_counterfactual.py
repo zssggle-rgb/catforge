@@ -521,6 +521,9 @@ def test_g05_source_does_not_consume_legacy_amounts_or_choice_curve(
         repo_root
         / "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_service.py"
     ).read_text(encoding="utf-8")
+    g05_source = source.split("def build_counterfactual_assessments", 1)[1].split(
+        "def quantify_sellpoint_value", 1
+    )[0]
 
     for forbidden in (
         "estimated_price_premium_abs",
@@ -528,4 +531,4 @@ def test_g05_source_does_not_consume_legacy_amounts_or_choice_curve(
         "selection_holding_gap",
         "pava",
     ):
-        assert forbidden not in source.lower()
+        assert forbidden not in g05_source.lower()
