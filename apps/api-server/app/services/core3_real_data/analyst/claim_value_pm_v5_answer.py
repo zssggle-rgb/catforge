@@ -109,7 +109,7 @@ def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValu
     for snapshot in ordered:
         for item in snapshot.semantic_market:
             code = str(item.get("dimension_code") or "").strip()
-            if code:
+            if code and _is_battlefield_semantic(item):
                 battlefield_names.setdefault(
                     code, str(item.get("dimension_name") or TV_BATTLEFIELD_CN.get(code) or "")
                 )
@@ -266,6 +266,7 @@ def build_perceived_value_market_report(
             row.sellpoint_bundle.bundle_code,
         )
     )
+    rows = _dedupe_value_account_rows(rows)
     archetypes = build_performance_archetypes(
         context,
         bundle_codes=[row.sellpoint_bundle.bundle_code for row in rows],
@@ -598,11 +599,39 @@ def _pm_bundle(bundle):
     )
 
 
+def _dedupe_value_account_rows(
+    rows: Sequence[ValueAccountRow],
+) -> list[ValueAccountRow]:
+    """Keep one account per battlefield and observable capability combination."""
+
+    result: list[ValueAccountRow] = []
+    seen: set[tuple[str, tuple[str, ...]]] = set()
+    for row in rows:
+        key = (
+            str(row.battlefield.get("code") or ""),
+            tuple(
+                sorted(
+                    member.capability_code for member in row.sellpoint_bundle.members
+                )
+            ),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        value = dict(row.perceived_user_value)
+        name = str(value.get("name_cn") or "")
+        value["name_cn"] = "＋".join(
+            sorted({part.strip() for part in name.split("＋") if part.strip()})
+        ) or name
+        result.append(row.model_copy(update={"perceived_user_value": value}))
+    return result
+
+
 def _battlefield_allocations(context: SellpointValueV5Context) -> list[BattlefieldAllocation]:
     result = []
     for item in context.v4_context.target_snapshot.semantic_market:
         code = str(item.get("dimension_code") or "").strip()
-        if not code:
+        if not code or not _is_battlefield_semantic(item):
             continue
         result.append(
             BattlefieldAllocation(
@@ -775,7 +804,10 @@ def _eligible_highlight_types(value_status, sets, accounting, synthetic_control)
 def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
     baselines = []
     names = {row.sellpoint_bundle.bundle_code: row.sellpoint_bundle.bundle_name_cn for row in rows}
+    active_codes = set(names)
     for code, result in sorted(synthetic_by_bundle.items()):
+        if code not in active_codes:
+            continue
         if result.status == "available" and result.sales_difference is not None:
             summary = (
                 "与较弱该组价值的合成市场相比，本品每个共同市场单元的观察性销量差约 "
@@ -1021,7 +1053,11 @@ def _market_space_for(context, code, link):
         return link.battlefield_market_space
     for snapshot in context.market_universe:
         for item in snapshot.semantic_market:
-            if str(item.get("dimension_code") or "") == code and item.get("market_space"):
+            if (
+                _is_battlefield_semantic(item)
+                and str(item.get("dimension_code") or "") == code
+                and item.get("market_space")
+            ):
                 return item["market_space"]
     return {}
 
@@ -1031,6 +1067,12 @@ def _battlefield_name(context, code):
         if row.battlefield_code == code:
             return row.battlefield_name_cn or TV_BATTLEFIELD_CN.get(code) or "未命名价值战场"
     return TV_BATTLEFIELD_CN.get(code) or "未命名价值战场"
+
+
+def _is_battlefield_semantic(item: dict[str, Any]) -> bool:
+    code = str(item.get("dimension_code") or "")
+    dimension_type = str(item.get("dimension_type") or "battlefield").lower()
+    return code.startswith("BF_") and dimension_type == "battlefield"
 
 
 def _option_name(option, report):

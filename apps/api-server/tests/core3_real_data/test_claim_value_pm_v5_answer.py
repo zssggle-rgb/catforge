@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
+    _dedupe_value_account_rows,
     adapt_v4_context_to_v5,
     build_perceived_value_market_report,
     build_v5_answer_artifacts,
@@ -43,6 +44,31 @@ def test_v4_adapter_is_deterministic_and_reuses_only_existing_snapshots() -> Non
     assert first.method_configs.amount_version == (
         "sellpoint_value_pm_v4_matched_wtp_config_v2"
     )
+
+
+def test_v4_adapter_does_not_treat_task_or_group_dimensions_as_battlefields() -> None:
+    v4 = _synthetic_context()
+    target = v4.target_snapshot.model_copy(
+        update={
+            "semantic_market": [
+                *v4.target_snapshot.semantic_market,
+                {
+                    "dimension_type": "user_task",
+                    "dimension_code": "TASK_WATCH_MOVIES",
+                    "dimension_name": "影音观看任务",
+                    "market_space": {"estimated_sales_volume": 1000},
+                },
+            ]
+        }
+    )
+
+    context = adapt_v4_context_to_v5(
+        v4.model_copy(update={"target_snapshot": target})
+    )
+
+    assert "TASK_WATCH_MOVIES" not in {
+        row.battlefield_code for row in context.battlefield_taxonomy
+    }
 
 
 def test_report_first_screen_answers_four_pm_questions() -> None:
@@ -210,6 +236,25 @@ def test_business_dto_does_not_duplicate_large_evidence_payloads() -> None:
         for row in report.value_account_rows
         for member in row.sellpoint_bundle.members
     )
+
+
+def test_same_battlefield_and_capability_combination_is_one_value_account() -> None:
+    row = _report().value_account_rows[0]
+    duplicate = row.model_copy(
+        update={
+            "perceived_user_value": {
+                **row.perceived_user_value,
+                "name_cn": "客厅沉浸感＋画质升级感",
+            },
+            "sellpoint_bundle": row.sellpoint_bundle.model_copy(
+                update={"bundle_code": "duplicate-purchase-reason-bundle"}
+            ),
+        }
+    )
+
+    result = _dedupe_value_account_rows([row, duplicate])
+
+    assert len(result) == 1
 
 
 def test_report_and_renderers_are_deterministic() -> None:
