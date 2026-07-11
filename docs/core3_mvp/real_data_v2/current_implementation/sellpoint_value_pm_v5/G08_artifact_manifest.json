@@ -1,0 +1,31 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_goal_artifact_manifest_v1",
+  "goal": "V5-G08",
+  "status": "complete",
+  "rc_code_commit": "9a5a147bec2a8be5c2a37839e3e9d7fc3ccc54bc",
+  "acceptance_commit": "82656275f05c0a7336758a26413b48b1b49a21e5",
+  "rc_package_sha256": "ad1aceb49bd46c6031b936b91c6e15075786e7387b335597017e7f2752276ee7",
+  "rollback_package_sha256": "b1438a82ec80ece126649159b707befb8e79dfd2869100c7aef636f8e1ac1c37",
+  "database_writes": 0,
+  "default_route_changed": false,
+  "artifacts": [
+    {"path": "G08_requirements_and_design_delta.md", "sha256": "c10eb7cbf145a1f0d5d9dc9d112d1493cbdad529d2ca8173d587b3cdf3884bcf"},
+    {"path": "G08_rc_manifest.json", "sha256": "d8098a3758b03405801dbbd3e00405eb75a53c4a3bcdca59910bd377303f60b3"},
+    {"path": "G08_method_review.md", "sha256": "2b2012df217978fdea06bef01e5ae2d028c0525b0f8673e81fbd45770900d217"},
+    {"path": "G08_engineering_review.md", "sha256": "aa06cdbd1a3267526200a6cd4d53839fe6058cc4e54b6b952f5c280ab21882cd"},
+    {"path": "G08_pm_language_review.md", "sha256": "6923cea5479bac959a6d556c33b7e4eee64f601c73e7ea66359284172d451dbb"},
+    {"path": "G08_rollback_receipt.md", "sha256": "8f2a797180f03d6986c496ed7111b7413b59484b37a41a885d11b74d70581b45"},
+    {"path": "G08_205_acceptance_report.md", "sha256": "b611ac10eed7be6b41ba7f44bb028c098f337df711ef3067643c06e5b016023b"}
+  ],
+  "validation": {
+    "local_tests": "passed",
+    "server_205_default_off": "passed",
+    "cohort_double_run": "18_of_18_passed",
+    "feishu_readback": "passed",
+    "v2_v4_regression": "passed",
+    "rollback_drill": "passed",
+    "health_ready": "passed"
+  },
+  "release_state": "default_off_shadow",
+  "next_goal_required_for_default_route": true
+}

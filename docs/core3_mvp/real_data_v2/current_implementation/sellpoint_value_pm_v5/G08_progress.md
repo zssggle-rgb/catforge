@@ -10,4 +10,5 @@
 - 回归：V2 passed、V4 hash unchanged；
 - 回滚：passed，最终恢复 RC7 default-off；
 - 复核：method P0=0/P1=0；engineering P0=0/P1=0；PM P0=0/P1=0；
-- 当前状态：待提交 G08 文档、artifact manifest/closure、删除定时器并关闭 Goal。
+- 验收文档提交：`82656275f05c0a7336758a26413b48b1b49a21e5`；
+- 当前状态：artifact manifest/closure 已生成，待删除定时器并关闭 Goal。
