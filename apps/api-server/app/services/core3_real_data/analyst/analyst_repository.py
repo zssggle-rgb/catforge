@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from itertools import groupby
 from typing import Any, Iterable, Sequence
 
 from sqlalchemy import case, desc, func, or_, select
@@ -957,13 +958,33 @@ class AnalystRepository:
         for row in comment_atoms:
             atoms_by_sku[str(row.sku_code)].append(row)
 
-        weekly_rows = self._v4_market_weekly_rows(selected_profiles=selected_by_module["M07"])
+        weekly_rows = self._v4_market_weekly_rows(
+            selected_profiles=selected_by_module["M07"]
+        )
+        weekly_rows, market_cells_truncated = _v4_trim_market_weekly_rows(
+            weekly_rows,
+            limit=2000,
+        )
+        if market_cells_truncated:
+            current_authorities = [
+                authority.model_copy(
+                    update={
+                        "usability": "limited",
+                        "warnings": _dedupe_texts(
+                            [*authority.warnings, "market_cells_truncated"]
+                        ),
+                    }
+                )
+                if authority.module_code == "M07"
+                else authority
+                for authority in current_authorities
+            ]
         market_cells = _v4_market_cells(
             weekly_rows=weekly_rows,
             market_profiles=selected_by_module["M07"],
             battlefield_profiles=selected_by_module["M11C"],
             allocation_rows=allocation_rows,
-        )[:2000]
+        )
 
         reader = purchase_reason_reader or RepositoryPurchaseReasonProfileReader(self.db)
         purchase_contract = reader.read(
@@ -1325,11 +1346,12 @@ class AnalystRepository:
             .where(entities.Core3CleanMarketWeekly.record_status == "active")
             .where(entities.Core3CleanMarketWeekly.quality_status == "ok")
             .order_by(
-                entities.Core3CleanMarketWeekly.period_week_index,
+                entities.Core3CleanMarketWeekly.period_week_index.desc(),
                 entities.Core3CleanMarketWeekly.platform_type,
                 entities.Core3CleanMarketWeekly.sku_code,
                 entities.Core3CleanMarketWeekly.source_row_id,
             )
+            .limit(2001)
         )
         result: list[entities.Core3CleanMarketWeekly] = []
         seen: set[str] = set()
@@ -3729,6 +3751,59 @@ def _v4_sku_identity(
         screen_size_inch=screen_size,
         size_tier=(market.size_segment if market is not None else None) or _param_size_tier(param) or (target_fallback.size_tier if target_fallback else None),
         price_band=(market.price_band_size if market is not None else None) or (target_fallback.price_band_in_size_tier if target_fallback else None),
+    )
+
+
+def _v4_trim_market_weekly_rows(
+    rows: Sequence[entities.Core3CleanMarketWeekly],
+    *,
+    limit: int,
+) -> tuple[list[entities.Core3CleanMarketWeekly], bool]:
+    """Keep newest complete week/platform/channel groups within the row budget."""
+
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            -int(row.period_week_index),
+            str(row.platform_type or ""),
+            str(row.channel_type or ""),
+            str(row.sku_code),
+            str(row.source_row_id),
+        ),
+    )
+    truncated = len(ordered) > limit
+    if not truncated:
+        return sorted(ordered, key=_v4_weekly_output_sort_key), False
+    boundary_key = _v4_weekly_group_key(ordered[-1])
+    complete_prefix = [
+        row for row in ordered if _v4_weekly_group_key(row) != boundary_key
+    ]
+    selected: list[entities.Core3CleanMarketWeekly] = []
+    for _, group in groupby(complete_prefix, key=_v4_weekly_group_key):
+        group_rows = list(group)
+        if len(selected) + len(group_rows) > limit:
+            break
+        selected.extend(group_rows)
+    return sorted(selected, key=_v4_weekly_output_sort_key), True
+
+
+def _v4_weekly_group_key(row: entities.Core3CleanMarketWeekly) -> tuple[int, str, str]:
+    return (
+        int(row.period_week_index),
+        str(row.platform_type or ""),
+        str(row.channel_type or ""),
+    )
+
+
+def _v4_weekly_output_sort_key(
+    row: entities.Core3CleanMarketWeekly,
+) -> tuple[int, str, str, str, str]:
+    return (
+        int(row.period_week_index),
+        str(row.platform_type or ""),
+        str(row.channel_type or ""),
+        str(row.sku_code),
+        str(row.source_row_id),
     )
 
 

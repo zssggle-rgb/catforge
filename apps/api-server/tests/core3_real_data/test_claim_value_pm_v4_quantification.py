@@ -12,8 +12,10 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     MarketImpliedWtp,
     QuantificationResult,
     SellpointValueV4Context,
+    SourceAuthority,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
+    _battlefield_sample_weight,
     build_counterfactual_assessments,
     quantify_sellpoint_value,
 )
@@ -158,6 +160,60 @@ def test_two_independent_families_recover_bounded_400_500_wtp() -> None:
     serialized = json.dumps(first.model_dump(mode="json"), ensure_ascii=False)
     for member in _picture_link(context).bundle.members:
         assert f"{member.capability_code}_wtp" not in serialized
+
+
+def test_market_cell_truncation_blocks_amount_but_keeps_descriptive_choice() -> None:
+    context = _synthetic_context()
+    authorities = [
+        *context.authority_manifest,
+        SourceAuthority(
+            module_code="M07",
+            table_name="core3_clean_market_weekly",
+            authority_mode="configured_rule",
+            rule_version="v1",
+            selected_batch_ids=["synthetic"],
+            row_count=len(context.market_cells),
+            availability="present",
+            usability="limited",
+            source_hash="synthetic-m07",
+            selected_reason="synthetic truncation fixture",
+            warnings=["market_cells_truncated"],
+        ),
+    ]
+    context = context.model_copy(update={"authority_manifest": authorities})
+
+    result = _quantify(context)
+
+    assert result.choice_association is not None
+    assert result.choice_association.status == "available"
+    assert result.wtp.status == "blocked"
+    assert result.wtp.estimate_low is None
+    assert result.wtp.exclusion_reasons == ["market_cells_truncated"]
+
+
+def test_battlefield_weight_is_explanatory_and_uses_conservative_pair_value() -> None:
+    target = MarketCellRow(
+        sku_code="TARGET",
+        battlefield_code=BATTLEFIELD,
+        period_week_index=1,
+        platform_type="jd",
+        battlefield_allocation_weight=0.8,
+        price_check_status="ok",
+        promotion_suspect=False,
+        inventory_status="unavailable",
+    )
+    candidate = target.model_copy(
+        update={"sku_code": "CANDIDATE", "battlefield_allocation_weight": 0.6}
+    )
+
+    weight, complete = _battlefield_sample_weight(target, candidate)
+    missing_weight, missing_complete = _battlefield_sample_weight(
+        target.model_copy(update={"battlefield_allocation_weight": None}),
+        candidate.model_copy(update={"battlefield_allocation_weight": None}),
+    )
+
+    assert (weight, complete) == (0.6, True)
+    assert (missing_weight, missing_complete) == (1.0, False)
 
 
 def test_same_family_pairs_do_not_satisfy_q5_family_gate() -> None:

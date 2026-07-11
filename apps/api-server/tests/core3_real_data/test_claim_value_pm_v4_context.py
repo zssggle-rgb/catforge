@@ -15,6 +15,7 @@ from app.services.core3_real_data.analyst.analyst_repository import (
     _v4_pick_rows_by_key,
     _v4_published_lineage,
     _v4_select_snapshot_candidates,
+    _v4_trim_market_weekly_rows,
     build_sellpoint_value_v4_lineage_gate,
 )
 from app.services.core3_real_data.analyst.analyst_schemas import ResolvedSku
@@ -262,6 +263,36 @@ def test_snapshot_selection_preserves_declared_roles_beyond_top_three() -> None:
     assert len(selected) == 4
     assert any(item["sku_code"] == "TV4" for item in selected)
     assert {item["slot_code"] for item in selected} == {"same_value", "base_value"}
+
+
+def test_market_row_budget_keeps_complete_groups_and_reports_truncation() -> None:
+    rows = [
+        SimpleNamespace(
+            period_week_index=week,
+            platform_type="jd",
+            channel_type="online",
+            sku_code=f"TV{sku}",
+            source_row_id=f"{week}-{sku}",
+        )
+        for week in range(1, 1001)
+        for sku in range(2)
+    ]
+    rows.append(
+        SimpleNamespace(
+            period_week_index=0,
+            platform_type="jd",
+            channel_type="online",
+            sku_code="TV0",
+            source_row_id="boundary-partial",
+        )
+    )
+
+    selected, truncated = _v4_trim_market_weekly_rows(rows, limit=2000)
+
+    assert truncated is True
+    assert len(selected) == 2000
+    assert {row.period_week_index for row in selected} == set(range(1, 1001))
+    assert all(row.source_row_id != "boundary-partial" for row in selected)
 
 
 def test_context_replays_selected_profiles_and_market_cells_deterministically(

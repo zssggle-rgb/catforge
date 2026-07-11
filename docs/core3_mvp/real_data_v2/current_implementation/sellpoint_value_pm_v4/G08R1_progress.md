@@ -15,7 +15,7 @@
 | Repair contract 与测试矩阵 | completed |
 | Lineage/hash deterministic repair | completed |
 | Candidate recall/snapshot/per-role repair | completed |
-| Market-cell bounded trim 与 M11D sample weight | pending |
+| Market-cell bounded trim 与 M11D sample weight | completed |
 | Q5 config v2 + deterministic cluster bootstrap | pending |
 | Pure negative / mixed / data conflict 分离 | pending |
 | Frozen cohort/hash 真回放 | pending |
@@ -39,3 +39,7 @@
 - 新增 same-version hash drift、authority order、rank-4 role coverage、per-role cap 回归；
 - 定向 schema/context/counterfactual：33 passed；
 - repository 全文件仍有 7 个 V4 前 Ruff 基线问题，新增 V4 diff 未引入新 lint 问题。
+- weekly query 现在 DB 侧最多读取 2,001 行；超限时丢弃可能不完整的边界 group，再按最新完整周/平台/渠道 group 保留 <=2,000 行；
+- 超限写入 M07 authority warning，PM limitation 明示裁剪，Q5 金额 blocked，但描述性 choice 可保留；
+- pair 的真实 target/candidate 销量和 share 不变，observation weight 使用总销量乘 target/candidate allocation 的保守最小解释权重；缺失权重显式记录 limitation；
+- 新增完整 group 裁剪、truncation 阻断金额和 allocation sample-weight 边界测试；context/counterfactual/quantification/answer 56 passed。

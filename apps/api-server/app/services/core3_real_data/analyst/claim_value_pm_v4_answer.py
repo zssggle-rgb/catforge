@@ -61,6 +61,7 @@ WTP_EXCLUSION_CN = {
     "equal_choice_crossing_count_below_2": "观测范围内缺少稳定的五五开交点",
     "leave_one_week_out_stability_failed": "移除单周后结果不稳定",
     "qualified_model_family_count_below_2": "通过全部门禁的独立产品族不足",
+    "market_cells_truncated": "市场单元超过首页预算并已裁剪，金额识别暂停",
 }
 
 
@@ -505,6 +506,12 @@ def _report_limitations(
     ]
     if context.lineage_gate.status in {"stale_conflict", "unresolved"}:
         values.append("部分事实版本存在冲突，受影响的价格归因已暂停。")
+    if any(
+        "market_cells_truncated" in authority.warnings
+        for authority in context.authority_manifest
+        if authority.module_code == "M07"
+    ):
+        values.append("市场单元超过本版分析预算，已按完整周渠道单元裁剪，金额识别暂停。")
     if any(
         row.sellpoint_bundle.get("identification_boundary_cn", "").startswith(
             "当前只能"

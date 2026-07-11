@@ -1112,6 +1112,7 @@ def _build_v4_pair_curve(
     observed_prices: list[float] = []
     candidate_prices: list[float] = []
     excluded = 0
+    allocation_missing = 0
     for key in common_keys:
         target_row = target_rows[key]
         candidate_row = candidate_rows[key]
@@ -1135,7 +1136,20 @@ def _build_v4_pair_curve(
             excluded += 1
             continue
         total_sales = target_sales + candidate_sales
-        raw.append((gap, target_sales / total_sales, total_sales, key[1]))
+        sample_weight, allocation_complete = _battlefield_sample_weight(
+            target_row,
+            candidate_row,
+        )
+        if not allocation_complete:
+            allocation_missing += 1
+        raw.append(
+            (
+                gap,
+                target_sales / total_sales,
+                total_sales * sample_weight,
+                key[1],
+            )
+        )
         observed_prices.extend([target_price, candidate_price])
         candidate_prices.append(candidate_price)
     if not raw:
@@ -1210,6 +1224,10 @@ def _build_v4_pair_curve(
     limitations: list[str] = []
     if excluded:
         limitations.append(f"{excluded} 个共同单元因促销疑似或无效量价被排除。")
+    if allocation_missing:
+        limitations.append(
+            f"{allocation_missing} 个共同单元缺少完整战场解释权重；真实销量未改写，样本权重按可用边界处理。"
+        )
     if not (gap_min <= 0 <= gap_max):
         limitations.append("观测价差没有覆盖同价位置。")
     elif not local_zero:
@@ -1291,6 +1309,25 @@ def _candidate_model_family(
     if len(values) == 1:
         return next(iter(values))
     return None
+
+
+def _battlefield_sample_weight(
+    target_row: Any,
+    candidate_row: Any,
+) -> tuple[float, bool]:
+    """Return a conservative explanatory sample weight without changing sales."""
+
+    values = [
+        float(value)
+        for value in (
+            target_row.battlefield_allocation_weight,
+            candidate_row.battlefield_allocation_weight,
+        )
+        if value is not None
+    ]
+    if not values:
+        return 1.0, False
+    return max(min(values), 0.0), len(values) == 2
 
 
 def _raw_direction_consistency(
@@ -1538,9 +1575,16 @@ def _market_implied_wtp(
     ]
     family_count = len({item.model_family for item in qualified if item.model_family})
     lineage_conflict = _has_relevant_lineage_conflict(context)
+    market_cells_truncated = any(
+        "market_cells_truncated" in authority.warnings
+        for authority in context.authority_manifest
+        if authority.module_code == "M07"
+    )
     exclusions: list[str] = []
     if lineage_conflict:
         exclusions.append("version_lineage_conflict")
+    elif market_cells_truncated:
+        exclusions.append("market_cells_truncated")
     elif link.value_status != "established":
         exclusions.append("user_value_not_fully_established")
     elif not relative_experience_available:
@@ -1570,12 +1614,13 @@ def _market_implied_wtp(
         link.value_status == "established"
         and relative_experience_available
         and not lineage_conflict
+        and not market_cells_truncated
         and len(qualified) >= 2
         and family_count >= 2
     )
     if available:
         status = "available"
-    elif lineage_conflict:
+    elif lineage_conflict or market_cells_truncated:
         status = "blocked"
     elif (
         len(base_curves) >= 2
