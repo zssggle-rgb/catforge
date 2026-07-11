@@ -1,0 +1,37 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_goal_artifact_manifest_v1",
+  "goal_id": "G07",
+  "goal_thread_id": "019f4c6c-5a6b-7660-b5e7-593754bc6923",
+  "predecessor_commit": "c3b52b3",
+  "artifact_commit": "1e10a04",
+  "captured_at": "2026-07-11T20:53:20+08:00",
+  "artifacts": [
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_schemas.py", "sha256": "7d5ba77eb2a0c7435d93db970c63bc991cf5a9938e138644eb4059fc8a10177b"},
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/claim_value_pm_v4_answer.py", "sha256": "67d0a3daa00a71ab0eab6148c12aa5078ab26020be61184d81f4a02a78d1c667"},
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/atomic_handlers.py", "sha256": "42c7a9f8956017e09b4a3a4cba915896baff0b0ee471fc905c3fada42e175ac3"},
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/sop_orchestrators.py", "sha256": "81468fad5d28e39e316601cf000a476bd24def9bc3ebc05bb1fb1a8efd56701f"},
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/analyst_service.py", "sha256": "bf54602047354ae20d2257526c6b0a0c395063d0c758884d935e84e06d42fb72"},
+    {"path": "apps/api-server/app/services/core3_real_data/analyst/ability_registry.py", "sha256": "9ade43a5228d3dd76f5f0da46eb40170012e39b6f41e37fcab27656c17f51029"},
+    {"path": "apps/api-server/app/cli/catforge_analyst.py", "sha256": "e110cc6087cae1decc14ce82cdd68bc9340b378cfa12e427cdca608212d0355f"},
+    {"path": "apps/api-server/tests/core3_real_data/test_claim_value_pm_v4_answer.py", "sha256": "850c8d843679cb6ba6fb109b519b05dc96e34b76f265979edb836855b92e0dfd"},
+    {"path": "apps/api-server/tests/core3_real_data/test_claim_value_pm_v4_cli.py", "sha256": "8d3aac3f52487c3119b4e9ff7d0c049c3b261324a703519e3326eb7d746a1074"}
+  ],
+  "mutable_artifacts_excluded": ["G07_progress.md"],
+  "self_hash_policy": "manifest, closure receipt, and mutable progress metadata are excluded from the artifact hash list",
+  "validation": {
+    "g07_test_count": 17,
+    "g03_to_g07_plus_v2_pass_count": 96,
+    "existing_analyst_cli_pass_count": 88,
+    "total_regression_pass_count": 184,
+    "answer_coverage_percent": 93,
+    "g02_runtime_contract_exact_match": true,
+    "pm_forbidden_output_count": 0,
+    "automatic_product_action_count": 0,
+    "real_sku_wtp_claim_count": 0,
+    "database_write_count": 0,
+    "server_file_write_count": 0,
+    "git_diff_check": "passed"
+  },
+  "next_goal": "G08",
+  "next_goal_allowed": true
+}
