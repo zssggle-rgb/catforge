@@ -1,0 +1,30 @@
+# G08R1 核心合同修复与重新验收进度
+
+- Goal thread：`019f4c6c-5a6b-7660-b5e7-593754bc6923`
+- Goal 状态：`in_progress`
+- 定时器：`catforge-v4-g08r1-10`
+- 前置 G08 artifact commit：`b54418e`
+- 前置 G08 closure commit：`2a985f8`
+- 允许修改：G02 repair addendum、V4 repository/schema/service/answer、V4 tests、G08R1 回执
+- 禁止事项：数据库/205 连接或写入、部署、默认路由切换、G09 RC、消费 M12C 旧金额、把 M11D allocation 当购买归因
+
+## 当前门禁
+
+| 门禁 | 状态 |
+| --- | --- |
+| Repair contract 与测试矩阵 | in_progress |
+| Lineage/hash deterministic repair | pending |
+| Candidate recall/snapshot/per-role repair | pending |
+| Market-cell bounded trim 与 M11D sample weight | pending |
+| Q5 config v2 + deterministic cluster bootstrap | pending |
+| Pure negative / mixed / data conflict 分离 | pending |
+| Frozen cohort/hash 真回放 | pending |
+| 309+ 回归、覆盖率、性能和三审 | pending |
+
+## 停止条件
+
+1. 任何修复需要消费 M12C 旧金额或把 M11D allocation 解释成真实选择归因时停止；
+2. bootstrap 不能在相同输入下确定性复现时 Q5 保持不可用；
+3. typed contract 修改不能向 V2 泄漏；
+4. 相关回归、性能或 PM 语义任一未通过时 G09 继续禁止；
+5. 不触碰工作区现有无关 M12D 质量修复。
