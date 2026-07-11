@@ -1,0 +1,56 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_rc_manifest_v1",
+  "rc_name": "sellpoint-value-pm-v5-rc7-9a5a147",
+  "code_commit": "9a5a147bec2a8be5c2a37839e3e9d7fc3ccc54bc",
+  "package": {
+    "filename": "sellpoint-value-pm-v5-rc7-9a5a147.tar.gz",
+    "sha256": "ad1aceb49bd46c6031b936b91c6e15075786e7387b335597017e7f2752276ee7",
+    "runtime_file_count": 9
+  },
+  "runtime_files": [
+    {"path": "app/services/core3_real_data/analyst/claim_value_pm_v5_schemas.py", "sha256": "cb4a3041a7a7eeb1b40e82ee56413de12faf01397f335b18f6d469d8ef2a5378"},
+    {"path": "app/services/core3_real_data/analyst/claim_value_pm_v5_counterfactuals.py", "sha256": "b23339b4897848229de9f5e2d49fe6eaed2d27639f1fe89bee4734998513349c"},
+    {"path": "app/services/core3_real_data/analyst/claim_value_pm_v5_service.py", "sha256": "e8bb6dce47f9583cf2e24da47a1b6bfe2e67175592b4d635dc71fe2f57f21642"},
+    {"path": "app/services/core3_real_data/analyst/claim_value_pm_v5_realization.py", "sha256": "ed29472aabd40021fea2f40d785bbcbdeecd689d7f3072f4c01d29bd172dbb66"},
+    {"path": "app/services/core3_real_data/analyst/claim_value_pm_v5_answer.py", "sha256": "8c36cd4069f83d22418ad673ad9b4b9aa8f6dd7232c84d37093a23333f5f08fb"},
+    {"path": "app/services/core3_real_data/analyst/sop_orchestrators.py", "sha256": "abfbf8a2d60602c742a93de51efc6acfda0a4ce0b6314f742ab6d5f496f073a9"},
+    {"path": "app/services/core3_real_data/analyst/ability_registry.py", "sha256": "c4729309188b8dd358ae674e7e32b0c8fa0f846bfa21bd42c7c8c187f8de2124"},
+    {"path": "app/services/core3_real_data/analyst/analyst_service.py", "sha256": "ac2876c80d4352d1fe73ca3c8c07e3136358a0f9361df403d421b3a351a3ab2a"},
+    {"path": "app/cli/catforge_analyst.py", "sha256": "4516c3941768ce8659e43bd602e48b175f19b1941dcfa03c9e381f7b642ca4ed"}
+  ],
+  "local_validation": {
+    "v5_passed": 73,
+    "v5_v4_related_passed": 137,
+    "analyst_cli_passed": 88,
+    "v5_coverage_percent": 93,
+    "v5_answer_coverage_percent": 87,
+    "ruff": "passed",
+    "compileall": "passed"
+  },
+  "server_205_validation": {
+    "runtime_hash_match_count": 9,
+    "healthz": "ok",
+    "readyz": "database_ok",
+    "default_off_pre_session_count": 0,
+    "natural_route": "sku-claim-value",
+    "context_query_count": 30,
+    "cohort_sku_count": 18,
+    "cohort_double_run_pass_count": 18,
+    "core_p95_seconds": 1.19,
+    "tracked_peak_memory_mb": 75.429,
+    "report_bytes_min": 88586,
+    "report_bytes_max": 188661,
+    "strict_amount_count": 0,
+    "synthetic_sales_difference_count": 0,
+    "net_increment_count": 0,
+    "eligible_expansion_count": 0,
+    "database_tuple_write_delta": 0,
+    "rollback_drill": "passed",
+    "v2_regression": "passed",
+    "v4_result_hash": "5bca5457c9b4e618700e50de3f32cebbde52061e2a180a084db705f83a4b2b1a",
+    "feishu_readback": "passed",
+    "default_route_unchanged": true
+  },
+  "release_state": "default_off_shadow",
+  "default_route_switch_allowed": false
+}
