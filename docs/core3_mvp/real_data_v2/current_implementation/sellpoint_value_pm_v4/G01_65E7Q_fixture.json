@@ -1,0 +1,250 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_g01_fixture_v1",
+  "captured_at": "2026-07-11T18:55:00+08:00",
+  "source_environment": "205/catforge_dev",
+  "read_only": true,
+  "redaction": {
+    "raw_comment_text_removed": true,
+    "raw_evidence_ids_removed": true,
+    "database_credentials_removed": true,
+    "kept": [
+      "public product identity",
+      "aggregated market facts",
+      "version identifiers",
+      "non-reversible source aggregate hashes"
+    ]
+  },
+  "scope": {
+    "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+    "category_code": "TV",
+    "serving_batch_ids": [
+      "m00_20260623014631_c8630747",
+      "m00_20260619084551_857df63b",
+      "m00_20260613004311_d548f6dc"
+    ],
+    "full_market_window": "full_observed_window",
+    "no_temporal_variation_window": "latest_week"
+  },
+  "source_versions": {
+    "M03B": "m03b_tv_param_profile_v0.2",
+    "M04C": "m04c_tv_claim_fact_profile_v0.2",
+    "M05C": "m05c_tv_comment_fact_profile_v0.2",
+    "M07": "m07_market_profile_v2",
+    "M09C": "m09c_tv_user_task_profile_v0.3",
+    "M10C": "m10c_tv_target_group_profile_v0.3",
+    "M11C": "m11c_tv_value_battlefield_profile_v0.4",
+    "M11D": "m11d_semantic_market_allocation_v0.1",
+    "M12C": "m12c_tv_claim_value_quantification_v0.2",
+    "M12D_published": "m12d_tv_purchase_reason_profile_v0_1_draft",
+    "M14": "unavailable_for_target"
+  },
+  "target": {
+    "sku_code": "TV00029112",
+    "brand_name": "海信",
+    "model_name": "65E7Q",
+    "screen_size_inch": 65,
+    "counterfactual_provenance": "competitor_set_fallback",
+    "battlefields": {
+      "primary": "BF_PREMIUM_PICTURE_UPGRADE",
+      "secondary": [
+        "BF_SMART_CONNECTED_EXPERIENCE",
+        "BF_GAMING_SPORTS_FLUENCY"
+      ],
+      "opportunity": [
+        "BF_MAINSTREAM_LIVING_BALANCE",
+        "BF_EYE_CARE_FAMILY_COMFORT"
+      ],
+      "drag": []
+    },
+    "capability_snapshot": {
+      "mini_led": true,
+      "brightness_nit": 5200,
+      "local_dimming_zones": 1920,
+      "refresh_rate_hz": 300,
+      "ram_gb": 4,
+      "storage_gb": 64,
+      "m03b_conflict_count": 0
+    },
+    "market_full_window": {
+      "active_week_count": 24,
+      "platform_count": 2,
+      "row_count": 48,
+      "sales_volume": 6023,
+      "sales_amount": 35833186.49,
+      "weighted_price": 5949.3917,
+      "price_min": 4764.8919,
+      "price_max": 7055.8294,
+      "price_volatility": 0.10876,
+      "same_pool_price_percentile": 0.962963,
+      "same_pool_volume_percentile": 0.135802
+    },
+    "market_latest_week": {
+      "temporal_week_count": 1,
+      "platform_count": 2,
+      "row_count": 2,
+      "sales_volume": 392,
+      "weighted_price": 4764.8919,
+      "supports_price_response_curve": false
+    },
+    "published_purchase_reason_profile": {
+      "status": "ready_degraded",
+      "core_reasons": [
+        "画质配置解释加价",
+        "同尺寸画质越级获得感",
+        "贵得值的体验升级",
+        "影音用户愿为画质升级付费"
+      ],
+      "param_profile_status": "conflict",
+      "claim_fact_status": "partial",
+      "source_lineage_uses_old_upstream": true
+    },
+    "semantic_market_primary_battlefield": {
+      "battlefield_name": "高端画质升级战场",
+      "estimated_market_sales_volume": 155240.7735,
+      "estimated_market_sales_amount": 1259550167.2946,
+      "target_allocation_weight": 0.43811,
+      "target_allocated_sales_volume": 2638.7365,
+      "target_allocation_confidence": 0.9963,
+      "causal_purchase_attribution": false
+    },
+    "observed_choice_quantification": {
+      "method_level": "L1",
+      "strong_pair_count": 1,
+      "same_price_choice_share": 0.613,
+      "same_price_choice_advantage_pp": 11.3,
+      "selection_holding_gap": null,
+      "sellpoint_bundle_wtp": null,
+      "maximum_allowed_level": "market_choice_association",
+      "reason": [
+        "only_one_strong_direct_price_pair",
+        "no_base_value_counterfactual_in_current_price_curve",
+        "sellpoint_bundle_collinear_with_whole_product",
+        "published_m12d_lineage_conflicts_with_latest_upstream"
+      ]
+    }
+  },
+  "counterfactual_candidates": [
+    {
+      "role": "base_value",
+      "sku_code": "TV00027541",
+      "brand_name": "海信",
+      "model_name": "65E5Q",
+      "screen_size_inch": 65,
+      "primary_battlefield": "BF_PREMIUM_PICTURE_UPGRADE",
+      "capability": {
+        "mini_led": true,
+        "brightness_nit": 1300,
+        "local_dimming_zones": 264,
+        "refresh_rate_hz": 300,
+        "ram_gb": 4,
+        "storage_gb": 64
+      },
+      "market": {
+        "active_week_count": 23,
+        "platform_count": 2,
+        "sales_volume": 11077,
+        "weighted_price": 3741.7661,
+        "price_min": 3300.7532,
+        "price_max": 4526.4521
+      },
+      "availability_note": "M04C v0.2 and M12C v0.2 are missing; candidate is valid for fact/market contrast but degraded for full V4 estimation"
+    },
+    {
+      "role": "same_value",
+      "sku_code": "TV00029020",
+      "brand_name": "小米",
+      "model_name": "L65MC-SP",
+      "screen_size_inch": 65,
+      "primary_battlefield": "BF_PREMIUM_PICTURE_UPGRADE",
+      "capability": {
+        "mini_led": true,
+        "brightness_nit": 5200,
+        "local_dimming_zones": 1792,
+        "refresh_rate_hz": 330,
+        "ram_gb": 4,
+        "storage_gb": 64
+      },
+      "market": {
+        "active_week_count": 24,
+        "platform_count": 2,
+        "sales_volume": 3756,
+        "weighted_price": 5852.5774,
+        "price_min": 4654.3201,
+        "price_max": 6452.1842
+      },
+      "availability_note": "all required fact, market, M11D and M12C sources present"
+    },
+    {
+      "role": "stretch_benchmark",
+      "sku_code": "TV00027899",
+      "brand_name": "索尼",
+      "model_name": "K-65XR50",
+      "screen_size_inch": 65,
+      "primary_battlefield": "BF_PREMIUM_PICTURE_UPGRADE",
+      "capability": {
+        "mini_led": true,
+        "brightness_numeric_value": -150,
+        "brightness_parse_note": "source range parse is not business-usable as a scalar",
+        "local_dimming_zones": 0,
+        "refresh_rate_hz": 120,
+        "ram_gb": 6,
+        "storage_gb": 32
+      },
+      "market": {
+        "active_week_count": 24,
+        "platform_count": 2,
+        "sales_volume": 3793,
+        "weighted_price": 8248.7923,
+        "price_min": 7118.4085,
+        "price_max": 9194.4286
+      },
+      "availability_note": "usable as an upmarket benchmark; not an isolated sellpoint counterfactual"
+    }
+  ],
+  "aggregate_source_hashes": {
+    "TV00029112": {
+      "M03B": "47a7d1b91ff7cd3f1c1d87170cd031ec3796fbe73f471e79dec2581cc08980a5",
+      "M04C": "234de5009a9add28b82aedd2a2d82fdb8d842b3e3d3c9cea01ebe1198daee102",
+      "M05C": "56182b25e4d48b2c44fe873a1340ec1856ad9b698ad92b294559946466dfb88f",
+      "M07": "9c2cb2015bbb033d17a8735931bff89248e9dd9649c04433373e1bd31ab2fe30",
+      "M11C": "d99d3d6cadfeb2759c93b98d1ca1941419df32b18416fd9dafe298d81acdd129",
+      "M11D": "8ed12fa4cf625e434fa2cefa9074a31a6efa0aeae25d5d06c6b158e143a464ba",
+      "M12C": "ef25286f5a3b1194113948397f3b5423e87007296c5da1f28813f922f35e73cd",
+      "M12D": "bfc463d9512b5cc816f4a198d5cce7dd213221d21f4ae0fb0dddce955506845f",
+      "market_weekly": "39040d1d6df2b9a1d2031fcf8abfcc2fae8aff92bd5d0354ebafcfa50ec35768"
+    },
+    "TV00027541": {
+      "M03B": "f788b44295b05bf1dad058991df1ec532754c7f448f1c4aaeeaa7f239a7627d9",
+      "M04C": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "M05C": "78f73035cde6f958b033aea1854cd1406f14eb6d9d7563e9adab4bd6f0a6c6bf",
+      "M07": "30bb4930d0c5ae94907c29af165d7e3298ef03c4e0ee9b99ac56ffc7f032b7b1",
+      "M11C": "f2a5b6a1b14ebeca5880182357eb699ec526b2aa0ce8c3ff257991669fe67044",
+      "M11D": "82eeb2b74b06ab70583307f2512e8bda625bb21c9ee7f576ed31a4698926179d",
+      "M12C": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "M12D": "b2f25f47764e6026b3a86346948e396c80f25c77314eda7bf40ae48bea834ea4",
+      "market_weekly": "e641bce9a8730d9db7518f553f9f96c6889d41a9237ae48c80dbf666c0edabf3"
+    },
+    "TV00029020": {
+      "M03B": "d76c950aed8a2ee0ea146d83926f4ab87727cd7ac125b715865a1153cd405496",
+      "M04C": "527ccc2ed04009ee0061e5a4482e97403404794b94c4fba950d4319a0c16ee89",
+      "M05C": "26223c68a512082e9bc3815f4fed1372c8f54e69a467afba55210024a56b1f00",
+      "M07": "39024bff5a47fb25b01c47ff5a38e0624981e2f05e6f58ed1430a7a283d6c634",
+      "M11C": "bbf76203e46be59229dd5099355ee8449e931d7db104a17e32bbdd6b1ddcdc73",
+      "M11D": "8c7b866a82595b40099d2818398f756b2d3b1cdafd1d607618177c0f66a6f4b8",
+      "M12C": "25748ce577b2799c989b6889a83f3d931ea33a61ca1727fdc4d968f1591c4ebd",
+      "M12D": "737b829313cc3b7a3cfe5dc0f586c94640782f8fca628cd3555aaf982f3ac8e3",
+      "market_weekly": "794c49a7d339446e580f33b1eca7972d9b73bef7c07b942721bdc9847cb6a016"
+    },
+    "TV00027899": {
+      "M03B": "e64f6031362adbec5e2fab9a15d7ef63f7b8c22053b18363fa4268ff1a990019",
+      "M04C": "7d5fac2bc9edf52dc9c9e3a33e4715846ba6740ba35d4ca002e71ac39e2e41ea",
+      "M05C": "fe21ca2162b5c0b621d7fc86154fb4f8d950bfa323577a7c37f3d75fd8328e6c",
+      "M07": "5e822dd777ef2e354a0c025ab6a2dd5a34d4bd4ac872f1740779fed72c7cc9e2",
+      "M11C": "0116213346fbe4b3dde2a4997be1d2e97372d02e45452e584b40b1cfae0824eb",
+      "M11D": "1a8a19290246666a3b4c369793dca8cc61a54d716c20200d7cdbabb0f35e154f",
+      "M12C": "436d05a4abd25aec83d1dac31c200e6b7fce1ab24ca3f10450f69ffca5d186eb",
+      "M12D": "65833d5ff876dcb374861c6c21f3a2c1cc6e429a56cd14a71716d38ebb8251ce",
+      "market_weekly": "55db0a9a224d9da127dd6b5d09abcd59e42f74b390f3966180c78408dffc0e5f"
+    }
+  }
+}

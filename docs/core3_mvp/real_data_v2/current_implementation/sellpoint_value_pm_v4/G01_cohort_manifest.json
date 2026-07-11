@@ -1,0 +1,141 @@
+{
+  "schema_version": "sellpoint_value_pm_v4_g01_cohort_manifest_v1",
+  "captured_at": "2026-07-11T18:55:00+08:00",
+  "category_code": "TV",
+  "cohorts": [
+    {
+      "cohort_id": "C01_IDENTIFIABLE_CANDIDATE_PICTURE_TIER",
+      "input_manifest_sha256": "36eaca0a04d14fbb902bfdc4adaa09382030a2122ccaef7e9d769db1ef719016",
+      "input_source_composites": {
+        "TV00027524": "27b725be65ae18cd330ae42f8064b768e03911098712f0f79d89ba5b98ac3e75",
+        "TV00027913": "80e9bfe62053229438e6aa00f191ab9d18d6320b22511267e7c8671b35bc7a76"
+      },
+      "purpose": "验证同品牌同尺寸同战场内，画质档位具有独立变化的候选反事实",
+      "target_sku_code": "TV00027524",
+      "counterfactual_sku_codes": [
+        "TV00027913"
+      ],
+      "models": [
+        "海信 75E5Q",
+        "海信 75E5Q-PRO"
+      ],
+      "controlled_observed_features": {
+        "brand": "海信",
+        "screen_size_inch": 75,
+        "primary_battlefield": "BF_LARGE_SCREEN_FAMILY_CINEMA",
+        "refresh_rate_hz": 300,
+        "ram_gb": 4,
+        "storage_gb": 64
+      },
+      "value_tier_difference": {
+        "target_brightness_nit": 1300,
+        "counterfactual_brightness_nit": 2200,
+        "target_local_dimming_zones": 320,
+        "counterfactual_local_dimming_zones": 768
+      },
+      "market_observation": {
+        "target_weighted_price": 4775.4011,
+        "counterfactual_weighted_price": 5915.4375,
+        "target_sales_volume": 15791,
+        "counterfactual_sales_volume": 52634,
+        "both_have_multiweek_price_variation": true
+      },
+      "identification_status": "candidate_only",
+      "maximum_quantification_now": "eligible_for_G06_model_gate",
+      "wtp_allowed_now": false,
+      "remaining_gates": [
+        "common_week_platform_overlap",
+        "series_and_other_configuration_controls",
+        "reasonable_stable_price_coefficient",
+        "sensitivity_direction_consistency"
+      ]
+    },
+    {
+      "cohort_id": "C02_ONLY_SAME_VALUE",
+      "input_manifest_sha256": "9ec47fd920b8adf7795e04ef0ea8204af610baaeb5ea442edf16831bcdd63708",
+      "purpose": "验证只有同价值竞品时不估计卖点增量 WTP",
+      "target_sku_code": "TV00029112",
+      "counterfactual_sku_codes": [
+        "TV00029020"
+      ],
+      "models": [
+        "海信 65E7Q",
+        "小米 L65MC-SP"
+      ],
+      "shared_value": {
+        "primary_battlefield": "BF_PREMIUM_PICTURE_UPGRADE",
+        "screen_size_inch": 65,
+        "mini_led": true,
+        "brightness_nit": 5200,
+        "local_dimming_zones": "1920 vs 1792",
+        "refresh_rate_hz": "300 vs 330",
+        "ram_storage": "4+64"
+      },
+      "identification_status": "same_value_only",
+      "maximum_quantification_now": "market_choice_association_or_whole_product_price_acceptance",
+      "wtp_allowed_now": false
+    },
+    {
+      "cohort_id": "C03_FULL_COLLINEAR_SELLPOINTS",
+      "input_manifest_sha256": "044304f3543ea35236a2077f4adbf0d864a1df098db1eac8edbe8da9a36cc9d9",
+      "purpose": "验证多个卖点随整机方案共同变化时只能量化组合",
+      "target_sku_code": "TV00029112",
+      "counterfactual_sku_codes": [
+        "TV00027541",
+        "TV00029020",
+        "TV00027899"
+      ],
+      "collinear_sellpoints": [
+        "MiniLED",
+        "brightness",
+        "local_dimming",
+        "high_refresh",
+        "system_configuration"
+      ],
+      "identification_status": "bundle_only",
+      "maximum_quantification_now": "bundle_or_whole_product",
+      "single_sellpoint_wtp_allowed": false
+    },
+    {
+      "cohort_id": "C04_NO_TEMPORAL_PRICE_VARIATION",
+      "input_manifest_sha256": "90d2dfdd2e0b02a5201d49aec5257f0295b1d7aa82aca61477aa531523e49774",
+      "purpose": "验证单周窗口不能估计价格敏感度",
+      "target_sku_code": "TV00029112",
+      "counterfactual_sku_codes": [
+        "TV00029020"
+      ],
+      "market_window": "latest_week",
+      "temporal_week_count": 1,
+      "platform_count": 2,
+      "identification_status": "no_temporal_price_variation",
+      "maximum_quantification_now": "cross_section_market_position",
+      "price_sensitivity_allowed": false,
+      "wtp_allowed_now": false
+    },
+    {
+      "cohort_id": "C05_VERSION_FACT_CONFLICT",
+      "input_manifest_sha256": "5b3669eb20f04a885d20f27c83d9ce4ef8eeca237e249dec02e810d73627afe4",
+      "purpose": "验证已发布采购理由画像与最新事实版本冲突时局部阻断",
+      "target_sku_code": "TV00029112",
+      "conflict": {
+        "published_m12d_param_profile_status": "conflict",
+        "published_m12d_m03b_source_version": "m03b_tv_param_profile_v0.1",
+        "latest_m03b_source_version": "m03b_tv_param_profile_v0.2",
+        "latest_m03b_conflict_count": 0,
+        "published_m12d_m04c_source_version": "m04c_tv_claim_fact_profile_v0.1",
+        "latest_m04c_source_version": "m04c_tv_claim_fact_profile_v0.2",
+        "published_m12d_m12c_source_version": "m12c_claim_value_quantification_v0.1",
+        "latest_m12c_source_version": "m12c_tv_claim_value_quantification_v0.2"
+      },
+      "identification_status": "version_lineage_conflict",
+      "maximum_quantification_now": "versioned_facts_only",
+      "wtp_allowed_now": false
+    }
+  ],
+  "global_missing_controls": {
+    "inventory": "unavailable",
+    "promotion_exposure": "raw coverage insufficient",
+    "promotion_suspect_flag": "available_as_exclusion_or_degradation_only",
+    "abnormal_price_check": "available"
+  }
+}
