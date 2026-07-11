@@ -1,0 +1,22 @@
+{
+  "addendum_version": "sellpoint_value_pm_v5_g03_schema_addendum_v1",
+  "base_contract_sha256": "1700afd699dac5465beaed1c3bf475a08990ebc2b7cec2ce17f30651cf2381cb",
+  "required_field_additions": {
+    "SyntheticControlResult": ["method_config_version", "sample_manifest_hash"],
+    "PerformanceArchetype": ["method_config_version", "sample_manifest_hash"],
+    "BattlefieldAllocation": ["lineage_status"],
+    "IncrementDecomposition": ["causal_claim"],
+    "BundlePriceInterval": ["method_config_version", "model_family_count", "pair_count"],
+    "ValueAccountRow": ["confidence_label_cn"],
+    "SkuPerceivedValueMarketRealizationReport": ["data_scope_cn"]
+  },
+  "rationale": {
+    "method_and_sample_versions": "Effect-bearing records must never exist without a method version and reproducible sample manifest.",
+    "lineage_status": "M11D allocation must explicitly disclose whether it aligns with the current M11C view.",
+    "causal_claim": "Every increment decomposition must explicitly keep causal_claim false.",
+    "amount_identification_counts": "A strict bundle amount must always disclose pair and model-family counts.",
+    "pm_labels": "PM rows and reports must explicitly carry confidence and data-scope language rather than renderer defaults."
+  },
+  "field_removals": [],
+  "semantic_changes": []
+}
