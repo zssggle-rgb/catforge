@@ -1492,6 +1492,13 @@ def _question_driven_comparisons(
     )
     if weakness_result is not None:
         result.append(weakness_result)
+    scale_shortfall = _scale_shortfall_comparison(
+        context,
+        candidates,
+        definitions,
+    )
+    if scale_shortfall is not None:
+        result.append(scale_shortfall)
 
     parameter_entry = next(
         (
@@ -1643,30 +1650,14 @@ def _weakness_comparison(
                     comparison.comparator_names,
                 )
             )
-    lower_price_higher_sales: dict[str, str] = {}
-    for entry in catalog:
-        for comparison in entry.get("comparisons") or []:
-            if (
-                comparison.method == "direct_comparable"
-                and comparison.price_gap_abs is not None
-                and comparison.price_gap_abs > 0
-                and comparison.sales_volume_gap_abs is not None
-                and comparison.sales_volume_gap_abs < 0
-            ):
-                lower_price_higher_sales.update(
-                    zip(
-                        comparison.comparator_sku_codes,
-                        comparison.comparator_names,
-                        strict=True,
-                    )
-                )
+    lower_price_higher_sales = _lower_price_higher_sales_rows(catalog)
     if lower_price_higher_sales:
         groups.append(
             (
                 "价格更低但销量更高的产品",
                 sorted(lower_price_higher_sales),
                 [
-                    lower_price_higher_sales[code]
+                    lower_price_higher_sales[code].comparator_names[0]
                     for code in sorted(lower_price_higher_sales)
                 ],
             )
@@ -1717,6 +1708,92 @@ def _weakness_comparison(
             "能力尚未具备的，应回到产品定义补齐。"
         ),
     }
+
+
+def _scale_shortfall_comparison(
+    context: SellpointValueV5Context,
+    catalog: Sequence[dict[str, Any]],
+    definitions,
+) -> dict[str, Any] | None:
+    comparisons = _lower_price_higher_sales_rows(catalog)
+    if not comparisons:
+        return None
+    rows = list(comparisons.values())
+    comparator_prices = [
+        row.comparator_price_median
+        for row in rows
+        if row.comparator_price_median is not None
+    ]
+    comparator_sales = [
+        row.comparator_sales_volume_median
+        for row in rows
+        if row.comparator_sales_volume_median is not None
+    ]
+    target_prices = [row.target_price for row in rows if row.target_price is not None]
+    target_sales = [
+        row.target_sales_volume for row in rows if row.target_sales_volume is not None
+    ]
+    if not comparator_prices or not comparator_sales or not target_prices or not target_sales:
+        return None
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    claim_codes = {
+        claim_code
+        for entry in catalog
+        for claim_code in _catalog_claim_codes(entry, definitions)
+    }
+    gaps = _supported_claim_gaps(
+        snapshots,
+        context.v4_context.target.sku_code,
+        sorted(comparisons),
+        claim_codes,
+    )
+    target_price = median(target_prices)
+    target_volume = median(target_sales)
+    comparator_price = median(comparator_prices)
+    comparator_volume = median(comparator_sales)
+    conclusion = (
+        f"从候选池中选出{len(rows)}款价格更低但销量更高的产品组成走量组。"
+        f"该组均价中位数约{comparator_price:.0f}元，比本品低"
+        f"{target_price - comparator_price:.0f}元；周均销量中位数约"
+        f"{comparator_volume:.1f}台，比本品高{comparator_volume - target_volume:.1f}台。"
+    )
+    if gaps:
+        conclusion += (
+            "这组产品还更常获得"
+            f"{'、'.join(CLAIM_LABELS_CN.get(code, code) for code in gaps[:3])}"
+            "的用户正向反馈，是扩大规模时优先补强的价值方向。"
+        )
+    else:
+        conclusion += (
+            "这组产品没有稳定多出一项本品缺失的用户价值反馈，"
+            "因此规模短板不是少一个常规卖点，而是高价画质定位没有转成同等销量规模。"
+        )
+    return {
+        "question_cn": "本品的规模转化短板",
+        "selected_products": [
+            comparisons[code].comparator_names[0] for code in sorted(comparisons)
+        ],
+        "conclusion_cn": conclusion,
+    }
+
+
+def _lower_price_higher_sales_rows(
+    catalog: Sequence[dict[str, Any]],
+) -> dict[str, RealizationMarketComparison]:
+    result: dict[str, RealizationMarketComparison] = {}
+    for entry in catalog:
+        for comparison in entry.get("comparisons") or []:
+            if (
+                comparison.method != "direct_comparable"
+                or comparison.price_gap_abs is None
+                or comparison.price_gap_abs <= 0
+                or comparison.sales_volume_gap_abs is None
+                or comparison.sales_volume_gap_abs >= 0
+            ):
+                continue
+            for sku_code in comparison.comparator_sku_codes:
+                result.setdefault(sku_code, comparison)
+    return result
 
 
 def _supported_claim_gaps(
