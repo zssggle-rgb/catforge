@@ -17,7 +17,9 @@ from app.services.core3_real_data.constants import (
     CORE3_M12D_SCHEMA_VERSION,
     CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,
     Core3RunStatus,
+    M12DAnchorRole,
     M12DProfileStatus,
+    M12DReasonEstablishmentStatus,
     M12DReleaseStatus,
 )
 from app.services.core3_real_data.purchase_reason_anchor_candidate_generator import AnchorCandidateGenerator
@@ -79,6 +81,7 @@ class PurchaseReasonProfileBatchGenerator:
         generated_by: str = "system",
         detail_limit: int = 50,
         focus_validation_results: Sequence[M12DFocusSkuValidationResult | dict[str, Any]] | None = None,
+        focus_sku_codes: Sequence[str] | None = None,
     ) -> M12DServiceResult:
         normalized_product_category = product_category.strip().upper()
         if normalized_product_category not in {"TV", "AC"}:
@@ -92,6 +95,10 @@ class PurchaseReasonProfileBatchGenerator:
         normalized_sku_codes = _normalize_sku_codes(sku_codes)
         if not normalized_sku_codes:
             raise M12DPurchaseReasonBatchGenerationError("sku_codes is required.")
+        if focus_validation_results is not None and focus_sku_codes is not None:
+            raise M12DPurchaseReasonBatchGenerationError(
+                "focus_validation_results and focus_sku_codes are mutually exclusive."
+            )
         source_batch_ids = tuple(batch_ids_from_scope(batch_id))
         normalized_storage_batch_id = (storage_batch_id or _default_storage_batch_id(batch_id)).strip()
         if not normalized_storage_batch_id:
@@ -180,6 +187,13 @@ class PurchaseReasonProfileBatchGenerator:
                     )
                 )
 
+        if focus_sku_codes is not None:
+            focus_validation_results = build_focus_validation_results(
+                sku_codes=focus_sku_codes,
+                profiles=profiles,
+                anchors=anchors,
+            )
+
         quality_summary = _quality_summary(profiles, anchors, failures)
         release_quality_evaluation = self.release_quality_evaluator.evaluate(
             category_code=self.context.category_code,
@@ -253,6 +267,67 @@ class PurchaseReasonProfileBatchGenerator:
         )
 
 
+def build_focus_validation_results(
+    *,
+    sku_codes: Sequence[str],
+    profiles: Sequence[M12DSkuPurchaseReasonProfileRecord],
+    anchors: Sequence[M12DPurchaseReasonAnchorRecord],
+) -> list[M12DFocusSkuValidationResult]:
+    """Validate focus SKUs from the exact generated profile and anchor records."""
+
+    profile_by_sku = {profile.sku_code: profile for profile in profiles}
+    anchors_by_sku: dict[str, list[M12DPurchaseReasonAnchorRecord]] = {}
+    for anchor in anchors:
+        anchors_by_sku.setdefault(anchor.sku_code, []).append(anchor)
+
+    established_statuses = {
+        M12DReasonEstablishmentStatus.ESTABLISHED.value,
+        M12DReasonEstablishmentStatus.ESTABLISHED_LIMITED.value,
+    }
+    unavailable_statuses = {
+        M12DProfileStatus.MISSING_INPUT.value,
+        M12DProfileStatus.FAILED.value,
+    }
+    results: list[M12DFocusSkuValidationResult] = []
+    for sku_code in _normalize_sku_codes(sku_codes):
+        profile = profile_by_sku.get(sku_code)
+        if profile is None:
+            results.append(
+                M12DFocusSkuValidationResult(
+                    sku_code=sku_code,
+                    passed=False,
+                    reason_cn="重点 SKU 未生成画像。",
+                )
+            )
+            continue
+
+        invalid_core = [
+            anchor
+            for anchor in anchors_by_sku.get(sku_code, [])
+            if _value(anchor.role) == M12DAnchorRole.CORE_PAYMENT.value
+            and (
+                _value(anchor.establishment_status) not in established_statuses
+                or anchor.establishment_score is None
+                or Decimal(anchor.establishment_score) < Decimal("7")
+                or anchor.core_eligible is not True
+            )
+        ]
+        profile_unavailable = _value(profile.status) in unavailable_statuses
+        passed = not invalid_core and not profile_unavailable
+        results.append(
+            M12DFocusSkuValidationResult(
+                sku_code=sku_code,
+                passed=passed,
+                reason_cn=(
+                    "重点 SKU 角色、门槛和消费状态通过。"
+                    if passed
+                    else "重点 SKU 存在无效核心或画像不可用。"
+                ),
+            )
+        )
+    return results
+
+
 def _profile_record(
     *,
     context: M12DSkuPurchaseReasonContext,
@@ -311,6 +386,10 @@ def _profile_record(
         supporting_anchors_json=score_result.supporting_anchors_json,
         weak_expression_anchors_json=score_result.weak_expression_anchors_json,
         risk_drag_anchors_json=score_result.risk_drag_anchors_json,
+        established_anchors_json=score_result.established_anchors_json,
+        proposition_anchors_json=score_result.proposition_anchors_json,
+        pressure_summary_json=score_result.pressure_summary_json,
+        comparison_limitations_json=score_result.comparison_limitations_json,
         evidence_summary_json=evidence_summary,
         input_status_json=context.input_status_json,
         input_quality_json=context.input_quality_json,
@@ -445,6 +524,18 @@ def _anchor_records(
                 role=anchor.role,
                 evidence_strength=anchor.evidence_strength,
                 confidence=anchor.confidence,
+                establishment_status=anchor.establishment_status,
+                establishment_score=anchor.establishment_score,
+                establishment_domains_json=anchor.establishment_domains_json,
+                user_validation_status=anchor.user_validation_status,
+                core_eligible=anchor.core_eligible,
+                core_ineligible_reasons_json=anchor.core_ineligible_reasons_json,
+                proposition_evidence_json=anchor.proposition_evidence_json,
+                user_support_evidence_json=anchor.user_support_evidence_json,
+                pressure_level=anchor.pressure_level,
+                pressure_tags_json=anchor.pressure_tags_json,
+                pressure_summary_cn=anchor.pressure_summary_cn,
+                comparison_limitations_json=anchor.comparison_limitations_json,
                 evidence_domains_json=anchor.evidence_domains_json,
                 domain_scores_json=anchor.domain_scores_json,
                 support_summary_cn=anchor.support_summary_cn,

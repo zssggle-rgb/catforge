@@ -112,6 +112,15 @@ class PurchaseReasonProfileRepository(Core3BaseRepository):
             "rule_version": rule_version,
         }
         for model_cls in (entities.Core3SkuPurchaseReasonProfile, entities.Core3SkuPurchaseReasonAnchor):
+            self.db.execute(
+                update(model_cls)
+                .where(getattr(model_cls, "project_id") == self.project_id)
+                .where(getattr(model_cls, "category_code") == self.category_code.value)
+                .where(getattr(model_cls, "batch_id") == batch_id)
+                .where(getattr(model_cls, "purchase_reason_version_id") != version.purchase_reason_version_id)
+                .where(getattr(model_cls, "is_current").is_(True))
+                .values(is_current=False)
+            )
             stmt = update(model_cls)
             for field_name, value in release_filter.items():
                 stmt = stmt.where(getattr(model_cls, field_name) == value)

@@ -48,6 +48,8 @@ from app.services.core3_real_data.constants import (
     M12DIssueScope,
     M12DIssueSeverity,
     M12DProfileStatus,
+    M12DPurchasePressureLevel,
+    M12DReasonEstablishmentStatus,
     M12DReleaseQualityStatus,
     M12DReleaseStatus,
 )
@@ -199,12 +201,39 @@ def test_m12d_repository_only_reads_published_current_version(client) -> None:
         assert current is not None
         assert current.version.m12d_profile_version == "m12d_v1"
 
+        repository.save_versions([_version_payload("version_3", "m12d_v3", "hash_v3")])
+        repository.save_profiles(
+            [_profile_payload("profile_3", "version_3", "m12d_v3", "hash_profile_v3")]
+        )
+        repository.save_anchors(
+            [
+                _anchor_payload(
+                    "anchor_3", "profile_3", "version_3", "m12d_v3", "hash_anchor_v3"
+                )
+            ]
+        )
+        repository.publish_version(
+            batch_id="batch_m12d",
+            m12d_profile_version="m12d_v3",
+            rule_version=CORE3_M12D_RULE_VERSION,
+            published_by="tester",
+        )
+
+        old_profile = session.get(entities.Core3SkuPurchaseReasonProfile, "profile_1")
+        old_anchor = session.get(entities.Core3SkuPurchaseReasonAnchor, "anchor_1")
+        new_profile = session.get(entities.Core3SkuPurchaseReasonProfile, "profile_3")
+        new_anchor = session.get(entities.Core3SkuPurchaseReasonAnchor, "anchor_3")
+        assert old_profile is not None and old_profile.is_current is False
+        assert old_anchor is not None and old_anchor.is_current is False
+        assert new_profile is not None and new_profile.is_current is True
+        assert new_anchor is not None and new_anchor.is_current is True
+
         version_rows = list(
             session.execute(
                 select(entities.Core3PurchaseReasonProfileVersion)
             ).scalars()
         )
-        assert len(version_rows) == 2
+        assert len(version_rows) == 3
     finally:
         session.close()
 
@@ -1987,7 +2016,7 @@ def test_m12d_batch_generator_writes_draft_records_without_publishing(client) ->
             m12d_profile_version="m12d_g08_test_draft",
             write=True,
             generated_by="pytest",
-            focus_validation_results=[{"sku_code": "TV00029112", "passed": True}],
+            focus_sku_codes=["TV00029112"],
         )
 
         assert result.status == Core3RunStatus.SUCCESS
@@ -2024,7 +2053,9 @@ def test_m12d_batch_generator_writes_draft_records_without_publishing(client) ->
         )
 
         assert version.release_status == M12DReleaseStatus.DRAFT.value
-        assert version.release_quality_status == M12DReleaseQualityStatus.READY.value
+        assert (
+            version.release_quality_status == M12DReleaseQualityStatus.READY.value
+        ), version.quality_summary_json["release_quality_evaluation"]
         assert (
             version.quality_summary_json["release_quality_evaluation"][
                 "failure_reason_codes"
@@ -2048,7 +2079,25 @@ def test_m12d_batch_generator_writes_draft_records_without_publishing(client) ->
             "worth_paying_more_for_experience_upgrade"
             in profile.core_payment_anchors_json
         )
+        assert (
+            "worth_paying_more_for_experience_upgrade"
+            in profile.established_anchors_json
+        )
+        assert profile.pressure_summary_json
         assert anchors
+        core_anchor = next(
+            anchor
+            for anchor in anchors
+            if anchor.anchor_code == "worth_paying_more_for_experience_upgrade"
+        )
+        assert core_anchor.establishment_status in {
+            M12DReasonEstablishmentStatus.ESTABLISHED.value,
+            M12DReasonEstablishmentStatus.ESTABLISHED_LIMITED.value,
+        }
+        assert core_anchor.establishment_score is not None
+        assert core_anchor.establishment_score >= Decimal("7")
+        assert core_anchor.core_eligible is True
+        assert core_anchor.pressure_level != M12DPurchasePressureLevel.UNASSESSED.value
         assert (
             anchors[0].purchase_reason_profile_id == profile.purchase_reason_profile_id
         )
