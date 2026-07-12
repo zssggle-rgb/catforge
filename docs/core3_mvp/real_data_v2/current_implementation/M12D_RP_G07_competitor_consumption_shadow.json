@@ -1,0 +1,1861 @@
+{
+  "task_id": "M12D-RP-G07",
+  "generated_at": "2026-07-11T18:53:56.997343+00:00",
+  "source_fixture": "/Users/sjs/catforge/docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G06_validated_fixture.json",
+  "source_fixture_version": "m12d_rp_g06_validated_v0.1",
+  "scope": {
+    "m12d_policy": "只消费 G06 fixture，不生成、不修正 M12D。",
+    "tv_target_count": 10,
+    "ac_target_count": 18,
+    "tv_65e7q_real_candidate_replay": true
+  },
+  "categories": {
+    "TV": {
+      "category": "TV",
+      "summary": {
+        "target_count": 10,
+        "pair_count": 90,
+        "proposition_pair_count": 0,
+        "proposition_profile_count": 2,
+        "proposition_scoring_failure_count": 0,
+        "proposition_language_failure_count": 0,
+        "pressure_separation_failure_count": 0,
+        "ranking_trace_failure_count": 0,
+        "pm_business_language_failure_count": 0
+      },
+      "targets": [
+        {
+          "target_sku_code": "TV00009549",
+          "target_name": "康佳 LED32E330CE",
+          "target_comparison_mode": "facts_only",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00027039",
+          "target_name": "小米 L100MB-SP",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00009549"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00027801",
+          "target_name": "TCL 65Q9L PRO",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00028829",
+          "target_name": "创维 65A6F ULTRA",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00029020",
+          "target_name": "小米 L65MC-SP",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00030079",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00029031",
+          "target_name": "酷开 32K3",
+          "target_comparison_mode": "facts_only",
+          "top3": [
+            "TV00029936",
+            "TV00009549",
+            "TV00029020"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00029112",
+          "target_name": "海信 65E7Q",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00029344",
+          "target_name": "华为 VISION智慧屏 5 SE优享版 65",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00027039",
+            "TV00029936",
+            "TV00009549"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00029936",
+          "target_name": "创维 65A7H PRO",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029020",
+            "TV00030079",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "TV00030079",
+          "target_name": "TCL 98Q10M PRO",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "TV00029936",
+            "TV00029020",
+            "TV00027039"
+          ],
+          "pair_count": 9,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 2,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        }
+      ],
+      "top3_rows": [
+        {
+          "category": "TV",
+          "target_sku_code": "TV00009549",
+          "target_name": "康佳 LED32E330CE",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00009549",
+          "target_name": "康佳 LED32E330CE",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00009549",
+          "target_name": "康佳 LED32E330CE",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027039",
+          "target_name": "小米 L100MB-SP",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 10,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献10/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027039",
+          "target_name": "小米 L100MB-SP",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 10,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献10/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027039",
+          "target_name": "小米 L100MB-SP",
+          "rank": 3,
+          "candidate_sku_code": "TV00009549",
+          "candidate_name": "验证样本 康佳 LED32E330CE",
+          "comparison_mode": "facts_only",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "候选的购买理由尚不足以参与强比较；它若进入 Top 3，只能由购买池、价值战场、用户任务、目标客群和市场事实支撑。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027801",
+          "target_name": "TCL 65Q9L PRO",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027801",
+          "target_name": "TCL 65Q9L PRO",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00027801",
+          "target_name": "TCL 65Q9L PRO",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00028829",
+          "target_name": "创维 65A6F ULTRA",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00028829",
+          "target_name": "创维 65A6F ULTRA",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00028829",
+          "target_name": "创维 65A6F ULTRA",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029020",
+          "target_name": "小米 L65MC-SP",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029020",
+          "target_name": "小米 L65MC-SP",
+          "rank": 2,
+          "candidate_sku_code": "TV00030079",
+          "candidate_name": "验证样本 TCL 98Q10M PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029020",
+          "target_name": "小米 L65MC-SP",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029031",
+          "target_name": "酷开 32K3",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029031",
+          "target_name": "酷开 32K3",
+          "rank": 2,
+          "candidate_sku_code": "TV00009549",
+          "candidate_name": "验证样本 康佳 LED32E330CE",
+          "comparison_mode": "facts_only",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "候选的购买理由尚不足以参与强比较；它若进入 Top 3，只能由购买池、价值战场、用户任务、目标客群和市场事实支撑。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029031",
+          "target_name": "酷开 32K3",
+          "rank": 3,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029112",
+          "target_name": "海信 65E7Q",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029112",
+          "target_name": "海信 65E7Q",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029112",
+          "target_name": "海信 65E7Q",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029344",
+          "target_name": "华为 VISION智慧屏 5 SE优享版 65",
+          "rank": 1,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 9,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献9/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029344",
+          "target_name": "华为 VISION智慧屏 5 SE优享版 65",
+          "rank": 2,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 7,
+          "replacement_pressure_points": 6,
+          "selection_effect_cn": "已成立购买理由重合贡献7/15，替代压力贡献6/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029344",
+          "target_name": "华为 VISION智慧屏 5 SE优享版 65",
+          "rank": 3,
+          "candidate_sku_code": "TV00009549",
+          "candidate_name": "验证样本 康佳 LED32E330CE",
+          "comparison_mode": "facts_only",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "候选的购买理由尚不足以参与强比较；它若进入 Top 3，只能由购买池、价值战场、用户任务、目标客群和市场事实支撑。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029936",
+          "target_name": "创维 65A7H PRO",
+          "rank": 1,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029936",
+          "target_name": "创维 65A7H PRO",
+          "rank": 2,
+          "candidate_sku_code": "TV00030079",
+          "candidate_name": "验证样本 TCL 98Q10M PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00029936",
+          "target_name": "创维 65A7H PRO",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00030079",
+          "target_name": "TCL 98Q10M PRO",
+          "rank": 1,
+          "candidate_sku_code": "TV00029936",
+          "candidate_name": "验证样本 创维 65A7H PRO",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00030079",
+          "target_name": "TCL 98Q10M PRO",
+          "rank": 2,
+          "candidate_sku_code": "TV00029020",
+          "candidate_name": "验证样本 小米 L65MC-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "TV",
+          "target_sku_code": "TV00030079",
+          "target_name": "TCL 98Q10M PRO",
+          "rank": 3,
+          "candidate_sku_code": "TV00027039",
+          "candidate_name": "验证样本 小米 L100MB-SP",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 2,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（2/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        }
+      ],
+      "checks": {
+        "target_coverage": true,
+        "tv_65e7q_covered": true,
+        "proposition_sample_covered": true,
+        "proposition_never_scores_as_shared_reason": true,
+        "proposition_business_language": true,
+        "replacement_and_purchase_pressure_separate": true,
+        "top3_trace_complete": true,
+        "pm_business_language_clean": true
+      }
+    },
+    "AC": {
+      "category": "AC",
+      "summary": {
+        "target_count": 18,
+        "pair_count": 306,
+        "proposition_pair_count": 10,
+        "proposition_profile_count": 5,
+        "proposition_scoring_failure_count": 0,
+        "proposition_language_failure_count": 0,
+        "pressure_separation_failure_count": 0,
+        "ranking_trace_failure_count": 0,
+        "pm_business_language_failure_count": 0
+      },
+      "targets": [
+        {
+          "target_sku_code": "AC00028640",
+          "target_name": "小米 KFR-72LW/N1A1",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00035996",
+            "AC00036211",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00028642",
+          "target_name": "小米 KFR-35GW/N1A1",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00038662",
+            "AC00028640",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 2,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00029751",
+          "target_name": "格力 KFR-72LW/NHAJ1BGJ",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036211",
+            "AC00036333",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00034731",
+          "target_name": "格力 KFR-35GW/NHAE1BAJ",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036211",
+            "AC00028640",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 2,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00034959",
+          "target_name": "美的 KFR-72LW/QJ201-1",
+          "target_comparison_mode": "facts_only",
+          "top3": [
+            "AC00036211",
+            "AC00039165",
+            "AC00028640"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 0,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00035996",
+          "target_name": "TCL KFR-35GW/JD21+B1",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028640",
+            "AC00036211",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00036020",
+          "target_name": "华凌 KFR-35GW/N8HE1IIPRO",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028642",
+            "AC00038662",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 2,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00036139",
+          "target_name": "华凌 KFR-35GW/N8HA1III-P",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028640",
+            "AC00035996",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00036211",
+          "target_name": "海尔 KFR-50LW/E1-1",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036333",
+            "AC00028640",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00036333",
+          "target_name": "美的 KFR-72LW/N8KS1-1U",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036211",
+            "AC00028640",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00036739",
+          "target_name": "格力 KFR-35GW/NHMA1BG",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036211",
+            "AC00036333",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00038063",
+          "target_name": "美的 KFR-88LW/N8KS1-1U",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00039165",
+            "AC00036211",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 1,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00038066",
+          "target_name": "澳柯玛 KFR-35GW/BPYT-1",
+          "target_comparison_mode": "limited",
+          "top3": [
+            "AC00036211",
+            "AC00039165",
+            "AC00028640"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00038662",
+          "target_name": "美的 KFR-35GW/KS2",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028642",
+            "AC00028640",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 2,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00038680",
+          "target_name": "美的 KFR-26GW/KS2",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028640",
+            "AC00035996",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00038856",
+          "target_name": "万宝 KFR-35GW/BPWL7-W1",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028640",
+            "AC00035996",
+            "AC00039165"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00039165",
+          "target_name": "美的 KFR-72GW/KS2",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00036211",
+            "AC00028640",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 1,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        },
+        {
+          "target_sku_code": "AC00039204",
+          "target_name": "格力 KFR-26GW/NHGS1BGT",
+          "target_comparison_mode": "strong",
+          "top3": [
+            "AC00028640",
+            "AC00036211",
+            "AC00028642"
+          ],
+          "pair_count": 17,
+          "proposition_pair_count": 0,
+          "facts_only_candidate_count": 1,
+          "report_checks": {
+            "replacement_pressure_separate": true,
+            "purchase_pressure_separate": true,
+            "no_threat_contradiction": true,
+            "pm_business_language": true
+          }
+        }
+      ],
+      "top3_rows": [
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028640",
+          "target_name": "小米 KFR-72LW/N1A1",
+          "rank": 1,
+          "candidate_sku_code": "AC00035996",
+          "candidate_name": "验证样本 TCL KFR-35GW/JD21+B1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028640",
+          "target_name": "小米 KFR-72LW/N1A1",
+          "rank": 2,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028640",
+          "target_name": "小米 KFR-72LW/N1A1",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 5,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（5/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028642",
+          "target_name": "小米 KFR-35GW/N1A1",
+          "rank": 1,
+          "candidate_sku_code": "AC00038662",
+          "candidate_name": "验证样本 美的 KFR-35GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028642",
+          "target_name": "小米 KFR-35GW/N1A1",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00028642",
+          "target_name": "小米 KFR-35GW/N1A1",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00029751",
+          "target_name": "格力 KFR-72LW/NHAJ1BGJ",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00029751",
+          "target_name": "格力 KFR-72LW/NHAJ1BGJ",
+          "rank": 2,
+          "candidate_sku_code": "AC00036333",
+          "candidate_name": "验证样本 美的 KFR-72LW/N8KS1-1U",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00029751",
+          "target_name": "格力 KFR-72LW/NHAJ1BGJ",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034731",
+          "target_name": "格力 KFR-35GW/NHAE1BAJ",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034731",
+          "target_name": "格力 KFR-35GW/NHAE1BAJ",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034731",
+          "target_name": "格力 KFR-35GW/NHAE1BAJ",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 6,
+          "replacement_pressure_points": 6,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（6/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034959",
+          "target_name": "美的 KFR-72LW/QJ201-1",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034959",
+          "target_name": "美的 KFR-72LW/QJ201-1",
+          "rank": 2,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00034959",
+          "target_name": "美的 KFR-72LW/QJ201-1",
+          "rank": 3,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00035996",
+          "target_name": "TCL KFR-35GW/JD21+B1",
+          "rank": 1,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00035996",
+          "target_name": "TCL KFR-35GW/JD21+B1",
+          "rank": 2,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00035996",
+          "target_name": "TCL KFR-35GW/JD21+B1",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 5,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（5/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036020",
+          "target_name": "华凌 KFR-35GW/N8HE1IIPRO",
+          "rank": 1,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036020",
+          "target_name": "华凌 KFR-35GW/N8HE1IIPRO",
+          "rank": 2,
+          "candidate_sku_code": "AC00038662",
+          "candidate_name": "验证样本 美的 KFR-35GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036020",
+          "target_name": "华凌 KFR-35GW/N8HE1IIPRO",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036139",
+          "target_name": "华凌 KFR-35GW/N8HA1III-P",
+          "rank": 1,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036139",
+          "target_name": "华凌 KFR-35GW/N8HA1III-P",
+          "rank": 2,
+          "candidate_sku_code": "AC00035996",
+          "candidate_name": "验证样本 TCL KFR-35GW/JD21+B1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036139",
+          "target_name": "华凌 KFR-35GW/N8HA1III-P",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 5,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（5/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036211",
+          "target_name": "海尔 KFR-50LW/E1-1",
+          "rank": 1,
+          "candidate_sku_code": "AC00036333",
+          "candidate_name": "验证样本 美的 KFR-72LW/N8KS1-1U",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036211",
+          "target_name": "海尔 KFR-50LW/E1-1",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036211",
+          "target_name": "海尔 KFR-50LW/E1-1",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036333",
+          "target_name": "美的 KFR-72LW/N8KS1-1U",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036333",
+          "target_name": "美的 KFR-72LW/N8KS1-1U",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036333",
+          "target_name": "美的 KFR-72LW/N8KS1-1U",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036739",
+          "target_name": "格力 KFR-35GW/NHMA1BG",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036739",
+          "target_name": "格力 KFR-35GW/NHMA1BG",
+          "rank": 2,
+          "candidate_sku_code": "AC00036333",
+          "candidate_name": "验证样本 美的 KFR-72LW/N8KS1-1U",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00036739",
+          "target_name": "格力 KFR-35GW/NHMA1BG",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038063",
+          "target_name": "美的 KFR-88LW/N8KS1-1U",
+          "rank": 1,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 13,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献13/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038063",
+          "target_name": "美的 KFR-88LW/N8KS1-1U",
+          "rank": 2,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038063",
+          "target_name": "美的 KFR-88LW/N8KS1-1U",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 1,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（1/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038066",
+          "target_name": "澳柯玛 KFR-35GW/BPYT-1",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038066",
+          "target_name": "澳柯玛 KFR-35GW/BPYT-1",
+          "rank": 2,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038066",
+          "target_name": "澳柯玛 KFR-35GW/BPYT-1",
+          "rank": 3,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 0,
+          "replacement_pressure_points": 3,
+          "selection_effect_cn": "当前未形成可计分的购买理由重合；候选若入选，依据来自其他可消费业务维度。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038662",
+          "target_name": "美的 KFR-35GW/KS2",
+          "rank": 1,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038662",
+          "target_name": "美的 KFR-35GW/KS2",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038662",
+          "target_name": "美的 KFR-35GW/KS2",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 3,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（3/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038680",
+          "target_name": "美的 KFR-26GW/KS2",
+          "rank": 1,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038680",
+          "target_name": "美的 KFR-26GW/KS2",
+          "rank": 2,
+          "candidate_sku_code": "AC00035996",
+          "candidate_name": "验证样本 TCL KFR-35GW/JD21+B1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038680",
+          "target_name": "美的 KFR-26GW/KS2",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 5,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（5/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038856",
+          "target_name": "万宝 KFR-35GW/BPWL7-W1",
+          "rank": 1,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038856",
+          "target_name": "万宝 KFR-35GW/BPWL7-W1",
+          "rank": 2,
+          "candidate_sku_code": "AC00035996",
+          "candidate_name": "验证样本 TCL KFR-35GW/JD21+B1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 14,
+          "replacement_pressure_points": 8,
+          "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00038856",
+          "target_name": "万宝 KFR-35GW/BPWL7-W1",
+          "rank": 3,
+          "candidate_sku_code": "AC00039165",
+          "candidate_name": "验证样本 美的 KFR-72GW/KS2",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 5,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（5/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039165",
+          "target_name": "美的 KFR-72GW/KS2",
+          "rank": 1,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039165",
+          "target_name": "美的 KFR-72GW/KS2",
+          "rank": 2,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 9,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献9/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039165",
+          "target_name": "美的 KFR-72GW/KS2",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 1,
+          "replacement_pressure_points": 5,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（1/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039204",
+          "target_name": "格力 KFR-26GW/NHGS1BGT",
+          "rank": 1,
+          "candidate_sku_code": "AC00028640",
+          "candidate_name": "验证样本 小米 KFR-72LW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 12,
+          "replacement_pressure_points": 9,
+          "selection_effect_cn": "已成立购买理由重合贡献12/15，替代压力贡献9/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039204",
+          "target_name": "格力 KFR-26GW/NHGS1BGT",
+          "rank": 2,
+          "candidate_sku_code": "AC00036211",
+          "candidate_name": "验证样本 海尔 KFR-50LW/E1-1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 11,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由重合贡献11/15，替代压力贡献7/10，支持直接竞品判断。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        },
+        {
+          "category": "AC",
+          "target_sku_code": "AC00039204",
+          "target_name": "格力 KFR-26GW/NHGS1BGT",
+          "rank": 3,
+          "candidate_sku_code": "AC00028642",
+          "candidate_name": "验证样本 小米 KFR-35GW/N1A1",
+          "comparison_mode": "strong",
+          "purchase_reason_overlap_points": 4,
+          "replacement_pressure_points": 7,
+          "selection_effect_cn": "已成立购买理由只形成局部重合（4/15）；当前不足以单独把候选升为首选直接竞品。",
+          "baseline_rank": null,
+          "migration_cn": "G06 fixture 消费回归，无旧 Top 3 基准。"
+        }
+      ],
+      "checks": {
+        "target_coverage": true,
+        "tv_65e7q_covered": true,
+        "proposition_sample_covered": true,
+        "proposition_never_scores_as_shared_reason": true,
+        "proposition_business_language": true,
+        "replacement_and_purchase_pressure_separate": true,
+        "top3_trace_complete": true,
+        "pm_business_language_clean": true
+      }
+    }
+  },
+  "tv_65e7q_replay": {
+    "source_path": "/Users/sjs/catforge/tmp/ca_g08/65e7q_competitor_answer_205.json",
+    "old_top3": [
+      "TV00029936",
+      "TV00027801",
+      "TV00028909"
+    ],
+    "new_top3": [
+      "TV00029936",
+      "TV00027801",
+      "TV00028829"
+    ],
+    "fixture_uncovered_candidates": [
+      "TV00028909",
+      "TV00027541",
+      "TV00027912",
+      "TV00028166",
+      "TV00027899",
+      "TV00027861"
+    ],
+    "top3_candidate_modes": [
+      "strong",
+      "strong",
+      "strong"
+    ],
+    "top3_rows": [
+      {
+        "category": "TV",
+        "target_sku_code": "TV00029112",
+        "target_name": "海信 65E7Q",
+        "rank": 1,
+        "candidate_sku_code": "TV00029936",
+        "candidate_name": "创维 65A7H PRO",
+        "comparison_mode": "strong",
+        "purchase_reason_overlap_points": 14,
+        "replacement_pressure_points": 8,
+        "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+        "baseline_rank": 1,
+        "migration_cn": "旧第1名保持/迁移。"
+      },
+      {
+        "category": "TV",
+        "target_sku_code": "TV00029112",
+        "target_name": "海信 65E7Q",
+        "rank": 2,
+        "candidate_sku_code": "TV00027801",
+        "candidate_name": "TCL 65Q9L PRO",
+        "comparison_mode": "strong",
+        "purchase_reason_overlap_points": 14,
+        "replacement_pressure_points": 8,
+        "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献8/10，支持直接竞品判断。",
+        "baseline_rank": 2,
+        "migration_cn": "旧第2名保持/迁移。"
+      },
+      {
+        "category": "TV",
+        "target_sku_code": "TV00029112",
+        "target_name": "海信 65E7Q",
+        "rank": 3,
+        "candidate_sku_code": "TV00028829",
+        "candidate_name": "创维 65A6F ULTRA",
+        "comparison_mode": "strong",
+        "purchase_reason_overlap_points": 14,
+        "replacement_pressure_points": 9,
+        "selection_effect_cn": "已成立购买理由重合贡献14/15，替代压力贡献9/10，支持直接竞品判断。",
+        "baseline_rank": null,
+        "migration_cn": "由 G06 已验证的 SKU 能力和其他业务维度共同进入 Top 3。"
+      }
+    ],
+    "checks": {
+      "three_candidates_selected": true,
+      "fixture_uncovered_not_in_top3": true,
+      "ranking_trace_complete": true,
+      "no_version_wide_degradation": true,
+      "replacement_and_purchase_pressure_separate": true,
+      "no_threat_contradiction": true,
+      "pm_business_language_clean": true
+    }
+  },
+  "acceptance": {
+    "passed": true,
+    "failed_checks": []
+  }
+}

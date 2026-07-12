@@ -19,7 +19,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M07_RULE_VERSION,
     CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_AC_TAXONOMY_VERSION,
-    CORE3_M12C_RULE_VERSION,
+    CORE3_M12C_AC_RULE_VERSION,
+    CORE3_M12C_TV_RULE_VERSION,
     Core3SourceBatchStatus,
 )
 from app.services.core3_real_data.m12c_claim_value_quantification_service import (
@@ -27,6 +28,7 @@ from app.services.core3_real_data.m12c_claim_value_quantification_service import
     M12C_PRODUCT_CATEGORY_INPUT_RULES,
     M12CRepository,
 )
+from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 
@@ -38,11 +40,101 @@ AC_SKU = "AC00099001"
 def test_m12c_ac_input_rules_are_configured() -> None:
     config = catforge_pipeline.product_category_config("ac")
 
-    assert config["claim_value_quantification_rule_version"] == CORE3_M12C_RULE_VERSION
+    assert config["claim_value_quantification_rule_version"] == CORE3_M12C_AC_RULE_VERSION
+    assert (
+        catforge_pipeline.product_category_config("tv")["claim_value_quantification_rule_version"]
+        == CORE3_M12C_TV_RULE_VERSION
+    )
     assert M12C_PRODUCT_CATEGORY_INPUT_RULES["AC"]["claim_rule_version"] == CORE3_M04C_AC_RULE_VERSION
     assert M12C_PRODUCT_CATEGORY_INPUT_RULES["AC"]["comment_rule_version"] == CORE3_M05C_AC_RULE_VERSION
     assert M12C_PRODUCT_CATEGORY_INPUT_RULES["AC"]["battlefield_rule_version"] == CORE3_M11C_AC_RULE_VERSION
     assert "airflow_volume_m3h" in M12C_CLAIM_PARAM_FALLBACKS["ac_claim_large_airflow_coverage"]
+
+
+def test_m12c_quality_assessment_only_reads_referenced_claim_rows() -> None:
+    rows = [
+        {
+            "claim_code": "target_claim",
+            "quality_flags_json": [],
+            "supporting_dimensions_json": {
+                "quality_assessment": {
+                    "amount_quantification_status": "ready",
+                    "relative_comparison_status": "ready",
+                }
+            },
+        },
+        {
+            "claim_code": "unrelated_claim",
+            "quality_flags_json": ["l4_threshold_only", "l4_threshold_only_no_amount"],
+            "supporting_dimensions_json": {
+                "quality_assessment": {
+                    "amount_quantification_status": "not_quantifiable",
+                    "relative_comparison_status": "ready",
+                }
+            },
+        },
+    ]
+
+    result = m12c_service.assess_m12c_claim_value_quality(
+        rows,
+        referenced_claim_codes=("target_claim",),
+    )
+
+    assert result["availability"] == "available"
+    assert result["usability"] == "usable"
+    assert result["review_required"] is False
+    assert result["selected_claim_codes"] == ["target_claim"]
+    assert result["amount_quantification_status"] == "ready"
+    assert result["limitation_flags"] == []
+
+
+def test_m12c_amount_and_single_group_limitations_stay_claim_scoped() -> None:
+    amount_limited = m12c_service.assess_m12c_claim_value_quality(
+        [
+            {
+                "claim_code": "amount_limited_claim",
+                "quality_flags_json": [
+                    "relaxed_pool_not_amount_quantifiable",
+                    "l4_threshold_only_no_amount",
+                ],
+            }
+        ],
+        referenced_claim_codes=("amount_limited_claim",),
+    )
+    single_group = m12c_service.assess_m12c_claim_value_quality(
+        [
+            {
+                "claim_code": "single_group_claim",
+                "quality_flags_json": ["single_sku_comparison_group"],
+            }
+        ],
+        referenced_claim_codes=("single_group_claim",),
+    )
+
+    assert amount_limited["usability"] == "usable"
+    assert amount_limited["amount_quantification_status"] == "not_quantifiable"
+    assert amount_limited["review_required"] is False
+    assert single_group["usability"] == "usable"
+    assert single_group["amount_quantification_status"] == "ready"
+    assert single_group["relative_comparison_status"] == "limited"
+
+
+def test_m12c_not_quantifiable_claim_never_outputs_amount_or_sales_lift() -> None:
+    result = m12c_service._claim_contribution_amounts(
+        amount_ready=False,
+        business_claim_type=m12c_service.M12C_CLAIM_TYPE_PREMIUM,
+        effective_price_space=Decimal("2000"),
+        weekly_sales_space=Decimal("50"),
+        weekly_amount_space=Decimal("100000"),
+        weighted_share=Decimal("0.8"),
+        coefficient=Decimal("1"),
+    )
+
+    assert result == {
+        "estimated_price_premium_abs": Decimal("0.0000"),
+        "estimated_weekly_sales_lift_abs": Decimal("0.000000"),
+        "estimated_weekly_sales_amount_lift_abs": Decimal("0.000000"),
+    }
 
 
 def test_m07_market_rule_versions_are_isolated_by_product_category() -> None:

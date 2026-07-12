@@ -6516,6 +6516,7 @@ class Core3PurchaseReasonProfileVersion(Base, AuditMixin):
     schema_version: Mapped[str] = mapped_column(String(120), nullable=False, default="sku_purchase_reason_profile_v1", index=True)
     rule_version: Mapped[str] = mapped_column(String(120), nullable=False, default="m12d_sku_purchase_reason_profile_v0.1", index=True)
     release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    release_quality_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unassessed", index=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     published_by: Mapped[str | None] = mapped_column(String(160))
@@ -6558,6 +6559,8 @@ class Core3SkuPurchaseReasonProfile(Base, AuditMixin):
         Index("ix_core3_m12d_profile_current", "project_id", "category_code", "batch_id", "is_current", "release_status"),
         Index("ix_core3_m12d_profile_core_gin", "core_payment_anchors_json", postgresql_using="gin"),
         Index("ix_core3_m12d_profile_risk_gin", "risk_flags_json", postgresql_using="gin"),
+        Index("ix_core3_m12d_profile_established_gin", "established_anchors_json", postgresql_using="gin"),
+        Index("ix_core3_m12d_profile_proposition_gin", "proposition_anchors_json", postgresql_using="gin"),
     )
 
     purchase_reason_profile_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
@@ -6587,8 +6590,13 @@ class Core3SkuPurchaseReasonProfile(Base, AuditMixin):
     supporting_anchors_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     weak_expression_anchors_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     risk_drag_anchors_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    established_anchors_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    proposition_anchors_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    pressure_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    comparison_limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     evidence_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
     input_status_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    input_quality_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
     param_profile_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
     claim_fact_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
     comment_profile_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown", index=True)
@@ -6628,12 +6636,26 @@ class Core3SkuPurchaseReasonAnchor(Base, AuditMixin):
         ),
         CheckConstraint("anchor_rank >= 0", name="ck_m12d_anchor_rank"),
         CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_m12d_anchor_confidence"),
+        CheckConstraint(
+            "establishment_status in ('unassessed','established','established_limited','proposition_only','rejected')",
+            name="ck_m12d_anchor_establishment_status",
+        ),
+        CheckConstraint(
+            "user_validation_status in ('unassessed','user_validated','user_supported','market_supported','not_observed')",
+            name="ck_m12d_anchor_user_validation_status",
+        ),
+        CheckConstraint(
+            "pressure_level in ('unassessed','none','low','medium','high','critical')",
+            name="ck_m12d_anchor_pressure_level",
+        ),
         Index("ix_core3_m12d_anchor_profile", "purchase_reason_profile_id", "anchor_rank"),
         Index("ix_core3_m12d_anchor_sku", "project_id", "category_code", "batch_id", "sku_code", "role"),
         Index("ix_core3_m12d_anchor_code", "project_id", "category_code", "batch_id", "anchor_code", "role"),
         Index("ix_core3_m12d_anchor_version", "project_id", "category_code", "batch_id", "m12d_profile_version", "release_status"),
         Index("ix_core3_m12d_anchor_domains_gin", "evidence_domains_json", postgresql_using="gin"),
         Index("ix_core3_m12d_anchor_refs_gin", "source_refs_json", postgresql_using="gin"),
+        Index("ix_core3_m12d_anchor_establishment", "project_id", "category_code", "establishment_status", "core_eligible"),
+        Index("ix_core3_m12d_anchor_pressure", "project_id", "category_code", "pressure_level"),
     )
 
     purchase_reason_anchor_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=new_id)
@@ -6665,6 +6687,18 @@ class Core3SkuPurchaseReasonAnchor(Base, AuditMixin):
     role: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     evidence_strength: Mapped[str] = mapped_column(String(60), nullable=False, default="insufficient", index=True)
     confidence: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=Decimal("0.0000"))
+    establishment_status: Mapped[str] = mapped_column(String(60), nullable=False, default="unassessed", index=True)
+    establishment_score: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    establishment_domains_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    user_validation_status: Mapped[str] = mapped_column(String(60), nullable=False, default="unassessed", index=True)
+    core_eligible: Mapped[bool | None] = mapped_column(Boolean, index=True)
+    core_ineligible_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    proposition_evidence_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    user_support_evidence_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    pressure_level: Mapped[str] = mapped_column(String(60), nullable=False, default="unassessed", index=True)
+    pressure_tags_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    pressure_summary_cn: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    comparison_limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     evidence_domains_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     domain_scores_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
     support_summary_cn: Mapped[str] = mapped_column(Text, nullable=False)

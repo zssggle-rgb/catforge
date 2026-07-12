@@ -30,6 +30,17 @@ M04C 输出的 `param_support_level`、`wtp_input_guard`、`source_claim_group_i
 
 M09C 用户任务和 M10C 目标客群只进入 M12C 的证据解释层。程序不得为用户任务、目标客群、整体市场池分别生成独立的正向用户支付价值金额。正向金额和正向卖点类型只能来自主/辅价值战场。
 
+### 2.1 QF-09 版本与品类隔离
+
+| 项目 | TV | AC |
+| --- | --- | --- |
+| M12C rule version | `m12c_tv_claim_value_quantification_v0.2` | `m12c_ac_claim_value_quantification_v0.2` |
+| M12C module version | `m12c-claim-value-quantification-0.2.0` | `m12c-claim-value-quantification-0.2.0` |
+| claim taxonomy | M04C TV 当前规则 | M04C AC 当前规则 |
+| battlefield / market pool | TV M11C/M11D/M07 | AC M11C/M11D/M07 |
+
+规则版本分开用于阻止 TV/AC 在发布、读取和回归时互相覆盖。算法框架可以共享，但输入版本、卖点 code、价值战场和市场池必须按品类选择。
+
 ## 3. 数据流
 
 ```mermaid
@@ -624,11 +635,52 @@ def build_comparable_pool(target, battlefield, claim):
 | 样本充分 | 池内 SKU >= 6，且有卖点组和对照组都 >= 2 | 可输出高溢价、份额转化、门槛等 |
 | 弱样本 | 池内 SKU >= 4，但某组样本不足 | 可输出倾向性结论，必须提示 |
 | 样本不足 | 池内 SKU < 4，或缺少对照组 | 只能输出待验证或定性判断 |
-| 本品孤例/无有效对照 | 目标 SKU 是唯一有卖点 SKU，或有卖点组/对照组任一方 < 2 | 不得量化金额；若战场相关、参数和评论证据成立，输出人无我有型支付价值 |
+| 比较组单样本 | 目标 SKU 是高参数组或有卖点组中的唯一 SKU，但池内至少 3 个 SKU 且有有效对照 | 可以输出解释性金额；相对比较标记为 `limited`，不得写成因果 |
+| 无有效对照 | 有卖点组或对照组为空，或仅剩 L3/L4 | 不得量化金额；若战场相关、参数和评论证据成立，输出人无我有型支付价值 |
 
 样本等级必须在放宽后判定。不得在 L0 阶段直接把目标 SKU 的所有卖点降级为样本不足。
 
-正向金额量化必须使用 L0/L1，或样本充分且有明确放宽说明的 L2。L3 只能输出倾向性结论，L4 不能进入金额分配。任何使用 L3/L4、目标 SKU 孤例或对照组不足得出的原始组间价差，只能保存在审计字段，不能进入业务摘要和报告主表。
+正向金额量化必须使用 L0/L1，或样本充分且有明确放宽说明的 L2。L3 只能输出倾向性结论，L4 不能进入金额分配。任何使用 L3/L4、无有效对照或样本不足得出的原始组间价差，只能保存在审计字段，不能进入业务摘要和报告主表。比较组单样本只有在池内至少 3 个 SKU、有效对照存在且其他金额门槛成立时才可输出解释性金额。
+
+### 6.3.1 三轴质量与作用域
+
+每条 `Core3SkuClaimValueQuantification` 在 `supporting_dimensions_json.quality_assessment` 中输出：
+
+```json
+{
+  "scope": "claim_context",
+  "affected_claim_codes": ["tv_claim_hdr_high_brightness"],
+  "value_judgement_status": "usable",
+  "relative_comparison_status": "limited",
+  "amount_quantification_status": "not_quantifiable",
+  "amount_limitation_flags": ["l4_threshold_only_no_amount"],
+  "relative_comparison_limitation_flags": [],
+  "business_risk_flags": [],
+  "profile_blocking": false
+}
+```
+
+聚合接口：
+
+```python
+assess_m12c_claim_value_quality(rows, referenced_claim_codes=anchor_claim_codes)
+```
+
+`referenced_claim_codes` 为空时只用于 M12C 自身全行审计；M12D 必须传入当前购买理由引用的 claim code，不能继续对 SKU 全部 M12C 行执行最坏状态合并。所引用的行存在且包含有效价值判断时，金额限制和相对比较限制均不触发 profile review；所引用的行完全不存在时返回 missing。
+
+金额硬守卫：
+
+```text
+if amount_quantification_status != ready:
+    contribution_share_in_sku = 0
+    estimated_price_premium_abs = 0
+    estimated_weekly_sales_lift_abs = 0
+    estimated_weekly_sales_amount_lift_abs = 0
+```
+
+`l4_threshold_only`、`relaxed_pool_not_amount_quantifiable`、`l4_threshold_only_no_amount` 以及组样本不足类标记属于金额量化说明。`single_sku_comparison_group` 属于相对比较说明。二者都保留在行级证据中，但不进入 SKU/profile blocking。
+
+`Core3ClaimValueReviewIssue` 使用 `issue_scope=claim_context_pool`、`issue_level=warning`，并在 payload 中写入 `impact_scope=amount_quantification_only`、`profile_blocking=false` 和 `affected_claim_codes`。存在此类 issue 时模块运行仍为 success；真实缺少全部 M12C 行才是 missing。
 
 ### 6.4 同战场可比基准价
 

@@ -341,56 +341,56 @@ CORE3_M03_MODULE_VERSION = "m03-param-extraction-0.1.0"
 CORE3_M03_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M03_PARSER_VERSION = "m03_parser_v1"
 CORE3_M03_RULE_VERSION = "m03_param_v1"
-CORE3_M03B_MODULE_VERSION = "m03b-sku-param-profile-0.1.0"
-CORE3_M03B_TAXONOMY_VERSION = "tv_param_taxonomy_manual_v0.1"
-CORE3_M03B_PARSER_VERSION = "m03b_tv_parser_v0.1"
-CORE3_M03B_RULE_VERSION = "m03b_tv_param_profile_v0.1"
-CORE3_M03B_AC_TAXONOMY_VERSION = "ac_param_taxonomy_manual_v0.1"
-CORE3_M03B_AC_PARSER_VERSION = "m03b_ac_parser_v0.1"
-CORE3_M03B_AC_RULE_VERSION = "m03b_ac_param_profile_v0.1"
+CORE3_M03B_MODULE_VERSION = "m03b-sku-param-profile-0.2.0"
+CORE3_M03B_TAXONOMY_VERSION = "tv_param_taxonomy_manual_v0.2"
+CORE3_M03B_PARSER_VERSION = "m03b_tv_parser_v0.2"
+CORE3_M03B_RULE_VERSION = "m03b_tv_param_profile_v0.2"
+CORE3_M03B_AC_TAXONOMY_VERSION = "ac_param_taxonomy_manual_v0.2"
+CORE3_M03B_AC_PARSER_VERSION = "m03b_ac_parser_v0.2"
+CORE3_M03B_AC_RULE_VERSION = "m03b_ac_param_profile_v0.2"
 CORE3_M04A_MODULE_VERSION = "m04a-base-claim-activation-0.1.0"
 CORE3_M04A_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M04A_RULE_VERSION = "m04a_claim_activation_v1"
-CORE3_M04C_MODULE_VERSION = "m04c-claim-fact-profile-0.1.0"
+CORE3_M04C_MODULE_VERSION = "m04c-claim-fact-profile-0.2.0"
 CORE3_M04C_TV_TAXONOMY_VERSION = "tv_claim_taxonomy_manual_v0.1"
-CORE3_M04C_TV_RULE_VERSION = "m04c_tv_claim_fact_profile_v0.1"
+CORE3_M04C_TV_RULE_VERSION = "m04c_tv_claim_fact_profile_v0.2"
 CORE3_M04C_AC_TAXONOMY_VERSION = "ac_claim_taxonomy_manual_v0.1"
-CORE3_M04C_AC_RULE_VERSION = "m04c_ac_claim_fact_profile_v0.1"
+CORE3_M04C_AC_RULE_VERSION = "m04c_ac_claim_fact_profile_v0.2"
 CORE3_M05_MODULE_VERSION = "m05-comment-evidence-0.1.0"
 CORE3_M05_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M05_RULE_VERSION = "m05_comment_evidence_v1"
-CORE3_M05C_MODULE_VERSION = "m05c-comment-fact-profile-0.1.0"
+CORE3_M05C_MODULE_VERSION = "m05c-comment-fact-profile-0.2.0"
 CORE3_M05C_TV_TAXONOMY_VERSION = "tv_comment_fact_taxonomy_manual_v0.1"
-CORE3_M05C_TV_RULE_VERSION = "m05c_tv_comment_fact_profile_v0.1"
+CORE3_M05C_TV_RULE_VERSION = "m05c_tv_comment_fact_profile_v0.2"
 CORE3_M05C_AC_TAXONOMY_VERSION = "ac_comment_fact_taxonomy_manual_v0.1"
-CORE3_M05C_AC_RULE_VERSION = "m05c_ac_comment_fact_profile_v0.1"
+CORE3_M05C_AC_RULE_VERSION = "m05c_ac_comment_fact_profile_v0.2"
 CORE3_M06_MODULE_VERSION = "m06-comment-downstream-signal-0.1.0"
 CORE3_M06_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M06_RULE_VERSION = "m06_comment_downstream_signal_v1"
 CORE3_M04B_MODULE_VERSION = "m04b-claim-comment-enhancement-0.1.0"
 CORE3_M04B_SEED_VERSION = "tv_core3_mvp_seed_v0_2"
 CORE3_M04B_RULE_VERSION = "m04b_claim_comment_enhancement_v1"
-CORE3_M07_MODULE_VERSION = "m07-market-profile-0.1.0"
-CORE3_M07_RULE_VERSION = "m07_market_profile_v1"
+CORE3_M07_MODULE_VERSION = "m07-market-profile-0.2.0"
+CORE3_M07_RULE_VERSION = "m07_market_profile_v2"
 CORE3_M07_PRICE_BAND_RULE_VERSION = "m07_price_band_v1"
 CORE3_M07_POOL_RULE_VERSION = "m07_pool_v1"
 CORE3_M07_AC_PRICE_BAND_RULE_VERSION = "m07_ac_hp_price_band_v2"
 CORE3_M07_AC_POOL_RULE_VERSION = "m07_ac_hp_price_pool_v2"
-CORE3_M09C_MODULE_VERSION = "m09c-user-task-profile-0.1.0"
+CORE3_M09C_MODULE_VERSION = "m09c-user-task-profile-0.2.0"
 CORE3_M09C_TV_TAXONOMY_VERSION = "m09c_tv_user_task_taxonomy_v0.1"
-CORE3_M09C_TV_RULE_VERSION = "m09c_tv_user_task_profile_v0.2"
+CORE3_M09C_TV_RULE_VERSION = "m09c_tv_user_task_profile_v0.3"
 CORE3_M09C_AC_TAXONOMY_VERSION = "m09c_ac_user_task_taxonomy_v0.1"
-CORE3_M09C_AC_RULE_VERSION = "m09c_ac_user_task_profile_v0.2"
-CORE3_M10C_MODULE_VERSION = "m10c-target-group-profile-0.1.0"
+CORE3_M09C_AC_RULE_VERSION = "m09c_ac_user_task_profile_v0.3"
+CORE3_M10C_MODULE_VERSION = "m10c-target-group-profile-0.2.0"
 CORE3_M10C_TV_TAXONOMY_VERSION = "m10c_tv_target_group_taxonomy_v0.1"
-CORE3_M10C_TV_RULE_VERSION = "m10c_tv_target_group_profile_v0.2"
+CORE3_M10C_TV_RULE_VERSION = "m10c_tv_target_group_profile_v0.3"
 CORE3_M10C_AC_TAXONOMY_VERSION = "m10c_ac_target_group_taxonomy_v0.1"
-CORE3_M10C_AC_RULE_VERSION = "m10c_ac_target_group_profile_v0.2"
-CORE3_M11C_MODULE_VERSION = "m11c-value-battlefield-profile-0.1.0"
+CORE3_M10C_AC_RULE_VERSION = "m10c_ac_target_group_profile_v0.3"
+CORE3_M11C_MODULE_VERSION = "m11c-value-battlefield-profile-0.2.0"
 CORE3_M11C_TV_TAXONOMY_VERSION = "m11c_tv_value_battlefield_taxonomy_v0.2"
-CORE3_M11C_TV_RULE_VERSION = "m11c_tv_value_battlefield_profile_v0.3"
+CORE3_M11C_TV_RULE_VERSION = "m11c_tv_value_battlefield_profile_v0.4"
 CORE3_M11C_AC_TAXONOMY_VERSION = "m11c_ac_value_battlefield_taxonomy_v0.1"
-CORE3_M11C_AC_RULE_VERSION = "m11c_ac_value_battlefield_profile_v0.2"
+CORE3_M11C_AC_RULE_VERSION = "m11c_ac_value_battlefield_profile_v0.3"
 CORE3_M08_MODULE_VERSION = "m08-sku-signal-profile-0.1.0"
 CORE3_M08_RULE_VERSION = "m08_sku_signal_profile_v1"
 CORE3_M08_FEATURE_VERSION = "core3_mvp_real_data_v2_m08_v1"
@@ -422,11 +422,15 @@ CORE3_M11_7_MODULE_VERSION = "m11-7-dimension-sales-reconciliation-0.1.0"
 CORE3_M11_7_RULE_VERSION = "core3_mvp_real_data_v2_m11_7_v1"
 CORE3_M11D_MODULE_VERSION = "m11d-semantic-market-graph-allocation-0.1.0"
 CORE3_M11D_RULE_VERSION = "m11d_semantic_market_allocation_v0.1"
-CORE3_M12C_MODULE_VERSION = "m12c-claim-value-quantification-0.1.0"
-CORE3_M12C_RULE_VERSION = "m12c_claim_value_quantification_v0.1"
+CORE3_M12C_MODULE_VERSION = "m12c-claim-value-quantification-0.2.0"
+CORE3_M12C_TV_RULE_VERSION = "m12c_tv_claim_value_quantification_v0.2"
+CORE3_M12C_AC_RULE_VERSION = "m12c_ac_claim_value_quantification_v0.2"
+# Compatibility alias for TV call sites that have not yet adopted category-aware selection.
+CORE3_M12C_RULE_VERSION = CORE3_M12C_TV_RULE_VERSION
 CORE3_M12D_MODULE_VERSION = "m12d-purchase-reason-profile-0.1.0"
 CORE3_M12D_RULE_VERSION = "m12d_sku_purchase_reason_profile_v0.1"
 CORE3_M12D_SCHEMA_VERSION = "sku_purchase_reason_profile_v1"
+CORE3_M12D_INPUT_QUALITY_POLICY_VERSION = "m12d_input_quality_scope_v0.2"
 CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION = "m12d_tv_purchase_reason_anchor_taxonomy_v0.1"
 CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION = "m12d_ac_purchase_reason_anchor_taxonomy_v0.1"
 CORE3_M12D_AC_PROFILE_VERSION = "m12d_ac_purchase_reason_profile_v0_2"
@@ -913,6 +917,7 @@ CORE3_M11_5_FORBIDDEN_OUTPUT_FIELDS: tuple[str, ...] = (
 
 class M12DProfileStatus(StrEnum):
     READY = "ready"
+    READY_LIMITED = "ready_limited"
     READY_DEGRADED = "ready_degraded"
     WEAK_EXPRESSION_ONLY = "weak_expression_only"
     MISSING_INPUT = "missing_input"
@@ -927,11 +932,53 @@ class M12DReleaseStatus(StrEnum):
     DEPRECATED = "deprecated"
 
 
+class M12DReleaseQualityStatus(StrEnum):
+    UNASSESSED = "unassessed"
+    READY = "ready"
+    LIMITED = "limited"
+    BLOCKED = "blocked"
+
+
 class M12DAnchorRole(StrEnum):
     CORE_PAYMENT = "core_payment"
     SUPPORTING = "supporting"
     WEAK_EXPRESSION = "weak_expression"
     RISK_DRAG = "risk_drag"
+
+
+class M12DReasonEstablishmentStatus(StrEnum):
+    UNASSESSED = "unassessed"
+    ESTABLISHED = "established"
+    ESTABLISHED_LIMITED = "established_limited"
+    PROPOSITION_ONLY = "proposition_only"
+    REJECTED = "rejected"
+
+
+class M12DUserValidationStatus(StrEnum):
+    UNASSESSED = "unassessed"
+    USER_VALIDATED = "user_validated"
+    USER_SUPPORTED = "user_supported"
+    MARKET_SUPPORTED = "market_supported"
+    NOT_OBSERVED = "not_observed"
+
+
+class M12DPurchasePressureLevel(StrEnum):
+    UNASSESSED = "unassessed"
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class M12DPurchasePressureType(StrEnum):
+    LOCALIZED_NEGATIVE = "localized_negative"
+    MIXED_FEEDBACK = "mixed_feedback"
+    NEGATIVE_DOMINANT = "negative_dominant"
+    M12C_VALUE_HEADWIND = "m12c_value_headwind"
+    MARKET_UNCERTAINTY = "market_uncertainty"
+    OBJECTIVE_FALSIFICATION = "objective_falsification"
+    EVIDENCE_MISALIGNMENT = "evidence_misalignment"
 
 
 class M12DEvidenceStrength(StrEnum):
@@ -959,6 +1006,31 @@ class M12DInputStatus(StrEnum):
     MISSING = "missing"
     CONFLICT = "conflict"
     UNKNOWN = "unknown"
+
+
+class M12DInputAvailability(StrEnum):
+    PRESENT = "present"
+    MISSING = "missing"
+
+
+class M12DInputUsability(StrEnum):
+    USABLE = "usable"
+    LIMITED = "limited"
+    UNUSABLE = "unusable"
+
+
+class M12DIssueSeverity(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    BLOCKING = "blocking"
+
+
+class M12DIssueScope(StrEnum):
+    ROW = "row"
+    RELATION = "relation"
+    ANCHOR = "anchor"
+    PROFILE = "profile"
+    RELEASE = "release"
 
 
 class M12RecallSource(StrEnum):

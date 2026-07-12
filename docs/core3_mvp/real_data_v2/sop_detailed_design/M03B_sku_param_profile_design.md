@@ -117,9 +117,9 @@ M03B 写入约束：
 
 ```json
 {
-  "taxonomy_version": "tv_param_taxonomy_manual_v0.1",
+  "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
   "parser_version": "m03b_tv_parser_v0.1",
-  "rule_version": "m03b_tv_param_profile_v0.1",
+  "rule_version": "m03b_tv_param_profile_v0.2",
   "values": {
     "screen_size_inch": {
       "value_presence": "present",
@@ -248,7 +248,7 @@ M03B 消费的 TV taxonomy 必须包含：
 
 ```json
 {
-  "taxonomy_version": "tv_param_taxonomy_manual_v0.1",
+  "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
   "category_code": "TV",
   "standard_params": [],
   "field_mapping_rules": [],
@@ -680,7 +680,7 @@ run request：
 ```json
 {
   "category_code": "TV",
-  "taxonomy_version": "tv_param_taxonomy_manual_v0.1",
+  "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
   "target_sku_codes": [],
   "force_rebuild": false
 }
@@ -695,7 +695,7 @@ catforge-realdata m03b sku-param-profiles \
   --project-id PROJECT_ID \
   --batch-id BATCH_ID \
   --category-code TV \
-  --taxonomy-version tv_param_taxonomy_manual_v0.1
+  --taxonomy-version tv_param_taxonomy_manual_v0.2
 ```
 
 必须支持：
@@ -785,3 +785,48 @@ M08-M11 可以引用参数事实和档位，但不能把参数档位直接等同
 3. `declared_refresh_rate_hz` 高于 240Hz 的口径是否需要统一标记 `scope_uncertain`。
 4. 档位规则变更是否全部归入 M03A taxonomy 发布流程，还是允许 M03B rule patch 小版本。
 5. 当前 205 没有 OLED，是否在 TV taxonomy 中保留 `oled` 空档位作为未来兼容。
+
+## 17. QF-02 v0.2 语义冲突设计
+
+### 17.1 版本与品类边界
+
+| 品类 | taxonomy | parser | rule |
+| --- | --- | --- | --- |
+| TV | `tv_param_taxonomy_manual_v0.2` | `m03b_tv_parser_v0.2` | `m03b_tv_param_profile_v0.2` |
+| AC | `ac_param_taxonomy_manual_v0.2` | `m03b_ac_parser_v0.2` | `m03b_ac_param_profile_v0.2` |
+
+loader 必须校验 taxonomy 与 `category_code` 一致。TV/AC 使用各自 source batch 和前缀，任何跨品类组合返回结构化 failed result，不读取另一品类数据。
+
+### 17.2 比较顺序
+
+1. 解析原始参数并保留原文、normalized value、evidence id 和 source priority。
+2. 从数值参数生成尺寸、匹数、制冷量、安装方式和能效 canonical candidate。
+3. 分段参数使用 `declared_range_contains_numeric_basis`：原始区间包含数值，且派生 candidate 等于该数值的标准档位时视为等价。
+4. 非分段参数使用 `normalized_value_exact`；先规范化安装方式和能效别名，再比较。
+5. 等价候选不产生 conflict；不等价候选生成一条 profile-scope conflict。
+
+### 17.3 冲突结构
+
+```json
+{
+  "conflict_type": "semantic_value_conflict",
+  "param_code": "screen_size_segment",
+  "scope": "profile",
+  "comparison_mode": "declared_range_contains_numeric_basis",
+  "comparison_basis": {
+    "param_code": "screen_size_inch",
+    "numeric_value": 65,
+    "expected_tier": "large_60_69"
+  },
+  "candidate_values": [],
+  "selected_value": {},
+  "affected_param_codes": ["screen_size_segment", "screen_size_inch"],
+  "affected_dimension_codes": ["size"]
+}
+```
+
+候选结构保存 normalized value、原文、source type、source priority、raw field、raw value、派生规则、basis param codes 和 evidence ids。真实冲突可追溯，但 M03B 不在此阶段把冲突扩散到 M12D 锚点。
+
+### 17.4 Draft 重跑边界
+
+`scripts/m12d_qf02_run_m03b_tv_ac_draft.py` 先执行只读影子比较，通过后只写 TV/AC M03B v0.2。比较器忽略 parser/rule/hash 等血缘字段，只比较 normalized business value、value presence、numeric value、参数完整度和 dimension tier，并校验 M04C 以后表的行数与最大更新时间不变。

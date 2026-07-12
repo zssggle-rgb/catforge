@@ -1,0 +1,132 @@
+{
+  "task_id": "M12D-RP-G02",
+  "contract_version": "m12d_reason_pressure_contract_v0.1",
+  "scope": {
+    "categories": ["TV", "AC"],
+    "production_algorithm_changed": false,
+    "database_written": false,
+    "published_version_changed": false
+  },
+  "compatibility_defaults": {
+    "establishment_status": "unassessed",
+    "establishment_score": null,
+    "user_validation_status": "unassessed",
+    "core_eligible": null,
+    "pressure_level": "unassessed",
+    "pressure_tags": [],
+    "comparison_limitations": []
+  },
+  "allowed_values": {
+    "establishment_status": [
+      "unassessed",
+      "established",
+      "established_limited",
+      "proposition_only",
+      "rejected"
+    ],
+    "user_validation_status": [
+      "unassessed",
+      "user_validated",
+      "user_supported",
+      "market_supported",
+      "not_observed"
+    ],
+    "pressure_level": ["unassessed", "none", "low", "medium", "high", "critical"],
+    "pressure_type": [
+      "localized_negative",
+      "mixed_feedback",
+      "negative_dominant",
+      "m12c_value_headwind",
+      "market_uncertainty",
+      "objective_falsification",
+      "evidence_misalignment"
+    ]
+  },
+  "example_anchor": {
+    "anchor_code": "same_size_picture_step_up",
+    "establishment_status": "established",
+    "establishment_score": "9.0000",
+    "establishment_domains": ["param_fact", "comment_perception", "semantic_scene"],
+    "user_validation_status": "user_validated",
+    "core_eligible": true,
+    "pressure_level": "medium",
+    "pressure_tags": [
+      {
+        "pressure_type": "mixed_feedback",
+        "pressure_level": "medium",
+        "affected_aspect_code": "reflection_control",
+        "affected_anchor_code": "same_size_picture_step_up",
+        "positive_count": 18,
+        "negative_count": 3,
+        "mixed_count": 0,
+        "dominance": "positive",
+        "limits_establishment": false,
+        "limits_comparison": false,
+        "summary_cn": "画质升级理由成立，但反光体验存在少量争议。",
+        "source_refs": [
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-comment-1",
+            "result_hash": null,
+            "evidence_ids": [],
+            "extra": {}
+          }
+        ]
+      }
+    ],
+    "comparison_limitations": []
+  },
+  "migration_impact": {
+    "TV": {
+      "profile_rows_receiving_defaults": 377,
+      "anchor_rows_receiving_defaults": 3542,
+      "business_conclusion_changes": 0,
+      "unaffected_regression_skus": [
+        "TV00009549", "TV00022396", "TV00023850", "TV00025500", "TV00025501",
+        "TV00025519", "TV00026065", "TV00026209", "TV00026228", "TV00026231",
+        "TV00026232", "TV00026857", "TV00026874", "TV00026983", "TV00027028",
+        "TV00027039", "TV00027055", "TV00027308", "TV00027309", "TV00027332"
+      ]
+    },
+    "AC": {
+      "profile_rows_receiving_defaults": 155,
+      "anchor_rows_receiving_defaults": 1879,
+      "business_conclusion_changes": 0,
+      "unaffected_regression_skus": [
+        "AC00026378", "AC00029751", "AC00030362", "AC00030631", "AC00030929",
+        "AC00032008", "AC00032338", "AC00032615", "AC00032705", "AC00033612",
+        "AC00033721", "AC00034659", "AC00034660", "AC00034716", "AC00034720",
+        "AC00034731", "AC00034767", "AC00034959", "AC00035069", "AC00035277"
+      ]
+    }
+  },
+  "export_boundary": {
+    "business_fields_exposed": [
+      "establishment_status",
+      "establishment_score",
+      "user_validation_status",
+      "core_eligible",
+      "pressure_level",
+      "pressure_tags",
+      "comparison_limitations"
+    ],
+    "internal_fields_forbidden": [
+      "raw_evidence_score",
+      "adjusted_evidence_score",
+      "domain_scores_json",
+      "role_reason_json",
+      "downgrade_reason_code",
+      "input_fingerprint",
+      "taxonomy_generation_prompt"
+    ]
+  },
+  "test_results": {
+    "dedicated_contract_tests": 10,
+    "m12d_profile_and_quality_regression_tests": 65,
+    "competitor_reader_regression_tests": 11,
+    "total_passed": 86,
+    "failed": 0,
+    "alembic_head": "0044_core3_m12d_reason_pressure"
+  }
+}

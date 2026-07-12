@@ -400,6 +400,17 @@ and is_current = true
 
 如果实现阶段 M02 对最新批次未生成完整 promo evidence，可以在 CLI 加 `--allow-raw-fallback` 调试模式读取 `selling_points_data`。正式 pipeline 不默认启用 raw fallback。
 
+### 6.2.1 M03B serving scope 读取
+
+M04C 的输出 batch 是审计边界，不要求 M03B 与 M04C 使用同一个源 batch。读取某 SKU 参数画像时，必须限定相同 `project_id + category_code + product_category + sku_code` 和该品类当前 M03B 规则版本，并按以下顺序选择：
+
+1. 同 batch 的有效画像优先。
+2. 同 batch 不存在时，选择当前品类 serving scope 内更新时间最新的有效画像。
+3. 记录 `m03b_source_batch_id`、`m03b_rule_version`、`m03b_profile_hash` 和 `lookup_strategy`。
+4. 只有整个 serving scope 都不存在有效画像时，才输出画像级 `m03b_param_profile_missing`。
+
+TV 与 AC 分别使用各自的 M03B 规则版本和参数 taxonomy；查询条件不得跨品类，也不得使用另一个品类的 fallback。
+
 ### 6.3 标准卖点匹配
 
 每条卖点文本按以下顺序匹配：
@@ -417,6 +428,8 @@ and is_current = true
 - 关键词。
 - evidence id。
 - 匹配分。
+
+未命中 taxonomy 的卖点文本不生成 `core3_sku_claim_fact`。它以结构化 warning 写入 `claim_summary_json.coverage_warnings`，至少包含 `issue_code=claim_text_unmatched`、`severity=warning`、`scope=row`、源字段、行序号、原文和 evidence id。该 warning 只表示 taxonomy 行覆盖不足，不进入 `quality_summary_json.profile_flags`，也不改变同 SKU 其他已匹配卖点的置信度、参数支撑或位置。
 
 ### 6.4 参数支撑评分
 
@@ -685,6 +698,15 @@ same_source_param_group_id:
 | `ClaimFactProfileRepository` | 写入 profile/fact/position/coverage |
 | `M04CClaimFactProfileRunner` | 编排批量运行 |
 
+当前质量修复版本矩阵：
+
+| 品类 | taxonomy version | rule version |
+| --- | --- | --- |
+| TV | `tv_claim_taxonomy_manual_v0.1` | `m04c_tv_claim_fact_profile_v0.2` |
+| AC | `ac_claim_taxonomy_manual_v0.1` | `m04c_ac_claim_fact_profile_v0.2` |
+
+本次只升级画像质量规则，不修改 taxonomy。v0.2 必须先作为 draft 写入并保留 v0.1；不得在 M04C 模块任务中切换 current/published 或触发 M05C 及后续模块。
+
 ### 8.2 幂等写入
 
 所有输出必须使用业务键和 hash 幂等写入：
@@ -819,6 +841,10 @@ GET  /api/mvp/core3/v2/projects/{project_id}/batches/{batch_id}/claim-position-c
 | same source param group merges chip claims | 芯片/画质芯片同源同参时输出同一分组和代表卖点 |
 | claimed position can differ from supported position | 宣称位置和支撑位置分离 |
 | coverage aggregates SKU lists | 覆盖索引正确 |
+| m03b serving scope prefers same batch and falls back within category | 跨 batch 但当前有效的 M03B 不误报缺失，且 TV/AC 不串用 |
+| unmatched claim is row coverage warning | 未匹配文本不降级整个 SKU 画像，evidence 仍可追溯 |
+| true m03b missing is profile issue | serving scope 内真实缺失才输出画像级问题 |
+| fact support warning stays fact scoped | 单个卖点未知、不支持或冲突不扩散到其他卖点 |
 
 ### 12.2 CLI 测试
 

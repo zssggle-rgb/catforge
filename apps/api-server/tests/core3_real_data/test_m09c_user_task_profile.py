@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,10 +15,13 @@ from app.services.core3_real_data.constants import (
     Core3RunStatus,
     Core3SourceBatchStatus,
 )
+from app.services.core3_real_data import m09c_user_task_service
 from app.services.core3_real_data.m09c_user_task_service import (
+    M09C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
     M09CUserTaskTaxonomyLoader,
     M09CRunner,
     _failed_result,
+    _profile_review_decision,
     ac_user_task_taxonomy_v0_1,
 )
 from tests.core3_real_data.test_m10c_target_group_profile import (
@@ -297,3 +301,125 @@ def test_m09c_failed_result_uses_current_review_issue_schema() -> None:
     assert result.review_issues[0].source_module == Core3ModuleCode.M09C
     assert result.review_issues[0].object_type == "module_run"
     assert result.review_issues[0].object_id == "run-test"
+
+
+def test_m09c_profile_quality_depends_only_on_primary_task_usability() -> None:
+    primary = {
+        "user_task_code": "TASK_MAINSTREAM_LIVING_VIEWING",
+        "relation_status": "primary_user_task",
+        "confidence": M09C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+        "negative_drag_score": Decimal("0.2500"),
+        "score_breakdown_json": {"size_price": {"gate_status": "matched"}},
+        "review_required": True,
+        "review_reason_json": {
+            "reason_codes": [
+                "service_signal_excluded",
+                "unknown_param_codes_present",
+            ]
+        },
+    }
+
+    review_required, reason = _profile_review_decision(
+        primary,
+        no_primary_reason=None,
+    )
+
+    assert review_required is False
+    assert reason == {}
+
+
+def test_m09c_profile_quality_limits_missing_low_confidence_or_conflicted_primary() -> None:
+    missing_review, missing_reason = _profile_review_decision(
+        None,
+        no_primary_reason="评论证据不足，未形成主用户任务。",
+    )
+    low_confidence_review, low_confidence_reason = _profile_review_decision(
+        {
+            "user_task_code": "TASK_MAINSTREAM_LIVING_VIEWING",
+            "relation_status": "primary_user_task",
+            "confidence": Decimal("0.6000"),
+            "negative_drag_score": Decimal("0.0000"),
+            "score_breakdown_json": {"size_price": {"gate_status": "matched"}},
+        },
+        no_primary_reason=None,
+    )
+    conflict_review, conflict_reason = _profile_review_decision(
+        {
+            "user_task_code": "TASK_MAINSTREAM_LIVING_VIEWING",
+            "relation_status": "primary_user_task",
+            "confidence": Decimal("1.0000"),
+            "negative_drag_score": Decimal("0.4500"),
+            "score_breakdown_json": {"size_price": {"gate_status": "matched"}},
+        },
+        no_primary_reason=None,
+    )
+
+    assert missing_review is True
+    assert missing_reason["reason_codes"] == ["no_primary_user_task"]
+    assert low_confidence_review is True
+    assert "primary_task_confidence_below_threshold" in low_confidence_reason["reason_codes"]
+    assert conflict_review is True
+    assert "primary_task_evidence_conflict" in conflict_reason["reason_codes"]
+
+
+def test_m09c_profile_quality_policy_does_not_change_task_scores_or_relations(
+    monkeypatch,
+) -> None:
+    session = make_session()
+    new_rule_version = "m09c_tv_user_task_profile_qf06_new"
+    legacy_projection_rule_version = "m09c_tv_user_task_profile_qf06_legacy"
+
+    M09CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=new_rule_version,
+        force_rebuild=True,
+    )
+    monkeypatch.setattr(
+        m09c_user_task_service,
+        "_profile_review_decision",
+        lambda primary, *, no_primary_reason: (
+            True,
+            {"scope": "profile", "reason_codes": ["legacy_projection"]},
+        ),
+    )
+    M09CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=legacy_projection_rule_version,
+        force_rebuild=True,
+    )
+
+    def score_snapshot(rule_version: str) -> list[tuple]:
+        rows = session.scalars(
+            select(entities.Core3M09cSkuUserTaskScore).where(
+                entities.Core3M09cSkuUserTaskScore.rule_version == rule_version
+            )
+        ).all()
+        return sorted(
+            (
+                row.sku_code,
+                row.user_task_code,
+                row.relation_status,
+                row.user_task_score,
+                row.comment_task_need_score,
+                row.claim_task_alignment_score,
+                row.param_capability_score,
+                row.size_price_fit_score,
+                row.market_validation_score,
+                row.negative_drag_score,
+                row.confidence,
+                row.evidence_ids_json,
+                row.review_required,
+                row.review_reason_json,
+            )
+            for row in rows
+        )
+
+    assert score_snapshot(new_rule_version) == score_snapshot(
+        legacy_projection_rule_version
+    )

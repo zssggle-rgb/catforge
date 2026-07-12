@@ -11,12 +11,16 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 
 from app.models import entities
-from app.services.core3_real_data.constants import M12DReleaseStatus
+from app.services.core3_real_data.constants import M12DReleaseQualityStatus, M12DReleaseStatus
 from app.services.core3_real_data.purchase_reason_profile_schemas import M12DPublishedProfile, M12DWriteResult
 from app.services.core3_real_data.repositories import Core3BaseRepository
 
 
 class M12DVersionNotFoundError(RuntimeError):
+    pass
+
+
+class M12DReleaseQualityNotPublishableError(RuntimeError):
     pass
 
 
@@ -50,6 +54,7 @@ class PurchaseReasonProfileRepository(Core3BaseRepository):
         rule_version: str,
         published_by: str = "system",
         release_note_cn: str | None = None,
+        allow_limited: bool = False,
     ) -> entities.Core3PurchaseReasonProfileVersion:
         version = self._find_version(
             batch_id=batch_id,
@@ -58,6 +63,28 @@ class PurchaseReasonProfileRepository(Core3BaseRepository):
         )
         if version is None:
             raise M12DVersionNotFoundError(f"M12D profile version not found: {batch_id}/{m12d_profile_version}/{rule_version}")
+
+        quality_status = str(
+            version.release_quality_status
+            or M12DReleaseQualityStatus.UNASSESSED.value
+        )
+        if quality_status in {
+            M12DReleaseQualityStatus.UNASSESSED.value,
+            M12DReleaseQualityStatus.BLOCKED.value,
+        }:
+            raise M12DReleaseQualityNotPublishableError(
+                f"M12D version cannot be published with release quality {quality_status}: "
+                f"{batch_id}/{m12d_profile_version}/{rule_version}"
+            )
+        if quality_status == M12DReleaseQualityStatus.LIMITED.value:
+            if not allow_limited:
+                raise M12DReleaseQualityNotPublishableError(
+                    "M12D limited version requires explicit allow_limited approval."
+                )
+            if not str(published_by or "").strip() or str(published_by).strip().lower() == "system":
+                raise M12DReleaseQualityNotPublishableError(
+                    "M12D limited version requires an explicit non-system approver."
+                )
 
         now = datetime.now(timezone.utc)
         self.db.execute(
@@ -161,6 +188,10 @@ class PurchaseReasonProfileRepository(Core3BaseRepository):
             .where(entities.Core3PurchaseReasonProfileVersion.category_code == self.category_code.value)
             .where(entities.Core3PurchaseReasonProfileVersion.batch_id == batch_id)
             .where(entities.Core3PurchaseReasonProfileVersion.release_status == M12DReleaseStatus.PUBLISHED.value)
+            .where(
+                entities.Core3PurchaseReasonProfileVersion.release_quality_status
+                != M12DReleaseQualityStatus.BLOCKED.value
+            )
         )
         if m12d_profile_version is None:
             stmt = stmt.where(entities.Core3PurchaseReasonProfileVersion.is_current.is_(True))

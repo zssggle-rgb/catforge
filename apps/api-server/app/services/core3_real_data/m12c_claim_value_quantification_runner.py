@@ -11,7 +11,6 @@ from app.schemas.core3_real_data import Core3ModuleRunResultSchema, Core3ReviewI
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
     CORE3_M12C_MODULE_VERSION,
-    CORE3_M12C_RULE_VERSION,
     Core3ModuleCode,
     Core3RunStatus,
 )
@@ -22,6 +21,7 @@ from app.services.core3_real_data.m12c_claim_value_quantification_service import
     M12CClaimValueQuantificationService,
     M12CRepository,
     M12CServiceResult,
+    m12c_rule_version_for_category,
 )
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.run_context import Core3RunContext
@@ -46,17 +46,21 @@ class M12CClaimValueQuantificationRunner:
                 started_at=datetime.now(timezone.utc),
                 finished_at=datetime.now(timezone.utc),
             )
+        product_category = str(target.metadata.get("product_category") or "TV")
         return self.run_batch(
             project_id=context.project_id,
             category_code=context.category_code.value,
             batch_id=batch_id,
-            product_category=str(target.metadata.get("product_category") or "TV"),
+            product_category=product_category,
             analysis_population=str(target.metadata.get("analysis_population") or ANALYSIS_POPULATION_READY_WITH_COMMENT),
             market_window=str(target.metadata.get("market_window") or MARKET_WINDOW_FULL_OBSERVED),
             target_sku_codes=target.target_ids,
             run_id=context.run_id,
             module_run_id=target.metadata.get("module_run_id"),
-            rule_version=str(target.metadata.get("rule_version") or CORE3_M12C_RULE_VERSION),
+            rule_version=str(
+                target.metadata.get("rule_version")
+                or m12c_rule_version_for_category(product_category)
+            ),
         )
 
     def run_batch(
@@ -71,10 +75,11 @@ class M12CClaimValueQuantificationRunner:
         target_sku_codes: Sequence[str] = (),
         run_id: str | None = None,
         module_run_id: str | None = None,
-        rule_version: str = CORE3_M12C_RULE_VERSION,
+        rule_version: str | None = None,
     ) -> Core3ModuleRunResultSchema:
         started_at = datetime.now(timezone.utc)
         context = Core3RepositoryContext(db=self.db, project_id=project_id, category_code=category_code)
+        rule_version = rule_version or m12c_rule_version_for_category(product_category)
         try:
             SourceBatchReader(context).get_consumable_batch(batch_id)
         except ValueError as exc:

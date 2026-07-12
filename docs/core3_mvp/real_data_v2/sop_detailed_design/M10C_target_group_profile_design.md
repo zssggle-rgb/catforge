@@ -97,7 +97,9 @@ flowchart TD
 | 项 | 值 |
 | --- | --- |
 | taxonomy version | `m10c_tv_target_group_taxonomy_v0.1` |
-| rule version | `m10c_tv_target_group_profile_v0.1` |
+| TV rule version | `m10c_tv_target_group_profile_v0.3` |
+| AC rule version | `m10c_ac_target_group_profile_v0.3` |
+| module version | `m10c-target-group-profile-0.2.0` |
 | product category | `TV` |
 | SKU prefix | `TV` |
 
@@ -360,6 +362,45 @@ target_group_score =
 | 卖点强 + 参数弱 + 评论弱 | `brand_claimed_group` 且需复核 |
 | 三类证据都弱 | `not_supported` |
 | 服务履约命中 | `not_supported`，服务语境另记 |
+
+### 7.4 画像质量聚合
+
+关系质量与画像质量分开计算：
+
+```text
+relation_review_required = 当前 SKU x 客群关系自身的证据问题
+
+profile_review_required =
+  no_primary_target_group
+  or primary_relation_status_invalid
+  or primary_confidence < 0.8333
+  or primary_size_price_conflict
+  or primary_selection_rank_tie
+```
+
+`primary_selection_rank_tie` 只在另一主候选的以下完整排序键与主客群完全相同时成立：
+
+```text
+(
+  target_group_score,
+  comment_audience_motivation_score,
+  task_support_score,
+  claim_alignment_score
+)
+```
+
+只看综合分相同或分差很小不得判歧义。完整排序键可区分时，继续使用确定性排序选择主客群。
+
+实现约束：
+
+1. `_profile_payload` 只把主客群质量问题写入画像 `review_reason_json`。
+2. `service_signal_excluded`、`unknown_param_codes_present` 等提醒继续写在关系行，但不是画像阻断项。
+3. 非主客群的 `review_required` 不参与画像 `review_required` 聚合。
+4. 质量策略不得改变 taxonomy、客群 code、关系状态、七个关系分项得分、综合分、证据 ID 和主次客群排序。
+5. `profile_hash` 纳入画像复核字段和画像置信度，避免质量状态变化但 hash 不变。
+6. TV/AC 使用同一聚合函数，但分别传入自己的 taxonomy 和 rule version。
+
+量价范围语义沿用 M07：无销量行按 0 销量事实处理；新品观测周数短不构成缺失或低质量，M10C 不增加固定 8 周门槛。
 
 ## 8. 数据模型设计
 
@@ -680,3 +721,5 @@ M10C 首版不调用 LLM，不读取原始评论文本，全量 TV SKU 规模下
 | 样本量不足 | `insufficient_market_or_comment_sample` |
 
 复核不阻断写入，但关系状态和置信度必须体现风险。
+
+作用域规则：`no_primary_with_enough_comments` 和完整主候选排序键并列属于画像级问题；评论、卖点、参数、未满足需求和服务隔离问题发生在非主客群时只属于 relation 级问题。服务信号已成功隔离时，不得将 `service_signal_excluded` 解释为画像失败。

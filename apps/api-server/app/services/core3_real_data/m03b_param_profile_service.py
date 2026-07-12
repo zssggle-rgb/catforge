@@ -12,7 +12,6 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import select
@@ -22,8 +21,6 @@ from app.models import entities
 from app.schemas.core3_real_data import Core3ModuleRunResultSchema
 from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
-    CORE3_M03B_AC_PARSER_VERSION,
-    CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
     CORE3_M03B_MODULE_VERSION,
     CORE3_M03B_PARSER_VERSION,
@@ -32,6 +29,7 @@ from app.services.core3_real_data.constants import (
     Core3EvidenceStatus,
     Core3EvidenceType,
     Core3ModuleCode,
+    Core3ReviewSeverity,
     Core3RunStatus,
 )
 from app.services.core3_real_data.hash_utils import stable_hash
@@ -325,6 +323,8 @@ class M03BTaxonomyLoader:
                 raise ValueError(f"M03B TV taxonomy requires TV source category, got {category_code}")
             return TV_PARAM_TAXONOMY_V0_1
         if taxonomy_version == CORE3_M03B_AC_TAXONOMY_VERSION:
+            if category_code != "AC":
+                raise ValueError(f"M03B AC taxonomy requires AC source category, got {category_code}")
             return AC_PARAM_TAXONOMY_V0_1
         raise ValueError(f"unsupported M03B taxonomy_version: {taxonomy_version}")
 
@@ -598,7 +598,6 @@ class M03BProfileBuilder:
 
     def _build_sku(self, sku_code: str, records: list[Any]) -> dict[str, Any]:
         model_name = _first_present(_field_value(record, "model_name") for record in records)
-        brand_name = _first_present(_field_value(record, "brand_name") for record in records)
         values_by_param: dict[str, list[dict[str, Any]]] = {}
         param_value_payloads: list[M03BParamValue] = []
         ignored_raw_fields: Counter[str] = Counter()
@@ -627,7 +626,8 @@ class M03BProfileBuilder:
             for param_code, candidates in values_by_param.items()
             if candidates
         }
-        conflict_count = sum(1 for candidates in values_by_param.values() if _has_conflict(candidates))
+        conflict_details = _build_conflict_details(values_by_param, category_code=self.taxonomy.category_code)
+        conflict_count = len(conflict_details)
         dimension_tiers = self._build_dimension_tiers(sku_code, model_name, main_values)
         dimension_tier_profile = {tier.payload["dimension_code"]: tier.payload["tier_code"] for tier in dimension_tiers}
         tier_explanation = {tier.payload["dimension_code"]: tier.payload["explanation"] for tier in dimension_tiers}
@@ -665,6 +665,8 @@ class M03BProfileBuilder:
             "false_by_absence_count": false_by_absence_count,
             "excluded_raw_fields": sorted(ignored_raw_fields),
             "conflict_count": conflict_count,
+            "conflict_param_codes": [item["param_code"] for item in conflict_details],
+            "conflicts": conflict_details,
             "parse_warning_count": sum(1 for entry in main_values.values() if entry.get("quality_flags")),
             "category_boundary_filter": f"sku_code_prefix_{self.sku_code_prefix}" if self.sku_code_prefix else None,
         }
@@ -821,22 +823,36 @@ class M03BProfileBuilder:
             )
 
     def _add_ac_derived_profile_values(self, values_by_param: dict[str, list[dict[str, Any]]], records: list[Any]) -> None:
-        if "horsepower_segment" not in values_by_param:
-            horsepower = _main_numeric(values_by_param.get("horsepower_hp", []))
-            if horsepower is not None:
-                tier = _ac_horsepower_tier_by_number(horsepower)
-                values_by_param.setdefault("horsepower_segment", []).append(
-                    _derived_profile_entry(
-                        param_code="horsepower_segment",
-                        param_name="匹数段",
-                        param_group="capacity",
-                        data_type="enum",
-                        normalized_value=tier,
-                        value_text=tier,
-                        basis_param_codes=["horsepower_hp"],
-                        rule="derive_ac_horsepower_segment",
-                    )
+        horsepower = _main_numeric(values_by_param.get("horsepower_hp", []))
+        if horsepower is not None:
+            tier = _ac_horsepower_tier_by_number(horsepower)
+            values_by_param.setdefault("horsepower_segment", []).append(
+                _derived_profile_entry(
+                    param_code="horsepower_segment",
+                    param_name="匹数段",
+                    param_group="capacity",
+                    data_type="enum",
+                    normalized_value=tier,
+                    value_text=tier,
+                    basis_param_codes=["horsepower_hp"],
+                    rule="derive_ac_horsepower_segment",
                 )
+            )
+        cooling_capacity = _main_numeric(values_by_param.get("cooling_capacity_w", []))
+        if cooling_capacity is not None:
+            tier = _ac_cooling_capacity_tier_by_number(cooling_capacity)
+            values_by_param.setdefault("cooling_capacity_segment", []).append(
+                _derived_profile_entry(
+                    param_code="cooling_capacity_segment",
+                    param_name="制冷量段",
+                    param_group="capacity",
+                    data_type="enum",
+                    normalized_value=tier,
+                    value_text=tier,
+                    basis_param_codes=["cooling_capacity_w"],
+                    rule="derive_ac_cooling_capacity_segment",
+                )
+            )
         if "heating_function_flag" not in values_by_param:
             heating_capacity = _main_numeric(values_by_param.get("heating_capacity_w", []))
             if heating_capacity is not None:
@@ -854,20 +870,36 @@ class M03BProfileBuilder:
                         value_presence=VALUE_PRESENT if has_heating else VALUE_DERIVED_FALSE,
                     )
                 )
-        if "installation_type" not in values_by_param:
-            product_type = _main_text({key: _select_main_profile_entry(value) for key, value in values_by_param.items()}, "product_type_combo")
-            installation = _ac_installation_from_text(product_type or "")
-            if installation != "unknown":
-                values_by_param.setdefault("installation_type", []).append(
+        selected_values = {key: _select_main_profile_entry(value) for key, value in values_by_param.items()}
+        product_type = _main_text(selected_values, "product_type_combo")
+        installation = _ac_installation_from_text(product_type or "")
+        if installation != "unknown":
+            values_by_param.setdefault("installation_type", []).append(
+                _derived_profile_entry(
+                    param_code="installation_type",
+                    param_name="安装方式",
+                    param_group="installation",
+                    data_type="enum",
+                    normalized_value=installation,
+                    value_text=installation,
+                    basis_param_codes=["product_type_combo"],
+                    rule="derive_ac_installation_type",
+                )
+            )
+        raw_energy_grade = _main_text(selected_values, "energy_grade_raw")
+        if raw_energy_grade:
+            parsed_grade = _parse_ac_energy_grade(raw_energy_grade)
+            if parsed_grade.value_presence == VALUE_PRESENT:
+                values_by_param.setdefault("energy_grade_normalized", []).append(
                     _derived_profile_entry(
-                        param_code="installation_type",
-                        param_name="安装方式",
-                        param_group="installation",
+                        param_code="energy_grade_normalized",
+                        param_name="能效等级",
+                        param_group="energy",
                         data_type="enum",
-                        normalized_value=installation,
-                        value_text=installation,
-                        basis_param_codes=["product_type_combo"],
-                        rule="derive_ac_installation_type",
+                        normalized_value=parsed_grade.normalized_value,
+                        value_text=str(parsed_grade.normalized_value),
+                        basis_param_codes=["energy_grade_raw"],
+                        rule="derive_ac_energy_grade",
                     )
                 )
 
@@ -1285,7 +1317,8 @@ def tv_param_taxonomy_v0_1() -> M03BTaxonomy:
 def ac_param_taxonomy_v0_1() -> M03BTaxonomy:
     params = (
         _param("brand_name_standard", "标准品牌", "identity", "string", ("标准品牌",), "string"),
-        _param("product_series", "产品系列", "identity", "string", ("系列", "三大品牌系列"), "string"),
+        _param("product_series", "产品系列名称", "identity", "string", ("系列",), "string"),
+        _param("brand_series_code", "品牌系列编码", "identity", "string", ("三大品牌系列",), "string"),
         _param("product_type_combo", "产品类型组合", "identity", "string", ("产品类型",), "string", required_for_core=True),
         _param("installation_type", "安装方式", "installation", "enum", ("安装方式", "产品类型"), "ac_installation_type", required_for_core=True),
         _param("indoor_unit_dimensions_mm", "内机尺寸", "installation", "object", ("内机尺寸",), "dimensions_mm", unit="mm"),
@@ -1329,6 +1362,7 @@ def ac_param_taxonomy_v0_1() -> M03BTaxonomy:
         _tier("cooling_capacity", "cooling_small_lt3000", "小制冷量 <3000W", 10, "制冷量 < 3000W"),
         _tier("cooling_capacity", "cooling_1_5_3000_3999", "1.5 匹常见制冷量", 20, "3000W <= 制冷量 < 4000W"),
         _tier("cooling_capacity", "cooling_2_4000_5499", "2 匹常见制冷量", 30, "4000W <= 制冷量 < 5500W"),
+        _tier("cooling_capacity", "cooling_2_5_5500_6499", "2.5 匹常见制冷量", 35, "5500W <= 制冷量 < 6500W"),
         _tier("cooling_capacity", "cooling_3_6500_7499", "3 匹常见制冷量", 40, "6500W <= 制冷量 < 7500W"),
         _tier("cooling_capacity", "cooling_large_7500_plus", "大制冷量 7500W+", 50, "制冷量 >= 7500W"),
         _tier("cooling_capacity", "cooling_unknown", "制冷量未知", None, "缺少制冷量输入"),
@@ -1924,6 +1958,161 @@ def _has_conflict(candidates: Sequence[dict[str, Any]]) -> bool:
     return len(values) > 1
 
 
+SEMANTIC_SEGMENT_PARAMS: dict[str, tuple[str, str]] = {
+    "screen_size_segment": ("screen_size_inch", "inch"),
+    "horsepower_segment": ("horsepower_hp", "horsepower"),
+    "cooling_capacity_segment": ("cooling_capacity_w", "watt"),
+}
+
+PARAM_AFFECTED_DIMENSIONS: dict[str, tuple[str, ...]] = {
+    "screen_size_segment": ("size",),
+    "screen_size_inch": ("size",),
+    "horsepower_segment": ("horsepower",),
+    "horsepower_hp": ("horsepower",),
+    "cooling_capacity_segment": ("cooling_capacity",),
+    "cooling_capacity_w": ("cooling_capacity",),
+    "installation_type": ("installation",),
+    "product_type_combo": ("installation",),
+    "energy_grade_normalized": ("energy",),
+    "energy_grade_raw": ("energy",),
+    "energy_grade_simple": ("energy",),
+}
+
+
+def _build_conflict_details(
+    values_by_param: Mapping[str, Sequence[dict[str, Any]]],
+    *,
+    category_code: str,
+) -> list[dict[str, Any]]:
+    conflicts: list[dict[str, Any]] = []
+    for param_code, candidates in sorted(values_by_param.items()):
+        present_candidates = [entry for entry in candidates if entry.get("value_presence") == VALUE_PRESENT]
+        if len(present_candidates) < 2:
+            continue
+        comparison = _compare_param_candidates(param_code, present_candidates, values_by_param)
+        if comparison["equivalent"]:
+            continue
+        selected = _select_main_profile_entry(present_candidates)
+        conflicts.append(
+            {
+                "conflict_type": "semantic_value_conflict",
+                "category_code": category_code,
+                "param_code": param_code,
+                "scope": "profile",
+                "comparison_mode": comparison["comparison_mode"],
+                "comparison_basis": comparison.get("comparison_basis"),
+                "candidate_values": [_conflict_candidate_payload(entry) for entry in present_candidates],
+                "selected_value": _conflict_candidate_payload(selected),
+                "affected_param_codes": _unique_preserve_order(
+                    [param_code, *[str(item) for item in comparison.get("basis_param_codes", [])]]
+                ),
+                "affected_dimension_codes": list(PARAM_AFFECTED_DIMENSIONS.get(param_code, ())),
+            }
+        )
+    return conflicts
+
+
+def _compare_param_candidates(
+    param_code: str,
+    candidates: Sequence[dict[str, Any]],
+    values_by_param: Mapping[str, Sequence[dict[str, Any]]],
+) -> dict[str, Any]:
+    segment_config = SEMANTIC_SEGMENT_PARAMS.get(param_code)
+    if segment_config is not None:
+        basis_param_code, unit_kind = segment_config
+        basis_value = _main_numeric(values_by_param.get(basis_param_code))
+        if basis_value is not None:
+            expected_tier = _segment_tier_for_number(param_code, basis_value)
+            equivalent = all(
+                _segment_candidate_matches(entry, basis_value=basis_value, expected_tier=expected_tier, unit_kind=unit_kind)
+                for entry in candidates
+            )
+            return {
+                "equivalent": equivalent,
+                "comparison_mode": "declared_range_contains_numeric_basis",
+                "comparison_basis": {
+                    "param_code": basis_param_code,
+                    "numeric_value": _json_number(basis_value),
+                    "expected_tier": expected_tier,
+                },
+                "basis_param_codes": [basis_param_code],
+            }
+    values = {
+        stable_hash(entry.get("normalized_value"), version="m03b_conflict_value_v2")
+        for entry in candidates
+    }
+    return {
+        "equivalent": len(values) <= 1,
+        "comparison_mode": "normalized_value_exact",
+        "comparison_basis": None,
+        "basis_param_codes": [],
+    }
+
+
+def _segment_tier_for_number(param_code: str, value: Decimal) -> str:
+    if param_code == "screen_size_segment":
+        return _size_tier_by_number(value)
+    if param_code == "horsepower_segment":
+        return _ac_horsepower_tier_by_number(value)
+    if param_code == "cooling_capacity_segment":
+        return _ac_cooling_capacity_tier_by_number(value)
+    raise ValueError(f"unsupported semantic segment param: {param_code}")
+
+
+def _segment_candidate_matches(
+    entry: Mapping[str, Any],
+    *,
+    basis_value: Decimal,
+    expected_tier: str,
+    unit_kind: str,
+) -> bool:
+    normalized_value = str(entry.get("normalized_value") or "").strip()
+    if normalized_value == expected_tier:
+        return True
+    declared_text = str(entry.get("raw_param_value") or entry.get("value_text") or normalized_value).strip()
+    return _declared_segment_contains(declared_text, basis_value, unit_kind=unit_kind)
+
+
+def _declared_segment_contains(text: str, value: Decimal, *, unit_kind: str) -> bool:
+    if not text:
+        return False
+    # The shared number parser treats the hyphen in a range as a minus sign.
+    # Segment declarations use it as a separator, so compare absolute bounds.
+    numbers = [abs(number) for number in _numbers(text)]
+    if unit_kind == "horsepower":
+        numbers = [number for number in numbers if number <= Decimal("10")]
+    elif unit_kind == "watt":
+        numbers = [number for number in numbers if number >= Decimal("100")]
+    elif unit_kind == "inch":
+        numbers = [number for number in numbers if Decimal("10") <= number <= Decimal("200")]
+    if not numbers:
+        return False
+    normalized = _normalize_text(text).lower().replace("＝", "=").replace("＞", ">").replace("＜", "<")
+    if len(numbers) >= 2:
+        lower, upper = min(numbers), max(numbers)
+        return lower <= value <= upper
+    boundary = numbers[0]
+    if any(token in normalized for token in (">=", "≥", "以上", "及以上")):
+        return value >= boundary
+    if any(token in normalized for token in ("<=", "≤", "以下", "及以下")):
+        return value <= boundary
+    return value == boundary
+
+
+def _conflict_candidate_payload(entry: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "normalized_value": _json_value(entry.get("normalized_value")),
+        "value_text": entry.get("value_text"),
+        "source_type": entry.get("source_type"),
+        "source_priority_rank": entry.get("source_priority_rank"),
+        "raw_param_name": entry.get("raw_param_name"),
+        "raw_param_value": entry.get("raw_param_value"),
+        "basis_param_codes": list(entry.get("basis_param_codes") or []),
+        "rule": entry.get("rule"),
+        "evidence_ids": list(entry.get("evidence_ids") or []),
+    }
+
+
 def _main_numeric(candidates: Sequence[dict[str, Any]] | None) -> Decimal | None:
     if not candidates:
         return None
@@ -2241,6 +2430,20 @@ def _ac_horsepower_tier_by_number(horsepower: Decimal) -> str:
     return "hp_3_plus"
 
 
+def _ac_cooling_capacity_tier_by_number(cooling: Decimal) -> str:
+    if cooling < Decimal("3000"):
+        return "cooling_small_lt3000"
+    if cooling < Decimal("4000"):
+        return "cooling_1_5_3000_3999"
+    if cooling < Decimal("5500"):
+        return "cooling_2_4000_5499"
+    if cooling < Decimal("6500"):
+        return "cooling_2_5_5500_6499"
+    if cooling < Decimal("7500"):
+        return "cooling_3_6500_7499"
+    return "cooling_large_7500_plus"
+
+
 def _ac_installation_dimension(values: Mapping[str, dict[str, Any]]) -> dict[str, Any]:
     basis = ["installation_type", "product_type_combo"]
     installation = _main_text(values, "installation_type") or _ac_installation_from_text(_main_text(values, "product_type_combo") or "")
@@ -2261,16 +2464,7 @@ def _ac_cooling_capacity_dimension(values: Mapping[str, dict[str, Any]]) -> dict
     cooling = _decimal(values.get("cooling_capacity_w", {}).get("numeric_value")) if values.get("cooling_capacity_w") else None
     if cooling is None:
         return _dimension_result("cooling_capacity", "cooling_unknown", ["cooling_capacity_w"], "缺少制冷量。", quality_flags=["missing_cooling_capacity"])
-    if cooling < Decimal("3000"):
-        tier = "cooling_small_lt3000"
-    elif cooling < Decimal("4000"):
-        tier = "cooling_1_5_3000_3999"
-    elif cooling < Decimal("5500"):
-        tier = "cooling_2_4000_5499"
-    elif cooling < Decimal("7500"):
-        tier = "cooling_3_6500_7499"
-    else:
-        tier = "cooling_large_7500_plus"
+    tier = _ac_cooling_capacity_tier_by_number(cooling)
     return _dimension_result("cooling_capacity", tier, ["cooling_capacity_w"], f"制冷量 {cooling}W，归入 {tier}。")
 
 
@@ -2627,7 +2821,18 @@ def _failed_result(
             version="m03b_failed_v1",
         ),
         warnings=[message_cn],
-        review_issues=[{"issue_code": error_code, "message_cn": message_cn, "error_message": error_message}],
+        review_issues=[
+            {
+                "issue_code": error_code,
+                "issue_type": "runtime_error",
+                "severity": Core3ReviewSeverity.BLOCKER,
+                "source_module": Core3ModuleCode.M03B,
+                "object_type": "batch",
+                "object_id": batch_id,
+                "message_cn": message_cn,
+                "suggestion_cn": error_message,
+            }
+        ],
         downstream_impacts=[],
         summary_json={
             "project_id": project_id,

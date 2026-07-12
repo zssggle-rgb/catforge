@@ -11,10 +11,33 @@ from app.services.core3_real_data.analyst.competitor_pm_report import (
 
 def test_pm_comparison_report_renders_four_products_and_business_sections() -> None:
     products = [
-        _product("海信 65E7Q", 5949, 251, "高端画质升级", "影院沉浸观影", "画质配置解释加价"),
-        _product("创维 65A7H PRO", 5637, 217, "高端画质升级", "高端画质体验", "家装融合更适合客厅"),
-        _product("TCL 65Q9L PRO", 5522, 194, "高端画质升级", "高端画质体验", "高亮画质配置升级"),
-        _product("创维 65A6F ULTRA", 4415, 322, "高端画质升级", "影院沉浸观影", "同价位核心配置完整"),
+        _product(
+            "海信 65E7Q", 5949, 251, "高端画质升级", "影院沉浸观影", "画质配置解释加价"
+        ),
+        _product(
+            "创维 65A7H PRO",
+            5637,
+            217,
+            "高端画质升级",
+            "高端画质体验",
+            "家装融合更适合客厅",
+        ),
+        _product(
+            "TCL 65Q9L PRO",
+            5522,
+            194,
+            "高端画质升级",
+            "高端画质体验",
+            "高亮画质配置升级",
+        ),
+        _product(
+            "创维 65A6F ULTRA",
+            4415,
+            322,
+            "高端画质升级",
+            "影院沉浸观影",
+            "同价位核心配置完整",
+        ),
     ]
     payload = build_pm_comparison_payload(
         title="海信 65E7Q 与重点竞品的用户选择对比报告",
@@ -26,6 +49,7 @@ def test_pm_comparison_report_renders_four_products_and_business_sections() -> N
                 "竞品更突出的理由": "家装融合",
                 "本品保留的理由": "高亮画质",
                 "替代程度": "中等（6/10）",
+                "双方各自的购买阻力": "本品中等阻力，竞品较高阻力；不改变双方购买理由成立。",
             },
             {
                 "name": "TCL 65Q9L PRO",
@@ -48,22 +72,44 @@ def test_pm_comparison_report_renders_four_products_and_business_sections() -> N
     markdown = render_pm_comparison_report(title=payload["title"], payload=payload)
 
     assert payload["schema_version"] == "competitor_pm_comparison_v1"
-    assert "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
+    assert (
+        "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |"
+        in markdown
+    )
     assert "## 一、四款产品分别卖多少钱、卖得怎么样" in markdown
     assert "## 二、四款产品真正强在哪里" in markdown
     assert "## 六、产品重点讲什么，用户实际理解了什么" in markdown
     assert "## 七、用户为什么会选择四款产品" in markdown
     assert "## 八、用户在四款产品之间会怎样取舍" in markdown
     assert "## 九、四款产品的用户价值是否传达完整" in markdown
-    assert "[查看竞品识别、评分和证据依据](https://my.feishu.cn/docx/EvidenceReport)" in markdown
+    assert "产品希望传达但尚未观察到用户承接" in markdown
+    assert "双方各自的购买阻力" in markdown
+    assert (
+        "[查看竞品识别、评分和证据依据](https://my.feishu.cn/docx/EvidenceReport)"
+        in markdown
+    )
     assert "创维 65A6F ULTRA价格最低" in markdown
     assert "创维 65A6F ULTRA周均销量最高" in markdown
-    for forbidden in ("BF_", "TASK_", "TG_", "M12D", "WTP", "建议验证", "应该降价", "销量追赶"):
+    for forbidden in (
+        "BF_",
+        "TASK_",
+        "TG_",
+        "M12D",
+        "WTP",
+        "建议验证",
+        "应该降价",
+        "销量追赶",
+    ):
         assert forbidden not in markdown
 
 
-def test_pm_comparison_report_omits_purchase_sections_without_published_profiles() -> None:
-    products = [_product("本品", 5000, 100, "高端画质", "影院观影", None), _product("竞品", 4800, 90, "高端画质", "影院观影", None)]
+def test_pm_comparison_report_omits_purchase_sections_without_published_profiles() -> (
+    None
+):
+    products = [
+        _product("本品", 5000, 100, "高端画质", "影院观影", None),
+        _product("竞品", 4800, 90, "高端画质", "影院观影", None),
+    ]
 
     payload = build_pm_comparison_payload(
         title="本品与重点竞品的用户选择对比报告",
@@ -81,19 +127,31 @@ def test_pm_comparison_report_omits_purchase_sections_without_published_profiles
 
 def test_pm_business_output_guard_rejects_internal_codes() -> None:
     assert pm_business_output_issue("用户主要比较高端画质。") is None
-    assert pm_business_output_issue("内部维度 BF_PREMIUM_PICTURE_UPGRADE") == "用户选择对比报告包含未解析的内部字段。"
-    assert pm_business_output_issue("gate_reasons=missing") == "用户选择对比报告包含未解析的内部字段。"
+    assert (
+        pm_business_output_issue("内部维度 BF_PREMIUM_PICTURE_UPGRADE")
+        == "用户选择对比报告包含未解析的内部字段。"
+    )
+    assert (
+        pm_business_output_issue("gate_reasons=missing")
+        == "用户选择对比报告包含未解析的内部字段。"
+    )
 
 
-def test_competitor_answer_publishes_independent_reports_and_adds_card_links(monkeypatch) -> None:
+def test_competitor_answer_publishes_independent_reports_without_pm_card_link(
+    monkeypatch,
+) -> None:
     calls: list[str] = []
 
-    def fake_publish_report(*, title: str, markdown: str, with_report: str) -> ReportPublishResult:
+    def fake_publish_report(
+        *, title: str, markdown: str, with_report: str
+    ) -> ReportPublishResult:
         calls.append(title)
         assert markdown.startswith(f"# {title}")
         assert with_report == "feishu-doc"
         token = "PmReport" if "用户选择对比" in title else "EvidenceReport"
-        return ReportPublishResult(status="created", url=f"https://my.feishu.cn/docx/{token}")
+        return ReportPublishResult(
+            status="created", url=f"https://my.feishu.cn/docx/{token}"
+        )
 
     monkeypatch.setattr(competitor_answer, "_publish_report", fake_publish_report)
     answer = competitor_answer.build_competitor_answer(
@@ -121,19 +179,15 @@ def test_competitor_answer_publishes_independent_reports_and_adds_card_links(mon
     assert answer["evidence_report_url"] == "https://my.feishu.cn/docx/EvidenceReport"
     assert answer["pm_comparison_report_url"] == "https://my.feishu.cn/docx/PmReport"
     dashboard = answer["dashboard_payload"]
-    assert dashboard["pm_comparison_report_link"] == {
-        "label": "查看用户选择对比",
-        "url": "https://my.feishu.cn/docx/PmReport",
-        "type": "pm_comparison_report",
-    }
+    assert "pm_comparison_report_link" not in dashboard
     card_text = json.dumps(answer["feishu_card_payload"], ensure_ascii=False)
-    assert "查看用户选择对比" in card_text
+    assert "查看用户选择对比" not in card_text
     assert "查看分析依据" in card_text
-    assert "https://my.feishu.cn/docx/PmReport" in card_text
+    assert "https://my.feishu.cn/docx/PmReport" not in card_text
     assert "https://my.feishu.cn/docx/EvidenceReport" in card_text
 
 
-def test_oversized_card_keeps_pm_and_evidence_buttons() -> None:
+def test_oversized_card_keeps_available_evidence_and_compare_buttons() -> None:
     card = {
         "schema": "2.0",
         "config": {"summary": {"content": "重点竞品看板"}},
@@ -141,25 +195,56 @@ def test_oversized_card_keeps_pm_and_evidence_buttons() -> None:
         "body": {
             "elements": [
                 {"tag": "markdown", "content": "很长的内容" * 10_000},
-                {"tag": "button", "element_id": "view_pm_comparison_report"},
                 {"tag": "button", "element_id": "view_report"},
+                {"tag": "button", "element_id": "view_product_compare"},
             ]
         },
     }
 
     compact = competitor_answer._trim_feishu_card(card)
 
-    button_ids = [row.get("element_id") for row in compact["body"]["elements"] if row.get("tag") == "button"]
-    assert button_ids == ["view_pm_comparison_report", "view_report"]
+    button_ids = [
+        row.get("element_id")
+        for row in compact["body"]["elements"]
+        if row.get("tag") == "button"
+    ]
+    assert button_ids == ["view_report", "view_product_compare"]
 
 
-def _product(name: str, price: int, sales: int, choice: str, usage: str, purchase_reason: str | None) -> dict[str, object]:
+def _product(
+    name: str,
+    price: int,
+    sales: int,
+    choice: str,
+    usage: str,
+    purchase_reason: str | None,
+) -> dict[str, object]:
     purchase = (
-        {"核心购买理由": purchase_reason, "辅助购买理由": "影院和游戏体验", "core_tags": [purchase_reason], "_all_tags": [purchase_reason]}
+        {
+            "核心购买理由": purchase_reason,
+            "辅助购买理由": "影院和游戏体验",
+            "产品希望传达但尚未观察到用户承接": "家庭操作更省心",
+            "购买阻力": "画质理由成立，但反光体验存在中等争议",
+            "core_tags": [purchase_reason],
+            "_all_tags": [purchase_reason],
+        }
         if purchase_reason
-        else {"核心购买理由": "暂不能判断", "辅助购买理由": "暂不能判断", "core_tags": [], "_all_tags": []}
+        else {
+            "核心购买理由": "暂不能判断",
+            "辅助购买理由": "暂不能判断",
+            "core_tags": [],
+            "_all_tags": [],
+        }
     )
-    delivery = {"已形成稳定购买理由": purchase_reason} if purchase_reason else {}
+    delivery = (
+        {
+            "已形成稳定购买理由": purchase_reason,
+            "产品希望传达但尚未观察到用户承接": "家庭操作更省心",
+            "已成立理由上的购买阻力": "画质升级（中等阻力）",
+        }
+        if purchase_reason
+        else {}
+    )
     return {
         "name": name,
         "market": {
@@ -172,9 +257,21 @@ def _product(name: str, price: int, sales: int, choice: str, usage: str, purchas
             "_pool_scope_key": "large_60_69|high",
         },
         "capabilities": {"亮度控光能力": "高亮度和多分区", "动态与游戏能力": "300Hz"},
-        "choice_criteria": {"主要比较内容": choice, "其他比较内容": "游戏体育流畅", "_all_tags": [choice, "游戏体育流畅"]},
-        "usage_needs": {"主要使用需求": usage, "其他使用需求": "体育赛事观看", "_all_tags": [usage, "体育赛事观看"]},
-        "demand_audiences": {"主要吸引的需求型用户": "重视高端影音体验", "其他可覆盖用户": "经常观看体育或玩游戏", "_all_tags": ["重视高端影音体验", "经常观看体育或玩游戏"]},
+        "choice_criteria": {
+            "主要比较内容": choice,
+            "其他比较内容": "游戏体育流畅",
+            "_all_tags": [choice, "游戏体育流畅"],
+        },
+        "usage_needs": {
+            "主要使用需求": usage,
+            "其他使用需求": "体育赛事观看",
+            "_all_tags": [usage, "体育赛事观看"],
+        },
+        "demand_audiences": {
+            "主要吸引的需求型用户": "重视高端影音体验",
+            "其他可覆盖用户": "经常观看体育或玩游戏",
+            "_all_tags": ["重视高端影音体验", "经常观看体育或玩游戏"],
+        },
         "message_reception": {
             "产品重点表达": "高亮画质和高刷新率",
             "用户正向感知": "高亮画质",
@@ -203,6 +300,14 @@ def _competitor() -> dict[str, object]:
         "found": True,
         "core_reasons_cn": ["画质配置解释加价"],
         "supporting_reasons_cn": ["游戏设备适配更安心"],
+        "proposition_reasons_cn": ["家庭操作更省心"],
+        "purchase_pressure_reasons": [
+            {
+                "anchor_cn": "画质配置解释加价",
+                "pressure_level": "medium",
+                "pressure_summary_cn": "画质理由成立，但反光体验存在中等争议。",
+            }
+        ],
         "weak_expression_reasons_cn": [],
         "risk_drag_reasons_cn": [],
         "anchors": [
@@ -210,6 +315,9 @@ def _competitor() -> dict[str, object]:
                 "anchor_cn": "画质配置解释加价",
                 "role": "core_payment",
                 "evidence_strength": "strong",
+                "establishment_status": "established",
+                "user_validation_status": "user_validated",
+                "pressure_level": "medium",
                 "evidence_domains": ["param_fact", "fact_claim", "comment_perception"],
             }
         ],
@@ -247,6 +355,13 @@ def _competitor() -> dict[str, object]:
             "type": "value_substitution",
             "type_cn": "价值替代压力",
             "reason_cn": "覆盖本品核心购买理由。",
+        },
+        "purchase_pressure_comparison": {
+            "comparison_allowed": True,
+            "target_highest_pressure_level_cn": "中等阻力",
+            "candidate_highest_pressure_level_cn": "中等阻力",
+            "shared_anchor_comparisons": [],
+            "summary_cn": "双方画质购买理由都存在中等阻力，不改变理由成立。",
         },
         "target_purchase_reason_profile": profile,
         "candidate_purchase_reason_profile": profile,

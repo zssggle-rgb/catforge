@@ -1,0 +1,462 @@
+{
+  "task_id": "M12D-QF-03",
+  "generated_at": "2026-07-11T04:23:19.958533+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "scope": "M04C only",
+  "write_draft": true,
+  "allowed_migrations": {
+    "TV": [
+      "m03b_param_profile_missing 328 -> 0 through current serving scope",
+      "claim_text_unmatched profile flag -> row coverage warning",
+      "param_unknown support may recover only where M03B v0.2 provides evidence"
+    ],
+    "AC": [
+      "claim_text_unmatched profile flag -> row coverage warning",
+      "M03B lineage v0.1 -> v0.2 with unchanged business parameter values"
+    ]
+  },
+  "before": {
+    "TV": {
+      "category": "TV",
+      "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+      "profile_count": 328,
+      "fact_count": 7993,
+      "position_count": 1622,
+      "quality_flag_counts": {
+        "claim_text_unmatched": 293,
+        "m03b_param_profile_missing": 328
+      },
+      "support_status_counts": {
+        "not_param_applicable": 396,
+        "param_unknown": 7597
+      },
+      "m03b_source_batch_counts": {
+        "missing": 328
+      },
+      "unmatched_row_count": 735,
+      "coverage_warning_sku_count": 293
+    },
+    "AC": {
+      "category": "AC",
+      "rule_version": "m04c_ac_claim_fact_profile_v0.1",
+      "profile_count": 155,
+      "fact_count": 3931,
+      "position_count": 1694,
+      "quality_flag_counts": {
+        "claim_text_unmatched": 121
+      },
+      "support_status_counts": {
+        "not_param_applicable": 914,
+        "param_unknown": 1070,
+        "partially_supported": 519,
+        "supported": 1428
+      },
+      "m03b_source_batch_counts": {
+        "missing": 155
+      },
+      "unmatched_row_count": 237,
+      "coverage_warning_sku_count": 121
+    }
+  },
+  "after": {
+    "TV": {
+      "category": "TV",
+      "rule_version": "m04c_tv_claim_fact_profile_v0.2",
+      "profile_count": 328,
+      "fact_count": 7993,
+      "position_count": 3116,
+      "quality_flag_counts": {},
+      "support_status_counts": {
+        "not_param_applicable": 396,
+        "param_unknown": 1064,
+        "partially_supported": 1850,
+        "supported": 4683
+      },
+      "m03b_source_batch_counts": {
+        "m00_20260613004311_d548f6dc": 35,
+        "m00_20260619084551_857df63b": 293
+      },
+      "unmatched_row_count": 735,
+      "coverage_warning_sku_count": 293
+    },
+    "AC": {
+      "category": "AC",
+      "rule_version": "m04c_ac_claim_fact_profile_v0.2",
+      "profile_count": 155,
+      "fact_count": 3931,
+      "position_count": 1694,
+      "quality_flag_counts": {},
+      "support_status_counts": {
+        "not_param_applicable": 914,
+        "param_unknown": 1070,
+        "partially_supported": 519,
+        "supported": 1428
+      },
+      "m03b_source_batch_counts": {
+        "m00_20260624000202_1150a669": 155
+      },
+      "unmatched_row_count": 237,
+      "coverage_warning_sku_count": 121
+    }
+  },
+  "comparisons": {
+    "TV": {
+      "common_profile_count": 328,
+      "missing_profile_count": 0,
+      "extra_profile_count": 0,
+      "missing_fact_count": 0,
+      "extra_fact_count": 0,
+      "immutable_fact_changed_count": 0,
+      "preexisting_claim_kind_changed_count": 993,
+      "claim_code_changed_count": 0,
+      "claimed_position_changed_count": 0,
+      "support_migration_distribution": {
+        "not_param_applicable->not_param_applicable": 396,
+        "param_unknown->param_unknown": 1064,
+        "param_unknown->partially_supported": 1850,
+        "param_unknown->supported": 4683
+      },
+      "non_unknown_support_changed_count": 0,
+      "support_business_changed_count": 7045,
+      "support_business_changed_sample": [
+        "TV00009549:raw:126:tv_claim_theater_scene",
+        "TV00009549:raw:126:tv_claim_wide_color_accuracy",
+        "TV00009549:raw:186:tv_claim_energy_efficiency",
+        "TV00022396:raw:1148:tv_claim_gaming_low_latency",
+        "TV00022396:raw:1148:tv_claim_high_refresh_rate",
+        "TV00022396:raw:1596:tv_claim_wide_color_accuracy",
+        "TV00022396:raw:2044:tv_claim_eye_care_display",
+        "TV00022396:raw:2492:tv_claim_casting_connectivity",
+        "TV00022396:raw:2492:tv_claim_theater_scene",
+        "TV00022396:raw:3388:tv_claim_high_refresh_rate",
+        "TV00022396:raw:3388:tv_claim_theater_scene",
+        "TV00022396:raw:3388:tv_claim_wide_color_accuracy",
+        "TV00022396:raw:3836:tv_claim_gaming_low_latency",
+        "TV00022396:raw:3836:tv_claim_theater_scene",
+        "TV00022396:raw:4282:tv_claim_casting_connectivity",
+        "TV00022396:raw:4282:tv_claim_voice_control",
+        "TV00022396:raw:4727:tv_claim_eye_care_display",
+        "TV00022396:raw:4727:tv_claim_high_refresh_rate",
+        "TV00022396:raw:4727:tv_claim_picture_engine_ai",
+        "TV00022396:raw:4727:tv_claim_theater_scene"
+      ],
+      "support_core_changed_count": 7045,
+      "support_core_changed_sample": [
+        "TV00009549:raw:126:tv_claim_theater_scene",
+        "TV00009549:raw:126:tv_claim_wide_color_accuracy",
+        "TV00009549:raw:186:tv_claim_energy_efficiency",
+        "TV00022396:raw:1148:tv_claim_gaming_low_latency",
+        "TV00022396:raw:1148:tv_claim_high_refresh_rate",
+        "TV00022396:raw:1596:tv_claim_wide_color_accuracy",
+        "TV00022396:raw:2044:tv_claim_eye_care_display",
+        "TV00022396:raw:2492:tv_claim_casting_connectivity",
+        "TV00022396:raw:2492:tv_claim_theater_scene",
+        "TV00022396:raw:3388:tv_claim_high_refresh_rate",
+        "TV00022396:raw:3388:tv_claim_theater_scene",
+        "TV00022396:raw:3388:tv_claim_wide_color_accuracy",
+        "TV00022396:raw:3836:tv_claim_gaming_low_latency",
+        "TV00022396:raw:3836:tv_claim_theater_scene",
+        "TV00022396:raw:4282:tv_claim_casting_connectivity",
+        "TV00022396:raw:4282:tv_claim_voice_control",
+        "TV00022396:raw:4727:tv_claim_eye_care_display",
+        "TV00022396:raw:4727:tv_claim_high_refresh_rate",
+        "TV00022396:raw:4727:tv_claim_picture_engine_ai",
+        "TV00022396:raw:4727:tv_claim_theater_scene"
+      ],
+      "regression_pool_count": 328,
+      "regression_sample": [
+        "TV00009549",
+        "TV00022396",
+        "TV00022397",
+        "TV00023850",
+        "TV00025500",
+        "TV00025501",
+        "TV00025519",
+        "TV00025784",
+        "TV00026064",
+        "TV00026065",
+        "TV00026106",
+        "TV00026131",
+        "TV00026209",
+        "TV00026228",
+        "TV00026231",
+        "TV00026232",
+        "TV00026248",
+        "TV00026857",
+        "TV00026874",
+        "TV00026886"
+      ]
+    },
+    "AC": {
+      "common_profile_count": 155,
+      "missing_profile_count": 0,
+      "extra_profile_count": 0,
+      "missing_fact_count": 0,
+      "extra_fact_count": 0,
+      "immutable_fact_changed_count": 0,
+      "preexisting_claim_kind_changed_count": 0,
+      "claim_code_changed_count": 0,
+      "claimed_position_changed_count": 0,
+      "support_migration_distribution": {
+        "not_param_applicable->not_param_applicable": 914,
+        "param_unknown->param_unknown": 1070,
+        "partially_supported->partially_supported": 519,
+        "supported->supported": 1428
+      },
+      "non_unknown_support_changed_count": 0,
+      "support_business_changed_count": 3931,
+      "support_business_changed_sample": [
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:0434a327fe807f4b35e5678084b63de4f0bfcd3c24e8579996a86e17dbcdabd0:ac_claim_quiet_sleep",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:0434a327fe807f4b35e5678084b63de4f0bfcd3c24e8579996a86e17dbcdabd0:ac_claim_smart_app_voice_iot",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:11a1b7bcb56efc27fc8b42a7d3c2166489140e7ac1dff8e46dc20ab1c29b70ea:ac_claim_price_value_subsidy",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:11a1b7bcb56efc27fc8b42a7d3c2166489140e7ac1dff8e46dc20ab1c29b70ea:ac_claim_warranty_install_service",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:47effcc6325ed50256acdfdc92ed8fc00f84302f9a148b5e1b2116da71606a65:ac_claim_energy_efficiency_apf",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:47effcc6325ed50256acdfdc92ed8fc00f84302f9a148b5e1b2116da71606a65:ac_claim_price_value_subsidy",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:47effcc6325ed50256acdfdc92ed8fc00f84302f9a148b5e1b2116da71606a65:ac_claim_self_cleaning",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:47effcc6325ed50256acdfdc92ed8fc00f84302f9a148b5e1b2116da71606a65:ac_claim_warranty_install_service",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:4f0cf4e91312fb8837498ffadda6ee65723bbb041ef918e0b459c66926b34aa5:ac_claim_energy_efficiency_apf",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:4f0cf4e91312fb8837498ffadda6ee65723bbb041ef918e0b459c66926b34aa5:ac_claim_quiet_sleep",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:4f0cf4e91312fb8837498ffadda6ee65723bbb041ef918e0b459c66926b34aa5:ac_claim_smart_app_voice_iot",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:5e5c022734505434a1a0f46cd9bfd0cfaf230c95e6b3308b7ab47c6627efa468:ac_claim_authority_sales_certification",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:5e5c022734505434a1a0f46cd9bfd0cfaf230c95e6b3308b7ab47c6627efa468:ac_claim_energy_efficiency_apf",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:6d176e6f3643983a7640b9b386482a3c85368dec5df5eeb72c9f7efd8bf8f437:ac_claim_energy_efficiency_apf",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:6d176e6f3643983a7640b9b386482a3c85368dec5df5eeb72c9f7efd8bf8f437:ac_claim_fast_cooling_heating",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:80a89738657e8498eaa15aff9534c87990c79ededddfc510c1821e8ef6c1ca63:ac_claim_fast_cooling_heating",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:80a89738657e8498eaa15aff9534c87990c79ededddfc510c1821e8ef6c1ca63:ac_claim_humidity_dehumidification",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:80a89738657e8498eaa15aff9534c87990c79ededddfc510c1821e8ef6c1ca63:ac_claim_self_cleaning",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:80a89738657e8498eaa15aff9534c87990c79ededddfc510c1821e8ef6c1ca63:ac_claim_wide_temperature_operation",
+        "AC00026378:evidence:sha256:m02_evidence_v1_id:8759dce497ca63859d923b22ebfc17bec82ca116cbc2f19e4faa90fecb272fda:ac_claim_fast_cooling_heating"
+      ],
+      "support_core_changed_count": 0,
+      "support_core_changed_sample": [],
+      "regression_pool_count": 155,
+      "regression_sample": [
+        "AC00026378",
+        "AC00028640",
+        "AC00028642",
+        "AC00029097",
+        "AC00029319",
+        "AC00029751",
+        "AC00030362",
+        "AC00030631",
+        "AC00030929",
+        "AC00032008",
+        "AC00032338",
+        "AC00032506",
+        "AC00032615",
+        "AC00032705",
+        "AC00033476",
+        "AC00033612",
+        "AC00033721",
+        "AC00033789",
+        "AC00034284",
+        "AC00034502"
+      ]
+    }
+  },
+  "run_results": {
+    "TV": {
+      "status": "warning",
+      "input_count": 4229,
+      "output_count": 11468,
+      "warnings": [
+        "m04c_param_support_unknown"
+      ],
+      "summary": {
+        "batch_id": "m00_20260623014631_c8630747",
+        "module_version": "m04c-claim-fact-profile-0.2.0",
+        "taxonomy_version": "tv_claim_taxonomy_manual_v0.1",
+        "rule_version": "m04c_tv_claim_fact_profile_v0.2",
+        "product_category": "TV",
+        "target_sku_codes": [],
+        "input_claim_text_count": 4229,
+        "sku_profile_count": 328,
+        "claim_fact_count": 7993,
+        "dimension_position_count": 3116,
+        "position_coverage_count": 31,
+        "fact_claim_count": 6533,
+        "service_separate_claim_count": 258,
+        "unmatched_claim_text_count": 735,
+        "coverage_warning_sku_count": 293,
+        "profile_quality_flag_counts": {},
+        "param_unknown_claim_count": 1064,
+        "unsupported_claim_count": 0,
+        "support_status_counts": {
+          "not_param_applicable": 396,
+          "param_unknown": 1064,
+          "partially_supported": 1850,
+          "supported": 4683
+        },
+        "dimension_distribution": {
+          "appearance_installation": 528,
+          "audio_cinema": 1675,
+          "energy_value": 208,
+          "motion_gaming": 1291,
+          "picture_quality": 2906,
+          "service_fulfillment": 258,
+          "smart_interaction": 859,
+          "system_performance": 268
+        },
+        "category_boundary_filter": "sku_code_prefix_TV",
+        "taxonomy_hash": "sha256:m04c_claim_taxonomy_asset_hash_v1:5ca1d3d5523c52758f2ea0630f11070d8469e147ad58a612331e54d1d0d83139",
+        "source_used": "raw",
+        "write_summary": {
+          "sku_claim_profiles": {
+            "created_count": 328,
+            "reused_count": 0,
+            "record_count": 328
+          },
+          "claim_facts": {
+            "created_count": 7993,
+            "reused_count": 0,
+            "record_count": 7993
+          },
+          "dimension_positions": {
+            "created_count": 3116,
+            "reused_count": 0,
+            "record_count": 3116
+          },
+          "position_coverages": {
+            "created_count": 31,
+            "reused_count": 0,
+            "record_count": 31
+          }
+        }
+      }
+    },
+    "AC": {
+      "status": "warning",
+      "input_count": 2189,
+      "output_count": 5808,
+      "warnings": [
+        "m04c_param_support_unknown"
+      ],
+      "summary": {
+        "batch_id": "m00_20260624000202_1150a669",
+        "module_version": "m04c-claim-fact-profile-0.2.0",
+        "taxonomy_version": "ac_claim_taxonomy_manual_v0.1",
+        "rule_version": "m04c_ac_claim_fact_profile_v0.2",
+        "product_category": "AC",
+        "target_sku_codes": [],
+        "input_claim_text_count": 2189,
+        "sku_profile_count": 155,
+        "claim_fact_count": 3931,
+        "dimension_position_count": 1694,
+        "position_coverage_count": 28,
+        "fact_claim_count": 1947,
+        "service_separate_claim_count": 420,
+        "unmatched_claim_text_count": 237,
+        "coverage_warning_sku_count": 121,
+        "profile_quality_flag_counts": {},
+        "param_unknown_claim_count": 1070,
+        "unsupported_claim_count": 0,
+        "support_status_counts": {
+          "not_param_applicable": 914,
+          "param_unknown": 1070,
+          "partially_supported": 519,
+          "supported": 1428
+        },
+        "dimension_distribution": {
+          "airflow_comfort": 696,
+          "authority": 302,
+          "durability_quality": 207,
+          "energy_efficiency": 833,
+          "health_clean_air": 647,
+          "installation_design": 29,
+          "price_value": 192,
+          "service_fulfillment": 420,
+          "smart_control": 273,
+          "temperature_performance": 332
+        },
+        "category_boundary_filter": "sku_code_prefix_AC",
+        "taxonomy_hash": "sha256:m04c_claim_taxonomy_asset_hash_v1:9e10a1531466cd5e216d479b846308d1f421d8019e5117df548cbbe4a325126c",
+        "source_used": "evidence",
+        "write_summary": {
+          "sku_claim_profiles": {
+            "created_count": 155,
+            "reused_count": 0,
+            "record_count": 155
+          },
+          "claim_facts": {
+            "created_count": 3931,
+            "reused_count": 0,
+            "record_count": 3931
+          },
+          "dimension_positions": {
+            "created_count": 1694,
+            "reused_count": 0,
+            "record_count": 1694
+          },
+          "position_coverages": {
+            "created_count": 28,
+            "reused_count": 0,
+            "record_count": 28
+          }
+        }
+      }
+    }
+  },
+  "downstream_guard": {
+    "before": {
+      "core3_sku_comment_fact_profile": {
+        "row_count": 492,
+        "max_updated_at": "2026-07-08T06:25:00.613104"
+      },
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "after": {
+      "core3_sku_comment_fact_profile": {
+        "row_count": 492,
+        "max_updated_at": "2026-07-08T06:25:00.613104"
+      },
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "unchanged": true
+  }
+}

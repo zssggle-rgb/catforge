@@ -15,6 +15,18 @@ M07 是市场事实和可比池模块，只处理清洗后的周销量、销额�
 
 当前真实样例只有 `26W01` 到 `26W23` 的周数据，因此 M07 必须使用可配置的观测窗口，不得生成 `12m` 这类伪 12 个月字段或结论。
 
+### 1.1 M07 v2 规范性变更
+
+`m07_market_profile_v2` 采用“完整市场日历 + 无记录周补 0”的数据契约：
+
+- SKU 在某周无记录等价于该周销量、销额为 0，不等价于数据缺失。
+- 新品上市时长和 `latest_week_gap` 是市场事实，不进入质量标记、复核或置信度扣分。
+- `price_latest` 只表示全局最新周成交价；当周零销量时为 null，不使用最近一次历史成交价冒充当前价。
+- `<52w`、online-only 写入 `review_reason_json.quality_issues` 中的 `severity=info`、`scope=dataset_range/channel_range`，画像保持可用。
+- TV/AC 同时按 `category_code` 与 `TV.../AC...` 前缀隔离；分位和可比池只消费本品类 SKU。
+- 分块执行时，目标 SKU 可分块，候选 SKU 必须保持全品类集合；否则同一 SKU 的价格带和池成员会随分块变化。
+- 本节覆盖后文与“有效销售周不足、最新周缺失即质量问题”有关的 v1 表述。
+
 ## 2. 模块职责
 
 ### 2.1 本模块解决什么
@@ -130,10 +142,10 @@ flowchart TD
 | 窗口编码 | 说明 | 计算口径 |
 | --- | --- | --- |
 | `full_observed_window` | 当前批次全量观测周 | 当前批次最小到最大有效周 |
-| `latest_week` | 最新有效周 | 每个 SKU 或全局最新周，可配置 |
-| `recent_4w` | 最近 4 个有效周 | 以全局最新周向前 4 周 |
-| `recent_8w` | 最近 8 个有效周 | 以全局最新周向前 8 周 |
-| `recent_12w` | 最近 12 个有效周 | 以全局最新周向前 12 周 |
+| `latest_week` | 全局最新日历周 | 当周无记录按销量/销额 0，成交价不可计算 |
+| `recent_4w` | 最近 4 个日历周 | 以全局最新周向前 4 周，缺行补 0 |
+| `recent_8w` | 最近 8 个日历周 | 以全局最新周向前 8 周，缺行补 0 |
+| `recent_12w` | 最近 12 个日历周 | 以全局最新周向前 12 周，缺行补 0 |
 
 后续数据达到更长周期时可新增 `rolling_26w`、`rolling_52w`，但首版不输出 `12m` 命名。
 
@@ -158,7 +170,7 @@ flowchart TD
 | `sku_latest_week` | 当前 SKU 最大有效周 |
 | `latest_week_gap` | `global_latest_week - sku_latest_week` |
 
-如果某 SKU 缺最新周但历史有数据，`price_latest` 使用 `sku_latest_week`，同时标记 `latest_week_missing_against_global`。
+`latest_week_gap` 表示距最近成交周数，仅用于描述连续零销量时长。`price_latest` 使用 `global_latest_week`；SKU 当周无成交时为 null，不生成质量标记。
 
 ## 5. 数据模型设计
 
@@ -266,10 +278,10 @@ market_active
 
 | 枚举 | 含义 |
 | --- | --- |
-| `sufficient` | 样本数量和有效周数满足分析 |
+| `sufficient` | 市场时间轴完整；无成交周已按 0 纳入 |
 | `limited` | 样本偏少但可参考 |
 | `insufficient` | 样本太少、关键字段缺失或无法计算 |
-| `unknown` | 无有效市场事实 |
+| `unknown` | 品类市场时间轴整体不可用 |
 
 #### 5.2.7 `market_signal_code`
 
@@ -426,12 +438,11 @@ SAMPLE_INSUFFICIENT
 
 ```json
 [
-  "observed_window_less_than_52w",
-  "online_only_channel",
-  "size_pool_limited",
-  "latest_week_gap"
+  "size_pool_limited"
 ]
 ```
+
+观察期和渠道范围放入 `review_reason_json.quality_issues` 的 info 项，不放入 `quality_flags`。
 
 ### 5.4 `core3_market_signal`
 
@@ -1141,7 +1152,7 @@ SKU 在某窗口内无有效行时，仍生成 profile，但 `sample_status='unk
 
 AC 品类的 `size_segment` 使用安装形态和匹数段，不使用屏幕尺寸。柜机 3匹和 3匹以上统一写入 `floor_hp_3`，业务展示为“3匹及以上柜机”。AC 的同池统计必须在 `price_band_size` 生成之后二次确定：`market_pool_key = ac:{size_segment}:{price_band_size}:{channel}:{window}`，`same_pool_sku_count`、同池价格分位、同池销量分位和同池销额分位都按该 key 计算。这样 1.5匹挂机不会被 77 个 SKU 的大池稀释，3匹以上柜机也不会形成单 SKU 孤岛。
 
-版本约束：TV 继续使用 `m07_price_band_v1 / m07_pool_v1`；AC 新口径使用 `m07_ac_hp_price_band_v2 / m07_ac_hp_price_pool_v2`。M07 主画像版本继续为 `m07_market_profile_v1`，由价格带规则和市场池规则字段区分品类算法，避免未重跑 TV 时切断现有 TV 读取链路。
+版本约束：主画像使用 `m07_market_profile_v2`；TV 继续使用 `m07_price_band_v1 / m07_pool_v1`，AC 使用 `m07_ac_hp_price_band_v2 / m07_ac_hp_price_pool_v2`。三个版本字段必须分别保存，draft 未验收前不得发布 current。
 
 ### 9.7 步骤 6：生成业务区间和区间内销量位置
 
@@ -1187,13 +1198,13 @@ AC 品类的 `size_segment` 使用安装形态和匹数段，不使用屏幕尺�
 
 生成 warning/review/block：
 
-- 数据缺失。
+- 品类市场时间轴整体缺失。
 - 样本不足。
-- 趋势不足。
+- 数据集日历范围不足以覆盖趋势窗口。
 - 尺寸缺失。
 - 价格异常。
 - 平台缺失。
-- 最新周缺失。
+- 最新周零销量只作为市场事实，不进入质量或复核。
 - 批次间波动异常。
 
 ## 10. 市场置信度设计
@@ -1213,7 +1224,7 @@ market_confidence =
 降权：
 
 - `price_check_mismatch`：降 0.10。
-- `latest_week_gap > 2`：降 0.08。
+- `latest_week_gap` 不扣分；它是连续零销量时长。
 - `screen_size_inch` 缺失：降 0.12。
 - `platform_type` 缺失：降 0.08。
 - 观察窗口少于 4 周：最高 low。
@@ -1374,15 +1385,15 @@ M07 API 用于运营查看、下游联调、报告证据钻取。
 
 | 条件 | warning |
 | --- | --- |
-| 观察窗口少于 52 周 | 标记 `observed_window_less_than_52w`，不得展示 12 月口径 |
-| 当前只有线上渠道 | 标记 `online_only_channel`，不得输出线下判断 |
-| `latest_week_gap > 2` | 最新周缺失 |
+| 观察窗口少于 52 周 | 记录 dataset range info，不得展示 12 月口径，不降级画像 |
+| 当前只有线上渠道 | 记录 channel range info，不得输出线下判断，不降级画像 |
+| `latest_week_gap > 2` | 记录连续零销量时长，不作为 warning |
 | `price_check_status='mismatch'` 占比高 | 均价校验风险 |
 | 同尺寸池样本 3-5 | 样本 limited |
 | 业务价格区间样本 3-5 | 区间位置只能 limited 展示 |
 | 业务尺寸区间样本 3-5 | 区间位置只能 limited 展示 |
 | 尺寸价格交叉区间样本 < 3 | 交叉区间位置不得高置信使用 |
-| 趋势窗口有效周不足 | 趋势不可高置信 |
+| 数据集日历范围不足以覆盖趋势窗口 | 趋势不适用，不代表 SKU 数据质量差 |
 | 平台字段缺失 | 平台重合不可用 |
 
 ### 13.2 review_required 条件
@@ -1567,10 +1578,10 @@ M07 不能直接说 85E7Q 的竞品是谁，只能提供：
 | 测试 | 输入 | 期望 |
 | --- | --- | --- |
 | 加权均价 | 多周销量销额 | `price_wavg=sales_amount_total/sales_volume_total` |
-| 零销量周 | 销量 0 销额 0 | 不导致除零，保留质量标记 |
+| 零销量周 | 销量 0 销额 0 | 不导致除零，不生成质量标记；成交价不可计算 |
 | 价格校验 mismatch | M01 标记 mismatch | profile 降置信 |
 | 平台占比 | 两个平台销量销额 | 输出 `platform_share_json` 和主平台 |
-| 窗口不足 | 近 4 周不足 3 周 | 趋势 null 并 warning |
+| 新品仅 1 个成交周 | 完整数据集已覆盖 8 周 | 缺行补 0，不生成样本质量 warning；基期为 0 时增长率 null |
 | 尺寸缺失 | M03 无 `screen_size_inch` | 不进入尺寸池，review |
 | 价格带 | 品类价格分位 | 动态生成 low-high |
 | 业务价格区间 | 多 SKU 加权均价 | 生成绝对金额区间并归桶 |
@@ -1597,9 +1608,9 @@ M07 不能直接说 85E7Q 的竞品是谁，只能提供：
 
 | 场景 | 期望 |
 | --- | --- |
-| SKU 无市场数据 | 输出 unknown profile 和 SAMPLE_INSUFFICIENT |
+| 市场批次内 SKU 各周均无成交 | 显式 scope 时输出 sufficient 零销量画像；无成交价，不输出缺数结论 |
 | SKU 有市场无尺寸 | 可生成市场画像，不生成尺寸池 |
-| SKU 仅一个有效周 | 可生成 latest_week，趋势样本不足 |
+| SKU 仅一个成交周 | 可生成完整窗口画像；其他周补 0，不因新品时长降级 |
 | 平台为空 | 平台重合不可用 |
 | 销额有值销量为空 | 价格不可计算，review |
 | 同尺寸池只有目标自己 | pool insufficient |

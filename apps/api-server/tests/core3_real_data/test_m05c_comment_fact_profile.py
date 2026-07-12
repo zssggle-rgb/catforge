@@ -37,6 +37,7 @@ from app.services.core3_real_data.m05c_comment_fact_profile_service import (
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606210001"
+UPSTREAM_BATCH_ID = "m00_202606230001"
 SKU_CODE = "TV00077777"
 SKU_CODE_2 = "TV00088888"
 AC_PROJECT_ID = "core3_mvp_ac"
@@ -317,6 +318,48 @@ def seed_ac_foundation(session: Session) -> None:
             rule_version=CORE3_M03B_AC_RULE_VERSION,
         )
     )
+    session.add(
+        entities.Core3SkuClaimFactProfile(
+            claim_profile_id="claim-profile-ac-00001",
+            project_id=AC_PROJECT_ID,
+            category_code="AC",
+            batch_id=AC_BATCH_ID,
+            product_category="AC",
+            taxonomy_version=CORE3_M04C_AC_TAXONOMY_VERSION,
+            sku_code=AC_SKU_CODE,
+            model_name="KFR-35GW",
+            brand_name="美的",
+            raw_claim_count=4,
+            matched_claim_count=4,
+            fact_claim_count=4,
+            unsupported_claim_count=0,
+            param_unknown_claim_count=0,
+            service_separate_claim_count=0,
+            claim_texts_json=[],
+            claim_codes=[
+                "ac_claim_fast_cooling_heating",
+                "ac_claim_energy_efficiency_apf",
+                "ac_claim_quiet_sleep",
+                "ac_claim_price_value_subsidy",
+            ],
+            fact_claim_codes=[
+                "ac_claim_fast_cooling_heating",
+                "ac_claim_energy_efficiency_apf",
+                "ac_claim_quiet_sleep",
+                "ac_claim_price_value_subsidy",
+            ],
+            unsupported_claim_codes=[],
+            service_claim_codes=[],
+            dimension_profile_json={},
+            dimension_position_profile_json={},
+            claim_summary_json={},
+            evidence_ids=[],
+            quality_flags=[],
+            confidence=Decimal("0.9000"),
+            profile_hash="sha256:test-ac-claim-profile",
+            rule_version=CORE3_M04C_AC_RULE_VERSION,
+        )
+    )
     session.add_all(
         [
             ac_claim_fact("ac-claim-cool", "ac_claim_fast_cooling_heating", "速冷速热", "temperature_performance", "fast_cooling_heating", ["cooling_capacity_w", "horsepower_hp"]),
@@ -531,6 +574,12 @@ def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
     assert "declared_refresh_rate_hz" in profile.supported_param_codes
     assert "speaker_power_w" in profile.contradicted_param_codes
     assert "brand_power_signal" in profile.signal_summary_json
+    assert "service_fulfillment_comment_excluded" not in profile.quality_flags
+    assert "comment_contradicts_existing_param_or_claim" not in profile.quality_flags
+    notices = {item["issue_code"]: item for item in profile.signal_summary_json["quality_notices"]}
+    assert notices["service_fulfillment_comment_excluded"]["severity"] == "info"
+    assert notices["service_fulfillment_comment_excluded"]["scope"] == "comment_fact"
+    assert notices["comment_contradicts_existing_param_or_claim"]["propagation_policy"] == "related_anchor_only"
 
     system_fact = session.execute(
         select(entities.Core3CommentFactAtom).where(entities.Core3CommentFactAtom.subdimension_code == "system_smooth_ads")
@@ -542,6 +591,12 @@ def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
         select(entities.Core3CommentFactAtom).where(entities.Core3CommentFactAtom.subdimension_code == "service_delivery_install")
     ).scalar_one()
     assert service_fact.support_relation == "service_excluded"
+    assert service_fact.signal_payload_json["quality_contract"] == {
+        "issue_code": "service_fulfillment_comment_excluded",
+        "severity": "info",
+        "scope": "comment_fact",
+        "downstream_usage": "excluded_from_product_fact_analysis",
+    }
 
     coverage_types = set(session.execute(select(entities.Core3CommentFactCoverage.coverage_type)).scalars())
     assert "brand_power_signal" in coverage_types
@@ -551,6 +606,95 @@ def test_m05c_runner_generates_comment_fact_profile_and_dimension_coverage():
 
     review_issue = session.execute(select(entities.Core3CommentFactReviewIssue)).scalar_one()
     assert review_issue.issue_type == "comment_contradicts_existing_param_or_claim"
+    assert review_issue.issue_payload_json["scope"] == "comment_fact"
+    assert review_issue.issue_payload_json["comment_topic_code"] == "audio_quality"
+    assert review_issue.issue_payload_json["contradicted_param_codes"] == ["speaker_power_w"]
+    assert review_issue.issue_payload_json["affected_anchor_codes"] == []
+    assert review_issue.issue_payload_json["affected_anchor_mapping_status"] == "deferred_to_downstream_category_taxonomy"
+    assert review_issue.issue_payload_json["propagation_policy"] == "related_anchor_only"
+
+
+def test_m05c_reads_m03b_and_m04c_from_current_category_serving_scope():
+    session = make_session()
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=UPSTREAM_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["product_parameter", "selling_points_data"],
+            ruleset_version="tv-core3-real-data-v2-0.2.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 23, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    session.query(entities.Core3SkuParamProfile).update({"batch_id": UPSTREAM_BATCH_ID})
+    session.query(entities.Core3SkuClaimFactProfile).update({"batch_id": UPSTREAM_BATCH_ID})
+    session.query(entities.Core3SkuClaimFact).update({"batch_id": UPSTREAM_BATCH_ID})
+    session.commit()
+
+    result = M05CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        llm_mode="off",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuCommentFactProfile)).scalar_one()
+    assert "param_profile_missing" not in profile.quality_flags
+    assert "claim_fact_profile_missing" not in profile.quality_flags
+    assert result.summary_json["input_context"]["param_profile_source_batch_counts"] == {UPSTREAM_BATCH_ID: 1}
+    assert result.summary_json["input_context"]["claim_fact_profile_source_batch_counts"] == {UPSTREAM_BATCH_ID: 1}
+    assert result.summary_json["input_context"]["lookup_strategy"] == "same_batch_then_current_category_serving_scope"
+
+
+def test_m05c_only_marks_true_serving_scope_dependency_missing():
+    session = make_session()
+    session.query(entities.Core3SkuParamProfile).delete()
+    session.query(entities.Core3SkuClaimFact).delete()
+    session.query(entities.Core3SkuClaimFactProfile).delete()
+    session.commit()
+
+    M05CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        llm_mode="off",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuCommentFactProfile)).scalar_one()
+    assert "param_profile_missing" in profile.quality_flags
+    assert "claim_fact_profile_missing" in profile.quality_flags
+
+
+def test_m05c_does_not_mark_claim_profile_missing_when_profile_has_no_fact_claims():
+    session = make_session()
+    session.query(entities.Core3SkuClaimFact).delete()
+    session.commit()
+
+    M05CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        llm_mode="off",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuCommentFactProfile)).scalar_one()
+    assert "claim_fact_profile_missing" not in profile.quality_flags
+    assert profile.supported_claim_codes == []
 
 
 def test_m05c_runner_generates_ac_comment_fact_profile_with_ac_taxonomy():

@@ -1,0 +1,144 @@
+{
+  "task_id": "M12D-RP-G08",
+  "generated_at": "2026-07-11T19:05:14.345262+00:00",
+  "sources": {
+    "g06_result": "/Users/sjs/catforge/docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G06_tv_ac_full_shadow.json",
+    "g06_fixture": "/Users/sjs/catforge/docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G06_validated_fixture.json",
+    "g07_result": "/Users/sjs/catforge/docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G07_competitor_consumption_shadow.json"
+  },
+  "integration_tests": {
+    "pytest_passed": 378,
+    "g07_deterministic_replay_identical": true,
+    "scope": "M03B-M12D、竞品 reader、CLI、报告和 TV/AC 品类隔离"
+  },
+  "shared_checks": {
+    "g06_acceptance_passed": true,
+    "g06_read_only_guard_unchanged": true,
+    "g07_acceptance_passed": true,
+    "g07_deterministic_replay_identical": true,
+    "integration_tests_passed": true
+  },
+  "categories": {
+    "TV": {
+      "category_code": "TV",
+      "taxonomy_version": "m12d_tv_purchase_reason_anchor_taxonomy_v0.1",
+      "sku_count": 377,
+      "status_counts": {
+        "failed": 0,
+        "missing_input": 0,
+        "ready": 335,
+        "ready_limited": 13,
+        "weak_expression_only": 29
+      },
+      "ready_rate": "0.8886",
+      "sku_consumable_rate": "1.0000",
+      "core_payment_missing_rate": "0.1114",
+      "focus_sku_count": 10,
+      "unaffected_regression_sku_count": 20,
+      "unaffected_regression_sku_codes": [
+        "TV00009549",
+        "TV00022396",
+        "TV00022397",
+        "TV00023850",
+        "TV00025500",
+        "TV00025501",
+        "TV00025519",
+        "TV00025784",
+        "TV00026064",
+        "TV00026065",
+        "TV00026106",
+        "TV00026131",
+        "TV00026209",
+        "TV00026228",
+        "TV00026231",
+        "TV00026232",
+        "TV00026248",
+        "TV00026857",
+        "TV00026874",
+        "TV00026886"
+      ],
+      "g07_target_count": 10,
+      "g07_pair_count": 90,
+      "checks": {
+        "taxonomy_isolated": true,
+        "sku_prefix_isolated": true,
+        "full_scope_complete": true,
+        "release_quality_ready": true,
+        "all_release_thresholds_passed": true,
+        "sku_consumable_rate_complete": true,
+        "unaffected_regression_20": true,
+        "focus_validation_complete": true,
+        "g06_business_checks_passed": true,
+        "g07_competitor_checks_passed": true
+      },
+      "decision": "go_to_g09"
+    },
+    "AC": {
+      "category_code": "AC",
+      "taxonomy_version": "m12d_ac_purchase_reason_anchor_taxonomy_v0.1",
+      "sku_count": 155,
+      "status_counts": {
+        "failed": 0,
+        "missing_input": 0,
+        "ready": 143,
+        "ready_limited": 1,
+        "weak_expression_only": 11
+      },
+      "ready_rate": "0.9226",
+      "sku_consumable_rate": "1.0000",
+      "core_payment_missing_rate": "0.0774",
+      "focus_sku_count": 18,
+      "unaffected_regression_sku_count": 20,
+      "unaffected_regression_sku_codes": [
+        "AC00026378",
+        "AC00028640",
+        "AC00028642",
+        "AC00029097",
+        "AC00029319",
+        "AC00029751",
+        "AC00030362",
+        "AC00030631",
+        "AC00030929",
+        "AC00032008",
+        "AC00032338",
+        "AC00032506",
+        "AC00032615",
+        "AC00032705",
+        "AC00033476",
+        "AC00033612",
+        "AC00033721",
+        "AC00033789",
+        "AC00034284",
+        "AC00034502"
+      ],
+      "g07_target_count": 18,
+      "g07_pair_count": 306,
+      "checks": {
+        "taxonomy_isolated": true,
+        "sku_prefix_isolated": true,
+        "full_scope_complete": true,
+        "release_quality_ready": true,
+        "all_release_thresholds_passed": true,
+        "sku_consumable_rate_complete": true,
+        "unaffected_regression_20": true,
+        "focus_validation_complete": true,
+        "g06_business_checks_passed": true,
+        "g07_competitor_checks_passed": true
+      },
+      "decision": "go_to_g09"
+    }
+  },
+  "qf_backfill": {
+    "qf15_historical_result": "旧口径下 blocked 结论保留为历史记录；旧口径把购买理由成立度、购买阻力和版本级消费能力混在一起，不能改写成当时已通过。",
+    "qf15_current_state": "completed_superseded_by_m12d_rp_g06_g08；新批准口径下 TV/AC 分别全量影子重算并达到 ready。",
+    "qf16_prerequisite": "satisfied；竞品消费和 Top 3 回归已由 M12D-RP-G07 完成。",
+    "qf17_state": "completed_by_m12d_rp_g08；共享链路和跨品类隔离回归通过。"
+  },
+  "acceptance": {
+    "passed": true,
+    "failed_checks": [],
+    "g09_commit_deploy_candidate": "go",
+    "current_publish": "no_go_pending_g09_g10",
+    "reason_cn": "TV/AC 均通过本地集成和影子发布门槛，可申请进入 G09 提交部署；代码尚未提交部署，205 尚未正式全量重跑，因此当前仍不可发布。"
+  }
+}

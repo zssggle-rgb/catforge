@@ -3,7 +3,7 @@ from sqlalchemy import select
 from app.cli import catforge_pipeline
 from app.models import entities
 from app.services.core3_real_data.constants import CORE3_M03B_AC_RULE_VERSION, Core3RunStatus, M07_ANALYSIS_WINDOWS
-from tests.core3_real_data.test_m03b_sku_param_profile_runner import BATCH_ID, PROJECT_ID, make_session, seed_ac_param_evidence
+from tests.core3_real_data.test_m03b_sku_param_profile_runner import AC_BATCH_ID, BATCH_ID, PROJECT_ID, make_session, seed_ac_param_evidence
 
 
 def test_pipeline_cli_natural_language_runs_ac_param_profile():
@@ -14,8 +14,8 @@ def test_pipeline_cli_natural_language_runs_ac_param_profile():
         session,
         question="生成空调 SKU 参数画像",
         project_id=PROJECT_ID,
-        source_category_code="TV",
-        batch_id=BATCH_ID,
+        source_category_code="AC",
+        batch_id=AC_BATCH_ID,
         product_category="auto",
         force_rebuild=True,
     )

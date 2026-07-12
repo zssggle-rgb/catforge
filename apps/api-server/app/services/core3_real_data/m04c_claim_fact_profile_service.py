@@ -16,7 +16,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import case, delete, select, text
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -25,7 +25,6 @@ from app.services.core3_real_data.cleaning_repositories import SourceBatchReader
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
-    CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_MODULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
@@ -1176,10 +1175,14 @@ class M04CService:
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.context.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.context.category_code.value)
-            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
             .where(entities.Core3SkuParamProfile.rule_version == param_rule_version)
             .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
-            .order_by(entities.Core3SkuParamProfile.updated_at.desc(), entities.Core3SkuParamProfile.created_at.desc())
+            .order_by(
+                case((entities.Core3SkuParamProfile.batch_id == batch_id, 0), else_=1),
+                entities.Core3SkuParamProfile.updated_at.desc(),
+                entities.Core3SkuParamProfile.created_at.desc(),
+                entities.Core3SkuParamProfile.batch_id.desc(),
+            )
         )
         result: dict[str, entities.Core3SkuParamProfile] = {}
         for profile in self.context.db.execute(stmt).scalars():
@@ -1225,6 +1228,8 @@ class M04CProfileBuilder:
         unmatched_count = 0
         support_status_counts: Counter[str] = Counter()
         service_separate_claim_count = 0
+        coverage_warning_sku_count = 0
+        profile_quality_flag_counts: Counter[str] = Counter()
 
         for sku_code in sorted(records_by_sku):
             sku_result = self._build_sku(sku_code, records_by_sku[sku_code], param_profiles.get(sku_code))
@@ -1234,6 +1239,9 @@ class M04CProfileBuilder:
             unmatched_count += int(sku_result["unmatched_claim_text_count"])
             support_status_counts.update(sku_result["support_status_counts"])
             service_separate_claim_count += int(sku_result["service_separate_claim_count"])
+            if sku_result["unmatched_claim_rows"]:
+                coverage_warning_sku_count += 1
+            profile_quality_flag_counts.update(sku_result["profile"].payload.get("quality_flags") or [])
 
         coverages = self._build_coverages(positions, total_sku_count=len(records_by_sku))
         dimension_distribution = _dimension_distribution(facts)
@@ -1246,6 +1254,8 @@ class M04CProfileBuilder:
             "fact_claim_count": support_status_counts[SUPPORT_SUPPORTED] + support_status_counts[SUPPORT_PARTIAL],
             "service_separate_claim_count": service_separate_claim_count,
             "unmatched_claim_text_count": unmatched_count,
+            "coverage_warning_sku_count": coverage_warning_sku_count,
+            "profile_quality_flag_counts": dict(sorted(profile_quality_flag_counts.items())),
             "param_unknown_claim_count": support_status_counts[SUPPORT_UNKNOWN],
             "unsupported_claim_count": support_status_counts[SUPPORT_UNSUPPORTED],
             "support_status_counts": dict(sorted(support_status_counts.items())),
@@ -1268,11 +1278,23 @@ class M04CProfileBuilder:
         support_status_counts: Counter[str] = Counter()
         service_separate_claim_count = 0
         profile_texts = []
+        unmatched_claim_rows: list[dict[str, Any]] = []
         for index, record in enumerate(records, start=1):
             source_claim_key = record.source_claim_key or _source_claim_key(sku_code, record.claim_seq, record.claim_text, index)
             matches = self._match_claims(record.claim_text)
             if not matches:
                 unmatched_claim_text_count += 1
+                unmatched_claim_rows.append(
+                    {
+                        "issue_code": "claim_text_unmatched",
+                        "severity": "warning",
+                        "scope": "row",
+                        "source_claim_key": source_claim_key,
+                        "claim_seq": record.claim_seq,
+                        "claim_text": record.claim_text,
+                        "evidence_id": record.evidence_id,
+                    }
+                )
                 continue
             profile_texts.append(
                 {
@@ -1318,6 +1340,7 @@ class M04CProfileBuilder:
                 facts=facts,
                 positions=positions,
                 unmatched_claim_text_count=unmatched_claim_text_count,
+                unmatched_claim_rows=unmatched_claim_rows,
                 service_separate_claim_count=service_separate_claim_count,
                 support_status_counts=support_status_counts,
                 param_profile=param_profile,
@@ -1328,6 +1351,7 @@ class M04CProfileBuilder:
             "facts": facts,
             "positions": positions,
             "unmatched_claim_text_count": unmatched_claim_text_count,
+            "unmatched_claim_rows": unmatched_claim_rows,
             "service_separate_claim_count": service_separate_claim_count,
             "support_status_counts": support_status_counts,
         }
@@ -1524,6 +1548,7 @@ class M04CProfileBuilder:
         facts: Sequence[M04CWritePayload],
         positions: Sequence[M04CWritePayload],
         unmatched_claim_text_count: int,
+        unmatched_claim_rows: list[dict[str, Any]],
         service_separate_claim_count: int,
         support_status_counts: Counter[str],
         param_profile: entities.Core3SkuParamProfile | None,
@@ -1544,22 +1569,29 @@ class M04CProfileBuilder:
             }
             for position in position_payloads
         }
-        evidence_ids = _unique_preserve_order(evidence_id for fact in fact_payloads for evidence_id in fact["evidence_ids"])
+        evidence_ids = _unique_preserve_order(
+            [
+                *[evidence_id for fact in fact_payloads for evidence_id in fact["evidence_ids"]],
+                *[str(item["evidence_id"]) for item in unmatched_claim_rows if item.get("evidence_id")],
+            ]
+        )
         quality_flags = []
         if param_profile is None:
             quality_flags.append("m03b_param_profile_missing")
-        if unmatched_claim_text_count:
-            quality_flags.append("claim_text_unmatched")
-        if support_status_counts[SUPPORT_UNSUPPORTED]:
-            quality_flags.append("claim_param_support_conflict")
         claim_summary = {
             "taxonomy_version": self.taxonomy.taxonomy_version,
             "rule_version": self.rule_version,
             "input_source": self.input_source,
             "m03b_param_profile_hash": getattr(param_profile, "profile_hash", None),
+            "m03b_param_profile_batch_id": getattr(param_profile, "batch_id", None),
+            "m03b_param_profile_rule_version": getattr(param_profile, "rule_version", None),
+            "m03b_lookup_strategy": "same_batch_then_latest_category_rule",
             "raw_claim_count": raw_claim_count,
             "matched_claim_count": len(fact_payloads),
             "unmatched_claim_text_count": unmatched_claim_text_count,
+            "coverage_status": "partial" if unmatched_claim_text_count else "complete",
+            "coverage_warnings": unmatched_claim_rows,
+            "fact_support_warning_count": support_status_counts[SUPPORT_UNSUPPORTED] + support_status_counts[SUPPORT_UNKNOWN],
             "support_status_counts": dict(sorted(support_status_counts.items())),
             "dimension_counts": {dimension: value["matched_claim_count"] for dimension, value in dimension_profile.items()},
         }

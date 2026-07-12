@@ -94,7 +94,9 @@ flowchart TD
 | 项 | 值 |
 | --- | --- |
 | taxonomy version | `m09c_tv_user_task_taxonomy_v0.1` |
-| rule version | `m09c_tv_user_task_profile_v0.1` |
+| TV rule version | `m09c_tv_user_task_profile_v0.3` |
+| AC rule version | `m09c_ac_user_task_profile_v0.3` |
+| module version | `m09c-user-task-profile-0.2.0` |
 | product category | `TV` |
 | SKU prefix | `TV` |
 
@@ -340,6 +342,34 @@ service_excluded = false
 3. 卖点和参数一致性更高。
 4. 尺寸价格更匹配。
 5. 仍并列时写入复核问题，不强行生成多个主任务。
+
+### 7.4 画像质量聚合
+
+关系质量与画像质量分开计算：
+
+```text
+relation_review_required = 当前 SKU x 用户任务关系自身的证据问题
+
+profile_review_required =
+  no_primary_user_task
+  or primary_relation_status_invalid
+  or primary_confidence < 0.80
+  or primary_size_price_conflict
+  or primary_negative_drag_score >= 0.45
+```
+
+其中 `primary_negative_drag_score >= 0.45` 表示主任务出现达到关系判定阻断阈值的反证，不包含少量负向体验。用户有任务但产品做得不好仍属于有效任务，不得因此删除主任务。
+
+实现约束：
+
+1. `_profile_payload` 只把主任务质量问题写入画像 `review_reason_json`。
+2. `service_signal_excluded`、`unknown_param_codes_present` 等证据提醒继续写在关系行，但不是画像阻断项。
+3. 非主任务的 `review_required` 不参与画像 `review_required` 聚合。
+4. 质量聚合不得改变 taxonomy、任务 code、`relation_status`、六个关系分项得分、综合分、证据 ID 和主次任务排序。
+5. `profile_hash` 必须纳入画像复核字段和画像置信度，避免质量状态变化但 hash 不变。
+6. TV/AC 使用同一聚合函数，但分别传入自己的 taxonomy 和 rule version。
+
+量价范围语义沿用 M07：无销量行按 0 销量事实处理；新上市导致观测周数短不构成缺失或低质量，M09C 不增加固定 8 周门槛。
 
 ## 8. 数据模型设计
 
@@ -610,6 +640,8 @@ CLI 实现后更新：
 | `no_primary_with_enough_comments` | 评论足够但无法形成主任务 |
 | `taxonomy_version_missing` | taxonomy 未发布或版本不匹配 |
 
+作用域规则：`primary_task_tie`、`claim_param_conflict`、`comment_param_conflict` 只有达到主任务阻断阈值时进入画像复核；发生在次要、观察、厂家主打、潜在或拖后腿任务时只保留为 relation 级复核。`service_leakage_detected` 在服务信号已成功排除时是 relation 级审计信息，不是画像失败。
+
 ## 14. 验收口径
 
 1. 数据库有独立 M09C 表，不覆盖旧 M09。
@@ -621,3 +653,6 @@ CLI 实现后更新：
 7. M10C/M11C 后续可读取 M09C 输出增强任务支撑。
 8. CLI 和 skill 自然语言入口可执行和查询。
 9. 单元测试和 CLI 测试不依赖外部 LLM。
+10. TV/AC 中主任务置信度不低于 `0.80` 且无阻断冲突的画像自动通过。
+11. 无主任务、主关系状态异常、主任务低置信或阻断级冲突的画像仍需复核。
+12. 切换质量聚合规则前后，任务 taxonomy、主次任务 code、关系状态、关系分数和证据保持不变。

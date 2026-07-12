@@ -21,7 +21,11 @@ def test_replacement_pressure_selects_value_substitution_as_primary() -> None:
                 candidate_stronger=["画质配置解释加价"],
             ),
             price_gap_pct_to_target=Decimal("0.02"),
-            weighted_overlap={"battlefield": Decimal("0.85"), "user_task": Decimal("0.80"), "target_group": Decimal("0.75")},
+            weighted_overlap={
+                "battlefield": Decimal("0.85"),
+                "user_task": Decimal("0.80"),
+                "target_group": Decimal("0.75"),
+            },
             market_validation_level="strong",
             candidate_config_advantage_score=Decimal("0.80"),
             candidate_scenario_mindshare_score=Decimal("0.70"),
@@ -37,14 +41,22 @@ def test_replacement_pressure_selects_value_substitution_as_primary() -> None:
     assert result.score_breakdown.purchase_reason_pressure == Decimal("3.0000")
 
 
-def test_replacement_pressure_selects_price_suppression_for_lower_price_with_core_anchor() -> None:
+def test_replacement_pressure_selects_price_suppression_for_lower_price_with_core_anchor() -> (
+    None
+):
     result = ReplacementPressureClassifier().classify(
         ReplacementPressureInput(
             purchase_pool_level="P1",
             purchase_pool_score=Decimal("0.85"),
-            anchor_substitutability=_anchor_result(score=10, shared_core=["贵得值的体验升级"]),
+            anchor_substitutability=_anchor_result(
+                score=10, shared_core=["贵得值的体验升级"]
+            ),
             price_gap_pct_to_target=Decimal("-0.18"),
-            weighted_overlap={"battlefield": Decimal("0.60"), "user_task": Decimal("0.55"), "target_group": Decimal("0.50")},
+            weighted_overlap={
+                "battlefield": Decimal("0.60"),
+                "user_task": Decimal("0.55"),
+                "target_group": Decimal("0.50"),
+            },
             market_validation_level="medium",
         )
     )
@@ -56,14 +68,20 @@ def test_replacement_pressure_selects_price_suppression_for_lower_price_with_cor
     assert "更低价格" in result.reason_cn
 
 
-def test_replacement_pressure_low_score_does_not_emit_strong_substitution_language() -> None:
+def test_replacement_pressure_low_score_does_not_emit_strong_substitution_language() -> (
+    None
+):
     result = ReplacementPressureClassifier().classify(
         ReplacementPressureInput(
             purchase_pool_level="P4",
             purchase_pool_score=Decimal("0.35"),
             anchor_substitutability=_anchor_result(score=4, shared_core=[]),
             price_gap_pct_to_target=Decimal("0.03"),
-            weighted_overlap={"battlefield": Decimal("0.20"), "user_task": Decimal("0.18"), "target_group": Decimal("0.15")},
+            weighted_overlap={
+                "battlefield": Decimal("0.20"),
+                "user_task": Decimal("0.18"),
+                "target_group": Decimal("0.15"),
+            },
             market_validation_level="weak",
             candidate_scenario_mindshare_score=Decimal("0.20"),
             risk_flags=["sample_limited", "claim_only"],
@@ -74,11 +92,13 @@ def test_replacement_pressure_low_score_does_not_emit_strong_substitution_langua
     assert result.primary_pressure_type == "low_pressure_review"
     assert result.strong_pressure_allowed is False
     assert result.requires_review is True
-    assert "不能输出强替代话术" in result.reason_cn
+    assert "当前更适合作为参考竞品" in result.reason_cn
     assert "强替代压力" not in result.reason_cn
 
 
-def test_replacement_pressure_outputs_one_primary_and_at_most_two_auxiliary_types() -> None:
+def test_replacement_pressure_outputs_one_primary_and_at_most_two_auxiliary_types() -> (
+    None
+):
     result = ReplacementPressureClassifier().classify(
         ReplacementPressureInput(
             purchase_pool_level="P1",
@@ -89,7 +109,11 @@ def test_replacement_pressure_outputs_one_primary_and_at_most_two_auxiliary_type
                 candidate_stronger=["游戏设备适配降低决策风险"],
             ),
             price_gap_pct_to_target=Decimal("-0.20"),
-            weighted_overlap={"battlefield": Decimal("0.82"), "user_task": Decimal("0.78"), "target_group": Decimal("0.74")},
+            weighted_overlap={
+                "battlefield": Decimal("0.82"),
+                "user_task": Decimal("0.78"),
+                "target_group": Decimal("0.74"),
+            },
             market_validation_level="strong",
             candidate_config_advantage_score=Decimal("0.90"),
             candidate_scenario_mindshare_score=Decimal("0.90"),
@@ -99,18 +123,28 @@ def test_replacement_pressure_outputs_one_primary_and_at_most_two_auxiliary_type
 
     assert result.primary_pressure_type == "price_suppression"
     assert len(result.auxiliary_pressure_types) == 2
-    assert result.primary_pressure_type not in {item.pressure_type for item in result.auxiliary_pressure_types}
+    assert result.primary_pressure_type not in {
+        item.pressure_type for item in result.auxiliary_pressure_types
+    }
     assert len({item.pressure_type for item in result.auxiliary_pressure_types}) == 2
 
 
-def test_replacement_pressure_blocks_strong_output_when_anchor_pair_is_blocked() -> None:
+def test_replacement_pressure_blocks_strong_output_when_anchor_pair_is_blocked() -> (
+    None
+):
     result = ReplacementPressureClassifier().classify(
         ReplacementPressureInput(
             purchase_pool_level="P0",
             purchase_pool_score=Decimal("1.00"),
-            anchor_substitutability=_anchor_result(score=0, pair_scoring_allowed=False, requires_review=True),
+            anchor_substitutability=_anchor_result(
+                score=0, pair_scoring_allowed=False, requires_review=True
+            ),
             price_gap_pct_to_target=Decimal("-0.18"),
-            weighted_overlap={"battlefield": Decimal("0.80"), "user_task": Decimal("0.80"), "target_group": Decimal("0.80")},
+            weighted_overlap={
+                "battlefield": Decimal("0.80"),
+                "user_task": Decimal("0.80"),
+                "target_group": Decimal("0.80"),
+            },
             market_validation_level="strong",
         )
     )
@@ -133,7 +167,13 @@ def _anchor_result(
     return AnchorSubstitutabilityResult(
         anchor_substitutability_score=score,
         anchor_substitutability_score_raw=Decimal(score),
-        anchor_substitutability_level="strong" if score >= 13 else "medium" if score >= 10 else "partial" if score >= 7 else "insufficient",
+        anchor_substitutability_level="strong"
+        if score >= 13
+        else "medium"
+        if score >= 10
+        else "partial"
+        if score >= 7
+        else "insufficient",
         score_breakdown=AnchorSubstitutabilityBreakdown(),
         shared_core_anchors=shared_core or [],
         candidate_stronger_anchors=candidate_stronger or [],

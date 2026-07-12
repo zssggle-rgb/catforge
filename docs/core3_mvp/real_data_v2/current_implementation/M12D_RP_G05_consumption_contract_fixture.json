@@ -1,0 +1,39 @@
+{
+  "contract_version": "m12d_reason_pressure_consumption_v0.1",
+  "task_id": "M12D-RP-G05",
+  "rules": {
+    "strong": "ready SKU 可比较已成立核心购买理由和压力。",
+    "limited": "有已成立 supporting 理由，只能有限比较，不输出强替代结论。",
+    "facts_only": "可比较参数、卖点、市场和产品价值主张，不比较用户购买理由。",
+    "blocked": "仅版本 blocked 或 SKU failed/missing_input 时不可消费。"
+  },
+  "categories": {
+    "TV": {
+      "release_quality_status": "legacy_unassessed",
+      "sku_count": 377,
+      "consumption_mode_counts": {
+        "facts_only": 32,
+        "limited": 10,
+        "strong": 335
+      },
+      "sample_skus": {
+        "strong": "TV00022396",
+        "limited": "TV00026228",
+        "facts_only": "TV00009549"
+      }
+    },
+    "AC": {
+      "release_quality_status": "legacy_unassessed",
+      "sku_count": 155,
+      "consumption_mode_counts": {
+        "facts_only": 12,
+        "strong": 143
+      },
+      "sample_skus": {
+        "strong": "AC00026378",
+        "limited": null,
+        "facts_only": "AC00034959"
+      }
+    }
+  }
+}

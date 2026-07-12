@@ -12,11 +12,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_analyst
 from app.models import entities
-from app.services.core3_real_data import m12c_claim_value_quantification_service as m12c_service
+from app.services.core3_real_data import (
+    m12c_claim_value_quantification_service as m12c_service,
+)
 from app.services.core3_real_data.analyst import competitor_answer
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext
-from app.services.core3_real_data.analyst.sop_orchestrators import CLAIM_VALUE_REPORT_LIMIT, SopOrchestrators
+from app.services.core3_real_data.analyst.sop_orchestrators import (
+    CLAIM_VALUE_REPORT_LIMIT,
+    SopOrchestrators,
+)
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
@@ -54,8 +59,11 @@ from app.services.core3_real_data.constants import (
     M12DEvidenceStrength,
     M12DInputStatus,
     M12DProfileStatus,
+    M12DReleaseQualityStatus,
 )
-from app.services.core3_real_data.purchase_reason_profile_repositories import PurchaseReasonProfileRepository
+from app.services.core3_real_data.purchase_reason_profile_repositories import (
+    PurchaseReasonProfileRepository,
+)
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
     M12DPurchaseReasonAnchorRecord,
     M12DPurchaseReasonProfileVersionRecord,
@@ -172,7 +180,10 @@ def test_m12c_scorecard_exposes_business_weights_and_claim_type() -> None:
         market_position=market_position,
     )
 
-    assert scorecard["score_method_cn"] == "卖点支付价值分 = 战场相关度20% + 参数竞争力25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
+    assert (
+        scorecard["score_method_cn"]
+        == "卖点支付价值分 = 战场相关度20% + 参数竞争力25% + 用户评论感知25% + 竞品差异15% + 市场验证15%。"
+    )
     assert {item["code"] for item in scorecard["dimensions"]} == {
         "battlefield_relevance",
         "parameter_competitiveness",
@@ -351,19 +362,37 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
     )
     claims = {
         sku: {
-            "tv_claim_hdr_high_brightness": dataclasses.replace(target_claim, sku_code=sku)
+            "tv_claim_hdr_high_brightness": dataclasses.replace(
+                target_claim, sku_code=sku
+            )
         }
         for sku in pool.sku_codes
     }
     param_profiles = {
-        "sku-a": m12c_service.ParamProfileState("sku-a", {"declared_brightness_nit_or_band": 5200}, ()),
-        "sku-b": m12c_service.ParamProfileState("sku-b", {"declared_brightness_nit_or_band": 2400}, ()),
-        "sku-c": m12c_service.ParamProfileState("sku-c", {"declared_brightness_nit_or_band": 2000}, ()),
-        "sku-d": m12c_service.ParamProfileState("sku-d", {"declared_brightness_nit_or_band": 1800}, ()),
-        "sku-e": m12c_service.ParamProfileState("sku-e", {"declared_brightness_nit_or_band": 1200}, ()),
-        "sku-f": m12c_service.ParamProfileState("sku-f", {"declared_brightness_nit_or_band": 800}, ()),
+        "sku-a": m12c_service.ParamProfileState(
+            "sku-a", {"declared_brightness_nit_or_band": 5200}, ()
+        ),
+        "sku-b": m12c_service.ParamProfileState(
+            "sku-b", {"declared_brightness_nit_or_band": 2400}, ()
+        ),
+        "sku-c": m12c_service.ParamProfileState(
+            "sku-c", {"declared_brightness_nit_or_band": 2000}, ()
+        ),
+        "sku-d": m12c_service.ParamProfileState(
+            "sku-d", {"declared_brightness_nit_or_band": 1800}, ()
+        ),
+        "sku-e": m12c_service.ParamProfileState(
+            "sku-e", {"declared_brightness_nit_or_band": 1200}, ()
+        ),
+        "sku-f": m12c_service.ParamProfileState(
+            "sku-f", {"declared_brightness_nit_or_band": 800}, ()
+        ),
     }
-    comments = {"sku-a": m12c_service.CommentState("sku-a", ("tv_claim_hdr_high_brightness",), (), 8, 0, Decimal("0.9000"))}
+    comments = {
+        "sku-a": m12c_service.CommentState(
+            "sku-a", ("tv_claim_hdr_high_brightness",), (), 8, 0, Decimal("0.9000")
+        )
+    }
 
     competitiveness = m12c_service._claim_parameter_competitiveness(
         pool=pool,
@@ -374,7 +403,10 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
         param_profiles=param_profiles,
     )
 
-    assert competitiveness["overall_parameter_competitiveness_level"] == m12c_service.M12C_PARAM_LEVEL_LEADING
+    assert (
+        competitiveness["overall_parameter_competitiveness_level"]
+        == m12c_service.M12C_PARAM_LEVEL_LEADING
+    )
     assert competitiveness["key_param_results"][0]["target_numeric_value"] == 5200.0
 
     metric = {
@@ -399,21 +431,40 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
 
     assert role == m12c_service.M12C_ROLE_PREMIUM
 
-    hdmi_pool = dataclasses.replace(pool, claim_code="tv_claim_hdmi21_connectivity", claim_name="HDMI2.1 连接", context_code="BF_GAMING_SPORTS_FLUENCY")
+    hdmi_pool = dataclasses.replace(
+        pool,
+        claim_code="tv_claim_hdmi21_connectivity",
+        claim_name="HDMI2.1 连接",
+        context_code="BF_GAMING_SPORTS_FLUENCY",
+    )
     hdmi_claim = dataclasses.replace(
         target_claim,
         claim_code="tv_claim_hdmi21_connectivity",
         claim_name="HDMI2.1 连接",
         supporting_param_codes=("hdmi21_flag",),
     )
-    hdmi_claims = {sku: {"tv_claim_hdmi21_connectivity": dataclasses.replace(hdmi_claim, sku_code=sku)} for sku in hdmi_pool.sku_codes}
-    hdmi_params = {sku: m12c_service.ParamProfileState(sku, {"hdmi21_flag": True}, ()) for sku in hdmi_pool.sku_codes}
+    hdmi_claims = {
+        sku: {
+            "tv_claim_hdmi21_connectivity": dataclasses.replace(
+                hdmi_claim, sku_code=sku
+            )
+        }
+        for sku in hdmi_pool.sku_codes
+    }
+    hdmi_params = {
+        sku: m12c_service.ParamProfileState(sku, {"hdmi21_flag": True}, ())
+        for sku in hdmi_pool.sku_codes
+    }
     hdmi_competitiveness = m12c_service._claim_parameter_competitiveness(
         pool=hdmi_pool,
         target_sku="sku-a",
         claim=hdmi_claim,
         claims=hdmi_claims,
-        comments={"sku-a": m12c_service.CommentState("sku-a", ("tv_claim_hdmi21_connectivity",), (), 4, 0, Decimal("0.9000"))},
+        comments={
+            "sku-a": m12c_service.CommentState(
+                "sku-a", ("tv_claim_hdmi21_connectivity",), (), 4, 0, Decimal("0.9000")
+            )
+        },
         param_profiles=hdmi_params,
     )
     hdmi_role = m12c_service._claim_role(
@@ -429,7 +480,10 @@ def test_m12c_parameter_competitiveness_gates_premium_claims() -> None:
         has_negative=False,
     )
 
-    assert hdmi_competitiveness["overall_parameter_competitiveness_level"] == m12c_service.M12C_PARAM_LEVEL_PARITY
+    assert (
+        hdmi_competitiveness["overall_parameter_competitiveness_level"]
+        == m12c_service.M12C_PARAM_LEVEL_PARITY
+    )
     assert hdmi_role == m12c_service.M12C_ROLE_BASIC
 
 
@@ -475,7 +529,11 @@ def make_session() -> Session:
 
 
 def seed_data(session: Session) -> None:
-    session.add(entities.CategoryProject(project_id=PROJECT_ID, name="Core3 MVP", category_code="TV"))
+    session.add(
+        entities.CategoryProject(
+            project_id=PROJECT_ID, name="Core3 MVP", category_code="TV"
+        )
+    )
     session.add(
         entities.Core3SourceBatch(
             batch_id=BATCH_ID,
@@ -484,7 +542,12 @@ def seed_data(session: Session) -> None:
             batch_type="incremental",
             source_system="postgresql_205",
             source_database="catforge_dev",
-            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            source_tables=[
+                "week_sales_data",
+                "attribute_data",
+                "selling_points_data",
+                "comment_data",
+            ],
             ruleset_version="tv-core3-real-data-v2-0.1.0",
             module_version="m00-source-registry-0.1.0",
             hash_version="m00_row_hash_v1",
@@ -492,11 +555,51 @@ def seed_data(session: Session) -> None:
             status="registered",
         )
     )
-    seed_market_profile(session, sku_code="TV00029112", model_name="65E7Q", brand_name="海信", size=65, price=Decimal("4999"), volume=Decimal("1200"))
-    seed_market_profile(session, sku_code="TV00030001", model_name="65E7Q Pro", brand_name="海信", size=65, price=Decimal("6999"), volume=Decimal("800"))
-    seed_market_profile(session, sku_code="TV00040001", model_name="65A7H PRO", brand_name="创维", size=65, price=Decimal("4700"), volume=Decimal("900"))
-    seed_market_profile(session, sku_code="TV00040002", model_name="L65MC-SP", brand_name="小米", size=65, price=Decimal("5010"), volume=Decimal("1500"))
-    seed_market_profile(session, sku_code="TV00040003", model_name="65Q9L PRO", brand_name="TCL", size=65, price=Decimal("4650"), volume=Decimal("850"))
+    seed_market_profile(
+        session,
+        sku_code="TV00029112",
+        model_name="65E7Q",
+        brand_name="海信",
+        size=65,
+        price=Decimal("4999"),
+        volume=Decimal("1200"),
+    )
+    seed_market_profile(
+        session,
+        sku_code="TV00030001",
+        model_name="65E7Q Pro",
+        brand_name="海信",
+        size=65,
+        price=Decimal("6999"),
+        volume=Decimal("800"),
+    )
+    seed_market_profile(
+        session,
+        sku_code="TV00040001",
+        model_name="65A7H PRO",
+        brand_name="创维",
+        size=65,
+        price=Decimal("4700"),
+        volume=Decimal("900"),
+    )
+    seed_market_profile(
+        session,
+        sku_code="TV00040002",
+        model_name="L65MC-SP",
+        brand_name="小米",
+        size=65,
+        price=Decimal("5010"),
+        volume=Decimal("1500"),
+    )
+    seed_market_profile(
+        session,
+        sku_code="TV00040003",
+        model_name="65Q9L PRO",
+        brand_name="TCL",
+        size=65,
+        price=Decimal("4650"),
+        volume=Decimal("850"),
+    )
     seed_market_profile(
         session,
         sku_code="TV00040004",
@@ -562,7 +665,9 @@ def seed_market_profile(
             price_per_inch=price / Decimal(size),
             main_channel_type="online",
             main_platform="test_platform",
-            platform_share_json={"test_platform": {"volume_share": 1.0, "amount_share": 1.0}},
+            platform_share_json={
+                "test_platform": {"volume_share": 1.0, "amount_share": 1.0}
+            },
             price_band_category=price_band,
             price_band_size=price_band,
             price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
@@ -592,7 +697,12 @@ def seed_ac_analyst_data(session: Session) -> None:
             batch_type="incremental",
             source_system="postgresql_205",
             source_database="catforge_dev",
-            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            source_tables=[
+                "week_sales_data",
+                "attribute_data",
+                "selling_points_data",
+                "comment_data",
+            ],
             ruleset_version="ac-core3-real-data-v2-0.1.0",
             module_version="m00-source-registry-0.1.0",
             hash_version="m00_row_hash_v1",
@@ -635,7 +745,13 @@ def seed_ac_analyst_data(session: Session) -> None:
         ("AC00028640", "KFR-72LW/BDN8Y-YH200", "海信", "floor_hp_3"),
         ("AC00029751", "KFR-72LW/N8MXA1", "格力", "floor_hp_3"),
     ]:
-        seed_ac_fact_profiles(session, sku_code=sku_code, model_name=model_name, brand_name=brand_name, size_tier=size_tier)
+        seed_ac_fact_profiles(
+            session,
+            sku_code=sku_code,
+            model_name=model_name,
+            brand_name=brand_name,
+            size_tier=size_tier,
+        )
     seed_ac_battlefield_score(
         session,
         sku_code="AC00038063",
@@ -764,7 +880,9 @@ def seed_ac_semantic_space(session: Session) -> None:
     )
 
 
-def seed_ac_purchase_reason_profiles_for_competitor_consumption(session: Session) -> None:
+def seed_ac_purchase_reason_profiles_for_competitor_consumption(
+    session: Session,
+) -> None:
     repository = PurchaseReasonProfileRepository(
         Core3RepositoryContext(
             db=session,
@@ -781,8 +899,12 @@ def seed_ac_purchase_reason_profiles_for_competitor_consumption(session: Session
                 batch_id=AC_BATCH_ID,
                 product_category="AC",
                 m12d_profile_version=AC_M12D_VERSION,
+                release_quality_status=M12DReleaseQualityStatus.READY,
                 source_batch_ids_json=[AC_BATCH_ID],
-                input_scope_json={"sku_count": 2, "scope": "competitor_consumption_test"},
+                input_scope_json={
+                    "sku_count": 2,
+                    "scope": "competitor_consumption_test",
+                },
                 sku_count=2,
                 ready_count=2,
                 input_fingerprint="input-version-ac-ca-g01",
@@ -797,7 +919,10 @@ def seed_ac_purchase_reason_profiles_for_competitor_consumption(session: Session
                 model_name="KFR-88LW/N8KS1-1U",
                 brand_name="美的",
                 display_name_cn="美的 KFR-88LW/N8KS1-1U",
-                core_payment_anchors=["large_space_fast_cooling", "premium_comfort_health"],
+                core_payment_anchors=[
+                    "large_space_fast_cooling",
+                    "premium_comfort_health",
+                ],
                 supporting_anchors=["smart_energy_saving_control"],
             ),
             _ac_m12d_profile(
@@ -805,7 +930,10 @@ def seed_ac_purchase_reason_profiles_for_competitor_consumption(session: Session
                 model_name="KFR-72LW/N8MXA1",
                 brand_name="格力",
                 display_name_cn="格力 KFR-72LW/N8MXA1",
-                core_payment_anchors=["large_space_fast_cooling", "premium_comfort_health"],
+                core_payment_anchors=[
+                    "large_space_fast_cooling",
+                    "premium_comfort_health",
+                ],
                 supporting_anchors=["smart_energy_saving_control"],
             ),
         ]
@@ -1021,14 +1149,20 @@ def seed_ac_market_profile(
             price_latest=float(price),
             main_channel_type="online",
             main_platform="test_platform",
-            platform_share_json={"test_platform": {"volume_share": 1.0, "amount_share": 1.0}},
+            platform_share_json={
+                "test_platform": {"volume_share": 1.0, "amount_share": 1.0}
+            },
             price_band_category=price_band,
             price_band_size=price_band,
             price_band_rule_version=CORE3_M07_PRICE_BAND_RULE_VERSION,
-            price_percentile_in_size=Decimal("0.900000") if price_band == "high" else Decimal("0.500000"),
+            price_percentile_in_size=Decimal("0.900000")
+            if price_band == "high"
+            else Decimal("0.500000"),
             volume_percentile_in_size=Decimal("0.800000"),
             amount_percentile_in_size=Decimal("0.850000"),
-            same_pool_sku_count=2 if size_tier == "floor_hp_3" and price_band == "high" else 1,
+            same_pool_sku_count=2
+            if size_tier == "floor_hp_3" and price_band == "high"
+            else 1,
             market_confidence=Decimal("0.9000"),
             confidence_level="high",
             sample_status="sufficient",
@@ -1042,7 +1176,9 @@ def seed_ac_market_profile(
     )
 
 
-def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, brand_name: str, size_tier: str) -> None:
+def seed_ac_fact_profiles(
+    session: Session, *, sku_code: str, model_name: str, brand_name: str, size_tier: str
+) -> None:
     session.add(
         entities.Core3SkuParamProfile(
             sku_param_profile_id=f"profile-{sku_code.lower()}",
@@ -1054,14 +1190,22 @@ def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, b
             param_values_json={
                 "horsepower_hp": {"normalized_value": 3.0},
                 "installation_type": {"normalized_value": "柜机"},
-                "dimension_tier_profile": {"size": size_tier, "energy": "high_efficiency"},
+                "dimension_tier_profile": {
+                    "size": size_tier,
+                    "energy": "high_efficiency",
+                },
                 "energy_grade_normalized": {"normalized_value": "一级能效"},
                 "airflow_volume_m3h": {"normalized_value": 1500},
             },
-            core_picture_params_json={"horsepower_hp": {"normalized_value": 3.0}, "installation_type": {"normalized_value": "柜机"}},
+            core_picture_params_json={
+                "horsepower_hp": {"normalized_value": 3.0},
+                "installation_type": {"normalized_value": "柜机"},
+            },
             core_gaming_params_json={"airflow_volume_m3h": {"normalized_value": 1500}},
             core_system_params_json={"wifi_control_flag": {"normalized_value": True}},
-            core_eye_care_params_json={"self_cleaning_flag": {"normalized_value": True}},
+            core_eye_care_params_json={
+                "self_cleaning_flag": {"normalized_value": True}
+            },
             param_completeness=Decimal("0.820000"),
             known_param_count=42,
             unknown_param_count=5,
@@ -1090,12 +1234,28 @@ def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, b
             fact_claim_count=3,
             unsupported_claim_count=0,
             claim_texts_json=["大风量", "自清洁", "智能控制"],
-            claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning", "ac_claim_smart_app_voice_iot"],
-            fact_claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning", "ac_claim_smart_app_voice_iot"],
+            claim_codes=[
+                "ac_claim_large_airflow_coverage",
+                "ac_claim_self_cleaning",
+                "ac_claim_smart_app_voice_iot",
+            ],
+            fact_claim_codes=[
+                "ac_claim_large_airflow_coverage",
+                "ac_claim_self_cleaning",
+                "ac_claim_smart_app_voice_iot",
+            ],
             unsupported_claim_codes=[],
-            dimension_profile_json={"airflow_comfort": {"fact_claim_count": 1}, "health_clean_air": {"fact_claim_count": 1}},
-            dimension_position_profile_json={"airflow_comfort": ["large_airflow"], "health_clean_air": ["self_cleaning"]},
-            claim_summary_json={"premium_claim_candidates": ["ac_claim_large_airflow_coverage"]},
+            dimension_profile_json={
+                "airflow_comfort": {"fact_claim_count": 1},
+                "health_clean_air": {"fact_claim_count": 1},
+            },
+            dimension_position_profile_json={
+                "airflow_comfort": ["large_airflow"],
+                "health_clean_air": ["self_cleaning"],
+            },
+            claim_summary_json={
+                "premium_claim_candidates": ["ac_claim_large_airflow_coverage"]
+            },
             evidence_ids=[f"ev-claim-{sku_code.lower()}"],
             confidence=Decimal("0.9000"),
             profile_hash=f"hash-claim-{sku_code.lower()}",
@@ -1121,13 +1281,22 @@ def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, b
             negative_sentence_count=1,
             neutral_sentence_count=3,
             service_excluded_sentence_count=1,
-            dimension_summary_json={"airflow_comfort": {"positive": 8}, "health_clean_air": {"positive": 5}},
+            dimension_summary_json={
+                "airflow_comfort": {"positive": 8},
+                "health_clean_air": {"positive": 5},
+            },
             signal_summary_json={"use_case_signal": ["客厅大空间"]},
             param_comment_support_json={"airflow_volume_m3h": {"positive": 3}},
-            claim_comment_support_json={"ac_claim_large_airflow_coverage": {"positive": 5}, "ac_claim_self_cleaning": {"positive": 4}},
+            claim_comment_support_json={
+                "ac_claim_large_airflow_coverage": {"positive": 5},
+                "ac_claim_self_cleaning": {"positive": 4},
+            },
             supported_param_codes=["airflow_volume_m3h"],
             contradicted_param_codes=[],
-            supported_claim_codes=["ac_claim_large_airflow_coverage", "ac_claim_self_cleaning"],
+            supported_claim_codes=[
+                "ac_claim_large_airflow_coverage",
+                "ac_claim_self_cleaning",
+            ],
             contradicted_claim_codes=[],
             evidence_examples_json=[{"text": "客厅制冷快，风量大，自清洁也方便"}],
             evidence_ids=[f"ev-comment-{sku_code.lower()}"],
@@ -1205,7 +1374,9 @@ def seed_ac_fact_profiles(session: Session, *, sku_code: str, model_name: str, b
             secondary_battlefield_codes_json=["BF_MID_HIGH_SMART_CONTROL_UPGRADE"],
             opportunity_battlefield_codes_json=[],
             drag_factor_battlefield_codes_json=[],
-            battlefield_summary_json={"primary_reason_cn": "大空间、舒适风、健康洁净和智能支撑。"},
+            battlefield_summary_json={
+                "primary_reason_cn": "大空间、舒适风、健康洁净和智能支撑。"
+            },
             confidence=Decimal("0.8400"),
             evidence_ids_json=[f"ev-bf-{sku_code.lower()}"],
             profile_hash=f"hash-bf-{sku_code.lower()}",
@@ -1259,7 +1430,10 @@ def seed_ac_battlefield_score(
                         "comparison_size_tiers": ["floor_hp_3"],
                         "borrowed_adjacent_context_pool": False,
                         "qualified_peer_count": 37,
-                        "sample_peer_comparisons": [{"peer_sku_code": code, "overlap_week_count": 12} for code in sample_peer_codes],
+                        "sample_peer_comparisons": [
+                            {"peer_sku_code": code, "overlap_week_count": 12}
+                            for code in sample_peer_codes
+                        ],
                         "note_cn": "销量/销额验证使用同尺寸 SKU 两两重叠在售周的周均表现；累计销量仅用于展示，不参与判断。",
                     }
                 }
@@ -1284,7 +1458,10 @@ def seed_fact_profiles(session: Session) -> None:
             param_values_json={
                 "screen_size_inch": {"normalized_value": 65},
                 "display_tech_class": {"normalized_value": "miniled"},
-                "dimension_tier_profile": {"size": "large_60_69", "display_tech": "miniled"},
+                "dimension_tier_profile": {
+                    "size": "large_60_69",
+                    "display_tech": "miniled",
+                },
             },
             core_picture_params_json={
                 "screen_size_inch": {"normalized_value": 65},
@@ -1293,14 +1470,24 @@ def seed_fact_profiles(session: Session) -> None:
                 "backlight_source": {"normalized_value": "LED"},
                 "quantum_dot_flag": {"normalized_value": False},
                 "resolution_label": {"normalized_value": "4K"},
-                "declared_brightness_nit_or_band": {"normalized_value": {"value": 5200, "unit": "nits"}},
+                "declared_brightness_nit_or_band": {
+                    "normalized_value": {"value": 5200, "unit": "nits"}
+                },
                 "local_dimming_zone_count": {"normalized_value": 1920},
                 "高端画质": {"normalized_value": 95},
-                "resolution_pixels": {"normalized_value": {"width": 3840, "height": 2160, "resolution_label": "4K"}},
+                "resolution_pixels": {
+                    "normalized_value": {
+                        "width": 3840,
+                        "height": 2160,
+                        "resolution_label": "4K",
+                    }
+                },
             },
             core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
             core_system_params_json={"ai_chip_flag": {"normalized_value": True}},
-            core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
+            core_eye_care_params_json={
+                "low_blue_light_flag": {"normalized_value": True}
+            },
             param_completeness=Decimal("0.820000"),
             known_param_count=42,
             unknown_param_count=5,
@@ -1332,8 +1519,13 @@ def seed_fact_profiles(session: Session) -> None:
             claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
             fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
             unsupported_claim_codes=["tv_claim_unknown"],
-            dimension_profile_json={"picture_quality": {"fact_claim_count": 1}, "motion_gaming": {"fact_claim_count": 1}},
-            dimension_position_profile_json={"picture_quality": ["picture_flagship_miniled"]},
+            dimension_profile_json={
+                "picture_quality": {"fact_claim_count": 1},
+                "motion_gaming": {"fact_claim_count": 1},
+            },
+            dimension_position_profile_json={
+                "picture_quality": ["picture_flagship_miniled"]
+            },
             claim_summary_json={"premium_claim_candidates": ["tv_claim_miniled"]},
             evidence_ids=["ev-claim-tv00029112"],
             confidence=Decimal("0.9000"),
@@ -1363,7 +1555,10 @@ def seed_fact_profiles(session: Session) -> None:
             dimension_summary_json={"picture_screen_experience": {"positive": 8}},
             signal_summary_json={"use_case_signal": ["客厅观影"]},
             param_comment_support_json={"screen_size_inch": {"positive": 3}},
-            claim_comment_support_json={"tv_claim_miniled": {"positive": 5}, "tv_claim_high_refresh": {"negative": 2}},
+            claim_comment_support_json={
+                "tv_claim_miniled": {"positive": 5},
+                "tv_claim_high_refresh": {"negative": 2},
+            },
             supported_param_codes=["screen_size_inch"],
             supported_claim_codes=["tv_claim_miniled"],
             contradicted_claim_codes=["tv_claim_high_refresh"],
@@ -1462,12 +1657,17 @@ def seed_candidate_fact_profiles(session: Session) -> None:
             param_values_json={
                 "screen_size_inch": {"normalized_value": 65},
                 "display_tech_class": {"normalized_value": "led"},
-                "dimension_tier_profile": {"size": "large_60_69", "display_tech": "led"},
+                "dimension_tier_profile": {
+                    "size": "large_60_69",
+                    "display_tech": "led",
+                },
             },
             core_picture_params_json={"screen_size_inch": {"normalized_value": 65}},
             core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
             core_system_params_json={"wifi_flag": {"normalized_value": True}},
-            core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
+            core_eye_care_params_json={
+                "low_blue_light_flag": {"normalized_value": True}
+            },
             param_completeness=Decimal("0.760000"),
             known_param_count=38,
             unknown_param_count=8,
@@ -1499,7 +1699,10 @@ def seed_candidate_fact_profiles(session: Session) -> None:
             claim_codes=["tv_claim_high_refresh", "tv_claim_smart_iot"],
             fact_claim_codes=["tv_claim_high_refresh", "tv_claim_smart_iot"],
             unsupported_claim_codes=[],
-            dimension_profile_json={"motion_gaming": {"fact_claim_count": 1}, "smart": {"fact_claim_count": 1}},
+            dimension_profile_json={
+                "motion_gaming": {"fact_claim_count": 1},
+                "smart": {"fact_claim_count": 1},
+            },
             dimension_position_profile_json={"motion_gaming": ["gaming_high_refresh"]},
             claim_summary_json={"premium_claim_candidates": ["tv_claim_high_refresh"]},
             evidence_ids=["ev-claim-tv00030001"],
@@ -1559,7 +1762,10 @@ def seed_candidate_fact_profiles(session: Session) -> None:
             primary_user_task_code="TASK_GAMING_CONSOLE_ENTERTAINMENT",
             primary_relation_status="primary_user_task",
             secondary_user_task_codes_json=["TASK_CINEMA_IMMERSION"],
-            comment_observed_task_codes_json=["TASK_GAMING_CONSOLE_ENTERTAINMENT", "TASK_CINEMA_IMMERSION"],
+            comment_observed_task_codes_json=[
+                "TASK_GAMING_CONSOLE_ENTERTAINMENT",
+                "TASK_CINEMA_IMMERSION",
+            ],
             brand_claimed_task_codes_json=["TASK_GAMING_CONSOLE_ENTERTAINMENT"],
             user_task_summary_json={"primary_reason_cn": "高刷和评论游戏体验支撑。"},
             confidence=Decimal("0.8300"),
@@ -1623,7 +1829,11 @@ def seed_business_competitor_profiles(session: Session) -> None:
         sku_code="TV00040001",
         model_name="65A7H PRO",
         brand_name="创维",
-        fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh", "tv_claim_flush_wall_mount"],
+        fact_claim_codes=[
+            "tv_claim_miniled",
+            "tv_claim_high_refresh",
+            "tv_claim_flush_wall_mount",
+        ],
         supported_claim_codes=["tv_claim_miniled", "tv_claim_flush_wall_mount"],
         primary_task="TASK_CINEMA_IMMERSION",
         secondary_tasks=["TASK_PREMIUM_PICTURE_EXPERIENCE"],
@@ -1651,7 +1861,11 @@ def seed_business_competitor_profiles(session: Session) -> None:
         sku_code="TV00040003",
         model_name="65Q9L PRO",
         brand_name="TCL",
-        fact_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh", "tv_claim_hdmi21_connectivity"],
+        fact_claim_codes=[
+            "tv_claim_miniled",
+            "tv_claim_high_refresh",
+            "tv_claim_hdmi21_connectivity",
+        ],
         supported_claim_codes=["tv_claim_miniled", "tv_claim_high_refresh"],
         primary_task="TASK_GAMING_CONSOLE_ENTERTAINMENT",
         secondary_tasks=["TASK_CINEMA_IMMERSION", "TASK_PREMIUM_PICTURE_EXPERIENCE"],
@@ -1672,7 +1886,10 @@ def seed_business_competitor_profiles(session: Session) -> None:
         primary_group="TG_MAINSTREAM_FAMILY_VIEWER",
         secondary_groups=["TG_PREMIUM_AV_ENTHUSIAST"],
         primary_battlefield="BF_PREMIUM_VALUE_DOWNTRADE",
-        secondary_battlefields=["BF_PREMIUM_PICTURE_UPGRADE", "BF_MAINSTREAM_LIVING_BALANCE"],
+        secondary_battlefields=[
+            "BF_PREMIUM_PICTURE_UPGRADE",
+            "BF_MAINSTREAM_LIVING_BALANCE",
+        ],
     )
 
 
@@ -1702,12 +1919,20 @@ def seed_competitor_fact_profile(
             param_values_json={
                 "screen_size_inch": {"normalized_value": 65},
                 "display_tech_class": {"normalized_value": "miniled"},
-                "dimension_tier_profile": {"size": "large_60_69", "display_tech": "miniled"},
+                "dimension_tier_profile": {
+                    "size": "large_60_69",
+                    "display_tech": "miniled",
+                },
             },
-            core_picture_params_json={"screen_size_inch": {"normalized_value": 65}, "display_tech_class": {"normalized_value": "miniled"}},
+            core_picture_params_json={
+                "screen_size_inch": {"normalized_value": 65},
+                "display_tech_class": {"normalized_value": "miniled"},
+            },
             core_gaming_params_json={"refresh_rate_hz": {"normalized_value": 144}},
             core_system_params_json={"wifi_flag": {"normalized_value": True}},
-            core_eye_care_params_json={"low_blue_light_flag": {"normalized_value": True}},
+            core_eye_care_params_json={
+                "low_blue_light_flag": {"normalized_value": True}
+            },
             param_completeness=Decimal("0.800000"),
             known_param_count=40,
             unknown_param_count=6,
@@ -1739,8 +1964,13 @@ def seed_competitor_fact_profile(
             claim_codes=fact_claim_codes,
             fact_claim_codes=fact_claim_codes,
             unsupported_claim_codes=[],
-            dimension_profile_json={"picture_quality": {"fact_claim_count": len(fact_claim_codes)}},
-            dimension_position_profile_json={"picture_quality": ["picture_flagship_miniled"], "motion_gaming": ["gaming_high_refresh"]},
+            dimension_profile_json={
+                "picture_quality": {"fact_claim_count": len(fact_claim_codes)}
+            },
+            dimension_position_profile_json={
+                "picture_quality": ["picture_flagship_miniled"],
+                "motion_gaming": ["gaming_high_refresh"],
+            },
             claim_summary_json={"premium_claim_candidates": fact_claim_codes[:2]},
             evidence_ids=[f"ev-claim-{sku_code.lower()}"],
             confidence=Decimal("0.8500"),
@@ -1770,7 +2000,9 @@ def seed_competitor_fact_profile(
             dimension_summary_json={"picture_screen_experience": {"positive": 7}},
             signal_summary_json={"use_case_signal": ["客厅观影"]},
             param_comment_support_json={"screen_size_inch": {"positive": 3}},
-            claim_comment_support_json={code: {"positive": 3} for code in supported_claim_codes},
+            claim_comment_support_json={
+                code: {"positive": 3} for code in supported_claim_codes
+            },
             supported_param_codes=["screen_size_inch"],
             contradicted_param_codes=[],
             supported_claim_codes=supported_claim_codes,
@@ -1864,13 +2096,21 @@ def seed_weekly_market(session: Session) -> None:
             "TV00029112",
             "65E7Q",
             "海信",
-            [(1, Decimal("90"), Decimal("449910")), (2, Decimal("100"), Decimal("499900")), (3, Decimal("110"), Decimal("549890"))],
+            [
+                (1, Decimal("90"), Decimal("449910")),
+                (2, Decimal("100"), Decimal("499900")),
+                (3, Decimal("110"), Decimal("549890")),
+            ],
         ),
         (
             "TV00030001",
             "65E7Q Pro",
             "海信",
-            [(2, Decimal("70"), Decimal("489930")), (3, Decimal("80"), Decimal("559920")), (4, Decimal("100"), Decimal("699900"))],
+            [
+                (2, Decimal("70"), Decimal("489930")),
+                (3, Decimal("80"), Decimal("559920")),
+                (4, Decimal("100"), Decimal("699900")),
+            ],
         ),
     ]:
         for week, volume, amount in points:
@@ -1964,7 +2204,9 @@ def upsert_weekly_market_point(
     )
 
 
-def seed_low_sales_pairwise_window(session: Session, *, target_volume: Decimal, competitor_volume: Decimal) -> None:
+def seed_low_sales_pairwise_window(
+    session: Session, *, target_volume: Decimal, competitor_volume: Decimal
+) -> None:
     for week in range(1, 5):
         upsert_weekly_market_point(
             session,
@@ -2023,7 +2265,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.480000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"海信": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"primary_battlefield": 1},
             top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 700}],
             confidence_avg=Decimal("0.8600"),
@@ -2138,7 +2382,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.300000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"创维": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"secondary_battlefield": 1},
             top_skus_json=[{"sku_code": "TV00040001", "allocated_sales_volume": 260}],
             confidence_avg=Decimal("0.7800"),
@@ -2177,7 +2423,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.550000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"海信": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"primary_user_task": 2},
             top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 500}],
             confidence_avg=Decimal("0.8800"),
@@ -2293,7 +2541,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.520000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"海信": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"primary_target_group": 1},
             top_skus_json=[{"sku_code": "TV00029112", "allocated_sales_volume": 480}],
             confidence_avg=Decimal("0.8700"),
@@ -2409,7 +2659,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.260000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"海信": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"opportunity_battlefield": 1},
             top_skus_json=[{"sku_code": "TV00030001", "allocated_sales_volume": 300}],
             confidence_avg=Decimal("0.8100"),
@@ -2489,7 +2741,9 @@ def seed_semantic_space(session: Session) -> None:
             sales_amount_share=Decimal("0.150000"),
             allocation_coverage_rate=Decimal("0.900000"),
             brand_distribution_json={"海信": {"sku_count": 1}},
-            size_price_distribution_json={"large_60_69": {"mid_high": {"sku_count": 1}}},
+            size_price_distribution_json={
+                "large_60_69": {"mid_high": {"sku_count": 1}}
+            },
             relation_status_counts_json={"drag_factor_battlefield": 1},
             top_skus_json=[{"sku_code": "TV00030001", "allocated_sales_volume": 180}],
             confidence_avg=Decimal("0.7000"),
@@ -2616,7 +2870,22 @@ def seed_m12c_claim_value(session: Session) -> None:
         )
     )
 
-    for row_id, sku_code, brand, model, claim_code, claim_name, role, context_code, context_name, price_premium, sales_lift, amount_lift, share, reason in [
+    for (
+        row_id,
+        sku_code,
+        brand,
+        model,
+        claim_code,
+        claim_name,
+        role,
+        context_code,
+        context_name,
+        price_premium,
+        sales_lift,
+        amount_lift,
+        share,
+        reason,
+    ) in [
         (
             "q-target-miniled",
             "TV00029112",
@@ -2714,7 +2983,10 @@ def seed_m12c_claim_value(session: Session) -> None:
                 estimated_weekly_sales_amount_lift_abs=amount_lift,
                 contribution_share_in_sku=share,
                 attribution_confidence=Decimal("0.8200"),
-                supporting_dimensions_json={"context_type": "battlefield", "context_code": context_code},
+                supporting_dimensions_json={
+                    "context_type": "battlefield",
+                    "context_code": context_code,
+                },
                 evidence_ids_json=[f"ev-{row_id}"],
                 reason_cn=reason,
                 quality_flags_json=[],
@@ -2750,9 +3022,28 @@ def seed_m12c_claim_value(session: Session) -> None:
             sku_price_premium_abs=Decimal("399"),
             sku_weekly_sales_lift_abs=Decimal("20"),
             sku_weekly_sales_amount_lift_abs=Decimal("131900"),
-            positive_claims_json=[{"claim_code": "tv_claim_miniled", "claim_name": "MiniLED", "claim_value_role": "premium_driver_estimated", "estimated_price_premium_abs": 280.0}],
-            drag_claims_json=[{"claim_code": "tv_claim_speaker_sound", "claim_name": "音响体验", "claim_value_role": "drag_factor"}],
-            opportunity_claims_json=[{"claim_code": "tv_claim_wall_mount_design", "claim_name": "壁画贴墙", "claim_value_role": "opportunity_gap"}],
+            positive_claims_json=[
+                {
+                    "claim_code": "tv_claim_miniled",
+                    "claim_name": "MiniLED",
+                    "claim_value_role": "premium_driver_estimated",
+                    "estimated_price_premium_abs": 280.0,
+                }
+            ],
+            drag_claims_json=[
+                {
+                    "claim_code": "tv_claim_speaker_sound",
+                    "claim_name": "音响体验",
+                    "claim_value_role": "drag_factor",
+                }
+            ],
+            opportunity_claims_json=[
+                {
+                    "claim_code": "tv_claim_wall_mount_design",
+                    "claim_name": "壁画贴墙",
+                    "claim_value_role": "opportunity_gap",
+                }
+            ],
             attribution_summary_cn="海信 65E7Q 的超额表现主要由 MiniLED 提供可观测解释。",
             confidence=Decimal("0.8200"),
             result_hash="hash-attr-target-premium",
@@ -2786,7 +3077,14 @@ def seed_m12c_claim_value(session: Session) -> None:
             sku_price_premium_abs=Decimal("100"),
             sku_weekly_sales_lift_abs=Decimal("-5"),
             sku_weekly_sales_amount_lift_abs=Decimal("-15500"),
-            positive_claims_json=[{"claim_code": "tv_claim_wall_mount_design", "claim_name": "壁画贴墙", "claim_value_role": "premium_driver_estimated", "estimated_price_premium_abs": 180.0}],
+            positive_claims_json=[
+                {
+                    "claim_code": "tv_claim_wall_mount_design",
+                    "claim_name": "壁画贴墙",
+                    "claim_value_role": "premium_driver_estimated",
+                    "estimated_price_premium_abs": 180.0,
+                }
+            ],
             drag_claims_json=[],
             opportunity_claims_json=[],
             attribution_summary_cn="创维 65A7H PRO 的正向卖点集中在壁画贴墙。",
@@ -2822,7 +3120,13 @@ def seed_m12c_claim_value(session: Session) -> None:
             estimated_avg_weekly_sales_volume=Decimal("75"),
             estimated_sales_amount=Decimal("4800000"),
             estimated_avg_weekly_sales_amount=Decimal("400000"),
-            top_skus_json=[{"sku_code": "TV00029112", "claim_name": "MiniLED", "estimated_price_premium_abs": 280.0}],
+            top_skus_json=[
+                {
+                    "sku_code": "TV00029112",
+                    "claim_name": "MiniLED",
+                    "estimated_price_premium_abs": 280.0,
+                }
+            ],
             business_summary_cn="MiniLED 在高端画质升级战场中形成可观测溢价。",
             result_hash="hash-dim-miniled-premium",
             rule_version=CORE3_M12C_RULE_VERSION,
@@ -2955,7 +3259,9 @@ def test_sku_claim_value_text_formatter_uses_business_role_names() -> None:
     assert "MiniLED" in text
 
 
-def test_sku_claim_value_text_formatter_keeps_unique_payment_potential_unquantified() -> None:
+def test_sku_claim_value_text_formatter_keeps_unique_payment_potential_unquantified() -> (
+    None
+):
     result = {
         "target": {"brand": "海信", "model_name": "65E7Q"},
         "result": {
@@ -3044,9 +3350,13 @@ def test_claim_value_report_keeps_specific_claims_with_battlefield_totals() -> N
     assert "#### 强溢价卖点" in markdown
     assert "HDMI2.1 连接、护眼显示和杜比/影音认证（组合）" not in markdown
     assert "强溢价卖点组合" not in markdown
-    assert "| HDMI2.1 连接 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    assert (
+        "| HDMI2.1 连接 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    )
     assert "| 护眼显示 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
-    assert "| 杜比/影音认证 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    assert (
+        "| 杜比/影音认证 | 50元 | 6台/周 | 20,000元/周 | 高端画质升级战场 |" in markdown
+    )
     assert "价值战场明细" in markdown
 
 
@@ -3073,7 +3383,12 @@ def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
                 "sku_excess_weekly_sales_amount_explained_abs": 41892,
                 "contribution_share_in_sku": 0.15,
             },
-            "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 1.0, "semantic": 0.8},
+            "evidence_strength": {
+                "claim": 1.0,
+                "param": 1.0,
+                "comment": 1.0,
+                "semantic": 0.8,
+            },
             "quality_flags": ["sample_weak"],
             "attribution_confidence": 0.63,
             "reason_cn": "HDMI2.1 连接 被判为样本不足；所在可比池有卖点组相对对照组价格差异约 427 元，周均销量差异约 34.3 台。",
@@ -3089,7 +3404,10 @@ def test_claim_value_report_downgrades_weak_sample_positive_rows() -> None:
 
     assert "#### 强溢价卖点" not in markdown
     assert "#### 本品优势卖点（待量化）" in markdown
-    assert "| HDMI2.1 连接 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 游戏体育流畅战场 |" in markdown
+    assert (
+        "| HDMI2.1 连接 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 游戏体育流畅战场 |"
+        in markdown
+    )
     assert "价值战场明细" not in markdown
     assert "66元" not in markdown
     assert "427 元" not in markdown
@@ -3134,7 +3452,9 @@ def test_m12c_weak_sample_pool_is_not_strong_premium() -> None:
     assert role == m12c_service.M12C_ROLE_BASIC
 
 
-def test_m12c_target_baseline_excludes_target_sku_and_uses_direct_price_median() -> None:
+def test_m12c_target_baseline_excludes_target_sku_and_uses_direct_price_median() -> (
+    None
+):
     pool = m12c_service.ClaimPool(
         claim_code="tv_claim_brightness_hdr",
         claim_name="高亮 HDR",
@@ -3153,9 +3473,54 @@ def test_m12c_target_baseline_excludes_target_sku_and_uses_direct_price_median()
         pool_relax_level="L1",
     )
     markets = {
-        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("9000"), Decimal("100"), Decimal("900000"), Decimal("10"), Decimal("90000"), 10, 1, 10),
-        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_65", "high", Decimal("5000"), Decimal("100"), Decimal("500000"), Decimal("10"), Decimal("50000"), 10, 1, 10),
-        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_65", "high", Decimal("6000"), Decimal("300"), Decimal("1800000"), Decimal("30"), Decimal("180000"), 10, 1, 10),
+        "target": m12c_service.MarketState(
+            "target",
+            "海信",
+            "65E7Q",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("9000"),
+            Decimal("100"),
+            Decimal("900000"),
+            Decimal("10"),
+            Decimal("90000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-a": m12c_service.MarketState(
+            "comp-a",
+            "竞品A",
+            "A",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("5000"),
+            Decimal("100"),
+            Decimal("500000"),
+            Decimal("10"),
+            Decimal("50000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-b": m12c_service.MarketState(
+            "comp-b",
+            "竞品B",
+            "B",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("6000"),
+            Decimal("300"),
+            Decimal("1800000"),
+            Decimal("30"),
+            Decimal("180000"),
+            10,
+            1,
+            10,
+        ),
     }
 
     baseline = m12c_service._target_baseline(pool, markets, "target")
@@ -3184,11 +3549,86 @@ def test_m12c_target_baseline_not_dragged_down_by_high_sales_low_price_sku() -> 
         pool_relax_level="L3",
     )
     markets = {
-        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("5949"), Decimal("100"), Decimal("594900"), Decimal("10"), Decimal("59490"), 10, 1, 10),
-        "low-volume-hit": m12c_service.MarketState("low-volume-hit", "竞品低价", "L", "large_60_69", "size_65", "high", Decimal("2861"), Decimal("10000"), Decimal("28610000"), Decimal("1000"), Decimal("2861000"), 10, 1, 10),
-        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_65", "high", Decimal("5522"), Decimal("100"), Decimal("552200"), Decimal("10"), Decimal("55220"), 10, 1, 10),
-        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_65", "high", Decimal("5637"), Decimal("100"), Decimal("563700"), Decimal("10"), Decimal("56370"), 10, 1, 10),
-        "comp-c": m12c_service.MarketState("comp-c", "竞品C", "C", "large_60_69", "size_65", "high", Decimal("5853"), Decimal("100"), Decimal("585300"), Decimal("10"), Decimal("58530"), 10, 1, 10),
+        "target": m12c_service.MarketState(
+            "target",
+            "海信",
+            "65E7Q",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("5949"),
+            Decimal("100"),
+            Decimal("594900"),
+            Decimal("10"),
+            Decimal("59490"),
+            10,
+            1,
+            10,
+        ),
+        "low-volume-hit": m12c_service.MarketState(
+            "low-volume-hit",
+            "竞品低价",
+            "L",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("2861"),
+            Decimal("10000"),
+            Decimal("28610000"),
+            Decimal("1000"),
+            Decimal("2861000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-a": m12c_service.MarketState(
+            "comp-a",
+            "竞品A",
+            "A",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("5522"),
+            Decimal("100"),
+            Decimal("552200"),
+            Decimal("10"),
+            Decimal("55220"),
+            10,
+            1,
+            10,
+        ),
+        "comp-b": m12c_service.MarketState(
+            "comp-b",
+            "竞品B",
+            "B",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("5637"),
+            Decimal("100"),
+            Decimal("563700"),
+            Decimal("10"),
+            Decimal("56370"),
+            10,
+            1,
+            10,
+        ),
+        "comp-c": m12c_service.MarketState(
+            "comp-c",
+            "竞品C",
+            "C",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("5853"),
+            Decimal("100"),
+            Decimal("585300"),
+            Decimal("10"),
+            Decimal("58530"),
+            10,
+            1,
+            10,
+        ),
     }
 
     baseline = m12c_service._target_baseline(pool, markets, "target")
@@ -3238,8 +3678,12 @@ def test_m12c_battlefield_claim_relevance_uses_claim_text_not_context_name() -> 
         context_name="家庭护眼舒适战场",
     )
 
-    assert m12c_service._battlefield_claim_relevance_strength(gaming_pool, claim) == Decimal("0.2500")
-    assert m12c_service._battlefield_claim_relevance_strength(eye_care_pool, claim) == Decimal("1.0000")
+    assert m12c_service._battlefield_claim_relevance_strength(
+        gaming_pool, claim
+    ) == Decimal("0.2500")
+    assert m12c_service._battlefield_claim_relevance_strength(
+        eye_care_pool, claim
+    ) == Decimal("1.0000")
 
 
 def test_m12c_semantic_state_uses_m11d_weight_and_normalized_fallback() -> None:
@@ -3258,8 +3702,25 @@ def test_m12c_semantic_state_uses_m11d_weight_and_normalized_fallback() -> None:
 
 def test_m12c_market_acceptance_coefficient_is_traceable() -> None:
     pool = _m12c_test_pool()
-    market = m12c_service.MarketState("sku-a", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("6200"), Decimal("120"), Decimal("744000"), Decimal("120"), Decimal("744000"), 1, 1, 1)
-    comment = m12c_service.CommentState("sku-a", ("tv_claim_brightness_hdr",), (), 6, 1, Decimal("0.9000"))
+    market = m12c_service.MarketState(
+        "sku-a",
+        "海信",
+        "65E7Q",
+        "large_60_69",
+        "size_65",
+        "high",
+        Decimal("6200"),
+        Decimal("120"),
+        Decimal("744000"),
+        Decimal("120"),
+        Decimal("744000"),
+        1,
+        1,
+        1,
+    )
+    comment = m12c_service.CommentState(
+        "sku-a", ("tv_claim_brightness_hdr",), (), 6, 1, Decimal("0.9000")
+    )
 
     score = m12c_service._market_acceptance_score(
         market=market,
@@ -3279,12 +3740,102 @@ def test_m12c_market_acceptance_coefficient_is_traceable() -> None:
 
 def test_m12c_relaxed_pool_uses_five_tier_before_sample_insufficient() -> None:
     markets = {
-        "target": m12c_service.MarketState("target", "海信", "65E7Q", "large_60_69", "size_65", "high", Decimal("6000"), Decimal("100"), Decimal("600000"), Decimal("10"), Decimal("60000"), 10, 1, 10),
-        "comp-a": m12c_service.MarketState("comp-a", "竞品A", "A", "large_60_69", "size_66", "high", Decimal("5600"), Decimal("100"), Decimal("560000"), Decimal("10"), Decimal("56000"), 10, 1, 10),
-        "comp-b": m12c_service.MarketState("comp-b", "竞品B", "B", "large_60_69", "size_66", "high", Decimal("5500"), Decimal("100"), Decimal("550000"), Decimal("10"), Decimal("55000"), 10, 1, 10),
-        "comp-c": m12c_service.MarketState("comp-c", "竞品C", "C", "large_60_69", "size_66", "high", Decimal("5400"), Decimal("100"), Decimal("540000"), Decimal("10"), Decimal("54000"), 10, 1, 10),
-        "comp-d": m12c_service.MarketState("comp-d", "竞品D", "D", "large_60_69", "size_66", "high", Decimal("5300"), Decimal("100"), Decimal("530000"), Decimal("10"), Decimal("53000"), 10, 1, 10),
-        "comp-e": m12c_service.MarketState("comp-e", "竞品E", "E", "large_60_69", "size_66", "high", Decimal("5200"), Decimal("100"), Decimal("520000"), Decimal("10"), Decimal("52000"), 10, 1, 10),
+        "target": m12c_service.MarketState(
+            "target",
+            "海信",
+            "65E7Q",
+            "large_60_69",
+            "size_65",
+            "high",
+            Decimal("6000"),
+            Decimal("100"),
+            Decimal("600000"),
+            Decimal("10"),
+            Decimal("60000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-a": m12c_service.MarketState(
+            "comp-a",
+            "竞品A",
+            "A",
+            "large_60_69",
+            "size_66",
+            "high",
+            Decimal("5600"),
+            Decimal("100"),
+            Decimal("560000"),
+            Decimal("10"),
+            Decimal("56000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-b": m12c_service.MarketState(
+            "comp-b",
+            "竞品B",
+            "B",
+            "large_60_69",
+            "size_66",
+            "high",
+            Decimal("5500"),
+            Decimal("100"),
+            Decimal("550000"),
+            Decimal("10"),
+            Decimal("55000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-c": m12c_service.MarketState(
+            "comp-c",
+            "竞品C",
+            "C",
+            "large_60_69",
+            "size_66",
+            "high",
+            Decimal("5400"),
+            Decimal("100"),
+            Decimal("540000"),
+            Decimal("10"),
+            Decimal("54000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-d": m12c_service.MarketState(
+            "comp-d",
+            "竞品D",
+            "D",
+            "large_60_69",
+            "size_66",
+            "high",
+            Decimal("5300"),
+            Decimal("100"),
+            Decimal("530000"),
+            Decimal("10"),
+            Decimal("53000"),
+            10,
+            1,
+            10,
+        ),
+        "comp-e": m12c_service.MarketState(
+            "comp-e",
+            "竞品E",
+            "E",
+            "large_60_69",
+            "size_66",
+            "high",
+            Decimal("5200"),
+            Decimal("100"),
+            Decimal("520000"),
+            Decimal("10"),
+            Decimal("52000"),
+            10,
+            1,
+            10,
+        ),
     }
     claims = {
         sku: {
@@ -3365,9 +3916,18 @@ def test_claim_value_report_sums_same_claim_within_same_category_battlefields() 
         )
     )
 
-    assert "| 芯片/处理器性能 | 130元 | 11台/周 | 66,000元/周 | 高端画质升级战场和游戏体育流畅战场 |" in markdown
-    assert "| 芯片/处理器性能 | 高端画质升级战场 | 420元 | 34台/周 | 60元 | 5台/周 |" in markdown
-    assert "| 芯片/处理器性能 | 游戏体育流畅战场 | 420元 | 34台/周 | 70元 | 6台/周 |" in markdown
+    assert (
+        "| 芯片/处理器性能 | 130元 | 11台/周 | 66,000元/周 | 高端画质升级战场和游戏体育流畅战场 |"
+        in markdown
+    )
+    assert (
+        "| 芯片/处理器性能 | 高端画质升级战场 | 420元 | 34台/周 | 60元 | 5台/周 |"
+        in markdown
+    )
+    assert (
+        "| 芯片/处理器性能 | 游戏体育流畅战场 | 420元 | 34台/周 | 70元 | 6台/周 |"
+        in markdown
+    )
 
 
 def test_claim_value_report_dedupes_identical_battlefield_quantification() -> None:
@@ -3410,12 +3970,20 @@ def test_claim_value_report_dedupes_identical_battlefield_quantification() -> No
         )
     )
 
-    assert "| 芯片/处理器性能 | 60元 | 5台/周 | 30,000元/周 | 高端画质升级战场和游戏体育流畅战场 |" in markdown
-    assert "| 芯片/处理器性能 | 高端画质升级战场和游戏体育流畅战场 | 420元 | 34台/周 | 60元 | 5台/周 |" in markdown
+    assert (
+        "| 芯片/处理器性能 | 60元 | 5台/周 | 30,000元/周 | 高端画质升级战场和游戏体育流畅战场 |"
+        in markdown
+    )
+    assert (
+        "| 芯片/处理器性能 | 高端画质升级战场和游戏体育流畅战场 | 420元 | 34台/周 | 60元 | 5台/周 |"
+        in markdown
+    )
     assert "| 芯片/处理器性能 | 120元 | 10台/周 |" not in markdown
 
 
-def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified_fact() -> None:
+def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified_fact() -> (
+    None
+):
     rows = [
         {
             "claim_code": "tv_claim_hdr_brightness",
@@ -3437,7 +4005,12 @@ def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified
                 "sku_excess_weekly_sales_explained_abs": 5,
                 "sku_excess_weekly_sales_amount_explained_abs": 20000,
             },
-            "evidence_strength": {"claim": 1.0, "param": 1.0, "comment": 0.9, "semantic": 0.8},
+            "evidence_strength": {
+                "claim": 1.0,
+                "param": 1.0,
+                "comment": 0.9,
+                "semantic": 0.8,
+            },
             "attribution_confidence": 0.8,
         }
     ]
@@ -3451,7 +4024,10 @@ def test_claim_value_report_moves_positive_non_battlefield_rows_to_nonquantified
 
     assert "#### 强溢价卖点" not in markdown
     assert "#### 本品优势卖点（待量化）" in markdown
-    assert "| HDR/高亮画质 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 价值战场暂未形成稳定量化 |" in markdown
+    assert (
+        "| HDR/高亮画质 | 不作为正向量化 | 不作为正向量化 | 不作为正向量化 | 价值战场暂未形成稳定量化 |"
+        in markdown
+    )
     assert "核心事实优势/暂不量化" not in markdown
 
 
@@ -3488,7 +4064,10 @@ def test_claim_opportunity_gaps_uses_candidate_positive_claims() -> None:
 
     assert result["status"] == "ok"
     payload = result["result"]["claim_opportunity_gaps"]
-    missing_codes = {item["claim_code"] for item in payload["candidate_positive_claims_missing_on_target"]}
+    missing_codes = {
+        item["claim_code"]
+        for item in payload["candidate_positive_claims_missing_on_target"]
+    }
     assert "tv_claim_wall_mount_design" in missing_codes
 
 
@@ -3506,8 +4085,12 @@ def test_claim_value_compare_splits_target_and_candidate_advantages() -> None:
 
     assert result["status"] == "ok"
     payload = result["result"]["claim_value_compare"]
-    target_advantage_codes = {item["claim_code"] for item in payload["target_advantage_claims"]}
-    candidate_advantage_codes = {item["claim_code"] for item in payload["candidate_advantage_claims"]}
+    target_advantage_codes = {
+        item["claim_code"] for item in payload["target_advantage_claims"]
+    }
+    candidate_advantage_codes = {
+        item["claim_code"] for item in payload["candidate_advantage_claims"]
+    }
     assert "tv_claim_miniled" in target_advantage_codes
     assert "tv_claim_wall_mount_design" in candidate_advantage_codes
 
@@ -3561,7 +4144,9 @@ def test_resolve_sku_strips_brand_words_from_query() -> None:
     assert result["target"]["sku_code"] == "TV00029112"
 
 
-def test_resolve_sku_latest_uses_latest_analyst_ready_batch_not_empty_source_batch() -> None:
+def test_resolve_sku_latest_uses_latest_analyst_ready_batch_not_empty_source_batch() -> (
+    None
+):
     session = make_session()
     session.add(
         entities.Core3SourceBatch(
@@ -3606,7 +4191,12 @@ def test_resolve_sku_latest_tv_serving_scope_includes_older_ready_batch() -> Non
             batch_type="full",
             source_system="postgresql_205",
             source_database="catforge_dev",
-            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            source_tables=[
+                "week_sales_data",
+                "attribute_data",
+                "selling_points_data",
+                "comment_data",
+            ],
             ruleset_version="tv-core3-real-data-v2-0.1.0",
             module_version="m00-source-registry-0.1.0",
             hash_version="m00_row_hash_v1",
@@ -3826,7 +4416,9 @@ def test_resolve_sku_does_not_autocorrect_ambiguous_zero_to_q() -> None:
 def test_sku_fact_brief_returns_core_fact_sections() -> None:
     session = make_session()
     target_market = session.execute(
-        select(entities.Core3SkuMarketProfile).where(entities.Core3SkuMarketProfile.sku_code == "TV00029112")
+        select(entities.Core3SkuMarketProfile).where(
+            entities.Core3SkuMarketProfile.sku_code == "TV00029112"
+        )
     ).scalar_one()
     target_market.size_segment = "legacy_large_screen"
     target_market.screen_size_class = "legacy_large_screen"
@@ -3845,12 +4437,24 @@ def test_sku_fact_brief_returns_core_fact_sections() -> None:
     assert sections["market"]["market_metrics"]["price_wavg"] == 4999.0
     assert sections["market"]["market_position"]["size_tier"] == "large_60_69"
     assert sections["parameter_fact"]["dimension_tier_profile"]["size"] == "large_60_69"
-    assert sections["claim_fact"]["fact_claim_codes"] == ["tv_claim_miniled", "tv_claim_high_refresh"]
+    assert sections["claim_fact"]["fact_claim_codes"] == [
+        "tv_claim_miniled",
+        "tv_claim_high_refresh",
+    ]
     assert sections["comment_fact"]["supported_claim_codes"] == ["tv_claim_miniled"]
     assert sections["user_task"]["primary_user_task_code"] == "TASK_CINEMA_IMMERSION"
-    assert sections["target_group"]["primary_target_group_code"] == "TG_PREMIUM_AV_ENTHUSIAST"
-    assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
-    assert sections["sales_allocation"][0]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert (
+        sections["target_group"]["primary_target_group_code"]
+        == "TG_PREMIUM_AV_ENTHUSIAST"
+    )
+    assert (
+        sections["value_battlefield"]["primary_battlefield_code"]
+        == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
+    assert (
+        sections["sales_allocation"][0]["dimension_code"]
+        == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
     assert sections["market"]["market_pool"]["sku_count"] == 5
     assert sections["market"]["market_pool"]["size_tier"] == "large_60_69"
     assert sections["market"]["market_pool"]["target_rank_by_avg_weekly_sales"] == 2
@@ -3891,7 +4495,9 @@ def test_ac_sku_fact_brief_includes_m11d_semantic_positions() -> None:
     )
 
     assert result["status"] == "ok"
-    positions = result["result"]["fact_brief"]["sections"]["semantic_dimension_positions"]
+    positions = result["result"]["fact_brief"]["sections"][
+        "semantic_dimension_positions"
+    ]
     battlefield = next(
         item
         for item in positions
@@ -3982,9 +4588,17 @@ def test_ac_ask_infers_category_reads_facts_and_uses_hp_price_pool() -> None:
         "ac_claim_large_airflow_coverage",
         "ac_claim_self_cleaning",
     ]
-    assert sections["user_task"]["primary_user_task_code"] == "TASK_LARGE_SPACE_COVERAGE"
-    assert sections["target_group"]["primary_target_group_code"] == "TG_LIVING_ROOM_LARGE_SPACE"
-    assert sections["value_battlefield"]["primary_battlefield_code"] == "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
+    assert (
+        sections["user_task"]["primary_user_task_code"] == "TASK_LARGE_SPACE_COVERAGE"
+    )
+    assert (
+        sections["target_group"]["primary_target_group_code"]
+        == "TG_LIVING_ROOM_LARGE_SPACE"
+    )
+    assert (
+        sections["value_battlefield"]["primary_battlefield_code"]
+        == "BF_FLOOR_3_PREMIUM_COMFORT_HEALTH"
+    )
     assert sections["market"]["market_position"]["price_band_in_size_tier"] == "high"
     assert "price_band_source" not in sections["market"]["market_position"]
     assert "claim_fact" not in fact_brief["missing_sections"]
@@ -4053,8 +4667,12 @@ def test_ac_competitor_set_consumes_published_m12d_without_tv_fallback() -> None
     assert "舒适健康体验值得多花钱" in markdown
     assert "MiniLED" not in markdown
     assert "影院沉浸观影" not in markdown
-    pm_markdown = result["result"]["competitor_answer"]["pm_comparison_report_payload"]["markdown"]
-    assert pm_markdown.startswith("# 美的 KFR-88LW/N8KS1-1U 与重点竞品的用户选择对比报告")
+    pm_markdown = result["result"]["competitor_answer"]["pm_comparison_report_payload"][
+        "markdown"
+    ]
+    assert pm_markdown.startswith(
+        "# 美的 KFR-88LW/N8KS1-1U 与重点竞品的用户选择对比报告"
+    )
     assert "## 七、用户为什么会选择" in pm_markdown
     assert "## 八、用户在" in pm_markdown
     assert "## 九、本品与重点竞品的用户价值是否传达完整" in pm_markdown
@@ -4140,7 +4758,10 @@ def test_param_claim_overlap_returns_shared_params_and_claims() -> None:
     assert "screen_size_inch" in overlap["parameter_overlap"]["matched_codes"]
     assert "refresh_rate_hz" in overlap["parameter_overlap"]["matched_codes"]
     assert "tv_claim_high_refresh" in overlap["claim_overlap"]["matched_codes"]
-    assert "picture_flagship_miniled" in overlap["claim_position_overlap"]["target_only_codes"]
+    assert (
+        "picture_flagship_miniled"
+        in overlap["claim_position_overlap"]["target_only_codes"]
+    )
 
 
 def test_comment_support_returns_claim_param_and_semantic_support() -> None:
@@ -4161,7 +4782,9 @@ def test_comment_support_returns_claim_param_and_semantic_support() -> None:
 
     assert result["status"] == "ok"
     support = result["result"]["comment_support"]
-    statuses = {item["source_type"]: item["support_status"] for item in support["support_items"]}
+    statuses = {
+        item["source_type"]: item["support_status"] for item in support["support_items"]
+    }
     assert statuses["claim_code"] == "supported"
     assert statuses["param_code"] == "supported"
     assert statuses["user_task"] == "supported_or_established"
@@ -4183,9 +4806,16 @@ def test_opportunity_gaps_returns_market_battlefield_and_fact_signals() -> None:
     assert result["status"] == "ok"
     gaps = result["result"]["opportunity_gaps"]
     assert gaps["market_position"]["size_tier"] == "large_60_69"
-    assert [item["dimension_code"] for item in gaps["opportunity_battlefields"]] == ["BF_GAMING_SPORTS_FLUENCY"]
-    assert [item["dimension_code"] for item in gaps["drag_factor_battlefields"]] == ["BF_SMART_CONNECTED_EXPERIENCE"]
-    assert gaps["opportunity_battlefields"][0]["market_space"]["estimated_sales_volume"] == 500.0
+    assert [item["dimension_code"] for item in gaps["opportunity_battlefields"]] == [
+        "BF_GAMING_SPORTS_FLUENCY"
+    ]
+    assert [item["dimension_code"] for item in gaps["drag_factor_battlefields"]] == [
+        "BF_SMART_CONNECTED_EXPERIENCE"
+    ]
+    assert (
+        gaps["opportunity_battlefields"][0]["market_space"]["estimated_sales_volume"]
+        == 500.0
+    )
     claim_gap_codes = {item["gap_code"] for item in gaps["claim_gap_signals"]}
     semantic_gap_codes = {item["gap_code"] for item in gaps["semantic_gap_signals"]}
     assert "comment_claim_contradiction" in claim_gap_codes
@@ -4212,9 +4842,19 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
     assert "TV00030001" in candidate_codes
     assert "TV00040001" in candidate_codes
     assert payload["candidates"][0]["basis"]["same_size_price_pool"] is True
-    overlap_methods = {item["candidate"]["sku_code"]: item["sales_overlap"]["method"] for item in payload["candidates"]}
+    overlap_methods = {
+        item["candidate"]["sku_code"]: item["sales_overlap"]["method"]
+        for item in payload["candidates"]
+    }
     assert overlap_methods["TV00030001"] == "pairwise_overlap_active_week_average"
-    assert [step["status"] for step in result["sop_steps"]] == ["ok", "ok", "ok", "ok", "ok", "ok"]
+    assert [step["status"] for step in result["sop_steps"]] == [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+    ]
 
 
 def test_low_sales_diagnosis_returns_value_stick_structure_and_limits() -> None:
@@ -4240,8 +4880,13 @@ def test_low_sales_diagnosis_returns_value_stick_structure_and_limits() -> None:
         "evidence_risk",
         "enterprise_side",
     }
-    assert payload["value_stick_summary"]["enterprise_side"]["status"] == "not_supported"
-    assert payload["product_line_cannibalization_summary"]["status"] in {"unknown", "possible"}
+    assert (
+        payload["value_stick_summary"]["enterprise_side"]["status"] == "not_supported"
+    )
+    assert payload["product_line_cannibalization_summary"]["status"] in {
+        "unknown",
+        "possible",
+    }
     assert payload["reason_ranking"]
     assert payload["reason_ranking"][0]["detail_points"]
     assert payload["reason_ranking"][0]["value_stick_effect_cn"]
@@ -4250,13 +4895,23 @@ def test_low_sales_diagnosis_returns_value_stick_structure_and_limits() -> None:
     assert payload["reason_ranking"][0]["decision_implication_cn"]
     assert payload["reason_ranking"][0]["validation_cn"]
     assert payload["action_plan"]["high_cost_actions"]
-    assert any("广告" in item and "库存" in item and "促销" in item and "毛利" in item for item in payload["not_supported_reasons"])
-    assert "当前不能判断广告、库存、促销和毛利原因" in result["result"]["low_sales_answer"]["short_answer"]
+    assert any(
+        "广告" in item and "库存" in item and "促销" in item and "毛利" in item
+        for item in payload["not_supported_reasons"]
+    )
+    assert (
+        "当前不能判断广告、库存、促销和毛利原因"
+        in result["result"]["low_sales_answer"]["short_answer"]
+    )
 
 
-def test_low_sales_diagnosis_marks_weak_when_overlap_competitors_outsell_target() -> None:
+def test_low_sales_diagnosis_marks_weak_when_overlap_competitors_outsell_target() -> (
+    None
+):
     session = make_session()
-    seed_low_sales_pairwise_window(session, target_volume=Decimal("80"), competitor_volume=Decimal("200"))
+    seed_low_sales_pairwise_window(
+        session, target_volume=Decimal("80"), competitor_volume=Decimal("200")
+    )
     result = catforge_analyst.low_sales_diagnosis(
         session,
         project_id=PROJECT_ID,
@@ -4271,20 +4926,54 @@ def test_low_sales_diagnosis_marks_weak_when_overlap_competitors_outsell_target(
     assert payload["sales_status"]["status"] == "weak"
     assert payload["sales_status"]["comparison_count"] >= 2
     assert payload["sales_status"]["weak_against_count"] >= 2
-    detail_text = " ".join(point for reason in payload["reason_ranking"] for point in reason.get("detail_points") or [])
-    root_cause_text = " ".join(str(reason.get("root_cause_cn") or "") for reason in payload["reason_ranking"])
-    decision_text = " ".join(str(reason.get("decision_implication_cn") or "") for reason in payload["reason_ranking"])
-    specific_reason = next((reason for reason in payload["reason_ranking"] if reason["reason_type"] == "specific_competitor_value_gap"), None)
+    detail_text = " ".join(
+        point
+        for reason in payload["reason_ranking"]
+        for point in reason.get("detail_points") or []
+    )
+    root_cause_text = " ".join(
+        str(reason.get("root_cause_cn") or "") for reason in payload["reason_ranking"]
+    )
+    decision_text = " ".join(
+        str(reason.get("decision_implication_cn") or "")
+        for reason in payload["reason_ranking"]
+    )
+    specific_reason = next(
+        (
+            reason
+            for reason in payload["reason_ranking"]
+            if reason["reason_type"] == "specific_competitor_value_gap"
+        ),
+        None,
+    )
     assert "重点竞品" in detail_text
     assert "重叠周" in detail_text
-    assert "不是竞品卖得好" in root_cause_text or "有效价格" in root_cause_text or "购买任务" in root_cause_text
+    assert (
+        "不是竞品卖得好" in root_cause_text
+        or "有效价格" in root_cause_text
+        or "购买任务" in root_cause_text
+    )
     assert "决策" not in root_cause_text
-    assert "测试" in decision_text or "定位" in decision_text or "价格带" in decision_text
-    assert payload["claim_compare_summary"]["competitor_with_candidate_advantage_count"] >= 1
+    assert (
+        "测试" in decision_text or "定位" in decision_text or "价格带" in decision_text
+    )
+    assert (
+        payload["claim_compare_summary"]["competitor_with_candidate_advantage_count"]
+        >= 1
+    )
     assert payload["claim_compare_summary"]["top_competitor_claim_gaps"]
-    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["claim_name"] == "壁画贴墙"
-    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["candidate_market_signal_cn"].startswith("市场观测：")
-    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0]["candidate_parameter_level_cn"].startswith("参数口径：")
+    assert (
+        payload["claim_compare_summary"]["top_candidate_advantage_claims"][0][
+            "claim_name"
+        ]
+        == "壁画贴墙"
+    )
+    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0][
+        "candidate_market_signal_cn"
+    ].startswith("市场观测：")
+    assert payload["claim_compare_summary"]["top_candidate_advantage_claims"][0][
+        "candidate_parameter_level_cn"
+    ].startswith("参数口径：")
     assert specific_reason is not None
     assert specific_reason["rank"] == 1
     assert "壁画贴墙" in " ".join(specific_reason["observation_points"])
@@ -4302,7 +4991,9 @@ def test_low_sales_diagnosis_marks_weak_when_overlap_competitors_outsell_target(
 
 def test_low_sales_diagnosis_does_not_force_problem_when_target_is_not_weak() -> None:
     session = make_session()
-    seed_low_sales_pairwise_window(session, target_volume=Decimal("220"), competitor_volume=Decimal("120"))
+    seed_low_sales_pairwise_window(
+        session, target_volume=Decimal("220"), competitor_volume=Decimal("120")
+    )
     result = catforge_analyst.low_sales_diagnosis(
         session,
         project_id=PROJECT_ID,
@@ -4330,7 +5021,9 @@ def test_low_sales_diagnosis_detects_same_brand_low_price_cannibalization() -> N
         volume=Decimal("2400"),
         price_band="mid",
     )
-    seed_low_sales_pairwise_window(session, target_volume=Decimal("80"), competitor_volume=Decimal("200"))
+    seed_low_sales_pairwise_window(
+        session, target_volume=Decimal("80"), competitor_volume=Decimal("200")
+    )
     result = catforge_analyst.low_sales_diagnosis(
         session,
         project_id=PROJECT_ID,
@@ -4346,11 +5039,21 @@ def test_low_sales_diagnosis_detects_same_brand_low_price_cannibalization() -> N
     assert summary["status"] == "possible"
     assert summary["candidate_count"] >= 1
     assert summary["candidates"][0]["sku_code"] == "TV00050001"
-    reason = next((row for row in payload["reason_ranking"] if row["reason_type"] == "same_brand_cannibalization"), None)
+    reason = next(
+        (
+            row
+            for row in payload["reason_ranking"]
+            if row["reason_type"] == "same_brand_cannibalization"
+        ),
+        None,
+    )
     assert reason is not None
     assert reason["severity"] in {"medium", "high"}
     assert "同品牌" in reason["root_cause_cn"]
-    assert payload["value_stick_summary"]["product_line_cannibalization"]["status"] == "possible"
+    assert (
+        payload["value_stick_summary"]["product_line_cannibalization"]["status"]
+        == "possible"
+    )
 
 
 def test_low_sales_diagnosis_text_is_business_facing() -> None:
@@ -4422,7 +5125,9 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
             self.claim_value_limits: list[int] = []
             self.claim_contribution_limits: list[int] = []
 
-        def resolve_sku(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+        def resolve_sku(
+            self, context: AnalystContext, **kwargs: object
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "resolve-sku",
@@ -4434,7 +5139,14 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
                 },
             }
 
-        def sku_fact_brief(self, context: AnalystContext, *, sku_code: str, limit: int = 20, **kwargs: object) -> dict[str, object]:
+        def sku_fact_brief(
+            self,
+            context: AnalystContext,
+            *,
+            sku_code: str,
+            limit: int = 20,
+            **kwargs: object,
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "sku-fact-brief",
@@ -4447,7 +5159,9 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
                 },
             }
 
-        def same_size_price_candidates(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+        def same_size_price_candidates(
+            self, context: AnalystContext, **kwargs: object
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "same-size-price-candidates",
@@ -4467,21 +5181,29 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
                 },
             }
 
-        def semantic_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+        def semantic_overlap(
+            self, context: AnalystContext, **kwargs: object
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "semantic-overlap",
-                "result": {"semantic_overlap": {"semantic_overlap_score": 0.8, "overlap": {}}},
+                "result": {
+                    "semantic_overlap": {"semantic_overlap_score": 0.8, "overlap": {}}
+                },
             }
 
-        def param_claim_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+        def param_claim_overlap(
+            self, context: AnalystContext, **kwargs: object
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "param-claim-overlap",
                 "result": {"param_claim_overlap": {"param_claim_overlap_score": 0.7}},
             }
 
-        def sales_overlap(self, context: AnalystContext, **kwargs: object) -> dict[str, object]:
+        def sales_overlap(
+            self, context: AnalystContext, **kwargs: object
+        ) -> dict[str, object]:
             return {
                 "status": "ok",
                 "command": "sales-overlap",
@@ -4495,7 +5217,9 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
                 },
             }
 
-        def sku_claim_value(self, context: AnalystContext, *, limit: int = 20, **kwargs: object) -> dict[str, object]:
+        def sku_claim_value(
+            self, context: AnalystContext, *, limit: int = 20, **kwargs: object
+        ) -> dict[str, object]:
             self.claim_value_limits.append(limit)
             return {
                 "status": "ok",
@@ -4503,7 +5227,9 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
                 "result": {"sku_claim_value": {"claim_values": []}},
             }
 
-        def claim_contribution(self, context: AnalystContext, *, limit: int = 20, **kwargs: object) -> dict[str, object]:
+        def claim_contribution(
+            self, context: AnalystContext, *, limit: int = 20, **kwargs: object
+        ) -> dict[str, object]:
             self.claim_contribution_limits.append(limit)
             return {
                 "status": "ok",
@@ -4513,13 +5239,26 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
 
     fake = FakeAtomicHandlers()
     orchestrator = SopOrchestrators(fake)  # type: ignore[arg-type]
-    context = AnalystContext(project_id=PROJECT_ID, category_code="TV", batch_id=BATCH_ID, product_category="tv")
+    context = AnalystContext(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="tv",
+    )
 
-    result = orchestrator.competitor_set(context, sku_code="TV00029112", limit=20, answer_style="xiaoao")
+    result = orchestrator.competitor_set(
+        context, sku_code="TV00029112", limit=20, answer_style="xiaoao"
+    )
 
     assert result["status"] == "ok"
-    assert fake.claim_value_limits == [CLAIM_VALUE_REPORT_LIMIT, CLAIM_VALUE_REPORT_LIMIT]
-    assert fake.claim_contribution_limits == [CLAIM_VALUE_REPORT_LIMIT, CLAIM_VALUE_REPORT_LIMIT]
+    assert fake.claim_value_limits == [
+        CLAIM_VALUE_REPORT_LIMIT,
+        CLAIM_VALUE_REPORT_LIMIT,
+    ]
+    assert fake.claim_contribution_limits == [
+        CLAIM_VALUE_REPORT_LIMIT,
+        CLAIM_VALUE_REPORT_LIMIT,
+    ]
 
 
 def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
@@ -4543,7 +5282,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert top_codes[:3] == ["TV00040001", "TV00040003", "TV00040004"]
     assert "TV00040002" not in top_codes[:2]
     assert answer["top_competitors"][0]["role"] == "primary_direct"
-    assert answer["top_competitors"][0]["weighted_overlap"]["target_group"] >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
+    assert (
+        answer["top_competitors"][0]["weighted_overlap"]["target_group"]
+        >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
+    )
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品识别与分析依据报告")
     assert "## 重点竞品看板" in markdown
@@ -4553,7 +5295,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 排名 | 竞品 | 角色 | 压力 | 重合 |" in dashboard_section
     assert "| 1 | 创维 65A7H PRO | 首选直接 |" in dashboard_section
     assert "### 多维评分雷达图数据" in dashboard_section
-    assert "| 维度 | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in dashboard_section
+    assert (
+        "| 维度 | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |"
+        in dashboard_section
+    )
     assert "| 购买池 |" in dashboard_section
     assert "| 价值战场 |" in dashboard_section
     assert "| 用户任务 |" in dashboard_section
@@ -4576,19 +5321,29 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 2.5 目标客群比较" in markdown
     assert "### 2.6 关键价值锚点可替代性比较" in markdown
     assert "### 2.7 替代压力比较" in markdown
-    assert "### 2.8 市场验证比较" in markdown
-    assert "### 2.9 候选池与未选原因附录" in markdown
-    assert markdown.index("### 2.1 综合评分总览") < markdown.index("### 2.9 候选池与未选原因附录")
-    assert markdown.index("### 2.8 市场验证比较") < markdown.index("### 2.9 候选池与未选原因附录")
+    assert "### 2.8 购买阻力比较" in markdown
+    assert "### 2.9 市场验证比较" in markdown
+    assert "### 2.10 候选池与未选原因附录" in markdown
+    assert markdown.index("### 2.1 综合评分总览") < markdown.index(
+        "### 2.10 候选池与未选原因附录"
+    )
+    assert markdown.index("### 2.9 市场验证比较") < markdown.index(
+        "### 2.10 候选池与未选原因附录"
+    )
     assert "| 替代压力 | 10 | 是否会改变用户对目标 SKU 价值判断 |" in markdown
     assert "### 2.1 候选 SKU 综合评分" not in markdown
     assert "### 2.4 用户任务和目标客群评分依据" not in markdown
     assert "### 2.5 关键价值锚点、替代压力和市场验证依据" not in markdown
-    assert "判断口径：购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策" in markdown
+    assert (
+        "判断口径：购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策" in markdown
+    )
     assert "判断口径：关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖" in markdown
     assert "## 三、四个产品详情链接" not in markdown
     assert "## 四、四个产品横向详细对比" in markdown
-    assert "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |" in markdown
+    assert (
+        "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |"
+        in markdown
+    )
     assert "### 4.1 市场画像" in markdown
     assert "### 4.2 价值战场画像" in markdown
     assert "### 4.3 用户任务画像" in markdown
@@ -4596,12 +5351,24 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 4.5 卖点画像" in markdown
     assert "### 4.6 参数画像" in markdown
     assert "### 4.7 卖点价值量化" not in markdown
-    assert "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |" in markdown
+    assert (
+        "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |"
+        in markdown
+    )
     assert "| 命中的固定价值战场 |" in markdown
     assert "| 补充证据判断 |" in markdown
-    assert "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |" in markdown
-    assert "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |" in markdown
-    assert "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |" in markdown
+    assert (
+        "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |"
+        in markdown
+    )
+    assert (
+        "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |"
+        in markdown
+    )
+    assert (
+        "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |"
+        in markdown
+    )
     assert "| 组合型增值卖点 |" not in markdown
     assert "| 基础门槛卖点 |" not in markdown
     assert "卖点溢价指数 Top" not in markdown
@@ -4660,7 +5427,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     short_answer = answer["short_answer"]
     assert len(short_answer) <= 600
     assert "创维 65A7H PRO" in short_answer
-    assert "小米 L65MC-SP" not in short_answer.split("详细分析报告")[0] or "价格贴身" in short_answer
+    assert (
+        "小米 L65MC-SP" not in short_answer.split("详细分析报告")[0]
+        or "价格贴身" in short_answer
+    )
     assert "详细分析报告暂未生成" in short_answer
     dashboard = answer["dashboard_payload"]
     assert dashboard["schema_version"] == "competitor_dashboard_v1"
@@ -4668,7 +5438,9 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert dashboard["display_policy"]["card_delivery_stdout"] is True
     assert dashboard["display_policy"]["fallback_to_short_answer"] is False
     assert dashboard["competitors"][0]["name"] == "创维 65A7H PRO"
-    assert [row["dimension_cn"] for row in dashboard["competitors"][0]["score_dimensions"]] == [
+    assert [
+        row["dimension_cn"] for row in dashboard["competitors"][0]["score_dimensions"]
+    ] == [
         "购买池",
         "价值战场",
         "用户任务",
@@ -4676,10 +5448,17 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "价值锚点",
         "市场验证",
     ]
-    assert [row["dimension_cn"] for row in dashboard["competitors"][0]["overlap_rows"]] == ["价值战场", "用户任务", "目标客群"]
-    assert all(row["matched_points_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
+    assert [
+        row["dimension_cn"] for row in dashboard["competitors"][0]["overlap_rows"]
+    ] == ["价值战场", "用户任务", "目标客群"]
+    assert all(
+        row["matched_points_cn"] for row in dashboard["competitors"][0]["overlap_rows"]
+    )
     assert all(row["impact_cn"] for row in dashboard["competitors"][0]["overlap_rows"])
-    assert "高端画质升级" in dashboard["competitors"][0]["overlap_rows"][0]["matched_points_cn"]
+    assert (
+        "高端画质升级"
+        in dashboard["competitors"][0]["overlap_rows"][0]["matched_points_cn"]
+    )
     battlefield_structure = dashboard["competitors"][0]["battlefield_overlap_structure"]
     assert battlefield_structure["score"] == 83
     assert [row["segment_cn"] for row in battlefield_structure["segments"]] == [
@@ -4716,11 +5495,18 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     compare_button = card["body"]["elements"][-1]
     assert compare_button["element_id"] == "view_product_compare"
     assert compare_button["text"]["content"] == "查看详细对比结果"
-    compare_url = _assert_feishu_web_url_open_applink(compare_button["behaviors"][0]["default_url"])
+    compare_url = _assert_feishu_web_url_open_applink(
+        compare_button["behaviors"][0]["default_url"]
+    )
     compare_query = parse_qs(urlsplit(compare_url).query)
-    assert compare_query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
+    assert compare_query["model"] == [
+        "海信 65E7Q",
+        "创维 65A7H PRO",
+        "TCL 65Q9L PRO",
+        "创维 65A6F ULTRA",
+    ]
     assert "创维 65A7H PRO" in card_json
-    assert "关键价值锚点与替代压力" in card_json
+    assert "购买理由重合、替代压力与购买阻力" in card_json
     assert "锚点可替代性" in card_json
     assert "小米 L65MC-SP" not in card_json
     assert "多维评分雷达图" in card_json
@@ -4728,7 +5514,9 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert '"type": "radar"' in card_json
     assert card["body"]["elements"][5]["content"].startswith("**价值战场重合结构**")
     assert "主战场：高端画质" in card["body"]["elements"][5]["content"]
-    assert card["body"]["elements"][8]["content"].startswith("**关键价值锚点与替代压力**")
+    assert card["body"]["elements"][8]["content"].startswith(
+        "**购买理由重合、替代压力与购买阻力**"
+    )
     assert "辅战场：" in card["body"]["elements"][5]["content"]
     assert "机会战场：" in card["body"]["elements"][5]["content"]
     assert "错位/缺口：" not in card["body"]["elements"][5]["content"]
@@ -4736,18 +5524,41 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     battlefield_chart = card["body"]["elements"][6]
     assert battlefield_chart["chart_spec"]["label"]["position"] == "inside"
     assert battlefield_chart["chart_spec"]["label"]["formatter"] == "{label}"
-    assert battlefield_chart["chart_spec"]["axes"][0]["title"]["text"] == "价值战场结构占比"
+    assert (
+        battlefield_chart["chart_spec"]["axes"][0]["title"]["text"]
+        == "价值战场结构占比"
+    )
     battlefield_values = battlefield_chart["chart_spec"]["data"]["values"]
     assert any(row["battlefields"] == "高端画质升级" for row in battlefield_values)
-    assert all(re.fullmatch(r"\d+(?:\.\d)?", row["label"]) for row in battlefield_values if row["segment"] != "错位/缺口")
-    assert any("错位" in row["label"] for row in battlefield_values if row["segment"] == "错位/缺口")
+    assert all(
+        re.fullmatch(r"\d+(?:\.\d)?", row["label"])
+        for row in battlefield_values
+        if row["segment"] != "错位/缺口"
+    )
+    assert any(
+        "错位" in row["label"]
+        for row in battlefield_values
+        if row["segment"] == "错位/缺口"
+    )
     assert "竞品市场验证" in card_json
     assert '"tag": "table"' in card_json
     market_table = card["body"]["elements"][11]
     assert market_table["element_id"] == "competitor_market_table"
-    assert [column["display_name"] for column in market_table["columns"]] == ["序号", "竞品/目标", "定位", "均价", "周均销量"]
+    assert [column["display_name"] for column in market_table["columns"]] == [
+        "序号",
+        "竞品/目标",
+        "定位",
+        "均价",
+        "周均销量",
+    ]
     assert market_table["columns"][0]["width"] == "80px"
-    assert market_table["rows"][0] == {"rank": "目标", "name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][0] == {
+        "rank": "目标",
+        "name": "海信 65E7Q",
+        "position": "被比较目标",
+        "price": "4,999元",
+        "sales": "100台",
+    }
     assert market_table["rows"][1]["rank"] == "1"
     assert market_table["rows"][1]["name"] == "创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "4,700元"
@@ -4792,15 +5603,26 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
                 "role_cn": "首选直接竞品",
                 "business_score": 0.82,
                 "replacement_pressure": {"type_cn": "价值替代压力"},
-                "shared_business_context": ["高端画质升级", "影院沉浸观影", "高端影音体验用户"],
-                "weighted_overlap": {"battlefield": 0.81, "user_task": 0.76, "target_group": 0.68},
+                "shared_business_context": [
+                    "高端画质升级",
+                    "影院沉浸观影",
+                    "高端影音体验用户",
+                ],
+                "weighted_overlap": {
+                    "battlefield": 0.81,
+                    "user_task": 0.76,
+                    "target_group": 0.68,
+                },
                 "matched_dimensions": {
                     "battlefield": ["高端画质升级", "智能互联体验"],
                     "user_task": ["影院沉浸观影", "主机游戏娱乐"],
                     "target_group": ["高端影音体验用户", "大屏换新升级用户"],
                 },
                 "value_anchor": {"shared_anchors": ["MiniLED", "高刷新率", "智能互联"]},
-                "market_validation": {"level": "strong", "summary_cn": "重叠在售周8周，候选周均销量约80台"},
+                "market_validation": {
+                    "level": "strong",
+                    "summary_cn": "重叠在售周8周，候选周均销量约80台",
+                },
             }
         ],
         report_url="https://my.feishu.cn/docx/ReportToken",
@@ -4809,9 +5631,21 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     competitor = dashboard["competitors"][0]
     assert competitor["score_cn"] == "82分"
     assert competitor["strength_cn"] == "强重合"
-    assert competitor["action_links"][0]["url"] == "https://my.feishu.cn/docx/ReportToken"
-    assert dashboard["report_evidence_links"] == [{"label": "查看分析依据", "url": "https://my.feishu.cn/docx/ReportToken", "type": "evidence_report"}]
-    assert {row["dimension_cn"] for row in competitor["overlap_rows"]} == {"价值战场", "用户任务", "目标客群"}
+    assert (
+        competitor["action_links"][0]["url"] == "https://my.feishu.cn/docx/ReportToken"
+    )
+    assert dashboard["report_evidence_links"] == [
+        {
+            "label": "查看分析依据",
+            "url": "https://my.feishu.cn/docx/ReportToken",
+            "type": "evidence_report",
+        }
+    ]
+    assert {row["dimension_cn"] for row in competitor["overlap_rows"]} == {
+        "价值战场",
+        "用户任务",
+        "目标客群",
+    }
     assert all("重合" in row["strength_cn"] for row in competitor["overlap_rows"])
     assert all("impact_cn" in row for row in competitor["overlap_rows"])
     assert "共同覆盖MiniLED" in competitor["anchor_substitutability_cn"]
@@ -4839,17 +5673,38 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
     assert card["body"]["elements"][3]["tag"] == "chart"
-    assert card["body"]["elements"][5]["content"].startswith("**关键价值锚点与替代压力**")
+    assert card["body"]["elements"][5]["content"].startswith(
+        "**购买理由重合、替代压力与购买阻力**"
+    )
     radar_values = card["body"]["elements"][3]["chart_spec"]["data"]["values"]
     assert len(radar_values) == 6
-    assert {row["dimension"] for row in radar_values} == {"购买池", "价值战场", "用户任务", "目标客群", "价值锚点", "市场验证"}
+    assert {row["dimension"] for row in radar_values} == {
+        "购买池",
+        "价值战场",
+        "用户任务",
+        "目标客群",
+        "价值锚点",
+        "市场验证",
+    }
     assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
     assert card["body"]["elements"][7]["content"] == "**竞品市场验证**"
     assert card["body"]["elements"][8]["tag"] == "table"
     market_table = card["body"]["elements"][8]
-    assert [column["display_name"] for column in market_table["columns"]] == ["序号", "竞品/目标", "定位", "均价", "周均销量"]
+    assert [column["display_name"] for column in market_table["columns"]] == [
+        "序号",
+        "竞品/目标",
+        "定位",
+        "均价",
+        "周均销量",
+    ]
     assert market_table["columns"][0]["width"] == "80px"
-    assert market_table["rows"][0] == {"rank": "目标", "name": "海信 65E7Q", "position": "被比较目标", "price": "4,999元", "sales": "100台"}
+    assert market_table["rows"][0] == {
+        "rank": "目标",
+        "name": "海信 65E7Q",
+        "position": "被比较目标",
+        "price": "4,999元",
+        "sales": "100台",
+    }
     assert market_table["rows"][1]["rank"] == "1"
     assert market_table["rows"][1]["name"] == "创维 65A7H PRO"
     assert market_table["rows"][1]["price"] == "5,600元"
@@ -4891,7 +5746,9 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
 
 
 def test_competitor_product_compare_link_carries_top_three_model_names() -> None:
-    def competitor(sku_code: str, brand_name: str, model_name: str, score: float) -> dict[str, object]:
+    def competitor(
+        sku_code: str, brand_name: str, model_name: str, score: float
+    ) -> dict[str, object]:
         return {
             "candidate": {
                 "sku_code": sku_code,
@@ -4904,18 +5761,30 @@ def test_competitor_product_compare_link_carries_top_three_model_names() -> None
             "business_score": score,
             "replacement_pressure": {"type_cn": "价值替代压力"},
             "shared_business_context": ["大屏家庭影院"],
-            "weighted_overlap": {"battlefield": score, "user_task": score, "target_group": score},
+            "weighted_overlap": {
+                "battlefield": score,
+                "user_task": score,
+                "target_group": score,
+            },
             "matched_dimensions": {
                 "battlefield": ["大屏家庭影院"],
                 "user_task": ["影院沉浸观影"],
                 "target_group": ["大屏换新升级用户"],
             },
             "value_anchor": {"shared_anchors": ["MiniLED"]},
-            "market_validation": {"level": "strong", "summary_cn": "重叠在售周8周，候选周均销量约80台"},
+            "market_validation": {
+                "level": "strong",
+                "summary_cn": "重叠在售周8周，候选周均销量约80台",
+            },
         }
 
     dashboard = competitor_answer.build_competitor_dashboard_payload(
-        target={"sku_code": "TV00029112", "brand_name": "海信", "model_name": "65E7Q", "category_code": "TV"},
+        target={
+            "sku_code": "TV00029112",
+            "brand_name": "海信",
+            "model_name": "65E7Q",
+            "category_code": "TV",
+        },
         target_fact_brief={"sections": {}},
         top_competitors=[
             competitor("TV00040001", "创维", "65A7H PRO", 0.91),
@@ -4929,8 +5798,15 @@ def test_competitor_product_compare_link_carries_top_three_model_names() -> None
     link = dashboard["product_compare_link"]
     assert link["label"] == "查看详细对比结果"
     query = parse_qs(urlsplit(link["url"]).query)
-    assert query["models"] == ["海信 65E7Q,创维 65A7H PRO,TCL 65Q9L PRO,创维 65A6F ULTRA"]
-    assert query["model"] == ["海信 65E7Q", "创维 65A7H PRO", "TCL 65Q9L PRO", "创维 65A6F ULTRA"]
+    assert query["models"] == [
+        "海信 65E7Q,创维 65A7H PRO,TCL 65Q9L PRO,创维 65A6F ULTRA"
+    ]
+    assert query["model"] == [
+        "海信 65E7Q",
+        "创维 65A7H PRO",
+        "TCL 65Q9L PRO",
+        "创维 65A6F ULTRA",
+    ]
     assert query["model_names"] == ["65E7Q,65A7H PRO,65Q9L PRO,65A6F ULTRA"]
     assert query["brands"] == ["海信,创维,TCL,创维"]
     assert "小米 65S Pro" not in link["url"]
@@ -4986,17 +5862,25 @@ def test_competitor_set_text_uses_xiaoao_short_answer() -> None:
 
 
 def test_competitor_answer_parses_feishu_docx_token() -> None:
-    assert competitor_answer._extract_feishu_doc_token("https://my.feishu.cn/docx/RugxdBRmEoKHCdxseo8csmktnSb") == (
+    assert competitor_answer._extract_feishu_doc_token(
+        "https://my.feishu.cn/docx/RugxdBRmEoKHCdxseo8csmktnSb"
+    ) == (
         "RugxdBRmEoKHCdxseo8csmktnSb",
         "docx",
     )
-    assert competitor_answer._extract_feishu_doc_token("https://my.feishu.cn/sheets/AbCdEf") == ("AbCdEf", "sheet")
+    assert competitor_answer._extract_feishu_doc_token(
+        "https://my.feishu.cn/sheets/AbCdEf"
+    ) == ("AbCdEf", "sheet")
 
 
 def test_xiaoao_short_answer_downgrades_when_semantic_evidence_missing() -> None:
     text = competitor_answer.render_short_answer(
         target={"brand_name": "海信", "model_name": "85E7S"},
-        target_fact_brief={"sections": {"claim_fact": {"fact_claim_codes": ["tv_claim_miniled_display"]}}},
+        target_fact_brief={
+            "sections": {
+                "claim_fact": {"fact_claim_codes": ["tv_claim_miniled_display"]}
+            }
+        },
         top_competitors=[
             {
                 "candidate": {"brand_name": "小米", "model_name": "L85MC-SP"},
@@ -5034,9 +5918,17 @@ def test_sku_business_brief_sop_returns_summary_sections() -> None:
 
     assert result["status"] == "ok"
     brief = result["result"]["sku_business_brief"]
-    assert brief["primary_semantics"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
-    assert "TV00030001" in {item["sku_code"] for item in brief["top_same_size_price_candidates"]}
-    assert brief["opportunity_and_risk"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+    assert (
+        brief["primary_semantics"]["primary_battlefield_code"]
+        == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
+    assert "TV00030001" in {
+        item["sku_code"] for item in brief["top_same_size_price_candidates"]
+    }
+    assert (
+        brief["opportunity_and_risk"]["opportunity_battlefields"][0]["dimension_code"]
+        == "BF_GAMING_SPORTS_FLUENCY"
+    )
 
 
 def test_why_sales_diff_sop_uses_overlap_week_sales() -> None:
@@ -5054,7 +5946,12 @@ def test_why_sales_diff_sop_uses_overlap_week_sales() -> None:
     assert result["status"] == "ok"
     payload = result["result"]["why_sales_diff"]
     assert payload["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
-    assert payload["sales_overlap"]["comparison"]["target_vs_candidate_avg_weekly_volume_gap"] == 30.0
+    assert (
+        payload["sales_overlap"]["comparison"][
+            "target_vs_candidate_avg_weekly_volume_gap"
+        ]
+        == 30.0
+    )
     assert payload["factor_summary"][0]["factor_code"] == "overlap_week_sales_gap"
 
 
@@ -5073,7 +5970,10 @@ def test_premium_claim_drivers_sop_classifies_claims() -> None:
     payload = result["result"]["premium_claim_drivers"]
     assert payload["premium_driver_claim_codes"] == ["tv_claim_miniled"]
     assert payload["drag_factor_claim_codes"] == ["tv_claim_high_refresh"]
-    assert payload["semantic_context"]["primary_battlefield_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert (
+        payload["semantic_context"]["primary_battlefield_code"]
+        == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
 
 
 def test_battlefield_space_sop_returns_graph_space() -> None:
@@ -5090,7 +5990,9 @@ def test_battlefield_space_sop_returns_graph_space() -> None:
     assert result["status"] == "ok"
     payload = result["result"]["battlefield_space"]
     assert payload["summary_count"] == 1
-    assert payload["items"][0]["summary"]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert (
+        payload["items"][0]["summary"]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
 
 
 def test_battlefield_opportunity_sop_returns_related_spaces() -> None:
@@ -5106,7 +6008,10 @@ def test_battlefield_opportunity_sop_returns_related_spaces() -> None:
 
     assert result["status"] == "ok"
     payload = result["result"]["battlefield_opportunity"]
-    assert payload["opportunity_gaps"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+    assert (
+        payload["opportunity_gaps"]["opportunity_battlefields"][0]["dimension_code"]
+        == "BF_GAMING_SPORTS_FLUENCY"
+    )
     space_codes = {
         item["items"][0]["summary"]["dimension_code"]
         for item in payload["related_battlefield_spaces"]
@@ -5130,7 +6035,10 @@ def test_ask_routes_competitor_question_to_sop() -> None:
     assert result["routed_command"] == "competitor-set"
     assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
     assert result["target"]["sku_code"] == "TV00029112"
-    candidate_codes = [item["candidate"]["sku_code"] for item in result["result"]["competitor_set"]["candidates"]]
+    candidate_codes = [
+        item["candidate"]["sku_code"]
+        for item in result["result"]["competitor_set"]["candidates"]
+    ]
     assert "TV00030001" in candidate_codes
     assert "TV00040001" in candidate_codes
     assert [step["step_code"] for step in result["sop_steps"]][:3] == [
@@ -5140,7 +6048,9 @@ def test_ask_routes_competitor_question_to_sop() -> None:
     ]
 
 
-def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_set() -> None:
+def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_set() -> (
+    None
+):
     session = make_session()
     result = catforge_analyst.answer_natural_language(
         session,
@@ -5155,7 +6065,10 @@ def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_s
     assert result["routed_command"] == "competitor-set"
     assert result["routing"]["matched_rule"] == "competitor_set"
     assert result["routing"]["extracted_params"]["model_name"] == "65E7Q"
-    candidate_codes = [item["candidate"]["sku_code"] for item in result["result"]["competitor_set"]["candidates"]]
+    candidate_codes = [
+        item["candidate"]["sku_code"]
+        for item in result["result"]["competitor_set"]["candidates"]
+    ]
     assert "TV00030001" in candidate_codes
     assert "TV00040001" in candidate_codes
 
@@ -5175,7 +6088,10 @@ def test_ask_routes_pairwise_sales_diff_from_sku_codes() -> None:
     assert result["routed_command"] == "why-sales-diff"
     assert result["routing"]["extracted_params"]["sku_code"] == "TV00029112"
     assert result["routing"]["extracted_params"]["candidate_sku_code"] == "TV00030001"
-    assert result["result"]["why_sales_diff"]["sales_overlap"]["method"] == "pairwise_overlap_active_week_average"
+    assert (
+        result["result"]["why_sales_diff"]["sales_overlap"]["method"]
+        == "pairwise_overlap_active_week_average"
+    )
 
 
 def test_ask_routes_single_sku_low_sales_question_to_low_sales_diagnosis() -> None:
@@ -5194,8 +6110,13 @@ def test_ask_routes_single_sku_low_sales_question_to_low_sales_diagnosis() -> No
     assert result["routed_command"] == "low-sales-diagnosis"
     assert result["routing"]["matched_rule"] == "low_sales_diagnosis"
     assert result["routing"]["extracted_params"]["sku_code"] == "TV00029112"
-    assert result["result"]["low_sales_diagnosis"]["sales_status"]["status"] == "uncertain"
-    assert "当前不能判断广告、库存、促销和毛利原因" in result["result"]["low_sales_answer"]["short_answer"]
+    assert (
+        result["result"]["low_sales_diagnosis"]["sales_status"]["status"] == "uncertain"
+    )
+    assert (
+        "当前不能判断广告、库存、促销和毛利原因"
+        in result["result"]["low_sales_answer"]["short_answer"]
+    )
 
 
 def test_ask_routes_value_stick_problem_question_to_low_sales_diagnosis() -> None:
@@ -5211,7 +6132,12 @@ def test_ask_routes_value_stick_problem_question_to_low_sales_diagnosis() -> Non
 
     assert result["status"] == "ok"
     assert result["routed_command"] == "low-sales-diagnosis"
-    assert result["result"]["low_sales_diagnosis"]["value_stick_summary"]["enterprise_side"]["status"] == "not_supported"
+    assert (
+        result["result"]["low_sales_diagnosis"]["value_stick_summary"][
+            "enterprise_side"
+        ]["status"]
+        == "not_supported"
+    )
 
 
 def test_ask_routes_battlefield_space_from_chinese_name() -> None:
@@ -5228,7 +6154,10 @@ def test_ask_routes_battlefield_space_from_chinese_name() -> None:
     assert result["status"] == "ok"
     assert result["routed_command"] == "battlefield-space"
     assert result["routing"]["extracted_params"]["query"] == "高端画质升级战场"
-    assert result["result"]["battlefield_space"]["items"][0]["summary"]["dimension_code"] == "BF_PREMIUM_PICTURE_UPGRADE"
+    assert (
+        result["result"]["battlefield_space"]["items"][0]["summary"]["dimension_code"]
+        == "BF_PREMIUM_PICTURE_UPGRADE"
+    )
 
 
 def test_ask_routes_premium_claim_question_to_sop() -> None:
@@ -5244,8 +6173,12 @@ def test_ask_routes_premium_claim_question_to_sop() -> None:
 
     assert result["status"] == "ok"
     assert result["routed_command"] == "premium-claim-drivers"
-    assert result["result"]["premium_claim_drivers"]["premium_driver_claim_codes"] == ["tv_claim_miniled"]
-    m12c_payload = result["result"]["premium_claim_drivers"]["m12c_quantified_claim_values"]
+    assert result["result"]["premium_claim_drivers"]["premium_driver_claim_codes"] == [
+        "tv_claim_miniled"
+    ]
+    m12c_payload = result["result"]["premium_claim_drivers"][
+        "m12c_quantified_claim_values"
+    ]
     assert m12c_payload["role_counts"]["premium_driver_estimated"] == 1
 
 
@@ -5281,7 +6214,12 @@ def test_ask_routes_battlefield_opportunity_question_to_sop() -> None:
 
     assert result["status"] == "ok"
     assert result["routed_command"] == "battlefield-opportunity"
-    assert result["result"]["battlefield_opportunity"]["opportunity_gaps"]["opportunity_battlefields"][0]["dimension_code"] == "BF_GAMING_SPORTS_FLUENCY"
+    assert (
+        result["result"]["battlefield_opportunity"]["opportunity_gaps"][
+            "opportunity_battlefields"
+        ][0]["dimension_code"]
+        == "BF_GAMING_SPORTS_FLUENCY"
+    )
 
 
 def test_ask_keeps_explicit_sku_over_extracted_model() -> None:
@@ -5371,9 +6309,27 @@ def _seed_sellpoint_pm_m14_and_comments(session: Session) -> None:
         )
     )
     for sku_code, source_key, text, subdimension, claim_codes in [
-        ("TV00029112", "comment-target-generic", "好高清，画面很清晰", "picture_clarity_resolution", ["tv_claim_miniled_display"]),
-        ("TV00029112", "comment-target-bright", "白天阳光照进客厅也看得清，不发灰", "picture_brightness_hdr", ["tv_claim_hdr_high_brightness"]),
-        ("TV00030001", "comment-candidate-game", "打游戏操作跟手，没有拖影", "gaming_high_refresh_motion", ["tv_claim_high_refresh"]),
+        (
+            "TV00029112",
+            "comment-target-generic",
+            "好高清，画面很清晰",
+            "picture_clarity_resolution",
+            ["tv_claim_miniled_display"],
+        ),
+        (
+            "TV00029112",
+            "comment-target-bright",
+            "白天阳光照进客厅也看得清，不发灰",
+            "picture_brightness_hdr",
+            ["tv_claim_hdr_high_brightness"],
+        ),
+        (
+            "TV00030001",
+            "comment-candidate-game",
+            "打游戏操作跟手，没有拖影",
+            "gaming_high_refresh_motion",
+            ["tv_claim_high_refresh"],
+        ),
     ]:
         session.add(
             entities.Core3CommentFactAtom(
@@ -5387,8 +6343,12 @@ def _seed_sellpoint_pm_m14_and_comments(session: Session) -> None:
                 source_comment_key=source_key,
                 sentence_seq=1,
                 clean_comment_text=text,
-                dimension_code="picture_screen_experience" if "game" not in source_key else "gaming_motion_experience",
-                dimension_name="画质屏幕体验" if "game" not in source_key else "游戏运动体验",
+                dimension_code="picture_screen_experience"
+                if "game" not in source_key
+                else "gaming_motion_experience",
+                dimension_name="画质屏幕体验"
+                if "game" not in source_key
+                else "游戏运动体验",
                 subdimension_code=subdimension,
                 subdimension_name=subdimension,
                 dimension_type="product_experience",
@@ -5426,7 +6386,11 @@ def test_sellpoint_value_pm_uses_m14_and_keeps_generic_comment_unattributed() ->
     assert analysis["competitor_boundary"]["source"] == "M14"
     assert analysis["competitor_boundary"]["sku_codes"] == ["TV00030001"]
     assert analysis["audit"]["competitor_selection_batch_id"] == BATCH_ID
-    bright = next(item for item in analysis["value_units"] if item["unit_code"] == "tv_bright_room_dark_detail")
+    bright = next(
+        item
+        for item in analysis["value_units"]
+        if item["unit_code"] == "tv_bright_room_dark_detail"
+    )
     assert bright["user_understanding"]["direct_sentence_count"] == 0
     assert bright["user_understanding"]["indirect_sentence_count"] == 1
     assert bright["user_understanding"]["unattributable_sentence_count"] == 1
@@ -5456,7 +6420,9 @@ def test_ask_routes_sellpoint_weighting_to_parallel_pm_sop() -> None:
     assert "sellpoint_value_pm_answer" in result["result"]
 
 
-def test_sellpoint_value_pm_falls_back_to_existing_competitor_sop_without_reusing_its_claim_amounts() -> None:
+def test_sellpoint_value_pm_falls_back_to_existing_competitor_sop_without_reusing_its_claim_amounts() -> (
+    None
+):
     session = make_session()
 
     result = catforge_analyst.sellpoint_value_pm(
@@ -5579,7 +6545,9 @@ def test_sellpoint_value_pm_reads_only_the_latest_successful_m14_run() -> None:
 
     assert latest_scope is not None and newer_batch_id in latest_scope
     assert [row.candidate_sku_code for row in historical_rows] == ["TV00030001"]
-    assert {row.selection_run_id for row in historical_rows} == {"m14-sellpoint-pm-run-1"}
+    assert {row.selection_run_id for row in historical_rows} == {
+        "m14-sellpoint-pm-run-1"
+    }
     assert [row.candidate_sku_code for row in rows] == ["TV00040001"]
     assert {row.selection_run_id for row in rows} == {"m14-sellpoint-pm-run-newer"}
 

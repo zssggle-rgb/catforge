@@ -89,6 +89,8 @@ M05C-A 可以由分析者使用 LLM 辅助归纳 taxonomy，但这不是运行�
 | SKU 市场画像 | M07 `core3_sku_market_profile` 等 | 否但建议 | 辅助价格、尺寸、市场位置评论解释 |
 | 批次信息 | M00 | 是 | batch 边界、增量重跑范围 |
 
+M05C 的评论 batch 是评论证据和输出审计边界，不要求 M03B/M04C 使用同一个源 batch。参数和卖点上下文必须在相同 `project_id + category_code + product_category + sku_code` 的当前品类 serving scope 内选择有效版本，同 batch 优先；只有整个 serving scope 都不存在时才报告画像缺失。
+
 M05C-B 必须通过 LLM 生成句级评论事实。工程实现允许三种运行模式：
 
 | 运行模式 | 用途 | 行为 |
@@ -107,8 +109,9 @@ M05C-B 必须按 `product_category` 加载 taxonomy：
 
 | `product_category` | taxonomy 状态 | M05C-B 行为 |
 | --- | --- | --- |
-| `tv` | 首版 TV taxonomy 发布后可用 | 正常执行 |
-| `ac`、`washer` 等其他品类 | 未发布前不可用 | 阻断并提示“该品类评论事实 taxonomy 未发布” |
+| `tv` | `tv_comment_fact_taxonomy_manual_v0.1` 已发布 | 使用 TV M03B/M04C 和 M05C 规则执行 |
+| `ac` | `ac_comment_fact_taxonomy_manual_v0.1` 已发布 | 使用 AC M03B/M04C 和 M05C 规则执行 |
+| `washer` 等其他品类 | 未发布前不可用 | 阻断并提示“该品类评论事实 taxonomy 未发布” |
 
 后续新增品类时，不改 M05C-B 主流程，只新增该品类的人工 taxonomy 资产和必要的规则映射。
 
@@ -207,6 +210,10 @@ evidence_text
 - 典型正向证据句。
 - 典型负向证据句。
 - 复核项。
+- 信息级服务排除通知，明确数量、作用范围和下游排除策略。
+- 局部评论矛盾通知，明确只作用于关联评论主题、参数、卖点及后续映射出的相关购买理由锚点。
+
+SKU 画像级 `quality_flags` 只保存整画像依赖或可用性问题。服务评论被正确排除属于 `info`，单条评论与参数/卖点冲突属于 comment fact 级 `warning`，二者都不得写成整 SKU 降级 flag。
 
 ### 4.4 评论事实维度统计与覆盖
 
@@ -285,6 +292,8 @@ SKU 层必须回到本 SKU：
 
 如果一句评论同时包含服务和产品事实，必须拆句或拆事实，只保留产品事实部分进入产品画像。
 
+被排除的服务事实必须保留原文和 evidence，标记 `support_relation=service_excluded`，并在 SKU 摘要中输出 `severity=info`、`scope=comment_fact`。正确排除服务评论不是数据异常，不触发 SKU 复核，不降低产品评论画像状态。
+
 ### 5.4 品牌力是正式评论事实
 
 品牌信任、复购、朋友推荐、家人推荐、大品牌、老牌子、一直用等表达必须作为 `brand_power_signal` 保存。它不是噪声，也不能只作为竞品排除项。
@@ -301,6 +310,8 @@ M05C 必须区分：
 - 负向表达：广告多、卡顿、反光严重、刺眼。
 - 混合表达：整体好但略有反光。
 - 不确定：语义不足或上下文缺失。
+
+评论反证必须局部传播。每个矛盾复核项至少记录 comment topic/subdimension、关联 param codes、关联 claim codes、证据和 `propagation_policy=related_anchor_only`。M05C 不加载 M12D taxonomy，因此 `affected_anchor_codes` 在本模块可以为空，但必须明确 `affected_anchor_mapping_status=deferred_to_downstream_category_taxonomy`；后续只能映射到相关锚点，不能扩散为整 SKU 或全部锚点异常。
 
 ## 6. LLM 要求
 
@@ -407,3 +418,6 @@ M05C 必须按 SKU 分批处理，不能一次把全量评论加载到内存。
 9. 品牌力作为正式事实维度输出。
 10. 测试不依赖外部 LLM。
 11. 指定未发布 taxonomy 的品类时，M05C-B 必须阻断并返回明确错误。
+12. TV/AC 均按各自 serving scope 读取 M03B/M04C；跨 batch 有效画像不误报缺失，跨品类资产不得回退复用。
+13. 服务排除只输出 fact 级 `info`；局部评论矛盾只输出 fact/review issue 级 `warning`，均不得降低整个 SKU 画像。
+14. TV/AC 分别生成 M05C draft，保持评论 taxonomy、上游规则和版本隔离；验证阶段不得切换 current/published，也不得顺带重跑 M07 及后续模块。

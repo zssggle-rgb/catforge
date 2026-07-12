@@ -1,0 +1,1440 @@
+{
+  "task_id": "M12D-QF-10",
+  "generated_at": "2026-07-11T13:32:10.233779+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "input_quality_policy_version": "m12d_input_quality_scope_v0.2",
+  "scope": "M12D context and candidate shadow only; scoring and profile decisions are not run",
+  "allowed_migrations": {
+    "TV": [
+      "legacy conflict/partial caused by system flags may become ready",
+      "row/relation/anchor issues remain in typed input_quality_json",
+      "QF upstream drafts may change candidate evidence matches"
+    ],
+    "AC": [
+      "legacy conflict/partial caused by system flags may become ready",
+      "row/relation/anchor issues remain in typed input_quality_json",
+      "QF upstream drafts may change candidate evidence matches"
+    ]
+  },
+  "categories": {
+    "TV": {
+      "category": "TV",
+      "purchase_reason_version_id": "m12d_ver_07cb258dc9594b908c30d850",
+      "source_batch_ids": [
+        "m00_20260623014631_c8630747",
+        "m00_20260619084551_857df63b",
+        "m00_20260613004311_d548f6dc"
+      ],
+      "read_scope": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+      "sku_count": 377,
+      "before_status_counts": {
+        "param_profile_status": {
+          "conflict": 377
+        },
+        "claim_fact_status": {
+          "missing": 49,
+          "partial": 328
+        },
+        "comment_profile_status": {
+          "missing": 29,
+          "partial": 308,
+          "ready": 40
+        },
+        "market_profile_status": {
+          "partial": 377
+        },
+        "semantic_profile_status": {
+          "missing": 29,
+          "partial": 348
+        },
+        "semantic_market_status": {
+          "missing": 33,
+          "ready": 344
+        },
+        "claim_value_status": {
+          "missing": 88,
+          "partial": 271,
+          "ready": 18
+        }
+      },
+      "after_status_counts": {
+        "param_profile_status": {
+          "ready": 377
+        },
+        "claim_fact_status": {
+          "missing": 49,
+          "ready": 328
+        },
+        "comment_profile_status": {
+          "missing": 29,
+          "ready": 348
+        },
+        "market_profile_status": {
+          "ready": 377
+        },
+        "semantic_profile_status": {
+          "missing": 29,
+          "ready": 348
+        },
+        "semantic_market_status": {
+          "missing": 33,
+          "ready": 344
+        },
+        "claim_value_status": {
+          "missing": 93,
+          "ready": 284
+        }
+      },
+      "status_migrations": {
+        "param_profile_status": {
+          "conflict->ready": 377
+        },
+        "claim_fact_status": {
+          "missing->missing": 49,
+          "partial->ready": 328
+        },
+        "comment_profile_status": {
+          "missing->missing": 29,
+          "partial->ready": 308,
+          "ready->ready": 40
+        },
+        "market_profile_status": {
+          "partial->ready": 377
+        },
+        "semantic_profile_status": {
+          "missing->missing": 29,
+          "partial->ready": 348
+        },
+        "semantic_market_status": {
+          "missing->missing": 33,
+          "ready->ready": 344
+        },
+        "claim_value_status": {
+          "missing->missing": 82,
+          "missing->ready": 6,
+          "partial->missing": 11,
+          "partial->ready": 260,
+          "ready->ready": 18
+        }
+      },
+      "quality_module_counts": {
+        "M03B": {
+          "availability:present": 377,
+          "usability:usable": 377
+        },
+        "M04C": {
+          "availability:missing": 49,
+          "availability:present": 328,
+          "usability:unusable": 49,
+          "usability:usable": 328
+        },
+        "M05C": {
+          "availability:missing": 29,
+          "availability:present": 348,
+          "usability:limited": 174,
+          "usability:unusable": 29,
+          "usability:usable": 174
+        },
+        "M07": {
+          "availability:present": 377,
+          "usability:limited": 16,
+          "usability:usable": 361
+        },
+        "M09C_M10C_M11C": {
+          "availability:missing": 29,
+          "availability:present": 348,
+          "usability:limited": 130,
+          "usability:unusable": 29,
+          "usability:usable": 218
+        },
+        "M11D": {
+          "availability:missing": 33,
+          "availability:present": 344,
+          "usability:unusable": 33,
+          "usability:usable": 344
+        },
+        "M12C": {
+          "availability:missing": 93,
+          "availability:present": 284,
+          "usability:limited": 144,
+          "usability:unusable": 93,
+          "usability:usable": 140
+        }
+      },
+      "issue_severity_counts": {
+        "info": 2156,
+        "warning": 1216
+      },
+      "issue_scope_counts": {
+        "anchor": 3106,
+        "row": 266
+      },
+      "issue_code_sku_counts": {
+        "comment_claim_contradiction": 174,
+        "m04c_profile_missing": 49,
+        "m05c_profile_missing": 29,
+        "m09c_primary_relation_unavailable": 11,
+        "m10c_primary_relation_unavailable": 104,
+        "m11c_primary_relation_unavailable": 56,
+        "m11d_allocation_missing": 33,
+        "m12c_amount_not_quantifiable": 282,
+        "m12c_related_claim_negative": 144,
+        "m12c_relative_comparison_limited": 144,
+        "m12c_rows_missing": 93,
+        "market_pool_insufficient": 2,
+        "price_band_sample_insufficient": 8,
+        "semantic_profiles_missing": 29,
+        "service_fulfillment_comment_excluded": 266,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "blocking_issue_counts": {},
+      "affected_anchor_issue_counts": {
+        "av_user_willing_to_pay_for_picture": 1356,
+        "big_screen_cinema_substitution": 593,
+        "family_long_watch_comfort_assurance": 393,
+        "family_operation_less_friction": 238,
+        "gaming_device_fit_reduces_risk": 610,
+        "living_room_upgrade_one_step": 619,
+        "low_price_core_experience_intact": 714,
+        "new_home_aesthetic_fit": 85,
+        "picture_upgrade_justifies_price": 1374,
+        "same_price_core_config_gain": 714,
+        "same_size_picture_step_up": 1374,
+        "sports_motion_stability": 610,
+        "worth_paying_more_for_experience_upgrade": 1386
+      },
+      "policy_only_candidate_business_change_count": 0,
+      "policy_only_candidate_business_change_skus": [],
+      "upstream_candidate_business_change_count": 289,
+      "upstream_candidate_business_change_skus": [
+        "TV00009549",
+        "TV00022396",
+        "TV00022397",
+        "TV00023850",
+        "TV00025500",
+        "TV00025501",
+        "TV00025519",
+        "TV00025784",
+        "TV00026064",
+        "TV00026065",
+        "TV00026106",
+        "TV00026131",
+        "TV00026209",
+        "TV00026228",
+        "TV00026231",
+        "TV00026232",
+        "TV00026248",
+        "TV00026857",
+        "TV00026874",
+        "TV00026886",
+        "TV00026941",
+        "TV00027015",
+        "TV00027027",
+        "TV00027028",
+        "TV00027029",
+        "TV00027039",
+        "TV00027055",
+        "TV00027077",
+        "TV00027301",
+        "TV00027302",
+        "TV00027305",
+        "TV00027308",
+        "TV00027309",
+        "TV00027332",
+        "TV00027351",
+        "TV00027353",
+        "TV00027354",
+        "TV00027378",
+        "TV00027405",
+        "TV00027406",
+        "TV00027442",
+        "TV00027474",
+        "TV00027489",
+        "TV00027490",
+        "TV00027549",
+        "TV00027554",
+        "TV00027580",
+        "TV00027582",
+        "TV00027587",
+        "TV00027590",
+        "TV00027615",
+        "TV00027629",
+        "TV00027642",
+        "TV00027652",
+        "TV00027653",
+        "TV00027684",
+        "TV00027686",
+        "TV00027687",
+        "TV00027688",
+        "TV00027690",
+        "TV00027699",
+        "TV00027700",
+        "TV00027701",
+        "TV00027733",
+        "TV00027754",
+        "TV00027756",
+        "TV00027758",
+        "TV00027759",
+        "TV00027760",
+        "TV00027764",
+        "TV00027765",
+        "TV00027769",
+        "TV00027772",
+        "TV00027774",
+        "TV00027780",
+        "TV00027801",
+        "TV00027805",
+        "TV00027806",
+        "TV00027809",
+        "TV00027811",
+        "TV00027812",
+        "TV00027813",
+        "TV00027842",
+        "TV00027855",
+        "TV00027857",
+        "TV00027858",
+        "TV00027859",
+        "TV00027861",
+        "TV00027862",
+        "TV00027867",
+        "TV00027874",
+        "TV00027898",
+        "TV00027899",
+        "TV00027902",
+        "TV00027906",
+        "TV00027913",
+        "TV00027921",
+        "TV00027923",
+        "TV00027935",
+        "TV00027937",
+        "TV00027942",
+        "TV00027946",
+        "TV00027983",
+        "TV00027985",
+        "TV00027986",
+        "TV00027991",
+        "TV00027994",
+        "TV00027996",
+        "TV00027997",
+        "TV00027999",
+        "TV00028043",
+        "TV00028071",
+        "TV00028081",
+        "TV00028082",
+        "TV00028083",
+        "TV00028085",
+        "TV00028087",
+        "TV00028088",
+        "TV00028099",
+        "TV00028100",
+        "TV00028108",
+        "TV00028111",
+        "TV00028115",
+        "TV00028122",
+        "TV00028123",
+        "TV00028159",
+        "TV00028164",
+        "TV00028167",
+        "TV00028168",
+        "TV00028169",
+        "TV00028170",
+        "TV00028179",
+        "TV00028200",
+        "TV00028204",
+        "TV00028206",
+        "TV00028213",
+        "TV00028238",
+        "TV00028242",
+        "TV00028243",
+        "TV00028267",
+        "TV00028274",
+        "TV00028330",
+        "TV00028341",
+        "TV00028342",
+        "TV00028372",
+        "TV00028384",
+        "TV00028388",
+        "TV00028389",
+        "TV00028424",
+        "TV00028425",
+        "TV00028426",
+        "TV00028472",
+        "TV00028549",
+        "TV00028551",
+        "TV00028552",
+        "TV00028553",
+        "TV00028555",
+        "TV00028556",
+        "TV00028565",
+        "TV00028656",
+        "TV00028673",
+        "TV00028685",
+        "TV00028703",
+        "TV00028704",
+        "TV00028706",
+        "TV00028708",
+        "TV00028775",
+        "TV00028776",
+        "TV00028778",
+        "TV00028779",
+        "TV00028829",
+        "TV00028830",
+        "TV00028831",
+        "TV00028835",
+        "TV00028902",
+        "TV00028905",
+        "TV00028907",
+        "TV00028908",
+        "TV00028909",
+        "TV00028913",
+        "TV00029016",
+        "TV00029020",
+        "TV00029021",
+        "TV00029022",
+        "TV00029034",
+        "TV00029035",
+        "TV00029037",
+        "TV00029094",
+        "TV00029095",
+        "TV00029099",
+        "TV00029104",
+        "TV00029106",
+        "TV00029107",
+        "TV00029108",
+        "TV00029112",
+        "TV00029116",
+        "TV00029121",
+        "TV00029122",
+        "TV00029123",
+        "TV00029124",
+        "TV00029127",
+        "TV00029166",
+        "TV00029167",
+        "TV00029172",
+        "TV00029173",
+        "TV00029202",
+        "TV00029204",
+        "TV00029210",
+        "TV00029215",
+        "TV00029260",
+        "TV00029300",
+        "TV00029301",
+        "TV00029302",
+        "TV00029303",
+        "TV00029304",
+        "TV00029342",
+        "TV00029343",
+        "TV00029344",
+        "TV00029414",
+        "TV00029806",
+        "TV00029820",
+        "TV00029823",
+        "TV00029936",
+        "TV00029937",
+        "TV00029938",
+        "TV00029939",
+        "TV00029940",
+        "TV00029942",
+        "TV00030053",
+        "TV00030054",
+        "TV00030056",
+        "TV00030063",
+        "TV00030064",
+        "TV00030065",
+        "TV00030076",
+        "TV00030078",
+        "TV00030079",
+        "TV00030080",
+        "TV00030081",
+        "TV00030083",
+        "TV00030130",
+        "TV00030173",
+        "TV00030195",
+        "TV00030197",
+        "TV00030198",
+        "TV00030199",
+        "TV00030200",
+        "TV00030201",
+        "TV00030246",
+        "TV00030247",
+        "TV00030259",
+        "TV00030268",
+        "TV00030269",
+        "TV00030270",
+        "TV00030271",
+        "TV00030272",
+        "TV00030284",
+        "TV00030293",
+        "TV00030299",
+        "TV00030314",
+        "TV00030315",
+        "TV00030316",
+        "TV00030317",
+        "TV00030318",
+        "TV00030319",
+        "TV00030320",
+        "TV00030325",
+        "TV00030337",
+        "TV00030352",
+        "TV00030355",
+        "TV00030368",
+        "TV00030388",
+        "TV00030389",
+        "TV00030398",
+        "TV00030413",
+        "TV00030415",
+        "TV00030420",
+        "TV00030469",
+        "TV00030492",
+        "TV00030527",
+        "TV00030529",
+        "TV00030530",
+        "TV00030532",
+        "TV00030533",
+        "TV00030534",
+        "TV00030549",
+        "TV00030610",
+        "TV00030615",
+        "TV00030618"
+      ],
+      "regression_samples": [
+        {
+          "sku_code": "TV00009549",
+          "old_candidate_digest": "99cfd72137548cb150393f8658d25af8301912c15adee5ecdb34571fe034bfc7",
+          "new_candidate_digest": "ceeb8589f668da52092a723133bd0f9efdad2d59eddcc52d606613b429749ba1",
+          "policy_baseline_digest": "ceeb8589f668da52092a723133bd0f9efdad2d59eddcc52d606613b429749ba1",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "missing",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "missing",
+            "semantic_market_status": "missing",
+            "claim_value_status": "missing"
+          },
+          "quality_issue_count": 5
+        },
+        {
+          "sku_code": "TV00022396",
+          "old_candidate_digest": "21eea97c89074e5a20b2509044ab1d160c2074106977907d2818dcecdb351d92",
+          "new_candidate_digest": "d554aa3a1beff95e5e8ac983b266612acab70fa86cfd370b3a972cf96a3da609",
+          "policy_baseline_digest": "d554aa3a1beff95e5e8ac983b266612acab70fa86cfd370b3a972cf96a3da609",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 14
+        },
+        {
+          "sku_code": "TV00022397",
+          "old_candidate_digest": "acdc73dce4092f5194aa125e7e70d4866ea58f0de276744c9fee768e052e566e",
+          "new_candidate_digest": "a4d6bfa4a8f4eeb1577dcb4f26d39eb075e1c56d05191c0c815351415fcf9b8b",
+          "policy_baseline_digest": "a4d6bfa4a8f4eeb1577dcb4f26d39eb075e1c56d05191c0c815351415fcf9b8b",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00023850",
+          "old_candidate_digest": "b00f51346f059af2a5250e6e15c5826abe83dbce813ac7dbe65ac8b6dfec80d7",
+          "new_candidate_digest": "03cc5e3c932ad310754f62f77de39e0fbec9e91a21c7d9645f6cd618b67541ea",
+          "policy_baseline_digest": "03cc5e3c932ad310754f62f77de39e0fbec9e91a21c7d9645f6cd618b67541ea",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "missing",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "missing",
+            "semantic_market_status": "missing",
+            "claim_value_status": "missing"
+          },
+          "quality_issue_count": 4
+        },
+        {
+          "sku_code": "TV00025500",
+          "old_candidate_digest": "2d635eb5da2b0adf313afac73fe71314b3075d8b002376c1370c1a69ad8d197f",
+          "new_candidate_digest": "ecca617f881162f88caf3af79dab17677a18a0c4d461f0a945caed29aeb09a7e",
+          "policy_baseline_digest": "ecca617f881162f88caf3af79dab17677a18a0c4d461f0a945caed29aeb09a7e",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 9
+        },
+        {
+          "sku_code": "TV00025501",
+          "old_candidate_digest": "6b3fb7aaa2b93854c8cd06d6937897f073ae9935b28c003865c4eda99a67f5f7",
+          "new_candidate_digest": "ba4b3cc70ba7b5f7020274941ca954513a232b3621373137781fdecd58817c02",
+          "policy_baseline_digest": "ba4b3cc70ba7b5f7020274941ca954513a232b3621373137781fdecd58817c02",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00025519",
+          "old_candidate_digest": "1509657d9fdc32d896b44faa7a5990fc5987e633d65437dab92189df709ed260",
+          "new_candidate_digest": "0b0863bfea7addbeaa16760f08bf0c92a584dffe2d3591bcaaccc91cb6b54f75",
+          "policy_baseline_digest": "0b0863bfea7addbeaa16760f08bf0c92a584dffe2d3591bcaaccc91cb6b54f75",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 11
+        },
+        {
+          "sku_code": "TV00025784",
+          "old_candidate_digest": "7b73f1025a6e16fecc8bf3264f3a88b10bd95f1d1ba5765c692a45e7f85bddf7",
+          "new_candidate_digest": "6de80796589214d53af09ebad99176955445d53bcf51e4d6a559b95c8701833d",
+          "policy_baseline_digest": "6de80796589214d53af09ebad99176955445d53bcf51e4d6a559b95c8701833d",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 4
+        },
+        {
+          "sku_code": "TV00026064",
+          "old_candidate_digest": "1a271a44e4ba532b24747684ad2b1b08506cf4327c4a0218f01b608d7e166236",
+          "new_candidate_digest": "1799ad8928297ad4626a31acc4a15dbfd628ffbac3024b5bad1c521749ecb1fd",
+          "policy_baseline_digest": "1799ad8928297ad4626a31acc4a15dbfd628ffbac3024b5bad1c521749ecb1fd",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00026065",
+          "old_candidate_digest": "d4200a844c758fc243509e9abaa4c8a66ca32282c3768cb7a3df18f3d5a058c7",
+          "new_candidate_digest": "b81108f37c2d4415e9ad7f425e5e19de078e15e243a65c6cca3fbc4d123abe80",
+          "policy_baseline_digest": "b81108f37c2d4415e9ad7f425e5e19de078e15e243a65c6cca3fbc4d123abe80",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 14
+        },
+        {
+          "sku_code": "TV00026106",
+          "old_candidate_digest": "3398308a84f8b23296744c7309b2e82284f1a4677b344abbe319b4554409e085",
+          "new_candidate_digest": "73d7a0e7dfd11dd78d0655e01eb0ed0a09ae9af1c3e01b62cfa43cf78a9ec0b1",
+          "policy_baseline_digest": "73d7a0e7dfd11dd78d0655e01eb0ed0a09ae9af1c3e01b62cfa43cf78a9ec0b1",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 7
+        },
+        {
+          "sku_code": "TV00026131",
+          "old_candidate_digest": "0236c99b446c5616cce909255c58e995bfe4e6672dd02bb66c6e7a66b272fdea",
+          "new_candidate_digest": "01eb93035d924fa319ddd2bf5ef6dca864b0fb3a169f88bf1c97d6c717b4270b",
+          "policy_baseline_digest": "01eb93035d924fa319ddd2bf5ef6dca864b0fb3a169f88bf1c97d6c717b4270b",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 14
+        },
+        {
+          "sku_code": "TV00026209",
+          "old_candidate_digest": "13cb2de32aa32dc6c518bbf74ee9565e0a014a8c3dff5cd3c815efd57ccbab5e",
+          "new_candidate_digest": "9d4d3f2989e6aa92441c6d54a92eef122c8e2429b015586c5861bf357fc900d9",
+          "policy_baseline_digest": "9d4d3f2989e6aa92441c6d54a92eef122c8e2429b015586c5861bf357fc900d9",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00026228",
+          "old_candidate_digest": "3aa06e3a48bf4901b80de2bf610656a190f1d73eeb8d8111c3b1b7f4b8713c7b",
+          "new_candidate_digest": "522914837b511d8a1ee90f7587bcb1ad3dce09fb55c3b7bd4adccdb0d834a7c6",
+          "policy_baseline_digest": "522914837b511d8a1ee90f7587bcb1ad3dce09fb55c3b7bd4adccdb0d834a7c6",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 14
+        },
+        {
+          "sku_code": "TV00026231",
+          "old_candidate_digest": "e1a8b7787d97b77fc61494ed93deb0c84d70b509883332a507b94a09813678c9",
+          "new_candidate_digest": "7843ae3ce26241f2f3ab87546abf5f51f521de87c7718648d7d0a5eaeec9bea2",
+          "policy_baseline_digest": "7843ae3ce26241f2f3ab87546abf5f51f521de87c7718648d7d0a5eaeec9bea2",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 11
+        },
+        {
+          "sku_code": "TV00026232",
+          "old_candidate_digest": "7b5a5fd8383a1904b1ba3e1476834666478367d34589c075e831f2f634d52a62",
+          "new_candidate_digest": "589aaadfbfd1052085dac93b3e8bd353cac2d86de9e0126299ca3cf4e9e5f469",
+          "policy_baseline_digest": "589aaadfbfd1052085dac93b3e8bd353cac2d86de9e0126299ca3cf4e9e5f469",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00026248",
+          "old_candidate_digest": "22d6f453f919101c749f96fa76fa51eb6c5cef6d3330a129615dc1144c83a1ed",
+          "new_candidate_digest": "ca274eceac7d5728b8f46994c84746bffee9c998853677c9f84940d8fb2adc1f",
+          "policy_baseline_digest": "ca274eceac7d5728b8f46994c84746bffee9c998853677c9f84940d8fb2adc1f",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 4
+        },
+        {
+          "sku_code": "TV00026857",
+          "old_candidate_digest": "8b5669fe4681fc144e54870413e86a5c0d5c564d0ae2a4e8bedc1877191d7f51",
+          "new_candidate_digest": "f25c967a324f3bf2e438b058f24dba9dfff04cf9c0ad7904085bb3093c009e4e",
+          "policy_baseline_digest": "f25c967a324f3bf2e438b058f24dba9dfff04cf9c0ad7904085bb3093c009e4e",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "TV00026874",
+          "old_candidate_digest": "242f6c4b16353a0de2db5842c1876f618cea0bab35d13eb8f145704471acc6c8",
+          "new_candidate_digest": "871c668121dc2cf5661d64665dbeb2c34dccac1ab53996dcc466614e63a75b4c",
+          "policy_baseline_digest": "871c668121dc2cf5661d64665dbeb2c34dccac1ab53996dcc466614e63a75b4c",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 4
+        },
+        {
+          "sku_code": "TV00026886",
+          "old_candidate_digest": "ab934000147c23bf62a14fd9231aa1476e84ea6bb630d3cd1e82202287fe84e7",
+          "new_candidate_digest": "13b8dc1d72f919bdfbbb04dccb26f54cab415d2651bc10683b256bf762d2a03a",
+          "policy_baseline_digest": "13b8dc1d72f919bdfbbb04dccb26f54cab415d2651bc10683b256bf762d2a03a",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 6
+        }
+      ]
+    },
+    "AC": {
+      "category": "AC",
+      "purchase_reason_version_id": "m12d_ver_60fe5fee508b9344ab16ccf9",
+      "source_batch_ids": [
+        "m00_20260624000202_1150a669"
+      ],
+      "read_scope": "serving-scope:AC:m00_20260624000202_1150a669",
+      "sku_count": 155,
+      "before_status_counts": {
+        "param_profile_status": {
+          "conflict": 29,
+          "ready": 126
+        },
+        "claim_fact_status": {
+          "partial": 121,
+          "ready": 34
+        },
+        "comment_profile_status": {
+          "missing": 11,
+          "partial": 141,
+          "ready": 3
+        },
+        "market_profile_status": {
+          "partial": 155
+        },
+        "semantic_profile_status": {
+          "missing": 11,
+          "partial": 144
+        },
+        "semantic_market_status": {
+          "missing": 11,
+          "ready": 144
+        },
+        "claim_value_status": {
+          "missing": 15,
+          "partial": 140
+        }
+      },
+      "after_status_counts": {
+        "param_profile_status": {
+          "ready": 155
+        },
+        "claim_fact_status": {
+          "ready": 155
+        },
+        "comment_profile_status": {
+          "missing": 11,
+          "ready": 144
+        },
+        "market_profile_status": {
+          "ready": 155
+        },
+        "semantic_profile_status": {
+          "missing": 11,
+          "ready": 144
+        },
+        "semantic_market_status": {
+          "missing": 11,
+          "ready": 144
+        },
+        "claim_value_status": {
+          "missing": 15,
+          "ready": 140
+        }
+      },
+      "status_migrations": {
+        "param_profile_status": {
+          "conflict->ready": 29,
+          "ready->ready": 126
+        },
+        "claim_fact_status": {
+          "partial->ready": 121,
+          "ready->ready": 34
+        },
+        "comment_profile_status": {
+          "missing->missing": 11,
+          "partial->ready": 141,
+          "ready->ready": 3
+        },
+        "market_profile_status": {
+          "partial->ready": 155
+        },
+        "semantic_profile_status": {
+          "missing->missing": 11,
+          "partial->ready": 144
+        },
+        "semantic_market_status": {
+          "missing->missing": 11,
+          "ready->ready": 144
+        },
+        "claim_value_status": {
+          "missing->missing": 15,
+          "partial->ready": 140
+        }
+      },
+      "quality_module_counts": {
+        "M03B": {
+          "availability:present": 155,
+          "usability:usable": 155
+        },
+        "M04C": {
+          "availability:present": 155,
+          "usability:usable": 155
+        },
+        "M05C": {
+          "availability:missing": 11,
+          "availability:present": 144,
+          "usability:limited": 101,
+          "usability:unusable": 11,
+          "usability:usable": 43
+        },
+        "M07": {
+          "availability:present": 155,
+          "usability:limited": 40,
+          "usability:usable": 115
+        },
+        "M09C_M10C_M11C": {
+          "availability:missing": 11,
+          "availability:present": 144,
+          "usability:limited": 13,
+          "usability:unusable": 11,
+          "usability:usable": 131
+        },
+        "M11D": {
+          "availability:missing": 11,
+          "availability:present": 144,
+          "usability:unusable": 11,
+          "usability:usable": 144
+        },
+        "M12C": {
+          "availability:missing": 15,
+          "availability:present": 140,
+          "usability:limited": 94,
+          "usability:unusable": 15,
+          "usability:usable": 46
+        }
+      },
+      "issue_severity_counts": {
+        "info": 1468,
+        "warning": 717
+      },
+      "issue_scope_counts": {
+        "anchor": 2044,
+        "row": 141
+      },
+      "issue_code_sku_counts": {
+        "comment_claim_contradiction": 101,
+        "m05c_profile_missing": 11,
+        "m09c_primary_relation_unavailable": 1,
+        "m10c_primary_relation_unavailable": 12,
+        "m11c_primary_relation_unavailable": 2,
+        "m11d_allocation_missing": 11,
+        "m12c_amount_not_quantifiable": 140,
+        "m12c_related_claim_negative": 94,
+        "m12c_relative_comparison_limited": 34,
+        "m12c_rows_missing": 15,
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "price_band_sample_insufficient": 2,
+        "semantic_profiles_missing": 11,
+        "service_fulfillment_comment_excluded": 141,
+        "size_pool_insufficient": 2
+      },
+      "blocking_issue_counts": {},
+      "affected_anchor_issue_counts": {
+        "cooling_heating_performance_justifies_price": 480,
+        "elderly_child_soft_wind_comfort": 182,
+        "fresh_air_health_reduces_stuffy_risk": 373,
+        "humidity_dehumidification_reassurance": 181,
+        "large_space_one_step_cooling_heating": 435,
+        "long_term_energy_saving_offsets_price": 433,
+        "low_price_core_ac_experience_intact": 567,
+        "room_size_capacity_match_reduces_risk": 445,
+        "same_price_efficiency_capacity_gain": 567,
+        "self_cleaning_reduces_maintenance_risk": 175,
+        "sleep_room_quiet_comfort_assurance": 183,
+        "small_room_installation_fit": 488,
+        "smart_remote_control_less_friction": 447
+      },
+      "policy_only_candidate_business_change_count": 0,
+      "policy_only_candidate_business_change_skus": [],
+      "upstream_candidate_business_change_count": 37,
+      "upstream_candidate_business_change_skus": [
+        "AC00033789",
+        "AC00034502",
+        "AC00034659",
+        "AC00034660",
+        "AC00034717",
+        "AC00034767",
+        "AC00034950",
+        "AC00035277",
+        "AC00035345",
+        "AC00035996",
+        "AC00036063",
+        "AC00036170",
+        "AC00036241",
+        "AC00036257",
+        "AC00036313",
+        "AC00036327",
+        "AC00036405",
+        "AC00036525",
+        "AC00036739",
+        "AC00038063",
+        "AC00038440",
+        "AC00038445",
+        "AC00038470",
+        "AC00038623",
+        "AC00038686",
+        "AC00038751",
+        "AC00038855",
+        "AC00038865",
+        "AC00039124",
+        "AC00039125",
+        "AC00039156",
+        "AC00039157",
+        "AC00039164",
+        "AC00039197",
+        "AC00039348",
+        "AC00039400",
+        "AC00039564"
+      ],
+      "regression_samples": [
+        {
+          "sku_code": "AC00026378",
+          "old_candidate_digest": "05d1aae5b2b835309ad072683e81479d9b9fcaeddbf328be9e2bb779a26c52c8",
+          "new_candidate_digest": "05d1aae5b2b835309ad072683e81479d9b9fcaeddbf328be9e2bb779a26c52c8",
+          "policy_baseline_digest": "05d1aae5b2b835309ad072683e81479d9b9fcaeddbf328be9e2bb779a26c52c8",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 12
+        },
+        {
+          "sku_code": "AC00028640",
+          "old_candidate_digest": "7a7d4db9b1b8d5e717d8433ed80f451c1bb424a7195b76d94634fc58a30c2520",
+          "new_candidate_digest": "7a7d4db9b1b8d5e717d8433ed80f451c1bb424a7195b76d94634fc58a30c2520",
+          "policy_baseline_digest": "7a7d4db9b1b8d5e717d8433ed80f451c1bb424a7195b76d94634fc58a30c2520",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "AC00028642",
+          "old_candidate_digest": "aafb1312fc042613d7a9bf28be963b8d8aabe5f5266e7a5cd26cd8fb038d4313",
+          "new_candidate_digest": "aafb1312fc042613d7a9bf28be963b8d8aabe5f5266e7a5cd26cd8fb038d4313",
+          "policy_baseline_digest": "aafb1312fc042613d7a9bf28be963b8d8aabe5f5266e7a5cd26cd8fb038d4313",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 18
+        },
+        {
+          "sku_code": "AC00029097",
+          "old_candidate_digest": "d8f2c4a3716f6cd790065a92faa8a78fedb545f5a12a68a5a88b19a41b8c91ca",
+          "new_candidate_digest": "d8f2c4a3716f6cd790065a92faa8a78fedb545f5a12a68a5a88b19a41b8c91ca",
+          "policy_baseline_digest": "d8f2c4a3716f6cd790065a92faa8a78fedb545f5a12a68a5a88b19a41b8c91ca",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 12
+        },
+        {
+          "sku_code": "AC00029319",
+          "old_candidate_digest": "b31b4151f82993cac7c3949a2275321537aded19099e2064821fcd5437b59778",
+          "new_candidate_digest": "b31b4151f82993cac7c3949a2275321537aded19099e2064821fcd5437b59778",
+          "policy_baseline_digest": "b31b4151f82993cac7c3949a2275321537aded19099e2064821fcd5437b59778",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 16
+        },
+        {
+          "sku_code": "AC00029751",
+          "old_candidate_digest": "bb571c9e71cc140f82fdcdb42978c720907d9b7f0084d5842fb8b908e167850b",
+          "new_candidate_digest": "bb571c9e71cc140f82fdcdb42978c720907d9b7f0084d5842fb8b908e167850b",
+          "policy_baseline_digest": "bb571c9e71cc140f82fdcdb42978c720907d9b7f0084d5842fb8b908e167850b",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 13
+        },
+        {
+          "sku_code": "AC00030362",
+          "old_candidate_digest": "730ae052853cbb3266046de9e437aa7ef413322efd2be7ca7b454eee04155144",
+          "new_candidate_digest": "730ae052853cbb3266046de9e437aa7ef413322efd2be7ca7b454eee04155144",
+          "policy_baseline_digest": "730ae052853cbb3266046de9e437aa7ef413322efd2be7ca7b454eee04155144",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 12
+        },
+        {
+          "sku_code": "AC00030631",
+          "old_candidate_digest": "f42bf05fcd38bdbf0e3d2aac8839e49074ddfcc0ed8b9e15e7aacb8e598d3d19",
+          "new_candidate_digest": "f42bf05fcd38bdbf0e3d2aac8839e49074ddfcc0ed8b9e15e7aacb8e598d3d19",
+          "policy_baseline_digest": "f42bf05fcd38bdbf0e3d2aac8839e49074ddfcc0ed8b9e15e7aacb8e598d3d19",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 16
+        },
+        {
+          "sku_code": "AC00030929",
+          "old_candidate_digest": "d8d916e4c8906292d52a2024c666dc6310f061c2481e4b3c1202a5193986df28",
+          "new_candidate_digest": "d8d916e4c8906292d52a2024c666dc6310f061c2481e4b3c1202a5193986df28",
+          "policy_baseline_digest": "d8d916e4c8906292d52a2024c666dc6310f061c2481e4b3c1202a5193986df28",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 16
+        },
+        {
+          "sku_code": "AC00032008",
+          "old_candidate_digest": "7f2e96386772811461ccbc220ba89270ce49e414e08e215f310b923cb982055f",
+          "new_candidate_digest": "7f2e96386772811461ccbc220ba89270ce49e414e08e215f310b923cb982055f",
+          "policy_baseline_digest": "7f2e96386772811461ccbc220ba89270ce49e414e08e215f310b923cb982055f",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "AC00032338",
+          "old_candidate_digest": "31af4026f7f63c773ab1ee9edd8f81168c6feee30308e0856f08eaf7937f6219",
+          "new_candidate_digest": "31af4026f7f63c773ab1ee9edd8f81168c6feee30308e0856f08eaf7937f6219",
+          "policy_baseline_digest": "31af4026f7f63c773ab1ee9edd8f81168c6feee30308e0856f08eaf7937f6219",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 10
+        },
+        {
+          "sku_code": "AC00032506",
+          "old_candidate_digest": "d7b6fbfd3b705a9f895c3b0d06098259b2e206136e733586804161a6d79a5fa6",
+          "new_candidate_digest": "d7b6fbfd3b705a9f895c3b0d06098259b2e206136e733586804161a6d79a5fa6",
+          "policy_baseline_digest": "d7b6fbfd3b705a9f895c3b0d06098259b2e206136e733586804161a6d79a5fa6",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 12
+        },
+        {
+          "sku_code": "AC00032615",
+          "old_candidate_digest": "48b7e741d38f90377aecc73b86f9867d14807c5baea58336fa40b4d571ee6f09",
+          "new_candidate_digest": "48b7e741d38f90377aecc73b86f9867d14807c5baea58336fa40b4d571ee6f09",
+          "policy_baseline_digest": "48b7e741d38f90377aecc73b86f9867d14807c5baea58336fa40b4d571ee6f09",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 16
+        },
+        {
+          "sku_code": "AC00032705",
+          "old_candidate_digest": "c34895126e76cddcc0203bd20343d0a47b235e8ca57ef11edf14cef017bb3840",
+          "new_candidate_digest": "c34895126e76cddcc0203bd20343d0a47b235e8ca57ef11edf14cef017bb3840",
+          "policy_baseline_digest": "c34895126e76cddcc0203bd20343d0a47b235e8ca57ef11edf14cef017bb3840",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 19
+        },
+        {
+          "sku_code": "AC00033476",
+          "old_candidate_digest": "142e7474869754742d3ceb5339a661102569e016b6ebda6985bf716c12d3c676",
+          "new_candidate_digest": "142e7474869754742d3ceb5339a661102569e016b6ebda6985bf716c12d3c676",
+          "policy_baseline_digest": "142e7474869754742d3ceb5339a661102569e016b6ebda6985bf716c12d3c676",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 19
+        },
+        {
+          "sku_code": "AC00033612",
+          "old_candidate_digest": "aafdaf44b454db8cdfb4cb522fd3480c96648d46efa87ee6357b31b078f25499",
+          "new_candidate_digest": "aafdaf44b454db8cdfb4cb522fd3480c96648d46efa87ee6357b31b078f25499",
+          "policy_baseline_digest": "aafdaf44b454db8cdfb4cb522fd3480c96648d46efa87ee6357b31b078f25499",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 6
+        },
+        {
+          "sku_code": "AC00033721",
+          "old_candidate_digest": "e8a51b5156fffa14da1ea5a0fbfc2a1b03a2901bf5e5fae7d1a802e294389dff",
+          "new_candidate_digest": "e8a51b5156fffa14da1ea5a0fbfc2a1b03a2901bf5e5fae7d1a802e294389dff",
+          "policy_baseline_digest": "e8a51b5156fffa14da1ea5a0fbfc2a1b03a2901bf5e5fae7d1a802e294389dff",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 26
+        },
+        {
+          "sku_code": "AC00033789",
+          "old_candidate_digest": "577b30b7ed95edfcbd0524841a09469852400bada8e2c83be7a50ee2c384ffd7",
+          "new_candidate_digest": "22f79c62762f10946b593d67f03954d2f860a6ee678f37a024b622af22ae920b",
+          "policy_baseline_digest": "22f79c62762f10946b593d67f03954d2f860a6ee678f37a024b622af22ae920b",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 17
+        },
+        {
+          "sku_code": "AC00034284",
+          "old_candidate_digest": "f136e8c04900a3f85666d03e8e72c09582063fcaa94495b875e1081ef2af6555",
+          "new_candidate_digest": "f136e8c04900a3f85666d03e8e72c09582063fcaa94495b875e1081ef2af6555",
+          "policy_baseline_digest": "f136e8c04900a3f85666d03e8e72c09582063fcaa94495b875e1081ef2af6555",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 11
+        },
+        {
+          "sku_code": "AC00034502",
+          "old_candidate_digest": "3cfb509ab0bf963d861fa22f236629de31667b96711d73ff07cb75109d2020a9",
+          "new_candidate_digest": "1b7bafdde755f359f9bb473326de31ca1799cf2f76973b5ef035449c6a4354fa",
+          "policy_baseline_digest": "1b7bafdde755f359f9bb473326de31ca1799cf2f76973b5ef035449c6a4354fa",
+          "policy_business_unchanged": true,
+          "new_statuses": {
+            "param_profile_status": "ready",
+            "claim_fact_status": "ready",
+            "comment_profile_status": "ready",
+            "market_profile_status": "ready",
+            "semantic_profile_status": "ready",
+            "semantic_market_status": "ready",
+            "claim_value_status": "ready"
+          },
+          "quality_issue_count": 14
+        }
+      ]
+    }
+  },
+  "downstream_guard": {
+    "before": {
+      "core3_sku_purchase_reason_profile": {
+        "count": 687,
+        "latest": "2026-07-10 09:04:05.187302"
+      },
+      "core3_sku_purchase_reason_anchor": {
+        "count": 7057,
+        "latest": "2026-07-10 09:04:05.202000"
+      },
+      "core3_purchase_reason_profile_version": {
+        "count": 3,
+        "latest": "2026-07-10 09:04:07.037641"
+      }
+    },
+    "after": {
+      "core3_sku_purchase_reason_profile": {
+        "count": 687,
+        "latest": "2026-07-10 09:04:05.187302"
+      },
+      "core3_sku_purchase_reason_anchor": {
+        "count": 7057,
+        "latest": "2026-07-10 09:04:05.202000"
+      },
+      "core3_purchase_reason_profile_version": {
+        "count": 3,
+        "latest": "2026-07-10 09:04:07.037641"
+      }
+    },
+    "unchanged": true
+  }
+}

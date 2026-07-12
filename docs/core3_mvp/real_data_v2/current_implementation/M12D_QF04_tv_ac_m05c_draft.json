@@ -1,0 +1,289 @@
+{
+  "task_id": "M12D-QF-04",
+  "generated_at": "2026-07-11T04:51:37.719550+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "scope": "M05C only",
+  "write_draft": true,
+  "classification_source": "existing M05C v0.1 fact topic and polarity; no LLM call",
+  "allowed_migrations": {
+    "TV": [
+      "param_profile_missing is recomputed from current TV M03B v0.2 serving scope",
+      "claim_fact_profile_missing is recomputed from current TV M04C v0.2 profile presence",
+      "service exclusion and comment contradiction move from SKU profile flags to localized notices/issues",
+      "support relation may change only because current M03B/M04C context replaces batch-exact historical context"
+    ],
+    "AC": [
+      "service exclusion and comment contradiction move from SKU profile flags to localized notices/issues",
+      "M03B/M04C context is revalidated against AC-only v0.2 versions"
+    ]
+  },
+  "before": {
+    "TV": {
+      "profile_count": 348,
+      "fact_count": 43750,
+      "review_issue_count": 1181,
+      "profile_flag_counts": {
+        "claim_fact_profile_missing": 165,
+        "comment_contradicts_existing_param_or_claim": 172,
+        "param_profile_missing": 90,
+        "service_fulfillment_comment_excluded": 266
+      },
+      "service_fact_count": 3169,
+      "contradiction_fact_count": 1181,
+      "contradiction_sku_count": 172,
+      "support_relation_counts": {
+        "comment_signal_only": 18610,
+        "contradicts_sku_param_claim": 1181,
+        "service_excluded": 3169,
+        "supports_sku_param_claim": 20790
+      },
+      "context_summary": {}
+    },
+    "AC": {
+      "profile_count": 144,
+      "fact_count": 68109,
+      "review_issue_count": 1066,
+      "profile_flag_counts": {
+        "comment_contradicts_existing_param_or_claim": 120,
+        "service_fulfillment_comment_excluded": 141
+      },
+      "service_fact_count": 6670,
+      "contradiction_fact_count": 1066,
+      "contradiction_sku_count": 120,
+      "support_relation_counts": {
+        "comment_signal_only": 29013,
+        "contradicts_sku_param_claim": 1066,
+        "service_excluded": 6670,
+        "supports_sku_param_claim": 31360
+      },
+      "context_summary": {}
+    }
+  },
+  "after": {
+    "TV": {
+      "profile_count": 348,
+      "fact_count": 43750,
+      "review_issue_count": 1400,
+      "profile_flag_counts": {
+        "claim_fact_profile_missing": 49
+      },
+      "service_fact_count": 3169,
+      "contradiction_fact_count": 1400,
+      "contradiction_sku_count": 233,
+      "support_relation_counts": {
+        "comment_signal_only": 14915,
+        "contradicts_sku_param_claim": 1400,
+        "service_excluded": 3169,
+        "supports_sku_param_claim": 24266
+      },
+      "context_summary": {
+        "param_source_batch_counts": {
+          "m00_20260613004311_d548f6dc": 75,
+          "m00_20260619084551_857df63b": 273
+        },
+        "claim_source_batch_counts": {
+          "m00_20260623014631_c8630747": 299
+        },
+        "param_missing_sku_count": 0,
+        "claim_profile_missing_sku_count": 49
+      }
+    },
+    "AC": {
+      "profile_count": 144,
+      "fact_count": 68109,
+      "review_issue_count": 1066,
+      "profile_flag_counts": {},
+      "service_fact_count": 6670,
+      "contradiction_fact_count": 1066,
+      "contradiction_sku_count": 120,
+      "support_relation_counts": {
+        "comment_signal_only": 29013,
+        "contradicts_sku_param_claim": 1066,
+        "service_excluded": 6670,
+        "supports_sku_param_claim": 31360
+      },
+      "context_summary": {
+        "param_source_batch_counts": {
+          "m00_20260624000202_1150a669": 144
+        },
+        "claim_source_batch_counts": {
+          "m00_20260624000202_1150a669": 144
+        },
+        "param_missing_sku_count": 0,
+        "claim_profile_missing_sku_count": 0
+      }
+    }
+  },
+  "comparisons": {
+    "TV": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "fact_added_count": 0,
+      "fact_removed_count": 0,
+      "immutable_fact_change_count": 0,
+      "immutable_fact_change_samples": [],
+      "support_context_change_count": 5002,
+      "profile_flag_counts_before": {
+        "claim_fact_profile_missing": 165,
+        "comment_contradicts_existing_param_or_claim": 172,
+        "param_profile_missing": 90,
+        "service_fulfillment_comment_excluded": 266
+      },
+      "profile_flag_counts_after": {
+        "claim_fact_profile_missing": 49
+      },
+      "service_fact_count_before": 3169,
+      "service_fact_count_after": 3169,
+      "contradiction_fact_count_before": 1181,
+      "contradiction_fact_count_after": 1400,
+      "contradiction_sku_count_before": 172,
+      "contradiction_sku_count_after": 233,
+      "review_issue_count_before": 1181,
+      "review_issue_count_after": 1400,
+      "context_summary_after": {
+        "param_source_batch_counts": {
+          "m00_20260613004311_d548f6dc": 75,
+          "m00_20260619084551_857df63b": 273
+        },
+        "claim_source_batch_counts": {
+          "m00_20260623014631_c8630747": 299
+        },
+        "param_missing_sku_count": 0,
+        "claim_profile_missing_sku_count": 49
+      }
+    },
+    "AC": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "fact_added_count": 0,
+      "fact_removed_count": 0,
+      "immutable_fact_change_count": 0,
+      "immutable_fact_change_samples": [],
+      "support_context_change_count": 0,
+      "profile_flag_counts_before": {
+        "comment_contradicts_existing_param_or_claim": 120,
+        "service_fulfillment_comment_excluded": 141
+      },
+      "profile_flag_counts_after": {},
+      "service_fact_count_before": 6670,
+      "service_fact_count_after": 6670,
+      "contradiction_fact_count_before": 1066,
+      "contradiction_fact_count_after": 1066,
+      "contradiction_sku_count_before": 120,
+      "contradiction_sku_count_after": 120,
+      "review_issue_count_before": 1066,
+      "review_issue_count_after": 1066,
+      "context_summary_after": {
+        "param_source_batch_counts": {
+          "m00_20260624000202_1150a669": 144
+        },
+        "claim_source_batch_counts": {
+          "m00_20260624000202_1150a669": 144
+        },
+        "param_missing_sku_count": 0,
+        "claim_profile_missing_sku_count": 0
+      }
+    }
+  },
+  "write_results": {
+    "TV": {
+      "profiles": {
+        "created_count": 0,
+        "reused_count": 348,
+        "record_count": 348
+      },
+      "facts": {
+        "created_count": 0,
+        "reused_count": 43750,
+        "record_count": 43750
+      },
+      "coverages": {
+        "created_count": 0,
+        "reused_count": 334,
+        "record_count": 334
+      },
+      "reviews": {
+        "created_count": 0,
+        "reused_count": 1400,
+        "record_count": 1400
+      }
+    },
+    "AC": {
+      "profiles": {
+        "created_count": 0,
+        "reused_count": 144,
+        "record_count": 144
+      },
+      "facts": {
+        "created_count": 0,
+        "reused_count": 68109,
+        "record_count": 68109
+      },
+      "coverages": {
+        "created_count": 0,
+        "reused_count": 162,
+        "record_count": 162
+      },
+      "reviews": {
+        "created_count": 0,
+        "reused_count": 1066,
+        "record_count": 1066
+      }
+    }
+  },
+  "downstream_guard": {
+    "before": {
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "after": {
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "unchanged": true
+  }
+}

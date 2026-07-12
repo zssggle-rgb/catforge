@@ -50,11 +50,13 @@ from app.services.core3_real_data.runner import Core3ModuleTarget
 
 
 M11C_PROFILE_ID_HASH_VERSION = "m11c-value-battlefield-profile-id-v1"
-M11C_PROFILE_HASH_VERSION = "m11c-value-battlefield-profile-v1"
+M11C_PROFILE_HASH_VERSION = "m11c-value-battlefield-profile-v2"
 M11C_SCORE_ID_HASH_VERSION = "m11c-value-battlefield-score-id-v1"
 M11C_SCORE_HASH_VERSION = "m11c-value-battlefield-score-v1"
 M11C_GRAPH_ID_HASH_VERSION = "m11c-value-battlefield-graph-id-v1"
 M11C_GRAPH_HASH_VERSION = "m11c-value-battlefield-graph-v1"
+
+M11C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD = Decimal("0.8000")
 
 PRICE_BANDS = ("low", "mid_low", "mid", "mid_high", "high")
 TV_CANONICAL_SIZE_TIERS = (
@@ -2077,6 +2079,12 @@ class M11CProfileBuilder:
                 score_payloads, sku_input, self.taxonomy.product_category
             )
         )
+        review_required, profile_review_reason = _profile_review_decision(
+            primary,
+            score_payloads=score_payloads,
+            product_category=self.taxonomy.product_category,
+            no_primary_reason=no_primary_reason,
+        )
         battlefield_summary = {
             "primary": _compact_score(primary) if primary else None,
             "secondary": [_compact_score(item) for item in secondary],
@@ -2122,15 +2130,9 @@ class M11CProfileBuilder:
                 item["battlefield_code"] for item in drags
             ],
             "battlefield_summary_json": battlefield_summary,
-            "review_required": bool(no_primary_reason)
-            or any(item["review_required"] for item in score_payloads),
-            "review_status": "review_required"
-            if bool(no_primary_reason)
-            or any(item["review_required"] for item in score_payloads)
-            else "auto_pass",
-            "review_reason_json": {"no_primary_reason_cn": no_primary_reason}
-            if no_primary_reason
-            else {},
+            "review_required": review_required,
+            "review_status": "review_required" if review_required else "auto_pass",
+            "review_reason_json": _json_safe(profile_review_reason),
             "confidence": _avg_decimal(
                 [
                     item["confidence"]
@@ -2149,6 +2151,10 @@ class M11CProfileBuilder:
                 "opportunity": payload["opportunity_battlefield_codes_json"],
                 "drag": payload["drag_factor_battlefield_codes_json"],
                 "summary": payload["battlefield_summary_json"],
+                "review_required": payload["review_required"],
+                "review_status": payload["review_status"],
+                "review_reason": payload["review_reason_json"],
+                "confidence": payload["confidence"],
                 "taxonomy_version": self.taxonomy.taxonomy_version,
                 "rule_version": self.rule_version,
             },
@@ -3415,6 +3421,111 @@ def _confidence(
     if sku_input.market_profile is not None:
         domain_count += 1
     return _clamp_decimal(Decimal(domain_count) / Decimal("5"))
+
+
+def _quality_primary_candidate(
+    payload: Mapping[str, Any], product_category: str
+) -> bool:
+    score = _decimal(payload.get("battlefield_score")) or Decimal("0.0000")
+    if score < Decimal("0.6800"):
+        return False
+    relation_status = payload.get("relation_status")
+    market_gate_status = payload.get("market_gate_status")
+    user_voice_score = _decimal(payload.get("user_voice_score")) or Decimal(
+        "0.0000"
+    )
+    claim_score = _decimal(payload.get("claim_alignment_score")) or Decimal(
+        "0.0000"
+    )
+    param_score = _decimal(payload.get("param_capability_score")) or Decimal(
+        "0.0000"
+    )
+    if market_gate_status == "matched":
+        return (
+            relation_status in {REL_SECONDARY, REL_OPPORTUNITY}
+            and user_voice_score >= Decimal("0.3500")
+            and (claim_score >= Decimal("0.3000") or param_score >= Decimal("0.3000"))
+        )
+    return (
+        str(product_category).upper() == "AC"
+        and relation_status == REL_OPPORTUNITY
+        and market_gate_status == "adjacent"
+        and user_voice_score >= Decimal("0.5500")
+        and claim_score >= Decimal("0.3000")
+        and param_score >= Decimal("0.5500")
+    )
+
+
+def _effective_primary_selection_rank(
+    payload: Mapping[str, Any],
+) -> tuple[Decimal, ...]:
+    return _primary_reason_sort_key(payload) + (
+        _decimal(payload.get("battlefield_score")) or Decimal("0.0000"),
+        _decimal(payload.get("user_voice_score")) or Decimal("0.0000"),
+        _decimal(payload.get("claim_alignment_score")) or Decimal("0.0000"),
+    )
+
+
+def _profile_review_decision(
+    primary: Mapping[str, Any] | None,
+    *,
+    score_payloads: Sequence[Mapping[str, Any]],
+    product_category: str,
+    no_primary_reason: str | None,
+) -> tuple[bool, dict[str, Any]]:
+    if primary is None:
+        return True, {
+            "scope": "profile",
+            "reason_codes": ["no_primary_battlefield"],
+            "reason_cn": [no_primary_reason or "未形成主价值战场。"],
+            "no_primary_reason_cn": no_primary_reason,
+        }
+
+    reason_codes: list[str] = []
+    reason_cn: list[str] = []
+    relation_status = str(primary.get("relation_status") or "")
+    confidence = _decimal(primary.get("confidence")) or Decimal("0.0000")
+    market_gate_status = str(primary.get("market_gate_status") or "unknown")
+    allowed_market_gates = (
+        {"matched", "adjacent"}
+        if str(product_category).upper() == "AC"
+        else {"matched"}
+    )
+    primary_rank = _effective_primary_selection_rank(primary)
+    competing_battlefield_codes = sorted(
+        str(item.get("battlefield_code"))
+        for item in score_payloads
+        if item is not primary
+        and _quality_primary_candidate(item, product_category)
+        and _effective_primary_selection_rank(item) == primary_rank
+    )
+
+    if relation_status != REL_PRIMARY:
+        reason_codes.append("primary_relation_status_invalid")
+        reason_cn.append("主战场记录与主关系状态不一致。")
+    if confidence < M11C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD:
+        reason_codes.append("primary_battlefield_confidence_below_threshold")
+        reason_cn.append("主战场证据域覆盖不足，尚未达到画像自动通过门槛。")
+    if market_gate_status not in allowed_market_gates:
+        reason_codes.append("primary_market_gate_conflict")
+        reason_cn.append("主战场与该品类的市场门槛适配结论冲突。")
+    if competing_battlefield_codes:
+        reason_codes.append("primary_battlefield_ambiguous")
+        reason_cn.append("存在两阶段排序证据完全相同的主战场候选。")
+
+    if not reason_codes:
+        return False, {}
+    return True, {
+        "scope": "profile",
+        "reason_codes": reason_codes,
+        "reason_cn": reason_cn,
+        "primary_battlefield_code": primary.get("battlefield_code"),
+        "primary_relation_status": relation_status,
+        "primary_confidence": confidence,
+        "primary_confidence_threshold": M11C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+        "primary_market_gate_status": market_gate_status,
+        "competing_battlefield_codes": competing_battlefield_codes,
+    }
 
 
 def _sentiment_polarity(

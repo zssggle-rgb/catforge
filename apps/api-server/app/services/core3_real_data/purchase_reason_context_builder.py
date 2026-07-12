@@ -37,10 +37,22 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
-    CORE3_M12C_RULE_VERSION,
+    CORE3_M12C_AC_RULE_VERSION,
+    CORE3_M12C_TV_RULE_VERSION,
+    CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
+    CORE3_M12D_INPUT_QUALITY_POLICY_VERSION,
+    CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,
     M12DInputStatus,
 )
+from app.services.core3_real_data.purchase_reason_anchor_taxonomy import (
+    M12DAnchorTaxonomyLoader,
+)
+from app.services.core3_real_data.purchase_reason_input_quality import (
+    M12DInputQualityAdapter,
+    legacy_status_from_quality,
+)
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
+    M12DInputQuality,
     M12DInputSnapshot,
     M12DSourceRef,
     M12DSkuPurchaseReasonContext,
@@ -73,7 +85,7 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
         battlefield_taxonomy_version: str | None = None,
         battlefield_rule_version: str | None = None,
         semantic_market_rule_version: str = CORE3_M11D_RULE_VERSION,
-        claim_value_rule_version: str = CORE3_M12C_RULE_VERSION,
+        claim_value_rule_version: str | None = None,
     ) -> M12DSkuPurchaseReasonContext:
         normalized_product_category = str(product_category or "TV").strip().upper()
         version_defaults = _category_version_defaults(normalized_product_category)
@@ -88,6 +100,12 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
         target_group_rule_version = target_group_rule_version or version_defaults["target_group_rule_version"]
         battlefield_taxonomy_version = battlefield_taxonomy_version or version_defaults["battlefield_taxonomy_version"]
         battlefield_rule_version = battlefield_rule_version or version_defaults["battlefield_rule_version"]
+        claim_value_rule_version = claim_value_rule_version or version_defaults["claim_value_rule_version"]
+        anchor_taxonomy = M12DAnchorTaxonomyLoader().load(
+            version_defaults["anchor_taxonomy_version"],
+            product_category=normalized_product_category,
+        )
+        quality_adapter = M12DInputQualityAdapter(anchor_taxonomy)
 
         param_profile = self._get_param_profile(batch_id, sku_code, param_rule_version)
         claim_profile = self._get_profile(
@@ -177,6 +195,14 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             order_fields=("claim_code", "context_type", "context_code"),
             limit=detail_limit,
         )
+        claim_value_quality_rows = self._list_sku_rows(
+            entities.Core3SkuClaimValueQuantification,
+            batch_id,
+            sku_code,
+            rule_version=claim_value_rule_version,
+            order_fields=("claim_code", "context_type", "context_code"),
+            limit=0,
+        )
         claim_attributions = self._list_sku_rows(
             entities.Core3SkuClaimContributionAttribution,
             batch_id,
@@ -186,17 +212,49 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             limit=detail_limit,
         )
 
-        param_snapshot = self._param_snapshot(param_profile)
-        claim_snapshot = self._claim_snapshot(claim_profile, claim_facts, claim_positions)
-        comment_snapshot = self._comment_snapshot(comment_profile, comment_facts)
-        market_snapshot = self._market_snapshot(market_profile)
-        semantic_snapshot = self._semantic_profile_snapshot(
+        param_quality = quality_adapter.param_profile(param_profile)
+        claim_quality = quality_adapter.claim_profile(
+            claim_profile,
+            claim_facts,
+            param_profile_present=param_profile is not None,
+        )
+        comment_quality = quality_adapter.comment_profile(comment_profile, comment_facts)
+        market_quality = quality_adapter.market_profile(market_profile)
+        semantic_quality = quality_adapter.semantic_profiles(
             task_profile,
             target_group_profile,
             battlefield_profile,
         )
-        semantic_market_snapshot = self._semantic_market_snapshot(semantic_allocations, semantic_contributions)
-        claim_value_snapshot = self._claim_value_snapshot(claim_values, claim_attributions)
+        semantic_market_quality = quality_adapter.semantic_market(
+            [*semantic_allocations, *semantic_contributions]
+        )
+        claim_value_quality = quality_adapter.claim_value(claim_value_quality_rows)
+        anchor_claim_value_roles = quality_adapter.claim_value_roles_by_anchor(
+            claim_value_quality_rows
+        )
+
+        param_snapshot = self._param_snapshot(param_profile, param_quality)
+        claim_snapshot = self._claim_snapshot(claim_profile, claim_facts, claim_positions, claim_quality)
+        comment_snapshot = self._comment_snapshot(comment_profile, comment_facts, comment_quality)
+        market_snapshot = self._market_snapshot(market_profile, market_quality)
+        semantic_snapshot = self._semantic_profile_snapshot(
+            task_profile,
+            target_group_profile,
+            battlefield_profile,
+            semantic_quality,
+        )
+        semantic_market_snapshot = self._semantic_market_snapshot(
+            semantic_allocations,
+            semantic_contributions,
+            semantic_market_quality,
+        )
+        claim_value_snapshot = self._claim_value_snapshot(
+            claim_values,
+            claim_attributions,
+            claim_value_quality,
+            anchor_claim_value_roles,
+            claim_value_quality_rows,
+        )
         snapshots = (
             param_snapshot,
             claim_snapshot,
@@ -230,6 +288,11 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             "semantic_market_status": semantic_market_snapshot.status,
             "claim_value_status": claim_value_snapshot.status,
         }
+        input_quality = {
+            snapshot.module_code: snapshot.quality
+            for snapshot in snapshots
+            if snapshot.quality is not None
+        }
         source_refs = [source_ref for snapshot in snapshots for source_ref in snapshot.source_refs]
         missing_reasons = [reason for snapshot in snapshots for reason in snapshot.missing_reasons]
         input_fingerprint = _fingerprint(
@@ -239,6 +302,10 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
                 "batch_id": batch_id,
                 "sku_code": sku_code,
                 "input_status": input_status,
+                "input_quality": {
+                    key: value.model_dump(mode="json") for key, value in input_quality.items()
+                },
+                "input_quality_policy_version": CORE3_M12D_INPUT_QUALITY_POLICY_VERSION,
                 "source_refs": [source_ref.model_dump(mode="python") for source_ref in source_refs],
             }
         )
@@ -266,6 +333,8 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             semantic_market_profile=semantic_market_snapshot,
             claim_value_profile=claim_value_snapshot,
             input_status_json={key: _jsonable_value(value) for key, value in input_status.items()},
+            input_quality_json=input_quality,
+            input_quality_policy_version=CORE3_M12D_INPUT_QUALITY_POLICY_VERSION,
             missing_input_reasons_json=missing_reasons,
             source_refs_json=source_refs,
             input_fingerprint=input_fingerprint,
@@ -340,19 +409,19 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             case(order_map, value=model_cls.batch_id, else_=len(batch_ids))
         )
 
-    def _param_snapshot(self, profile: Any | None) -> M12DInputSnapshot:
+    def _param_snapshot(
+        self,
+        profile: Any | None,
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         if profile is None:
-            return _missing_snapshot("M03B", "M03B SKU 参数事实画像缺失。")
-        status = _profile_status(
-            profile,
-            confidence_attr="param_completeness",
-            conflict_count_attr="conflict_count",
-            review_count_attr="review_required_count",
-        )
+            return _missing_snapshot("M03B", "M03B SKU 参数事实画像缺失。", quality)
+        status = legacy_status_from_quality(quality)
         return _snapshot(
             "M03B",
             [profile],
             status=status,
+            quality=quality,
             summary={
                 "model_name": profile.model_name,
                 "param_completeness": profile.param_completeness,
@@ -379,14 +448,21 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             ),
         )
 
-    def _claim_snapshot(self, profile: Any | None, facts: Sequence[Any], positions: Sequence[Any]) -> M12DInputSnapshot:
+    def _claim_snapshot(
+        self,
+        profile: Any | None,
+        facts: Sequence[Any],
+        positions: Sequence[Any],
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         if profile is None:
-            return _missing_snapshot("M04C", "M04C SKU 卖点事实画像缺失。")
-        status = _profile_status(profile)
+            return _missing_snapshot("M04C", "M04C SKU 卖点事实画像缺失。", quality)
+        status = legacy_status_from_quality(quality)
         return _snapshot(
             "M04C",
             [profile, *facts, *positions],
             status=status,
+            quality=quality,
             summary={
                 "raw_claim_count": profile.raw_claim_count,
                 "matched_claim_count": profile.matched_claim_count,
@@ -406,14 +482,20 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             },
         )
 
-    def _comment_snapshot(self, profile: Any | None, facts: Sequence[Any]) -> M12DInputSnapshot:
+    def _comment_snapshot(
+        self,
+        profile: Any | None,
+        facts: Sequence[Any],
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         if profile is None:
-            return _missing_snapshot("M05C", "M05C SKU 评论事实画像缺失。")
-        status = _profile_status(profile)
+            return _missing_snapshot("M05C", "M05C SKU 评论事实画像缺失。", quality)
+        status = legacy_status_from_quality(quality)
         return _snapshot(
             "M05C",
             [profile, *facts],
             status=status,
+            quality=quality,
             summary={
                 "comment_sentence_count": profile.comment_sentence_count,
                 "matched_sentence_count": profile.matched_sentence_count,
@@ -431,18 +513,31 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
                 "evidence_examples_json": profile.evidence_examples_json,
                 "comment_fact_count": len(facts),
             },
+            record_fields=(
+                "sku_code",
+                "dimension_code",
+                "subdimension_code",
+                "polarity",
+                "raw_comment_text",
+                "result_hash",
+                "rule_version",
+                "taxonomy_version",
+            ),
         )
 
-    def _market_snapshot(self, profile: Any | None) -> M12DInputSnapshot:
+    def _market_snapshot(
+        self,
+        profile: Any | None,
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         if profile is None:
-            return _missing_snapshot("M07", "M07 SKU 市场画像缺失。")
-        status = _profile_status(profile, confidence_attr="market_confidence")
-        if profile.sample_status in {"unknown", "insufficient", "sample_insufficient"}:
-            status = _combine_statuses([status, M12DInputStatus.PARTIAL])
+            return _missing_snapshot("M07", "M07 SKU 市场画像缺失。", quality)
+        status = legacy_status_from_quality(quality)
         return _snapshot(
             "M07",
             [profile],
             status=status,
+            quality=quality,
             summary={
                 "analysis_window": profile.analysis_window,
                 "active_week_count": profile.active_week_count,
@@ -467,15 +562,20 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             },
         )
 
-    def _semantic_profile_snapshot(self, task_profile: Any | None, target_group_profile: Any | None, battlefield_profile: Any | None) -> M12DInputSnapshot:
+    def _semantic_profile_snapshot(
+        self,
+        task_profile: Any | None,
+        target_group_profile: Any | None,
+        battlefield_profile: Any | None,
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         rows = [row for row in (task_profile, target_group_profile, battlefield_profile) if row is not None]
         if not rows:
-            return _missing_snapshot("M09C_M10C_M11C", "M09C/M10C/M11C 语义画像均缺失。")
-        statuses = [
-            _row_or_missing_status(task_profile),
-            _row_or_missing_status(target_group_profile),
-            _row_or_missing_status(battlefield_profile),
-        ]
+            return _missing_snapshot(
+                "M09C_M10C_M11C",
+                "M09C/M10C/M11C 语义画像均缺失。",
+                quality,
+            )
         missing_reasons = []
         if task_profile is None:
             missing_reasons.append("M09C 用户任务画像缺失。")
@@ -486,7 +586,8 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
         return _snapshot(
             "M09C_M10C_M11C",
             rows,
-            status=_combine_statuses(statuses),
+            status=legacy_status_from_quality(quality),
+            quality=quality,
             summary={
                 "user_task": _semantic_row_summary(
                     task_profile,
@@ -510,14 +611,20 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             missing_reasons=missing_reasons,
         )
 
-    def _semantic_market_snapshot(self, allocations: Sequence[Any], contributions: Sequence[Any]) -> M12DInputSnapshot:
+    def _semantic_market_snapshot(
+        self,
+        allocations: Sequence[Any],
+        contributions: Sequence[Any],
+        quality: M12DInputQuality,
+    ) -> M12DInputSnapshot:
         rows = [*allocations, *contributions]
         if not rows:
-            return _missing_snapshot("M11D", "M11D 语义市场图谱分配缺失。")
+            return _missing_snapshot("M11D", "M11D 语义市场图谱分配缺失。", quality)
         return _snapshot(
             "M11D",
             rows,
-            status=_combine_statuses([_profile_status(row, confidence_attr="allocation_confidence") for row in rows]),
+            status=legacy_status_from_quality(quality),
+            quality=quality,
             summary={
                 "allocation_count": len(allocations),
                 "contribution_count": len(contributions),
@@ -526,14 +633,26 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
             },
         )
 
-    def _claim_value_snapshot(self, claim_values: Sequence[Any], attributions: Sequence[Any]) -> M12DInputSnapshot:
+    def _claim_value_snapshot(
+        self,
+        claim_values: Sequence[Any],
+        attributions: Sequence[Any],
+        quality: M12DInputQuality,
+        anchor_claim_value_roles: Mapping[str, Mapping[str, Sequence[str]]],
+        claim_value_quality_rows: Sequence[Any],
+    ) -> M12DInputSnapshot:
         rows = [*claim_values, *attributions]
         if not rows:
-            return _missing_snapshot("M12C", "M12C 用户卖点支付价值缺失；后续画像只能降级生成。")
+            return _missing_snapshot(
+                "M12C",
+                "M12C 用户卖点支付价值缺失；后续画像只能降级生成。",
+                quality,
+            )
         return _snapshot(
             "M12C",
             rows,
-            status=_combine_statuses([_profile_status(row, confidence_attr="attribution_confidence") for row in rows]),
+            status=legacy_status_from_quality(quality),
+            quality=quality,
             summary={
                 "claim_value_count": len(claim_values),
                 "attribution_count": len(attributions),
@@ -543,10 +662,27 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
                     for row in claim_values
                     if getattr(row, "claim_code", None)
                 },
+                "anchor_claim_value_roles": {
+                    str(anchor_code): dict(roles)
+                    for anchor_code, roles in anchor_claim_value_roles.items()
+                },
+                "claim_value_role_evidence": _claim_value_role_evidence(
+                    claim_value_quality_rows
+                ),
                 "positive_claims_json": getattr(attributions[0], "positive_claims_json", []) if attributions else [],
                 "drag_claims_json": getattr(attributions[0], "drag_claims_json", []) if attributions else [],
                 "opportunity_claims_json": getattr(attributions[0], "opportunity_claims_json", []) if attributions else [],
             },
+            record_fields=(
+                "sku_code",
+                "claim_code",
+                "claim_name",
+                "claim_value_role",
+                "quality_flags_json",
+                "reason_cn",
+                "result_hash",
+                "rule_version",
+            ),
         )
 
 
@@ -564,6 +700,8 @@ def _category_version_defaults(product_category: str) -> dict[str, str]:
             "target_group_rule_version": CORE3_M10C_AC_RULE_VERSION,
             "battlefield_taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION,
             "battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
+            "claim_value_rule_version": CORE3_M12C_AC_RULE_VERSION,
+            "anchor_taxonomy_version": CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
         }
     return {
         "param_rule_version": CORE3_M03B_RULE_VERSION,
@@ -577,7 +715,39 @@ def _category_version_defaults(product_category: str) -> dict[str, str]:
         "target_group_rule_version": CORE3_M10C_TV_RULE_VERSION,
         "battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
         "battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
+        "claim_value_rule_version": CORE3_M12C_TV_RULE_VERSION,
+        "anchor_taxonomy_version": CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,
     }
+
+
+def _claim_value_role_evidence(
+    rows: Sequence[Any],
+    *,
+    per_role_limit: int = 3,
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    result: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for row in rows:
+        claim_code = str(getattr(row, "claim_code", "") or "")
+        role = str(getattr(row, "claim_value_role", "") or "")
+        if not claim_code or not role:
+            continue
+        role_rows = result.setdefault(claim_code, {}).setdefault(role, [])
+        if len(role_rows) >= per_role_limit:
+            continue
+        ref = _source_ref("M12C", row)
+        role_rows.append(
+            {
+                "table_name": ref.table_name,
+                "record_id": ref.record_id,
+                "result_hash": ref.result_hash,
+                "evidence_ids": list(ref.evidence_ids),
+                "reason_cn": getattr(row, "reason_cn", None),
+                "quality_flags_json": _jsonable_value(
+                    getattr(row, "quality_flags_json", None)
+                ),
+            }
+        )
+    return result
 
 
 def _filter_if_present(stmt: Select[Any], model_cls: Any, field_name: str, value: Any | None) -> Select[Any]:
@@ -589,12 +759,17 @@ def _filter_if_present(stmt: Select[Any], model_cls: Any, field_name: str, value
     return stmt.where(column == value)
 
 
-def _missing_snapshot(module_code: str, reason: str) -> M12DInputSnapshot:
+def _missing_snapshot(
+    module_code: str,
+    reason: str,
+    quality: M12DInputQuality | None = None,
+) -> M12DInputSnapshot:
     return M12DInputSnapshot(
         module_code=module_code,
         status=M12DInputStatus.MISSING,
         record_count=0,
         missing_reasons=[reason],
+        quality=quality,
     )
 
 
@@ -603,6 +778,7 @@ def _snapshot(
     rows: Sequence[Any],
     *,
     status: M12DInputStatus,
+    quality: M12DInputQuality,
     summary: Mapping[str, Any],
     missing_reasons: Sequence[str] = (),
     record_fields: Sequence[str] = (),
@@ -616,6 +792,7 @@ def _snapshot(
         records=[_record_payload(row, record_fields) for row in rows],
         source_refs=source_refs,
         missing_reasons=list(missing_reasons),
+        quality=quality,
     )
 
 
@@ -723,7 +900,11 @@ def _semantic_row_summary(row: Any | None, *, primary_field: str, secondary_fiel
         return {"status": M12DInputStatus.MISSING.value}
     return _jsonable_mapping(
         {
-            "status": _profile_status(row),
+            "status": (
+                M12DInputStatus.READY
+                if getattr(row, primary_field, None) and not bool(getattr(row, "review_required", False))
+                else M12DInputStatus.PARTIAL
+            ),
             "primary_code": getattr(row, primary_field, None),
             "primary_relation_status": getattr(row, "primary_relation_status", None),
             "secondary_codes": getattr(row, secondary_field, []),

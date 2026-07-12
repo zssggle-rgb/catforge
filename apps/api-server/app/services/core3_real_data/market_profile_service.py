@@ -22,8 +22,6 @@ from app.services.core3_real_data.constants import (
     M07PoolType,
     M07PriceBand,
     M07SampleStatus,
-    Core3DataDomain,
-    Core3ModuleCode,
     Core3RunStatus,
 )
 from app.services.core3_real_data.hash_utils import stable_hash
@@ -33,7 +31,6 @@ from app.services.core3_real_data.market_profile_schemas import (
     M07MarketInputRow,
     M07MarketPoolMemberRecord,
     M07MarketSignalRecord,
-    M07RunResult,
     M07SkuMarketMetrics,
     M07SkuMarketProfileRecord,
     M07SkuSizeInput,
@@ -44,6 +41,19 @@ from app.services.core3_real_data.market_profile_schemas import (
 
 D0 = Decimal("0")
 D1 = Decimal("1")
+M07_DERIVED_QUALITY_FLAGS = {
+    "observed_window_less_than_52w",
+    "online_only_channel",
+    "trend_sample_insufficient",
+    "baseline_window_insufficient",
+    "latest_week_gap",
+    "market_sample_limited",
+    "price_band_sample_insufficient",
+    "size_pool_insufficient",
+    "size_pool_limited",
+    "market_pool_insufficient",
+    "market_pool_limited",
+}
 SCREEN_SIZE_MIN_INCH = Decimal("20")
 SCREEN_SIZE_MAX_INCH = Decimal("130")
 SCREEN_SIZE_EXACT_RAW_NAMES = frozenset({"尺寸"})
@@ -87,18 +97,28 @@ class MarketProfileService:
         sku_codes_in_scope = tuple(sorted({code for code in sku_scope if code}))
         windows = tuple(M07AnalysisWindow(window) for window in (analysis_windows or M07_ANALYSIS_WINDOWS))
 
-        clean_skus = self.repository.list_clean_skus(batch_id)
+        clean_skus = [
+            sku
+            for sku in self.repository.list_clean_skus(batch_id)
+            if _sku_matches_product_category(sku.sku_code, product_category_value)
+        ]
         sku_lookup = {sku.sku_code: sku for sku in clean_skus}
-        market_rows = self._market_rows(batch_id)
+        market_rows = [
+            row
+            for row in self._market_rows(batch_id)
+            if _sku_matches_product_category(row.sku_code, product_category_value)
+        ]
         size_inputs = self._size_inputs(batch_id, product_category=product_category_value)
 
-        all_sku_codes = sorted(set(sku_lookup) | {row.sku_code for row in market_rows})
+        market_sku_codes = {row.sku_code for row in market_rows}
+        all_sku_codes = sorted(set(sku_lookup) & market_sku_codes)
         if sku_codes_in_scope:
-            all_sku_codes = sorted(set(all_sku_codes) | set(sku_codes_in_scope))
+            all_sku_codes = sorted(set(all_sku_codes) | (set(sku_codes_in_scope) & set(sku_lookup)))
         profiles_by_window: dict[str, list[M07SkuMarketMetrics]] = {}
         global_latest_week = _max_week(row.period_week_index for row in market_rows)
         global_first_week = _min_week(row.period_week_index for row in market_rows)
         global_week_count = (global_latest_week - global_first_week + 1) if global_latest_week and global_first_week else 0
+        dataset_channel_types = sorted({row.channel_type for row in market_rows if row.channel_type})
         for window in windows:
             metrics = [
                 self._calculate_metrics(
@@ -110,6 +130,7 @@ class MarketProfileService:
                     global_latest_week=global_latest_week,
                     global_first_week=global_first_week,
                     global_week_count=global_week_count,
+                    dataset_channel_types=dataset_channel_types,
                     product_category=product_category_value,
                     rule_version=rule_version,
                     price_band_rule_version=price_band_rule_version,
@@ -118,12 +139,10 @@ class MarketProfileService:
             ]
             profiles_by_window[window.value] = self._apply_percentiles(metrics, product_category=product_category_value)
 
-        profile_records: list[M07SkuMarketProfileRecord] = []
+        candidate_profile_records: list[M07SkuMarketProfileRecord] = []
         for metrics in profiles_by_window.values():
             for item in metrics:
-                if sku_codes_in_scope and item.sku_code not in sku_codes_in_scope:
-                    continue
-                profile_records.append(
+                candidate_profile_records.append(
                     self._profile_record(
                         item,
                         batch_id=batch_id,
@@ -133,6 +152,11 @@ class MarketProfileService:
                         price_band_rule_version=price_band_rule_version,
                     )
                 )
+        profile_records = [
+            profile
+            for profile in candidate_profile_records
+            if not sku_codes_in_scope or profile.sku_code in sku_codes_in_scope
+        ]
         profile_write = self.repository.save_profiles(profile_records)
 
         signals = self._build_signals(profile_records, profiles_by_window, rule_version=rule_version)
@@ -142,6 +166,7 @@ class MarketProfileService:
         pools, members = self._build_pools_and_members(
             profile_records,
             profiles_by_window,
+            candidate_profiles=candidate_profile_records,
             batch_id=batch_id,
             run_id=run_id,
             module_run_id=module_run_id,
@@ -178,6 +203,7 @@ class MarketProfileService:
             "review_required_count": review_required_count,
             "scope_notes": scope_notes,
             "quality_notes": quality_notes,
+            "quality_contract_counts": _quality_contract_counts(profile_records),
             "sample_status_counts": dict(Counter(profile.sample_status for profile in profile_records)),
             "pool_status_counts": dict(Counter(pool.sample_status for pool in pools)),
             "created_output_count": created_count,
@@ -357,6 +383,7 @@ class MarketProfileService:
         global_latest_week: int | None,
         global_first_week: int | None,
         global_week_count: int,
+        dataset_channel_types: list[str],
         product_category: str,
         rule_version: str,
         price_band_rule_version: str,
@@ -394,7 +421,11 @@ class MarketProfileService:
             main_channel,
             analysis_window,
         )
-        trend = _trend_metrics(market_rows, global_latest_week)
+        trend = _trend_metrics(
+            market_rows,
+            global_latest_week,
+            global_first_week=global_first_week,
+        )
         quality_flags = _quality_flags(
             rows=rows,
             all_rows=market_rows,
@@ -422,6 +453,7 @@ class MarketProfileService:
             analysis_window=analysis_window,
             first_week=first_week,
             global_latest_week=global_latest_week,
+            product_category=product_category,
         )
         confidence = _market_confidence(
             active_week_count=active_week_count,
@@ -480,6 +512,8 @@ class MarketProfileService:
             global_latest_week_index=global_latest_week,
             sku_latest_week_index=sku_latest_week,
             latest_week_gap=latest_week_gap,
+            global_week_count=global_week_count,
+            dataset_channel_types=dataset_channel_types,
             active_week_count=active_week_count,
             market_row_count=len(rows),
             platform_count=len(platform_share),
@@ -563,6 +597,7 @@ class MarketProfileService:
                 analysis_window=item.analysis_window,
                 first_week=item.period_start_week_index,
                 global_latest_week=item.global_latest_week_index,
+                product_category=product_category,
             )
             quality_flags = set(item.quality_flags)
             if price_band_category == M07PriceBand.UNKNOWN.value or price_band_size == M07PriceBand.UNKNOWN.value:
@@ -795,13 +830,17 @@ class MarketProfileService:
         profiles: list[M07SkuMarketProfileRecord],
         profiles_by_window: dict[str, list[M07SkuMarketMetrics]],
         *,
+        candidate_profiles: list[M07SkuMarketProfileRecord],
         batch_id: str,
         run_id: str | None,
         module_run_id: str | None,
         rule_version: str,
         pool_rule_version: str,
     ) -> tuple[list[M07ComparablePoolRecord], list[M07MarketPoolMemberRecord]]:
-        profiles_by_key = {(profile.sku_code, profile.analysis_window): profile for profile in profiles}
+        profiles_by_key = {
+            (profile.sku_code, profile.analysis_window): profile
+            for profile in candidate_profiles
+        }
         pools: list[M07ComparablePoolRecord] = []
         members: list[M07MarketPoolMemberRecord] = []
         for target in profiles:
@@ -1046,16 +1085,30 @@ class MarketProfileService:
 
     def _scope_notes(self, profiles: list[M07SkuMarketProfileRecord]) -> list[str]:
         notes: list[str] = []
-        if any("observed_window_less_than_52w" in profile.quality_flags for profile in profiles):
+        if any(
+            "observed_window_less_than_52w" in profile.quality_flags
+            or any(
+                issue.get("issue_code") == "observed_window_less_than_52w"
+                for issue in (profile.review_reason_json or {}).get("quality_issues", [])
+            )
+            for profile in profiles
+        ):
             notes.append("当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。")
-        if any("online_only_channel" in profile.quality_flags for profile in profiles):
+        if any(
+            "online_only_channel" in profile.quality_flags
+            or any(
+                issue.get("issue_code") == "online_only_channel"
+                for issue in (profile.review_reason_json or {}).get("quality_issues", [])
+            )
+            for profile in profiles
+        ):
             notes.append("当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。")
         return notes
 
     def _quality_notes(self, profiles: list[M07SkuMarketProfileRecord], pools: list[M07ComparablePoolRecord]) -> list[str]:
         notes: list[str] = []
         if any(profile.sample_status != M07SampleStatus.SUFFICIENT for profile in profiles):
-            notes.append("部分 SKU 在自身可观测期内周样本不完整，相关市场趋势和增长判断低置信使用。")
+            notes.append("当前批次未形成可用市场时间轴，相关市场趋势暂不输出。")
         if any("price_missing" in profile.quality_flags for profile in profiles if not _is_full_observed_window(profile.analysis_window)):
             notes.append("部分 SKU 在短周期窗口无可计算成交价格；零销量周按 0 销量处理，不作为销量样本缺失。")
         if any(pool.sample_status == M07SampleStatus.INSUFFICIENT for pool in pools):
@@ -1104,7 +1157,7 @@ def _window_period_bounds(
     global_first_week: int | None,
 ) -> tuple[int | None, int | None]:
     if window == M07AnalysisWindow.FULL_OBSERVED_WINDOW:
-        return _min_week(row.period_week_index for row in rows), _max_week(row.period_week_index for row in rows)
+        return global_first_week, global_latest_week
     if global_latest_week is None:
         return None, None
     if window == M07AnalysisWindow.LATEST_WEEK:
@@ -1166,18 +1219,32 @@ def _weekly_volumes(
     return list(by_week.values())
 
 
-def _trend_metrics(rows: list[M07MarketInputRow], global_latest_week: int | None) -> dict[str, Any]:
+def _trend_metrics(
+    rows: list[M07MarketInputRow],
+    global_latest_week: int | None,
+    *,
+    global_first_week: int | None = None,
+) -> dict[str, Any]:
     result: dict[str, Any] = {"quality_flags": []}
     if global_latest_week is None:
-        result["quality_flags"].append("trend_sample_insufficient")
-        return result
-    if not rows:
-        result["quality_flags"].append("trend_sample_insufficient")
         return result
     recent_start = global_latest_week - 3
     recent_end = global_latest_week
     baseline_start = global_latest_week - 7
     baseline_end = global_latest_week - 4
+    dataset_first_week = global_first_week if global_first_week is not None else global_latest_week
+    recent_available_week_count = _overlap_week_count(
+        dataset_first_week,
+        global_latest_week,
+        recent_start,
+        recent_end,
+    )
+    baseline_available_week_count = _overlap_week_count(
+        dataset_first_week,
+        global_latest_week,
+        baseline_start,
+        baseline_end,
+    )
     recent = [row for row in rows if row.period_week_index is not None and recent_start <= row.period_week_index <= recent_end]
     baseline = [row for row in rows if row.period_week_index is not None and baseline_start <= row.period_week_index <= baseline_end]
     recent_price = _weighted_price(recent)
@@ -1188,10 +1255,29 @@ def _trend_metrics(rows: list[M07MarketInputRow], global_latest_week: int | None
     baseline_volume = _sum_weekly_totals(weekly_volume, baseline_start, baseline_end)
     recent_amount = _sum_weekly_totals(weekly_amount, recent_start, recent_end)
     baseline_amount = _sum_weekly_totals(weekly_amount, baseline_start, baseline_end)
+    result["recent_available_week_count"] = recent_available_week_count
+    result["baseline_available_week_count"] = baseline_available_week_count
+    if recent_available_week_count < 4 or baseline_available_week_count < 4:
+        result["availability_status"] = "dataset_range_insufficient"
+        result["price_change_recent_4w"] = None
+        result["sales_growth_recent_4w"] = None
+        result["amount_growth_recent_4w"] = None
+        return result
     result["price_change_recent_4w"] = _rate_change(recent_price, baseline_price)
     result["sales_growth_recent_4w"] = _rate_change(recent_volume, baseline_volume)
     result["amount_growth_recent_4w"] = _rate_change(recent_amount, baseline_amount)
     return result
+
+
+def _overlap_week_count(
+    observed_start: int,
+    observed_end: int,
+    window_start: int,
+    window_end: int,
+) -> int:
+    start = max(observed_start, window_start)
+    end = min(observed_end, window_end)
+    return max(end - start + 1, 0)
 
 
 def _weekly_totals(rows: list[M07MarketInputRow], field_name: str) -> dict[int, Decimal]:
@@ -1250,13 +1336,7 @@ def _quality_flags(
     product_category: str = "TV",
 ) -> list[str]:
     flags: list[str] = []
-    zero_sales_window = has_market_history and (sales_volume_total or D0) == D0
-    if global_week_count < 52:
-        flags.append("observed_window_less_than_52w")
-    if set(channel_share) == {"线上"}:
-        flags.append("online_only_channel")
-    if latest_week_gap is not None and latest_week_gap > 2:
-        flags.append("latest_week_gap")
+    zero_sales_window = (sales_volume_total or D0) == D0
     if price_wavg is None and not zero_sales_window:
         flags.append("price_missing")
     if _market_size_input_missing(product_category, size_input):
@@ -1265,7 +1345,7 @@ def _quality_flags(
         flags.append("platform_missing")
     flags.extend(str(flag) for flag in trend.get("quality_flags") or [])
     for row in [*rows, *all_rows]:
-        flags.extend(row.quality_flags)
+        flags.extend(flag for flag in row.quality_flags if flag not in M07_DERIVED_QUALITY_FLAGS)
         if row.sales_volume is None:
             flags.append("missing_sales_volume")
         if row.sales_volume == 0 and row.sales_amount and row.sales_amount > 0:
@@ -1320,8 +1400,9 @@ def _observed_window_sample_status(
     analysis_window: M07AnalysisWindow | str | None,
     first_week: int | None,
     global_latest_week: int | None,
+    product_category: str = "TV",
 ) -> M07SampleStatus:
-    if not has_rows:
+    if global_latest_week is None:
         return M07SampleStatus.UNKNOWN
     return M07SampleStatus.SUFFICIENT
 
@@ -1335,6 +1416,7 @@ def _combined_sample_status(
     analysis_window: M07AnalysisWindow | str | None = None,
     first_week: int | None = None,
     global_latest_week: int | None = None,
+    product_category: str = "TV",
 ) -> M07SampleStatus:
     return _observed_window_sample_status(
         active_week_count=active_week_count,
@@ -1342,6 +1424,7 @@ def _combined_sample_status(
         analysis_window=analysis_window,
         first_week=first_week,
         global_latest_week=global_latest_week,
+        product_category=product_category,
     )
 
 
@@ -1368,6 +1451,15 @@ def _pool_confidence(sample_status: M07SampleStatus, candidates: list[M07SkuMark
         return Decimal("0.0000")
     avg_confidence = sum((item.market_confidence for item in candidates), D0) / Decimal(len(candidates))
     return _quant4(min(D1, base * Decimal("0.50") + avg_confidence * Decimal("0.50")))
+
+
+def _sku_matches_product_category(sku_code: str | None, product_category: str) -> bool:
+    if not sku_code:
+        return False
+    category = _category_value(product_category).strip().upper()
+    if category not in {"TV", "AC"}:
+        return True
+    return sku_code.strip().upper().startswith(category)
 
 
 def _normalize_product_category(product_category: str | None, category_code: Any) -> str:
@@ -1914,13 +2006,55 @@ def _downstream_usage_json(code: M07MarketSignalCode) -> dict[str, Any]:
 
 def _review_reason(item: M07SkuMarketMetrics) -> dict[str, Any]:
     reasons = []
-    if item.market_row_count == 0:
-        reasons.append("missing_market")
     if item.size_segment == "unknown":
         reasons.append("size_missing")
     if item.sample_status in {M07SampleStatus.INSUFFICIENT, M07SampleStatus.UNKNOWN}:
-        reasons.append("market_sample_limited")
-    return {"reasons": reasons} if reasons else {}
+        reasons.append("market_time_axis_unavailable")
+    payload: dict[str, Any] = {}
+    if reasons:
+        payload["reasons"] = reasons
+    quality_issues = _market_quality_issues(item)
+    if quality_issues:
+        payload["quality_issues"] = quality_issues
+    return payload
+
+
+def _market_quality_issues(item: M07SkuMarketMetrics) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    if item.global_week_count < 52:
+        issues.append(
+            {
+                "issue_code": "observed_window_less_than_52w",
+                "severity": "info",
+                "scope": "dataset_range",
+                "affected_metrics": ["rolling_52w", "annualized_market_conclusion"],
+                "profile_usable": True,
+            }
+        )
+    if set(item.dataset_channel_types) == {"线上"} or set(item.channel_share_json) == {"线上"}:
+        issues.append(
+            {
+                "issue_code": "online_only_channel",
+                "severity": "info",
+                "scope": "channel_range",
+                "affected_metrics": ["offline_channel_conclusion"],
+                "profile_usable": True,
+            }
+        )
+    return issues
+
+
+def _quality_contract_counts(profiles: Sequence[M07SkuMarketProfileRecord]) -> dict[str, Any]:
+    issue_counts: Counter[str] = Counter()
+    severity_counts: Counter[str] = Counter()
+    for profile in profiles:
+        for issue in (profile.review_reason_json or {}).get("quality_issues", []):
+            issue_counts[str(issue.get("issue_code") or "unknown")] += 1
+            severity_counts[str(issue.get("severity") or "unknown")] += 1
+    return {
+        "issue_counts": dict(sorted(issue_counts.items())),
+        "severity_counts": dict(sorted(severity_counts.items())),
+    }
 
 
 def _logic_key(*parts: Any) -> str:

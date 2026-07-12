@@ -1,0 +1,5626 @@
+{
+  "task_id": "M12D-QF-05",
+  "generated_at": "2026-07-11T07:34:21.500025+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "scope": "M07 only",
+  "write_draft": true,
+  "allowed_migrations": {
+    "TV": [
+      "observed_window_less_than_52w and online_only_channel move from profile flags to range info",
+      "weeks without rows are zero-sales market facts, so latest-week gap and per-SKU trend coverage are not quality issues",
+      "two new-launch SKUs move from limited to sufficient because short observed history is lifecycle fact, not missing data"
+    ],
+    "AC": [
+      "observed_window_less_than_52w and online_only_channel move from profile flags to range info",
+      "weeks without rows are zero-sales market facts while AC price/pool v2 stays unchanged"
+    ]
+  },
+  "persisted_before": {
+    "TV": {
+      "profile_count": 1885,
+      "signal_count": 8213,
+      "pool_count": 10707,
+      "member_count": 291346,
+      "sku_count": 377,
+      "window_counts": {
+        "full_observed_window": 377,
+        "latest_week": 377,
+        "recent_12w": 377,
+        "recent_4w": 377,
+        "recent_8w": 377
+      },
+      "sample_status_counts": {
+        "insufficient": 419,
+        "limited": 366,
+        "sufficient": 1088,
+        "unknown": 12
+      },
+      "full_sample_status_counts": {
+        "limited": 2,
+        "sufficient": 375
+      },
+      "full_flag_counts": {
+        "baseline_window_insufficient": 9,
+        "latest_week_gap": 13,
+        "market_pool_insufficient": 2,
+        "market_sample_limited": 2,
+        "observed_window_less_than_52w": 377,
+        "online_only_channel": 377,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8,
+        "trend_sample_insufficient": 37
+      },
+      "quality_issue_counts": {},
+      "quality_severity_counts": {},
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_price_band_v1": 377
+      },
+      "pool_rule_versions": {
+        "m07_pool_v1": 10707
+      },
+      "cross_category_pool_candidate_count": 0
+    },
+    "AC": {
+      "profile_count": 775,
+      "signal_count": 3584,
+      "pool_count": 4460,
+      "member_count": 100596,
+      "sku_count": 155,
+      "window_counts": {
+        "full_observed_window": 155,
+        "latest_week": 155,
+        "recent_12w": 155,
+        "recent_4w": 155,
+        "recent_8w": 155
+      },
+      "sample_status_counts": {
+        "sufficient": 775
+      },
+      "full_sample_status_counts": {
+        "sufficient": 155
+      },
+      "full_flag_counts": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "observed_window_less_than_52w": 155,
+        "online_only_channel": 155,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "quality_issue_counts": {},
+      "quality_severity_counts": {},
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_ac_hp_price_band_v2": 155
+      },
+      "pool_rule_versions": {
+        "m07_ac_hp_price_pool_v2": 4460
+      },
+      "cross_category_pool_candidate_count": 0
+    }
+  },
+  "before": {
+    "TV": {
+      "profile_count": 1885,
+      "signal_count": 7715,
+      "pool_count": 10599,
+      "member_count": 1107726,
+      "sku_count": 377,
+      "window_counts": {
+        "full_observed_window": 377,
+        "latest_week": 377,
+        "recent_12w": 377,
+        "recent_4w": 377,
+        "recent_8w": 377
+      },
+      "sample_status_counts": {
+        "sufficient": 1885
+      },
+      "full_sample_status_counts": {
+        "sufficient": 377
+      },
+      "full_flag_counts": {
+        "latest_week_gap": 13,
+        "market_pool_insufficient": 2,
+        "observed_window_less_than_52w": 377,
+        "online_only_channel": 377,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "quality_issue_counts": {},
+      "quality_severity_counts": {},
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_price_band_v1": 377
+      },
+      "pool_rule_versions": {
+        "m07_pool_v1": 10599
+      },
+      "cross_category_pool_candidate_count": 0
+    },
+    "AC": {
+      "profile_count": 775,
+      "signal_count": 3351,
+      "pool_count": 4485,
+      "member_count": 316666,
+      "sku_count": 155,
+      "window_counts": {
+        "full_observed_window": 155,
+        "latest_week": 155,
+        "recent_12w": 155,
+        "recent_4w": 155,
+        "recent_8w": 155
+      },
+      "sample_status_counts": {
+        "sufficient": 775
+      },
+      "full_sample_status_counts": {
+        "sufficient": 155
+      },
+      "full_flag_counts": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "observed_window_less_than_52w": 155,
+        "online_only_channel": 155,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "quality_issue_counts": {},
+      "quality_severity_counts": {},
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_ac_hp_price_band_v2": 155
+      },
+      "pool_rule_versions": {
+        "m07_ac_hp_price_pool_v2": 4485
+      },
+      "cross_category_pool_candidate_count": 0
+    }
+  },
+  "after": {
+    "TV": {
+      "profile_count": 1885,
+      "signal_count": 7789,
+      "pool_count": 10599,
+      "member_count": 1088980,
+      "sku_count": 377,
+      "window_counts": {
+        "full_observed_window": 377,
+        "latest_week": 377,
+        "recent_12w": 377,
+        "recent_4w": 377,
+        "recent_8w": 377
+      },
+      "sample_status_counts": {
+        "sufficient": 1885
+      },
+      "full_sample_status_counts": {
+        "sufficient": 377
+      },
+      "full_flag_counts": {
+        "market_pool_insufficient": 2,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "quality_issue_counts": {
+        "observed_window_less_than_52w": 1885,
+        "online_only_channel": 1885
+      },
+      "quality_severity_counts": {
+        "info": 3770
+      },
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_price_band_v1": 377
+      },
+      "pool_rule_versions": {
+        "m07_pool_v1": 10599
+      },
+      "cross_category_pool_candidate_count": 0
+    },
+    "AC": {
+      "profile_count": 775,
+      "signal_count": 3351,
+      "pool_count": 4485,
+      "member_count": 316666,
+      "sku_count": 155,
+      "window_counts": {
+        "full_observed_window": 155,
+        "latest_week": 155,
+        "recent_12w": 155,
+        "recent_4w": 155,
+        "recent_8w": 155
+      },
+      "sample_status_counts": {
+        "sufficient": 775
+      },
+      "full_sample_status_counts": {
+        "sufficient": 155
+      },
+      "full_flag_counts": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "quality_issue_counts": {
+        "observed_window_less_than_52w": 775,
+        "online_only_channel": 775
+      },
+      "quality_severity_counts": {
+        "info": 1550
+      },
+      "full_review_required_count": 0,
+      "price_band_rule_versions": {
+        "m07_ac_hp_price_band_v2": 155
+      },
+      "pool_rule_versions": {
+        "m07_ac_hp_price_pool_v2": 4485
+      },
+      "cross_category_pool_candidate_count": 0
+    }
+  },
+  "comparisons": {
+    "TV": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "pool_added_count": 0,
+      "pool_removed_count": 0,
+      "pool_removed_samples": [],
+      "self_raw_profile_change_count": 0,
+      "self_raw_profile_change_samples": [],
+      "comparison_field_change_count": 1469,
+      "comparison_field_change_samples": [
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027483",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_latest"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028245",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_latest"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028421",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_latest"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028546",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_latest"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_12w"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_4w"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_8w"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022397",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        }
+      ],
+      "full_confidence_change_count": 13,
+      "full_confidence_change_samples": [
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027483",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00028546",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027305",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027406",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027580",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027684",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027701",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027806",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00027946",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260619084551_857df63b",
+          "TV00028372",
+          "full_observed_window"
+        ]
+      ],
+      "pool_membership_change_count": 2710,
+      "pool_membership_change_samples": [
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "full_observed_window",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026228",
+            "TV00027858",
+            "TV00027863",
+            "TV00028703",
+            "TV00028907",
+            "TV00029034",
+            "TV00029343",
+            "TV00030083",
+            "TV00030413"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "full_observed_window",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026065",
+            "TV00028082",
+            "TV00028099",
+            "TV00028115",
+            "TV00028423",
+            "TV00028777",
+            "TV00029120",
+            "TV00029820",
+            "TV00030053",
+            "TV00030355",
+            "TV00030388"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "latest_week",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026228",
+            "TV00027405",
+            "TV00027863",
+            "TV00028081",
+            "TV00028108",
+            "TV00028238",
+            "TV00028342",
+            "TV00028907",
+            "TV00029343"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "latest_week",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00027549",
+            "TV00027582",
+            "TV00027861",
+            "TV00028099",
+            "TV00028115",
+            "TV00028423",
+            "TV00028908",
+            "TV00029035",
+            "TV00029120",
+            "TV00030053",
+            "TV00030355",
+            "TV00030388"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_12w",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026228",
+            "TV00027863",
+            "TV00028121",
+            "TV00028342",
+            "TV00029034",
+            "TV00029343",
+            "TV00030083",
+            "TV00030413"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_12w",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026065",
+            "TV00028082",
+            "TV00028099",
+            "TV00028115",
+            "TV00028423",
+            "TV00028908",
+            "TV00029120",
+            "TV00029820",
+            "TV00030053",
+            "TV00030355",
+            "TV00030388"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_4w",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00022397",
+            "TV00025519",
+            "TV00026228",
+            "TV00027858",
+            "TV00028081",
+            "TV00028108",
+            "TV00028122",
+            "TV00029343"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_4w",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026064",
+            "TV00027305",
+            "TV00027549",
+            "TV00027861",
+            "TV00028099",
+            "TV00028423",
+            "TV00028704",
+            "TV00028777",
+            "TV00028908",
+            "TV00029120",
+            "TV00029820",
+            "TV00030053",
+            "TV00030355",
+            "TV00030388",
+            "TV00030398"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_8w",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00022397",
+            "TV00025519",
+            "TV00026228",
+            "TV00027474",
+            "TV00027858",
+            "TV00028342",
+            "TV00028703",
+            "TV00029034",
+            "TV00029343",
+            "TV00030083"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260619084551_857df63b",
+            "TV00022396",
+            "recent_8w",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "TV00026064",
+            "TV00026065",
+            "TV00027305",
+            "TV00027861",
+            "TV00028099",
+            "TV00028423",
+            "TV00028777",
+            "TV00029120",
+            "TV00029226",
+            "TV00029820",
+            "TV00030053",
+            "TV00030355",
+            "TV00030388"
+          ]
+        }
+      ],
+      "sample_status_counts_before": {
+        "sufficient": 1885
+      },
+      "sample_status_counts_after": {
+        "sufficient": 1885
+      },
+      "full_sample_status_counts_before": {
+        "sufficient": 377
+      },
+      "full_sample_status_counts_after": {
+        "sufficient": 377
+      },
+      "full_flag_counts_before": {
+        "latest_week_gap": 13,
+        "market_pool_insufficient": 2,
+        "observed_window_less_than_52w": 377,
+        "online_only_channel": 377,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "full_flag_counts_after": {
+        "market_pool_insufficient": 2,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "quality_issue_counts_after": {
+        "observed_window_less_than_52w": 1885,
+        "online_only_channel": 1885
+      },
+      "quality_severity_counts_after": {
+        "info": 3770
+      }
+    },
+    "AC": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "pool_added_count": 0,
+      "pool_removed_count": 0,
+      "pool_removed_samples": [],
+      "self_raw_profile_change_count": 0,
+      "self_raw_profile_change_samples": [],
+      "comparison_field_change_count": 0,
+      "comparison_field_change_samples": [],
+      "full_confidence_change_count": 0,
+      "full_confidence_change_samples": [],
+      "pool_membership_change_count": 0,
+      "pool_membership_change_samples": [],
+      "sample_status_counts_before": {
+        "sufficient": 775
+      },
+      "sample_status_counts_after": {
+        "sufficient": 775
+      },
+      "full_sample_status_counts_before": {
+        "sufficient": 155
+      },
+      "full_sample_status_counts_after": {
+        "sufficient": 155
+      },
+      "full_flag_counts_before": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "observed_window_less_than_52w": 155,
+        "online_only_channel": 155,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "full_flag_counts_after": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "quality_issue_counts_after": {
+        "observed_window_less_than_52w": 775,
+        "online_only_channel": 775
+      },
+      "quality_severity_counts_after": {
+        "info": 1550
+      }
+    }
+  },
+  "persisted_migrations": {
+    "TV": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "pool_added_count": 0,
+      "pool_removed_count": 108,
+      "pool_removed_samples": [
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027483",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "candidate_sku_codes": [
+            "TV00023850",
+            "TV00027442",
+            "TV00027463",
+            "TV00027475",
+            "TV00027483",
+            "TV00027492",
+            "TV00027511",
+            "TV00028205",
+            "TV00029111",
+            "TV00029113",
+            "TV00029193",
+            "TV00029262",
+            "TV00030612"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027483",
+            "latest_week",
+            "same_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00027353",
+            "TV00027483",
+            "TV00027485",
+            "TV00027487",
+            "TV00027511",
+            "TV00027523",
+            "TV00027615",
+            "TV00027758",
+            "TV00027920",
+            "TV00029111",
+            "TV00029169",
+            "TV00029193",
+            "TV00029211",
+            "TV00029427",
+            "TV00029942",
+            "TV00030137",
+            "TV00030248"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027483",
+            "latest_week",
+            "size_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00026941",
+            "TV00027302",
+            "TV00027475",
+            "TV00027483",
+            "TV00027485",
+            "TV00027511",
+            "TV00027523",
+            "TV00027541",
+            "TV00027587",
+            "TV00027590",
+            "TV00027629",
+            "TV00027737",
+            "TV00027754",
+            "TV00027756",
+            "TV00027819",
+            "TV00027911",
+            "TV00027912",
+            "TV00027920",
+            "TV00027991",
+            "TV00028078",
+            "TV00028166",
+            "TV00028205",
+            "TV00028421",
+            "TV00028546",
+            "TV00029111",
+            "TV00029169",
+            "TV00029193",
+            "TV00029209",
+            "TV00029427",
+            "TV00030136",
+            "TV00030137",
+            "TV00030258"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028245",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "candidate_sku_codes": [
+            "TV00026941",
+            "TV00027302",
+            "TV00027353",
+            "TV00027443",
+            "TV00027485",
+            "TV00027487",
+            "TV00027523",
+            "TV00027524",
+            "TV00027526",
+            "TV00027541",
+            "TV00027587",
+            "TV00027590",
+            "TV00027615",
+            "TV00027629",
+            "TV00027756",
+            "TV00027758",
+            "TV00027770",
+            "TV00027819",
+            "TV00027887",
+            "TV00027911",
+            "TV00027991",
+            "TV00028043",
+            "TV00028078",
+            "TV00028221",
+            "TV00028245",
+            "TV00028421",
+            "TV00028546",
+            "TV00028705",
+            "TV00028707",
+            "TV00029030",
+            "TV00029031",
+            "TV00029032",
+            "TV00029036",
+            "TV00029101",
+            "TV00029122",
+            "TV00029159",
+            "TV00029170",
+            "TV00029171",
+            "TV00029427",
+            "TV00029783",
+            "TV00029942",
+            "TV00030136",
+            "TV00030547"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028245",
+            "latest_week",
+            "same_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00027524",
+            "TV00027526",
+            "TV00027547",
+            "TV00027770",
+            "TV00027887",
+            "TV00027913",
+            "TV00027914",
+            "TV00027998",
+            "TV00028167",
+            "TV00028168",
+            "TV00028221",
+            "TV00028245",
+            "TV00029114",
+            "TV00029115",
+            "TV00029171",
+            "TV00030547",
+            "TV00030612"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028245",
+            "latest_week",
+            "size_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00027492",
+            "TV00027524",
+            "TV00027526",
+            "TV00027541",
+            "TV00027551",
+            "TV00027770",
+            "TV00027887",
+            "TV00027912",
+            "TV00027913",
+            "TV00027921",
+            "TV00027998",
+            "TV00028166",
+            "TV00028167",
+            "TV00028168",
+            "TV00028221",
+            "TV00028245",
+            "TV00028546",
+            "TV00028705",
+            "TV00028707",
+            "TV00029036",
+            "TV00029113",
+            "TV00029114",
+            "TV00029115",
+            "TV00029122",
+            "TV00029159",
+            "TV00029170",
+            "TV00029171",
+            "TV00029783",
+            "TV00030138",
+            "TV00030547",
+            "TV00030612"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028421",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "candidate_sku_codes": [
+            "TV00026941",
+            "TV00027302",
+            "TV00027353",
+            "TV00027443",
+            "TV00027485",
+            "TV00027487",
+            "TV00027523",
+            "TV00027524",
+            "TV00027526",
+            "TV00027541",
+            "TV00027587",
+            "TV00027590",
+            "TV00027615",
+            "TV00027629",
+            "TV00027756",
+            "TV00027758",
+            "TV00027770",
+            "TV00027819",
+            "TV00027887",
+            "TV00027911",
+            "TV00027991",
+            "TV00028043",
+            "TV00028078",
+            "TV00028221",
+            "TV00028245",
+            "TV00028421",
+            "TV00028546",
+            "TV00028705",
+            "TV00028707",
+            "TV00029030",
+            "TV00029031",
+            "TV00029032",
+            "TV00029036",
+            "TV00029101",
+            "TV00029122",
+            "TV00029159",
+            "TV00029170",
+            "TV00029171",
+            "TV00029427",
+            "TV00029783",
+            "TV00029942",
+            "TV00030136",
+            "TV00030547"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028421",
+            "latest_week",
+            "same_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00026941",
+            "TV00027302",
+            "TV00027475",
+            "TV00027587",
+            "TV00027590",
+            "TV00027629",
+            "TV00027737",
+            "TV00027754",
+            "TV00027756",
+            "TV00027819",
+            "TV00027991",
+            "TV00028078",
+            "TV00028205",
+            "TV00028421",
+            "TV00029209",
+            "TV00030136",
+            "TV00030258"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028421",
+            "latest_week",
+            "size_price_band"
+          ],
+          "candidate_sku_codes": [
+            "TV00023850",
+            "TV00026941",
+            "TV00027302",
+            "TV00027443",
+            "TV00027475",
+            "TV00027483",
+            "TV00027485",
+            "TV00027511",
+            "TV00027523",
+            "TV00027587",
+            "TV00027590",
+            "TV00027629",
+            "TV00027737",
+            "TV00027754",
+            "TV00027756",
+            "TV00027819",
+            "TV00027920",
+            "TV00027991",
+            "TV00028043",
+            "TV00028078",
+            "TV00028170",
+            "TV00028205",
+            "TV00028421",
+            "TV00029101",
+            "TV00029111",
+            "TV00029169",
+            "TV00029193",
+            "TV00029209",
+            "TV00029427",
+            "TV00030136",
+            "TV00030137",
+            "TV00030258",
+            "TV00030285"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00028546",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "candidate_sku_codes": [
+            "TV00026941",
+            "TV00027302",
+            "TV00027353",
+            "TV00027443",
+            "TV00027485",
+            "TV00027487",
+            "TV00027523",
+            "TV00027524",
+            "TV00027526",
+            "TV00027541",
+            "TV00027587",
+            "TV00027590",
+            "TV00027615",
+            "TV00027629",
+            "TV00027756",
+            "TV00027758",
+            "TV00027770",
+            "TV00027819",
+            "TV00027887",
+            "TV00027911",
+            "TV00027991",
+            "TV00028043",
+            "TV00028078",
+            "TV00028221",
+            "TV00028245",
+            "TV00028421",
+            "TV00028546",
+            "TV00028705",
+            "TV00028707",
+            "TV00029030",
+            "TV00029031",
+            "TV00029032",
+            "TV00029036",
+            "TV00029101",
+            "TV00029122",
+            "TV00029159",
+            "TV00029170",
+            "TV00029171",
+            "TV00029427",
+            "TV00029783",
+            "TV00029942",
+            "TV00030136",
+            "TV00030547"
+          ]
+        }
+      ],
+      "self_raw_profile_change_count": 1765,
+      "self_raw_profile_change_samples": [
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "latest_week"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "recent_12w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "recent_4w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "recent_8w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "latest_week"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "recent_12w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "recent_4w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "recent_8w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        }
+      ],
+      "comparison_field_change_count": 1562,
+      "comparison_field_change_samples": [
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00009549",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category",
+            "same_pool_price_percentile",
+            "same_pool_volume_percentile",
+            "same_pool_amount_percentile",
+            "same_pool_sku_count"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00026886",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00026941",
+            "latest_week"
+          ],
+          "fields": [
+            "price_band_size",
+            "price_percentile_in_category",
+            "price_percentile_in_size",
+            "same_pool_price_percentile",
+            "same_pool_volume_percentile",
+            "same_pool_amount_percentile",
+            "same_pool_sku_count"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027302",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "price_percentile_in_size",
+            "same_pool_price_percentile",
+            "same_pool_volume_percentile",
+            "same_pool_amount_percentile",
+            "same_pool_sku_count"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027353",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "price_percentile_in_size",
+            "same_pool_price_percentile",
+            "same_pool_volume_percentile",
+            "same_pool_amount_percentile",
+            "same_pool_sku_count"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027442",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027443",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "price_percentile_in_size",
+            "same_pool_price_percentile",
+            "same_pool_sku_count"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027463",
+            "latest_week"
+          ],
+          "fields": [
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027475",
+            "latest_week"
+          ],
+          "fields": [
+            "price_band_size",
+            "price_percentile_in_category",
+            "volume_percentile_in_category",
+            "amount_percentile_in_category",
+            "price_percentile_in_size",
+            "volume_percentile_in_size",
+            "amount_percentile_in_size",
+            "same_pool_price_percentile",
+            "same_pool_volume_percentile",
+            "same_pool_amount_percentile",
+            "same_pool_sku_count"
+          ]
+        }
+      ],
+      "full_confidence_change_count": 127,
+      "full_confidence_change_samples": [
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00009549",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00023850",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00026886",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00026941",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027302",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027353",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027442",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027443",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027463",
+          "full_observed_window"
+        ],
+        [
+          "m00_20260613004311_d548f6dc",
+          "TV00027475",
+          "full_observed_window"
+        ]
+      ],
+      "pool_membership_change_count": 8398,
+      "pool_membership_change_samples": [
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "removed_candidates": [
+            "TV00027483"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00023850",
+            "latest_week",
+            "size_price_band"
+          ],
+          "removed_candidates": [
+            "TV00028421"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00026941",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "removed_candidates": [
+            "TV00028245",
+            "TV00028421",
+            "TV00028546"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00026941",
+            "latest_week",
+            "same_price_band"
+          ],
+          "removed_candidates": [
+            "TV00028421"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00026941",
+            "latest_week",
+            "size_price_band"
+          ],
+          "removed_candidates": [
+            "TV00027483",
+            "TV00028421"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027302",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "removed_candidates": [
+            "TV00028245",
+            "TV00028421",
+            "TV00028546"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027302",
+            "latest_week",
+            "same_price_band"
+          ],
+          "removed_candidates": [
+            "TV00028421"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027302",
+            "latest_week",
+            "size_price_band"
+          ],
+          "removed_candidates": [
+            "TV00027483",
+            "TV00028421"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027353",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "removed_candidates": [
+            "TV00028245",
+            "TV00028421",
+            "TV00028546"
+          ],
+          "added_candidates": []
+        },
+        {
+          "key": [
+            "m00_20260613004311_d548f6dc",
+            "TV00027353",
+            "latest_week",
+            "same_price_band"
+          ],
+          "removed_candidates": [
+            "TV00027483"
+          ],
+          "added_candidates": []
+        }
+      ],
+      "sample_status_counts_before": {
+        "insufficient": 419,
+        "limited": 366,
+        "sufficient": 1088,
+        "unknown": 12
+      },
+      "sample_status_counts_after": {
+        "sufficient": 1885
+      },
+      "full_sample_status_counts_before": {
+        "limited": 2,
+        "sufficient": 375
+      },
+      "full_sample_status_counts_after": {
+        "sufficient": 377
+      },
+      "full_flag_counts_before": {
+        "baseline_window_insufficient": 9,
+        "latest_week_gap": 13,
+        "market_pool_insufficient": 2,
+        "market_sample_limited": 2,
+        "observed_window_less_than_52w": 377,
+        "online_only_channel": 377,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8,
+        "trend_sample_insufficient": 37
+      },
+      "full_flag_counts_after": {
+        "market_pool_insufficient": 2,
+        "price_band_sample_insufficient": 8,
+        "size_pool_insufficient": 8,
+        "size_pool_limited": 8
+      },
+      "quality_issue_counts_after": {
+        "observed_window_less_than_52w": 1885,
+        "online_only_channel": 1885
+      },
+      "quality_severity_counts_after": {
+        "info": 3770
+      }
+    },
+    "AC": {
+      "profile_added_count": 0,
+      "profile_removed_count": 0,
+      "pool_added_count": 25,
+      "pool_removed_count": 0,
+      "pool_removed_samples": [],
+      "self_raw_profile_change_count": 751,
+      "self_raw_profile_change_samples": [
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "latest_week"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "recent_12w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "recent_4w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "recent_8w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00028640",
+            "full_observed_window"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00028640",
+            "latest_week"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_min",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00028640",
+            "recent_12w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00028640",
+            "recent_4w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_max"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00028640",
+            "recent_8w"
+          ],
+          "fields": [
+            "price_wavg",
+            "price_median",
+            "price_max"
+          ]
+        }
+      ],
+      "comparison_field_change_count": 0,
+      "comparison_field_change_samples": [],
+      "full_confidence_change_count": 0,
+      "full_confidence_change_samples": [],
+      "pool_membership_change_count": 4460,
+      "pool_membership_change_samples": [
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "adjacent_size"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036138",
+            "AC00036139",
+            "AC00036172",
+            "AC00036207",
+            "AC00036215",
+            "AC00036237",
+            "AC00036241",
+            "AC00036255",
+            "AC00036291",
+            "AC00036324",
+            "AC00036525",
+            "AC00036739",
+            "AC00036763",
+            "AC00036877",
+            "AC00036919",
+            "AC00036924",
+            "AC00037592",
+            "AC00038066",
+            "AC00038232",
+            "AC00038347",
+            "AC00038399",
+            "AC00038400",
+            "AC00038440",
+            "AC00038470",
+            "AC00038478",
+            "AC00038623",
+            "AC00038660",
+            "AC00038662",
+            "AC00038755",
+            "AC00038855",
+            "AC00038856",
+            "AC00038858",
+            "AC00038903",
+            "AC00038909",
+            "AC00038967",
+            "AC00038968",
+            "AC00039007",
+            "AC00039044",
+            "AC00039053",
+            "AC00039073",
+            "AC00039082",
+            "AC00039086",
+            "AC00039091",
+            "AC00039124",
+            "AC00039131",
+            "AC00039156",
+            "AC00039157",
+            "AC00039187",
+            "AC00039205",
+            "AC00039257",
+            "AC00039356",
+            "AC00039400",
+            "AC00039468",
+            "AC00039563",
+            "AC00039564",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "market_active"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036138",
+            "AC00036139",
+            "AC00036167",
+            "AC00036168",
+            "AC00036170",
+            "AC00036172",
+            "AC00036174",
+            "AC00036207",
+            "AC00036211",
+            "AC00036212",
+            "AC00036215",
+            "AC00036237",
+            "AC00036241",
+            "AC00036255",
+            "AC00036257",
+            "AC00036291",
+            "AC00036313",
+            "AC00036324",
+            "AC00036327",
+            "AC00036328",
+            "AC00036333",
+            "AC00036405",
+            "AC00036525",
+            "AC00036636",
+            "AC00036739",
+            "AC00036763",
+            "AC00036778",
+            "AC00036792",
+            "AC00036877",
+            "AC00036919",
+            "AC00036924",
+            "AC00037563",
+            "AC00037592",
+            "AC00037595",
+            "AC00038063",
+            "AC00038066",
+            "AC00038232",
+            "AC00038347",
+            "AC00038373",
+            "AC00038375",
+            "AC00038399",
+            "AC00038400",
+            "AC00038440",
+            "AC00038445",
+            "AC00038470",
+            "AC00038477",
+            "AC00038478",
+            "AC00038623",
+            "AC00038660",
+            "AC00038662",
+            "AC00038680",
+            "AC00038686",
+            "AC00038748",
+            "AC00038750",
+            "AC00038751",
+            "AC00038752",
+            "AC00038755",
+            "AC00038756",
+            "AC00038777",
+            "AC00038810",
+            "AC00038812",
+            "AC00038813",
+            "AC00038855",
+            "AC00038856",
+            "AC00038858",
+            "AC00038865",
+            "AC00038882",
+            "AC00038884",
+            "AC00038903",
+            "AC00038904",
+            "AC00038909",
+            "AC00038967",
+            "AC00038968",
+            "AC00039007",
+            "AC00039044",
+            "AC00039047",
+            "AC00039053",
+            "AC00039058",
+            "AC00039073",
+            "AC00039082",
+            "AC00039086",
+            "AC00039091",
+            "AC00039124",
+            "AC00039125",
+            "AC00039126",
+            "AC00039131",
+            "AC00039156",
+            "AC00039157",
+            "AC00039161",
+            "AC00039164",
+            "AC00039165",
+            "AC00039187",
+            "AC00039197",
+            "AC00039204",
+            "AC00039205",
+            "AC00039257",
+            "AC00039346",
+            "AC00039348",
+            "AC00039356",
+            "AC00039400",
+            "AC00039468",
+            "AC00039563",
+            "AC00039564",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "platform_overlap"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036138",
+            "AC00036139",
+            "AC00036167",
+            "AC00036168",
+            "AC00036170",
+            "AC00036172",
+            "AC00036174",
+            "AC00036207",
+            "AC00036212",
+            "AC00036215",
+            "AC00036237",
+            "AC00036241",
+            "AC00036255",
+            "AC00036291",
+            "AC00036313",
+            "AC00036324",
+            "AC00036327",
+            "AC00036328",
+            "AC00036333",
+            "AC00036525",
+            "AC00036636",
+            "AC00036739",
+            "AC00036763",
+            "AC00036792",
+            "AC00036877",
+            "AC00036919",
+            "AC00036924",
+            "AC00037563",
+            "AC00037592",
+            "AC00038063",
+            "AC00038066",
+            "AC00038232",
+            "AC00038347",
+            "AC00038373",
+            "AC00038375",
+            "AC00038399",
+            "AC00038400",
+            "AC00038440",
+            "AC00038445",
+            "AC00038470",
+            "AC00038623",
+            "AC00038662",
+            "AC00038686",
+            "AC00038748",
+            "AC00038750",
+            "AC00038751",
+            "AC00038752",
+            "AC00038755",
+            "AC00038756",
+            "AC00038777",
+            "AC00038810",
+            "AC00038812",
+            "AC00038813",
+            "AC00038855",
+            "AC00038856",
+            "AC00038858",
+            "AC00038865",
+            "AC00038882",
+            "AC00038884",
+            "AC00038903",
+            "AC00038904",
+            "AC00038909",
+            "AC00038967",
+            "AC00039007",
+            "AC00039044",
+            "AC00039047",
+            "AC00039053",
+            "AC00039058",
+            "AC00039073",
+            "AC00039082",
+            "AC00039086",
+            "AC00039091",
+            "AC00039124",
+            "AC00039125",
+            "AC00039126",
+            "AC00039131",
+            "AC00039156",
+            "AC00039157",
+            "AC00039161",
+            "AC00039164",
+            "AC00039165",
+            "AC00039187",
+            "AC00039197",
+            "AC00039257",
+            "AC00039346",
+            "AC00039348",
+            "AC00039356",
+            "AC00039400",
+            "AC00039468",
+            "AC00039563",
+            "AC00039564",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036139",
+            "AC00036207",
+            "AC00036215",
+            "AC00036291",
+            "AC00036324",
+            "AC00038066",
+            "AC00038400",
+            "AC00038750",
+            "AC00038752",
+            "AC00038755",
+            "AC00038856",
+            "AC00038903",
+            "AC00038909",
+            "AC00038967",
+            "AC00039007",
+            "AC00039053",
+            "AC00039126",
+            "AC00039346",
+            "AC00039468",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "same_size"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036170",
+            "AC00036257",
+            "AC00036778",
+            "AC00038373",
+            "AC00038477",
+            "AC00038680",
+            "AC00038750",
+            "AC00038752",
+            "AC00039126",
+            "AC00039161",
+            "AC00039204",
+            "AC00039346"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "full_observed_window",
+            "size_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036138",
+            "AC00036139",
+            "AC00036170",
+            "AC00036207",
+            "AC00036215",
+            "AC00036237",
+            "AC00036255",
+            "AC00036257",
+            "AC00036291",
+            "AC00036324",
+            "AC00036525",
+            "AC00036763",
+            "AC00036877",
+            "AC00036919",
+            "AC00036924",
+            "AC00038066",
+            "AC00038347",
+            "AC00038373",
+            "AC00038400",
+            "AC00038477",
+            "AC00038623",
+            "AC00038660",
+            "AC00038662",
+            "AC00038680",
+            "AC00038750",
+            "AC00038752",
+            "AC00038755",
+            "AC00038856",
+            "AC00038858",
+            "AC00038903",
+            "AC00038909",
+            "AC00038967",
+            "AC00038968",
+            "AC00039007",
+            "AC00039044",
+            "AC00039053",
+            "AC00039073",
+            "AC00039082",
+            "AC00039086",
+            "AC00039091",
+            "AC00039126",
+            "AC00039161",
+            "AC00039346",
+            "AC00039468",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "latest_week",
+            "adjacent_size"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036116",
+            "AC00036138",
+            "AC00036139",
+            "AC00036172",
+            "AC00036207",
+            "AC00036215",
+            "AC00036237",
+            "AC00036241",
+            "AC00036255",
+            "AC00036291",
+            "AC00036324",
+            "AC00036525",
+            "AC00036739",
+            "AC00036763",
+            "AC00036877",
+            "AC00036919",
+            "AC00036924",
+            "AC00037592",
+            "AC00038066",
+            "AC00038232",
+            "AC00038347",
+            "AC00038399",
+            "AC00038400",
+            "AC00038440",
+            "AC00038470",
+            "AC00038478",
+            "AC00038623",
+            "AC00038660",
+            "AC00038662",
+            "AC00038755",
+            "AC00038855",
+            "AC00038856",
+            "AC00038858",
+            "AC00038903",
+            "AC00038909",
+            "AC00038967",
+            "AC00038968",
+            "AC00039007",
+            "AC00039044",
+            "AC00039053",
+            "AC00039073",
+            "AC00039082",
+            "AC00039086",
+            "AC00039091",
+            "AC00039124",
+            "AC00039131",
+            "AC00039156",
+            "AC00039157",
+            "AC00039187",
+            "AC00039205",
+            "AC00039257",
+            "AC00039356",
+            "AC00039400",
+            "AC00039468",
+            "AC00039563",
+            "AC00039564",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "latest_week",
+            "platform_overlap"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036211",
+            "AC00036327",
+            "AC00036778",
+            "AC00038399",
+            "AC00038440",
+            "AC00038477",
+            "AC00038478",
+            "AC00038660",
+            "AC00038968",
+            "AC00039204",
+            "AC00039205"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "latest_week",
+            "same_price_band"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036138",
+            "AC00036139",
+            "AC00036170",
+            "AC00036207",
+            "AC00036215",
+            "AC00036291",
+            "AC00036763",
+            "AC00036919",
+            "AC00038066",
+            "AC00038400",
+            "AC00038750",
+            "AC00038752",
+            "AC00038755",
+            "AC00038856",
+            "AC00038903",
+            "AC00038909",
+            "AC00038967",
+            "AC00039007",
+            "AC00039053",
+            "AC00039126",
+            "AC00039346",
+            "AC00039655"
+          ]
+        },
+        {
+          "key": [
+            "m00_20260624000202_1150a669",
+            "AC00026378",
+            "latest_week",
+            "same_size"
+          ],
+          "removed_candidates": [],
+          "added_candidates": [
+            "AC00036170",
+            "AC00036257",
+            "AC00036778",
+            "AC00038373",
+            "AC00038477",
+            "AC00038680",
+            "AC00038750",
+            "AC00038752",
+            "AC00039126",
+            "AC00039161",
+            "AC00039204",
+            "AC00039346"
+          ]
+        }
+      ],
+      "sample_status_counts_before": {
+        "sufficient": 775
+      },
+      "sample_status_counts_after": {
+        "sufficient": 775
+      },
+      "full_sample_status_counts_before": {
+        "sufficient": 155
+      },
+      "full_sample_status_counts_after": {
+        "sufficient": 155
+      },
+      "full_flag_counts_before": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "observed_window_less_than_52w": 155,
+        "online_only_channel": 155,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "full_flag_counts_after": {
+        "market_pool_insufficient": 20,
+        "market_pool_limited": 20,
+        "price_band_sample_insufficient": 2,
+        "size_pool_insufficient": 2
+      },
+      "quality_issue_counts_after": {
+        "observed_window_less_than_52w": 775,
+        "online_only_channel": 775
+      },
+      "quality_severity_counts_after": {
+        "info": 1550
+      }
+    }
+  },
+  "legacy_runs": {
+    "TV": [
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 20617,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 84,
+          "market_profile_count": 84,
+          "market_signal_count": 333,
+          "comparable_pool_count": 494,
+          "pool_member_count": 19706,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 84
+          },
+          "pool_status_counts": {
+            "limited": 17,
+            "sufficient": 471,
+            "insufficient": 6
+          },
+          "created_output_count": 20617,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 10947,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 84,
+          "market_profile_count": 84,
+          "market_signal_count": 331,
+          "comparable_pool_count": 398,
+          "pool_member_count": 10134,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 84
+          },
+          "pool_status_counts": {
+            "limited": 16,
+            "sufficient": 376,
+            "insufficient": 6
+          },
+          "created_output_count": 10947,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 18278,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 84,
+          "market_profile_count": 84,
+          "market_signal_count": 330,
+          "comparable_pool_count": 488,
+          "pool_member_count": 17376,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 84
+          },
+          "pool_status_counts": {
+            "limited": 16,
+            "sufficient": 466,
+            "insufficient": 6
+          },
+          "created_output_count": 18278,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 19471,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 84,
+          "market_profile_count": 84,
+          "market_signal_count": 327,
+          "comparable_pool_count": 491,
+          "pool_member_count": 18569,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 84
+          },
+          "pool_status_counts": {
+            "limited": 19,
+            "sufficient": 466,
+            "insufficient": 6
+          },
+          "created_output_count": 19471,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 20107,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 84,
+          "market_profile_count": 84,
+          "market_signal_count": 335,
+          "comparable_pool_count": 494,
+          "pool_member_count": 19194,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 84
+          },
+          "pool_status_counts": {
+            "limited": 17,
+            "sufficient": 471,
+            "insufficient": 6
+          },
+          "created_output_count": 20107,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 15372,
+        "output_count": 240534,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 448,
+          "processed_sku_count": 293,
+          "market_profile_count": 293,
+          "market_signal_count": 1214,
+          "comparable_pool_count": 1730,
+          "pool_member_count": 237297,
+          "review_required_count": 20,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 293
+          },
+          "pool_status_counts": {
+            "sufficient": 1722,
+            "insufficient": 8
+          },
+          "created_output_count": 240534,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 15372,
+        "output_count": 118595,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 448,
+          "processed_sku_count": 293,
+          "market_profile_count": 293,
+          "market_signal_count": 1199,
+          "comparable_pool_count": 1341,
+          "pool_member_count": 115762,
+          "review_required_count": 20,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 293
+          },
+          "pool_status_counts": {
+            "sufficient": 1333,
+            "insufficient": 8
+          },
+          "created_output_count": 118595,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 15372,
+        "output_count": 214395,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 448,
+          "processed_sku_count": 293,
+          "market_profile_count": 293,
+          "market_signal_count": 1215,
+          "comparable_pool_count": 1709,
+          "pool_member_count": 211178,
+          "review_required_count": 20,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 293
+          },
+          "pool_status_counts": {
+            "sufficient": 1701,
+            "insufficient": 8
+          },
+          "created_output_count": 214395,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 15372,
+        "output_count": 230390,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 448,
+          "processed_sku_count": 293,
+          "market_profile_count": 293,
+          "market_signal_count": 1217,
+          "comparable_pool_count": 1724,
+          "pool_member_count": 227156,
+          "review_required_count": 20,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 293
+          },
+          "pool_status_counts": {
+            "sufficient": 1716,
+            "insufficient": 8
+          },
+          "created_output_count": 230390,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 15372,
+        "output_count": 234591,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 448,
+          "processed_sku_count": 293,
+          "market_profile_count": 293,
+          "market_signal_count": 1214,
+          "comparable_pool_count": 1730,
+          "pool_member_count": 231354,
+          "review_required_count": 20,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 293
+          },
+          "pool_status_counts": {
+            "sufficient": 1722,
+            "insufficient": 8
+          },
+          "created_output_count": 234591,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      }
+    ],
+    "AC": [
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 70696,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 155,
+          "market_profile_count": 155,
+          "market_signal_count": 672,
+          "comparable_pool_count": 928,
+          "pool_member_count": 68941,
+          "review_required_count": 12,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 155
+          },
+          "pool_status_counts": {
+            "sufficient": 924,
+            "insufficient": 4
+          },
+          "created_output_count": 70696,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 45045,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 155,
+          "market_profile_count": 155,
+          "market_signal_count": 669,
+          "comparable_pool_count": 773,
+          "pool_member_count": 43448,
+          "review_required_count": 12,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 155
+          },
+          "pool_status_counts": {
+            "sufficient": 769,
+            "insufficient": 4
+          },
+          "created_output_count": 45045,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 69579,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 155,
+          "market_profile_count": 155,
+          "market_signal_count": 667,
+          "comparable_pool_count": 928,
+          "pool_member_count": 67829,
+          "review_required_count": 12,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 155
+          },
+          "pool_status_counts": {
+            "sufficient": 924,
+            "insufficient": 4
+          },
+          "created_output_count": 69579,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 69886,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 155,
+          "market_profile_count": 155,
+          "market_signal_count": 672,
+          "comparable_pool_count": 928,
+          "pool_member_count": 68131,
+          "review_required_count": 12,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 155
+          },
+          "pool_status_counts": {
+            "sufficient": 924,
+            "insufficient": 4
+          },
+          "created_output_count": 69886,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 70071,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v1",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 155,
+          "market_profile_count": 155,
+          "market_signal_count": 671,
+          "comparable_pool_count": 928,
+          "pool_member_count": 68317,
+          "review_required_count": 12,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "sample_status_counts": {
+            "sufficient": 155
+          },
+          "pool_status_counts": {
+            "sufficient": 924,
+            "insufficient": 4
+          },
+          "created_output_count": 70071,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      }
+    ]
+  },
+  "shadow_runs": {
+    "TV": [
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 18467,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 306,
+          "comparable_pool_count": 440,
+          "pool_member_count": 17646,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "limited": 16,
+            "sufficient": 418,
+            "insufficient": 6
+          },
+          "created_output_count": 18467,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 2150,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 9,
+          "market_profile_count": 9,
+          "market_signal_count": 27,
+          "comparable_pool_count": 54,
+          "pool_member_count": 2060,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 9,
+              "online_only_channel": 9
+            },
+            "severity_counts": {
+              "info": 18
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 9
+          },
+          "pool_status_counts": {
+            "sufficient": 53,
+            "limited": 1
+          },
+          "created_output_count": 2150,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 9659,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 289,
+          "comparable_pool_count": 353,
+          "pool_member_count": 8942,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "limited": 16,
+            "sufficient": 331,
+            "insufficient": 6
+          },
+          "created_output_count": 9659,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 1288,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 9,
+          "market_profile_count": 9,
+          "market_signal_count": 42,
+          "comparable_pool_count": 45,
+          "pool_member_count": 1192,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 9,
+              "online_only_channel": 9
+            },
+            "severity_counts": {
+              "info": 18
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 9
+          },
+          "pool_status_counts": {
+            "sufficient": 45
+          },
+          "created_output_count": 1288,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 16248,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 289,
+          "comparable_pool_count": 434,
+          "pool_member_count": 15450,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "limited": 16,
+            "sufficient": 412,
+            "insufficient": 6
+          },
+          "created_output_count": 16248,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 2030,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 9,
+          "market_profile_count": 9,
+          "market_signal_count": 41,
+          "comparable_pool_count": 54,
+          "pool_member_count": 1926,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 9,
+              "online_only_channel": 9
+            },
+            "severity_counts": {
+              "info": 18
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 9
+          },
+          "pool_status_counts": {
+            "sufficient": 54
+          },
+          "created_output_count": 2030,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 17372,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 290,
+          "comparable_pool_count": 437,
+          "pool_member_count": 16570,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "limited": 18,
+            "sufficient": 413,
+            "insufficient": 6
+          },
+          "created_output_count": 17372,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 2099,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 9,
+          "market_profile_count": 9,
+          "market_signal_count": 37,
+          "comparable_pool_count": 54,
+          "pool_member_count": 1999,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 9,
+              "online_only_channel": 9
+            },
+            "severity_counts": {
+              "info": 18
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 9
+          },
+          "pool_status_counts": {
+            "sufficient": 53,
+            "limited": 1
+          },
+          "created_output_count": 2099,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 17986,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 298,
+          "comparable_pool_count": 440,
+          "pool_member_count": 17173,
+          "review_required_count": 18,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "limited": 17,
+            "sufficient": 417,
+            "insufficient": 6
+          },
+          "created_output_count": 17986,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 3322,
+        "output_count": 2121,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 84,
+          "processed_sku_count": 9,
+          "market_profile_count": 9,
+          "market_signal_count": 37,
+          "comparable_pool_count": 54,
+          "pool_member_count": 2021,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 9,
+              "online_only_channel": 9
+            },
+            "severity_counts": {
+              "info": 18
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 9
+          },
+          "pool_status_counts": {
+            "sufficient": 54
+          },
+          "created_output_count": 2121,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 61066,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 295,
+          "comparable_pool_count": 442,
+          "pool_member_count": 60254,
+          "review_required_count": 4,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 440,
+            "insufficient": 2
+          },
+          "created_output_count": 61066,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 59748,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 315,
+          "comparable_pool_count": 442,
+          "pool_member_count": 58916,
+          "review_required_count": 10,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 438,
+            "insufficient": 4
+          },
+          "created_output_count": 59748,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 61285,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 361,
+          "comparable_pool_count": 444,
+          "pool_member_count": 60405,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 442,
+            "insufficient": 2
+          },
+          "created_output_count": 61285,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 54440,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 68,
+          "market_profile_count": 68,
+          "market_signal_count": 262,
+          "comparable_pool_count": 402,
+          "pool_member_count": 53708,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 68,
+              "online_only_channel": 68
+            },
+            "severity_counts": {
+              "info": 136
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 68
+          },
+          "pool_status_counts": {
+            "sufficient": 402
+          },
+          "created_output_count": 54440,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 26604,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 244,
+          "comparable_pool_count": 319,
+          "pool_member_count": 25966,
+          "review_required_count": 4,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 317,
+            "insufficient": 2
+          },
+          "created_output_count": 26604,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 29120,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 297,
+          "comparable_pool_count": 340,
+          "pool_member_count": 28408,
+          "review_required_count": 10,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 335,
+            "limited": 1,
+            "insufficient": 4
+          },
+          "created_output_count": 29120,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 29595,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 297,
+          "comparable_pool_count": 348,
+          "pool_member_count": 28875,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 346,
+            "insufficient": 2
+          },
+          "created_output_count": 29595,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 29812,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 68,
+          "market_profile_count": 68,
+          "market_signal_count": 377,
+          "comparable_pool_count": 334,
+          "pool_member_count": 29033,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 68,
+              "online_only_channel": 68
+            },
+            "severity_counts": {
+              "info": 136
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 68
+          },
+          "pool_status_counts": {
+            "sufficient": 334
+          },
+          "created_output_count": 29812,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 52929,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 255,
+          "comparable_pool_count": 433,
+          "pool_member_count": 52166,
+          "review_required_count": 4,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 431,
+            "insufficient": 2
+          },
+          "created_output_count": 52929,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 53187,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 294,
+          "comparable_pool_count": 436,
+          "pool_member_count": 52382,
+          "review_required_count": 10,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 432,
+            "insufficient": 4
+          },
+          "created_output_count": 53187,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 54732,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 310,
+          "comparable_pool_count": 438,
+          "pool_member_count": 53909,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 436,
+            "insufficient": 2
+          },
+          "created_output_count": 54732,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 50152,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 68,
+          "market_profile_count": 68,
+          "market_signal_count": 373,
+          "comparable_pool_count": 402,
+          "pool_member_count": 49309,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 68,
+              "online_only_channel": 68
+            },
+            "severity_counts": {
+              "info": 136
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 68
+          },
+          "pool_status_counts": {
+            "sufficient": 402
+          },
+          "created_output_count": 50152,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 57770,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 254,
+          "comparable_pool_count": 442,
+          "pool_member_count": 56999,
+          "review_required_count": 4,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 440,
+            "insufficient": 2
+          },
+          "created_output_count": 57770,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 56563,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 291,
+          "comparable_pool_count": 436,
+          "pool_member_count": 55761,
+          "review_required_count": 10,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 432,
+            "insufficient": 4
+          },
+          "created_output_count": 56563,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 58840,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 313,
+          "comparable_pool_count": 444,
+          "pool_member_count": 58008,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 442,
+            "insufficient": 2
+          },
+          "created_output_count": 58840,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 53309,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 68,
+          "market_profile_count": 68,
+          "market_signal_count": 369,
+          "comparable_pool_count": 402,
+          "pool_member_count": 52470,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 68,
+              "online_only_channel": 68
+            },
+            "severity_counts": {
+              "info": 136
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 68
+          },
+          "pool_status_counts": {
+            "sufficient": 402
+          },
+          "created_output_count": 53309,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 58638,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 260,
+          "comparable_pool_count": 442,
+          "pool_member_count": 57861,
+          "review_required_count": 4,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 440,
+            "insufficient": 2
+          },
+          "created_output_count": 58638,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 58198,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 298,
+          "comparable_pool_count": 442,
+          "pool_member_count": 57383,
+          "review_required_count": 10,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 438,
+            "insufficient": 4
+          },
+          "created_output_count": 58198,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 59984,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 325,
+          "comparable_pool_count": 444,
+          "pool_member_count": 59140,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 442,
+            "insufficient": 2
+          },
+          "created_output_count": 59984,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 10285,
+        "output_count": 53861,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "product_category": "TV",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_price_band_v1",
+          "pool_rule_version": "m07_pool_v1",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 293,
+          "processed_sku_count": 68,
+          "market_profile_count": 68,
+          "market_signal_count": 343,
+          "comparable_pool_count": 402,
+          "pool_member_count": 53048,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 68,
+              "online_only_channel": 68
+            },
+            "severity_counts": {
+              "info": 136
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 68
+          },
+          "pool_status_counts": {
+            "sufficient": 402
+          },
+          "created_output_count": 53861,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      }
+    ],
+    "AC": [
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 33717,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 319,
+          "comparable_pool_count": 449,
+          "pool_member_count": 32874,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 33717,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 34551,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 337,
+          "comparable_pool_count": 449,
+          "pool_member_count": 33690,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 34551,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 2428,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "full_observed_window"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 5,
+          "market_profile_count": 5,
+          "market_signal_count": 16,
+          "comparable_pool_count": 30,
+          "pool_member_count": 2377,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 5,
+              "online_only_channel": 5
+            },
+            "severity_counts": {
+              "info": 10
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 5
+          },
+          "pool_status_counts": {
+            "sufficient": 30
+          },
+          "created_output_count": 2428,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 21256,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 305,
+          "comparable_pool_count": 374,
+          "pool_member_count": 20502,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 372,
+            "insufficient": 2
+          },
+          "created_output_count": 21256,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 22145,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 344,
+          "comparable_pool_count": 374,
+          "pool_member_count": 21352,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 372,
+            "insufficient": 2
+          },
+          "created_output_count": 22145,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 1644,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "latest_week"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 5,
+          "market_profile_count": 5,
+          "market_signal_count": 20,
+          "comparable_pool_count": 25,
+          "pool_member_count": 1594,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 5,
+              "online_only_channel": 5
+            },
+            "severity_counts": {
+              "info": 10
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 5
+          },
+          "pool_status_counts": {
+            "sufficient": 25
+          },
+          "created_output_count": 1644,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 33072,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 297,
+          "comparable_pool_count": 449,
+          "pool_member_count": 32251,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 33072,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 34067,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 350,
+          "comparable_pool_count": 449,
+          "pool_member_count": 33193,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 34067,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 2440,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_4w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 5,
+          "market_profile_count": 5,
+          "market_signal_count": 20,
+          "comparable_pool_count": 30,
+          "pool_member_count": 2385,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 5,
+              "online_only_channel": 5
+            },
+            "severity_counts": {
+              "info": 10
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 5
+          },
+          "pool_status_counts": {
+            "sufficient": 30
+          },
+          "created_output_count": 2440,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 33156,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 305,
+          "comparable_pool_count": 449,
+          "pool_member_count": 32327,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 33156,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 34314,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 347,
+          "comparable_pool_count": 449,
+          "pool_member_count": 33443,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 34314,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 2416,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_8w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 5,
+          "market_profile_count": 5,
+          "market_signal_count": 20,
+          "comparable_pool_count": 30,
+          "pool_member_count": 2361,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 5,
+              "online_only_channel": 5
+            },
+            "severity_counts": {
+              "info": 10
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 5
+          },
+          "pool_status_counts": {
+            "sufficient": 30
+          },
+          "created_output_count": 2416,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 33302,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 310,
+          "comparable_pool_count": 449,
+          "pool_member_count": 32468,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 33302,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 34352,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 75,
+          "market_profile_count": 75,
+          "market_signal_count": 343,
+          "comparable_pool_count": 449,
+          "pool_member_count": 33485,
+          "review_required_count": 6,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [
+            "部分可比池样本不足，下游按低置信使用或进入复核。"
+          ],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 75,
+              "online_only_channel": 75
+            },
+            "severity_counts": {
+              "info": 150
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 75
+          },
+          "pool_status_counts": {
+            "sufficient": 447,
+            "insufficient": 2
+          },
+          "created_output_count": 34352,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      },
+      {
+        "status": "success",
+        "input_count": 5087,
+        "output_count": 2417,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "product_category": "AC",
+          "rule_version": "m07_market_profile_v2",
+          "price_band_rule_version": "m07_ac_hp_price_band_v2",
+          "pool_rule_version": "m07_ac_hp_price_pool_v2",
+          "analysis_windows": [
+            "recent_12w"
+          ],
+          "sku_count": 155,
+          "processed_sku_count": 5,
+          "market_profile_count": 5,
+          "market_signal_count": 18,
+          "comparable_pool_count": 30,
+          "pool_member_count": 2364,
+          "review_required_count": 0,
+          "scope_notes": [
+            "当前数据按已导入的 2026 年线上观察窗口分析，不补造 52 周或 12 月伪口径。",
+            "当前数据为线上渠道样本，M07 生成线上平台市场画像，不推断线下渠道。"
+          ],
+          "quality_notes": [],
+          "quality_contract_counts": {
+            "issue_counts": {
+              "observed_window_less_than_52w": 5,
+              "online_only_channel": 5
+            },
+            "severity_counts": {
+              "info": 10
+            }
+          },
+          "sample_status_counts": {
+            "sufficient": 5
+          },
+          "pool_status_counts": {
+            "sufficient": 30
+          },
+          "created_output_count": 2417,
+          "updated_output_count": 0,
+          "reused_output_count": 0,
+          "boundary_note": "M07 只生成市场画像、市场信号和可比池基线；不生成任务、客群、战场、候选或竞品结论，不使用 12m 伪口径。",
+          "downstream_support": {
+            "M08": "可消费市场画像、市场信号和可比池摘要",
+            "M11.5": "可消费池内价格、销量、销额分布作为卖点价值层基线",
+            "M12": "可消费市场可比池，但需在 M12 再决定候选召回",
+            "M13": "可消费池成员关系强度和市场压力指标"
+          }
+        }
+      }
+    ]
+  },
+  "write_runs": {},
+  "downstream_guard": {
+    "before": {
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "after": {
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "unchanged": true
+  }
+}

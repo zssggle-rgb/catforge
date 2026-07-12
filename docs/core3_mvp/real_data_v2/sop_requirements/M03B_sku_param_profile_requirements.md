@@ -64,7 +64,7 @@ M03B 必须输出三类结果。
 {
   "sku_code": "TV00027549",
   "category_code": "TV",
-  "taxonomy_version": "tv_param_taxonomy_manual_v0.1",
+  "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
   "param_fact_profile": {
     "screen_size_inch": 65,
     "resolution_label": "4K",
@@ -291,3 +291,13 @@ M03B 首版验收必须满足：
 7. 输出包含 evidence id、taxonomy version、parser version、rule version、confidence、quality flags。
 8. 不读取评论、卖点、销量价格，不生成业务结论。
 9. 所有测试不调用外部 LLM。
+
+## 10. TV/AC 语义冲突契约 v0.2
+
+1. 原始分段标签与派生档位不得直接按字符串判冲突。TV 尺寸段、AC 匹数段和制冷量段必须以原始数值是否落入声明区间为准。
+2. 安装方式和能效等级必须先规范化为品类 canonical value，再判断原始值、别名值和派生值是否等价。
+3. AC `系列` 保存为 `product_series`，`三大品牌系列` 单独保存为 `brand_series_code`；名称和编码不得因文本不同被判为同一参数冲突。
+4. AC 制冷量档位必须连续覆盖 `<3000`、`3000-3999`、`4000-5499`、`5500-6499`、`6500-7499`、`>=7500W`，不得把 `5500-6499W` 静默归入 3 匹档。
+5. 真实冲突必须在 `quality_summary_json.conflicts` 中保存 `param_code`、全部候选值及来源、selected value、comparison basis、affected param codes 和 affected dimension codes。
+6. TV taxonomy 只能读取 `category_code=TV`，AC taxonomy 只能读取 `category_code=AC`；SKU 前缀过滤不能替代品类隔离。
+7. v0.2 以独立 taxonomy/parser/rule version 生成 draft，不覆盖 v0.1，也不自动触发 M04C 以后模块。

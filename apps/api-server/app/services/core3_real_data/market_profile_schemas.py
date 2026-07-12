@@ -154,6 +154,8 @@ class M07SkuMarketMetrics(M07BaseModel):
     global_latest_week_index: int | None = None
     sku_latest_week_index: int | None = None
     latest_week_gap: int | None = None
+    global_week_count: int = Field(default=0, ge=0, exclude=True)
+    dataset_channel_types: list[str] = Field(default_factory=list, exclude=True)
     active_week_count: int = Field(default=0, ge=0)
     market_row_count: int = Field(default=0, ge=0)
     platform_count: int = Field(default=0, ge=0)

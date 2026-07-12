@@ -1,0 +1,887 @@
+{
+  "task_id": "M12D-QF-13",
+  "mode": "release_quality_shadow",
+  "generated_at": "2026-07-11T13:38:20.286206+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "categories": {
+    "TV": {
+      "category": "TV",
+      "taxonomy_version": "m12d_tv_purchase_reason_anchor_taxonomy_v0.1",
+      "purchase_reason_version_id": "m12d_ver_07cb258dc9594b908c30d850",
+      "source_batch_ids": [
+        "m00_20260623014631_c8630747",
+        "m00_20260619084551_857df63b",
+        "m00_20260613004311_d548f6dc"
+      ],
+      "read_scope": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+      "sku_count": 377,
+      "status_counts": {
+        "ready": 238,
+        "ready_limited": 94,
+        "weak_expression_only": 45
+      },
+      "baseline_release_quality_status": "unassessed",
+      "quality_evaluation": {
+        "category_code": "TV",
+        "product_category": "TV",
+        "expected_sku_count": 377,
+        "profile_count": 377,
+        "release_quality_status": "limited",
+        "metrics_json": {
+          "expected_sku_count": 377,
+          "profile_count": 377,
+          "unique_sku_count": 377,
+          "status_counts": {
+            "failed": 0,
+            "missing_input": 0,
+            "ready": 238,
+            "ready_limited": 94,
+            "weak_expression_only": 45
+          },
+          "ready_count": 238,
+          "ready_limited_count": 94,
+          "review_required_count": 0,
+          "missing_input_count": 0,
+          "failed_count": 0,
+          "profile_gap_count": 0,
+          "core_payment_missing_count": 139,
+          "focus_validation_evaluated": false,
+          "focus_validation_count": 0,
+          "generation_success_rate": "1.0000",
+          "ready_rate": "0.6313",
+          "ready_or_limited_rate": "0.8806",
+          "review_required_rate": "0.0000",
+          "missing_or_failed_rate": "0.0000",
+          "core_payment_missing_rate": "0.3687",
+          "focus_sku_pass_rate": null
+        },
+        "threshold_results": [
+          {
+            "metric_code": "generation_success_rate",
+            "numerator": 377,
+            "denominator": 377,
+            "observed_rate": "1.0000",
+            "operator": ">=",
+            "threshold": "0.9800",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "成功生成画像的 SKU 比例为 1.0000，门槛为 >= 0.9800，结果通过。"
+          },
+          {
+            "metric_code": "ready_rate",
+            "numerator": 238,
+            "denominator": 377,
+            "observed_rate": "0.6313",
+            "operator": ">=",
+            "threshold": "0.8500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "可供强消费的 ready 画像比例为 0.6313，门槛为 >= 0.8500，结果未通过。"
+          },
+          {
+            "metric_code": "ready_or_limited_rate",
+            "numerator": 332,
+            "denominator": 377,
+            "observed_rate": "0.8806",
+            "operator": ">=",
+            "threshold": "0.9500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "ready 与 ready_limited 合计比例为 0.8806，门槛为 >= 0.9500，结果未通过。"
+          },
+          {
+            "metric_code": "review_required_rate",
+            "numerator": 0,
+            "denominator": 377,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "需要人工复核的画像比例为 0.0000，门槛为 <= 0.1500，结果通过。"
+          },
+          {
+            "metric_code": "missing_or_failed_rate",
+            "numerator": 0,
+            "denominator": 377,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.0500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "缺少最低输入或生成失败的画像比例为 0.0000，门槛为 <= 0.0500，结果通过。"
+          },
+          {
+            "metric_code": "core_payment_missing_rate",
+            "numerator": 139,
+            "denominator": 377,
+            "observed_rate": "0.3687",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "缺少核心成交理由的画像比例为 0.3687，门槛为 <= 0.1500，结果未通过。"
+          },
+          {
+            "metric_code": "focus_sku_pass_rate",
+            "numerator": 0,
+            "denominator": 0,
+            "observed_rate": null,
+            "operator": "=",
+            "threshold": "1.0000",
+            "applicable": false,
+            "passed": false,
+            "reason_cn": "重点 SKU 尚未完成验证，版本不能判为 release-ready。"
+          }
+        ],
+        "blocking_issue_coverage_json": [],
+        "system_issues": [],
+        "failure_reason_codes": [
+          "ready_rate",
+          "ready_or_limited_rate",
+          "core_payment_missing_rate",
+          "focus_sku_pass_rate"
+        ]
+      },
+      "focus_pass_evaluation": {
+        "category_code": "TV",
+        "product_category": "TV",
+        "expected_sku_count": 377,
+        "profile_count": 377,
+        "release_quality_status": "limited",
+        "metrics_json": {
+          "expected_sku_count": 377,
+          "profile_count": 377,
+          "unique_sku_count": 377,
+          "status_counts": {
+            "failed": 0,
+            "missing_input": 0,
+            "ready": 238,
+            "ready_limited": 94,
+            "weak_expression_only": 45
+          },
+          "ready_count": 238,
+          "ready_limited_count": 94,
+          "review_required_count": 0,
+          "missing_input_count": 0,
+          "failed_count": 0,
+          "profile_gap_count": 0,
+          "core_payment_missing_count": 139,
+          "focus_validation_evaluated": true,
+          "focus_validation_count": 1,
+          "generation_success_rate": "1.0000",
+          "ready_rate": "0.6313",
+          "ready_or_limited_rate": "0.8806",
+          "review_required_rate": "0.0000",
+          "missing_or_failed_rate": "0.0000",
+          "core_payment_missing_rate": "0.3687",
+          "focus_sku_pass_rate": "1.0000"
+        },
+        "threshold_results": [
+          {
+            "metric_code": "generation_success_rate",
+            "numerator": 377,
+            "denominator": 377,
+            "observed_rate": "1.0000",
+            "operator": ">=",
+            "threshold": "0.9800",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "成功生成画像的 SKU 比例为 1.0000，门槛为 >= 0.9800，结果通过。"
+          },
+          {
+            "metric_code": "ready_rate",
+            "numerator": 238,
+            "denominator": 377,
+            "observed_rate": "0.6313",
+            "operator": ">=",
+            "threshold": "0.8500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "可供强消费的 ready 画像比例为 0.6313，门槛为 >= 0.8500，结果未通过。"
+          },
+          {
+            "metric_code": "ready_or_limited_rate",
+            "numerator": 332,
+            "denominator": 377,
+            "observed_rate": "0.8806",
+            "operator": ">=",
+            "threshold": "0.9500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "ready 与 ready_limited 合计比例为 0.8806，门槛为 >= 0.9500，结果未通过。"
+          },
+          {
+            "metric_code": "review_required_rate",
+            "numerator": 0,
+            "denominator": 377,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "需要人工复核的画像比例为 0.0000，门槛为 <= 0.1500，结果通过。"
+          },
+          {
+            "metric_code": "missing_or_failed_rate",
+            "numerator": 0,
+            "denominator": 377,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.0500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "缺少最低输入或生成失败的画像比例为 0.0000，门槛为 <= 0.0500，结果通过。"
+          },
+          {
+            "metric_code": "core_payment_missing_rate",
+            "numerator": 139,
+            "denominator": 377,
+            "observed_rate": "0.3687",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "缺少核心成交理由的画像比例为 0.3687，门槛为 <= 0.1500，结果未通过。"
+          },
+          {
+            "metric_code": "focus_sku_pass_rate",
+            "numerator": 1,
+            "denominator": 1,
+            "observed_rate": "1.0000",
+            "operator": "=",
+            "threshold": "1.0000",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "重点 SKU 验证通过率为 1.0000，门槛为 = 1.0000，结果通过。"
+          }
+        ],
+        "blocking_issue_coverage_json": [],
+        "system_issues": [],
+        "failure_reason_codes": [
+          "ready_rate",
+          "ready_or_limited_rate",
+          "core_payment_missing_rate"
+        ]
+      },
+      "profile_fingerprint_before": "3c0d9e6ca1d71eca5e950c2ecc0c7f5b4329c2c235d1b0cba0a32bb86483b0a2",
+      "profile_fingerprint_after": "3c0d9e6ca1d71eca5e950c2ecc0c7f5b4329c2c235d1b0cba0a32bb86483b0a2",
+      "profile_fields_unchanged": true,
+      "unaffected_profile_samples": [
+        {
+          "sku_code": "TV00009549",
+          "status": "weak_expression_only",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "48da6c2e39a822e8a6ccfbfc69050c8d7e0345027fb1d9ce103382e524e93507",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00022396",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "f829a713e55dba26af9f7c7d9eed1dda6119251c8ea28f8cf3cc6ab3a5e0849b",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00022397",
+          "status": "ready",
+          "core_payment_anchor_count": 1,
+          "review_required": false,
+          "input_fingerprint": "908d487de572d05ca2a50816fb6bffa855b280c073f49a7c1b5556c617dd32c2",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00023850",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "912a71d7913c3b42ecfabb75847568f53835e756ccf7a27df9cdd7bd4ce41919",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00025500",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "06c7204bab3ff7a931e6333ea0d37ed102678a0f3e53992bc2b39f346601e1c7",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00025501",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "dbdef0925c223d48302ca58c09802bdf1cd0ea02b4e896da0784eb22b4467709",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00025519",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "93d45b7b6fa1cc1d87b335270ab1cea916c80a6ad2a0c18aa106f82bd6808125",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00025784",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "a44f8bcd4b2c257428561ba1ed7bee4e51b77371a12b6a12799a4d2e881f0f7b",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026064",
+          "status": "weak_expression_only",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "aea91e2ae53b94ec3ddd5db505b45e454ec109e3ff978b174d9995823743429b",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026065",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "f8aecdad013684153d65dc4133c4075ffbb12f64fc76aabcb86984821894f701",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026106",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "f59f306c1ae122f906cd2c94954dbda1b6fc41cf3e08cc8556a96974982de628",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026131",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "d25ac7c9c3ae26d12f3935df567337ceded2bd381db34986322aac676c843fb6",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026209",
+          "status": "ready",
+          "core_payment_anchor_count": 1,
+          "review_required": false,
+          "input_fingerprint": "b180532a8aab5ea5ae4193894683ab6df7e5aac9996c3422cffeb6d18e503dae",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026228",
+          "status": "ready",
+          "core_payment_anchor_count": 1,
+          "review_required": false,
+          "input_fingerprint": "1a15a33d45a5c865c1554f4df120eff812287241f641247c759a00148fda6918",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026231",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "d87ee9bcb0ff824377d06b484d11e9e6d4e12aa3d6ef20340ebc1b03d6e25343",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026232",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "0ca7b1aae24e1bce390b739815b63c5363278aecd6d45dbc0d0969f0a803766e",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026248",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "16826c7c4ea233b22f8b5533f26587c4b4ec097122bdbae12d711768e2847485",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026857",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "2bbab218183e9a4ed0f079a4dd0a071f0180b5b8cb77d056d33e9b73d877b925",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026874",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "9bf768a262c2e83427c95ab043ac20a8d0c182eaf37e09ffebb062ef9baed92b",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "TV00026886",
+          "status": "ready",
+          "core_payment_anchor_count": 1,
+          "review_required": false,
+          "input_fingerprint": "58b888f41930b23863f1f3b1f5b6720b4905218d9b1b31fe595bcecfe34d033d",
+          "profile_fields_unchanged": true
+        }
+      ]
+    },
+    "AC": {
+      "category": "AC",
+      "taxonomy_version": "m12d_ac_purchase_reason_anchor_taxonomy_v0.1",
+      "purchase_reason_version_id": "m12d_ver_60fe5fee508b9344ab16ccf9",
+      "source_batch_ids": [
+        "m00_20260624000202_1150a669"
+      ],
+      "read_scope": "serving-scope:AC:m00_20260624000202_1150a669",
+      "sku_count": 155,
+      "status_counts": {
+        "ready": 130,
+        "ready_limited": 23,
+        "weak_expression_only": 2
+      },
+      "baseline_release_quality_status": "unassessed",
+      "quality_evaluation": {
+        "category_code": "AC",
+        "product_category": "AC",
+        "expected_sku_count": 155,
+        "profile_count": 155,
+        "release_quality_status": "limited",
+        "metrics_json": {
+          "expected_sku_count": 155,
+          "profile_count": 155,
+          "unique_sku_count": 155,
+          "status_counts": {
+            "failed": 0,
+            "missing_input": 0,
+            "ready": 130,
+            "ready_limited": 23,
+            "weak_expression_only": 2
+          },
+          "ready_count": 130,
+          "ready_limited_count": 23,
+          "review_required_count": 0,
+          "missing_input_count": 0,
+          "failed_count": 0,
+          "profile_gap_count": 0,
+          "core_payment_missing_count": 25,
+          "focus_validation_evaluated": false,
+          "focus_validation_count": 0,
+          "generation_success_rate": "1.0000",
+          "ready_rate": "0.8387",
+          "ready_or_limited_rate": "0.9871",
+          "review_required_rate": "0.0000",
+          "missing_or_failed_rate": "0.0000",
+          "core_payment_missing_rate": "0.1613",
+          "focus_sku_pass_rate": null
+        },
+        "threshold_results": [
+          {
+            "metric_code": "generation_success_rate",
+            "numerator": 155,
+            "denominator": 155,
+            "observed_rate": "1.0000",
+            "operator": ">=",
+            "threshold": "0.9800",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "成功生成画像的 SKU 比例为 1.0000，门槛为 >= 0.9800，结果通过。"
+          },
+          {
+            "metric_code": "ready_rate",
+            "numerator": 130,
+            "denominator": 155,
+            "observed_rate": "0.8387",
+            "operator": ">=",
+            "threshold": "0.8500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "可供强消费的 ready 画像比例为 0.8387，门槛为 >= 0.8500，结果未通过。"
+          },
+          {
+            "metric_code": "ready_or_limited_rate",
+            "numerator": 153,
+            "denominator": 155,
+            "observed_rate": "0.9871",
+            "operator": ">=",
+            "threshold": "0.9500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "ready 与 ready_limited 合计比例为 0.9871，门槛为 >= 0.9500，结果通过。"
+          },
+          {
+            "metric_code": "review_required_rate",
+            "numerator": 0,
+            "denominator": 155,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "需要人工复核的画像比例为 0.0000，门槛为 <= 0.1500，结果通过。"
+          },
+          {
+            "metric_code": "missing_or_failed_rate",
+            "numerator": 0,
+            "denominator": 155,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.0500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "缺少最低输入或生成失败的画像比例为 0.0000，门槛为 <= 0.0500，结果通过。"
+          },
+          {
+            "metric_code": "core_payment_missing_rate",
+            "numerator": 25,
+            "denominator": 155,
+            "observed_rate": "0.1613",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "缺少核心成交理由的画像比例为 0.1613，门槛为 <= 0.1500，结果未通过。"
+          },
+          {
+            "metric_code": "focus_sku_pass_rate",
+            "numerator": 0,
+            "denominator": 0,
+            "observed_rate": null,
+            "operator": "=",
+            "threshold": "1.0000",
+            "applicable": false,
+            "passed": false,
+            "reason_cn": "重点 SKU 尚未完成验证，版本不能判为 release-ready。"
+          }
+        ],
+        "blocking_issue_coverage_json": [],
+        "system_issues": [],
+        "failure_reason_codes": [
+          "ready_rate",
+          "core_payment_missing_rate",
+          "focus_sku_pass_rate"
+        ]
+      },
+      "focus_pass_evaluation": {
+        "category_code": "AC",
+        "product_category": "AC",
+        "expected_sku_count": 155,
+        "profile_count": 155,
+        "release_quality_status": "limited",
+        "metrics_json": {
+          "expected_sku_count": 155,
+          "profile_count": 155,
+          "unique_sku_count": 155,
+          "status_counts": {
+            "failed": 0,
+            "missing_input": 0,
+            "ready": 130,
+            "ready_limited": 23,
+            "weak_expression_only": 2
+          },
+          "ready_count": 130,
+          "ready_limited_count": 23,
+          "review_required_count": 0,
+          "missing_input_count": 0,
+          "failed_count": 0,
+          "profile_gap_count": 0,
+          "core_payment_missing_count": 25,
+          "focus_validation_evaluated": true,
+          "focus_validation_count": 1,
+          "generation_success_rate": "1.0000",
+          "ready_rate": "0.8387",
+          "ready_or_limited_rate": "0.9871",
+          "review_required_rate": "0.0000",
+          "missing_or_failed_rate": "0.0000",
+          "core_payment_missing_rate": "0.1613",
+          "focus_sku_pass_rate": "1.0000"
+        },
+        "threshold_results": [
+          {
+            "metric_code": "generation_success_rate",
+            "numerator": 155,
+            "denominator": 155,
+            "observed_rate": "1.0000",
+            "operator": ">=",
+            "threshold": "0.9800",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "成功生成画像的 SKU 比例为 1.0000，门槛为 >= 0.9800，结果通过。"
+          },
+          {
+            "metric_code": "ready_rate",
+            "numerator": 130,
+            "denominator": 155,
+            "observed_rate": "0.8387",
+            "operator": ">=",
+            "threshold": "0.8500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "可供强消费的 ready 画像比例为 0.8387，门槛为 >= 0.8500，结果未通过。"
+          },
+          {
+            "metric_code": "ready_or_limited_rate",
+            "numerator": 153,
+            "denominator": 155,
+            "observed_rate": "0.9871",
+            "operator": ">=",
+            "threshold": "0.9500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "ready 与 ready_limited 合计比例为 0.9871，门槛为 >= 0.9500，结果通过。"
+          },
+          {
+            "metric_code": "review_required_rate",
+            "numerator": 0,
+            "denominator": 155,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "需要人工复核的画像比例为 0.0000，门槛为 <= 0.1500，结果通过。"
+          },
+          {
+            "metric_code": "missing_or_failed_rate",
+            "numerator": 0,
+            "denominator": 155,
+            "observed_rate": "0.0000",
+            "operator": "<=",
+            "threshold": "0.0500",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "缺少最低输入或生成失败的画像比例为 0.0000，门槛为 <= 0.0500，结果通过。"
+          },
+          {
+            "metric_code": "core_payment_missing_rate",
+            "numerator": 25,
+            "denominator": 155,
+            "observed_rate": "0.1613",
+            "operator": "<=",
+            "threshold": "0.1500",
+            "applicable": true,
+            "passed": false,
+            "reason_cn": "缺少核心成交理由的画像比例为 0.1613，门槛为 <= 0.1500，结果未通过。"
+          },
+          {
+            "metric_code": "focus_sku_pass_rate",
+            "numerator": 1,
+            "denominator": 1,
+            "observed_rate": "1.0000",
+            "operator": "=",
+            "threshold": "1.0000",
+            "applicable": true,
+            "passed": true,
+            "reason_cn": "重点 SKU 验证通过率为 1.0000，门槛为 = 1.0000，结果通过。"
+          }
+        ],
+        "blocking_issue_coverage_json": [],
+        "system_issues": [],
+        "failure_reason_codes": [
+          "ready_rate",
+          "core_payment_missing_rate"
+        ]
+      },
+      "profile_fingerprint_before": "a246b444eb66c1467ce44afa39842a3c33da0dbc0f632560165153c47d92e0e5",
+      "profile_fingerprint_after": "a246b444eb66c1467ce44afa39842a3c33da0dbc0f632560165153c47d92e0e5",
+      "profile_fields_unchanged": true,
+      "unaffected_profile_samples": [
+        {
+          "sku_code": "AC00026378",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "eb21464b504357b1e44badad6d16ba202d91ca044c0df7d48cf05fc9a876fb4f",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00028640",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "185f1d49c9022c8f9538cd446d5989f6e2aef0636c48ea168b4a3f42196d66b4",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00028642",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "4806d634167fb5e87cbe9470fa8d327d487b715aef18abbc5670c49aa1a1d550",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00029097",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "51d8459e605f54f977a2e0f798e42b6278063f69f11662e34c2d2ede9b273bca",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00029319",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "4aba7911503ec845c48c5040db553d0ecfa6da23424c123af056497234f716bf",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00029751",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "26d7c248999d74368ff4925c04315cbe486af3a94a55da79cb16d38ac210c355",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00030362",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "f9d23b1ca6bbff96f4bc5e933027f68bb0283a98116b3c58d8d743dbcb3f795a",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00030631",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "68f4c88992fe399fab7e01c29b5c3ab4686ebadd0859c03c22b0a5e7e0ac4cb2",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00030929",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "96e6eeb8b3f15a340e4ad36de6a1b4d582439bb43a2869a835b5eceae6255cc2",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00032008",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "e9463183496f908da64c5025c2c820c89b17e815a5deef107017e098949a5d05",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00032338",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "d5bb9cd736936cba1917f62d3a50a310ed5774fa749b5126e16a5e8969750f6c",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00032506",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "54da49b5729ba220d785fde9823ca6d9b82b955b23a56444a838b92a38f8f164",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00032615",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "ee91318152e885aa93d24379847d386f0b4e38d8a0a76d0f65000135e88f2b6d",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00032705",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "2576366ff4ec4f889c12310fdb9e2b6ce37eecc6b7b52b8967e4ee54d5c3f632",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00033476",
+          "status": "ready_limited",
+          "core_payment_anchor_count": 0,
+          "review_required": false,
+          "input_fingerprint": "a552bc74eb105a3de7b70ac90d161e60ffc94df0d12f74b2588494f3125d8285",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00033612",
+          "status": "ready",
+          "core_payment_anchor_count": 1,
+          "review_required": false,
+          "input_fingerprint": "237142afd5963bc84e60172a5015a5993a2cec8c6b37a7dcee3dc909e04f1644",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00033721",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "cf4b1d6f80bae12825107016b94845e3f19f2a293e8f9f276eb6b9b4baec8778",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00033789",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "3f77407ef71ffa72a200aeac58282872e61c61c4e8d01072617c4db1578d2f55",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00034284",
+          "status": "ready",
+          "core_payment_anchor_count": 2,
+          "review_required": false,
+          "input_fingerprint": "b8bf14f0739fb433d3f3948158b6a3afbdb53ee6df1c622508d8451ad6ed46e3",
+          "profile_fields_unchanged": true
+        },
+        {
+          "sku_code": "AC00034502",
+          "status": "ready",
+          "core_payment_anchor_count": 3,
+          "review_required": false,
+          "input_fingerprint": "32345f44ae2a8e9cd830f611120b6088dbaee5692d60ba81b57075e0b8f51f11",
+          "profile_fields_unchanged": true
+        }
+      ]
+    }
+  },
+  "downstream_guard": {
+    "before": {
+      "core3_sku_purchase_reason_profile": {
+        "count": 687,
+        "latest": "2026-07-10 09:04:05.187302"
+      },
+      "core3_sku_purchase_reason_anchor": {
+        "count": 7057,
+        "latest": "2026-07-10 09:04:05.202000"
+      },
+      "core3_purchase_reason_profile_version": {
+        "count": 3,
+        "latest": "2026-07-10 09:04:07.037641"
+      }
+    },
+    "after": {
+      "core3_sku_purchase_reason_profile": {
+        "count": 687,
+        "latest": "2026-07-10 09:04:05.187302"
+      },
+      "core3_sku_purchase_reason_anchor": {
+        "count": 7057,
+        "latest": "2026-07-10 09:04:05.202000"
+      },
+      "core3_purchase_reason_profile_version": {
+        "count": 3,
+        "latest": "2026-07-10 09:04:07.037641"
+      }
+    },
+    "unchanged": true
+  }
+}

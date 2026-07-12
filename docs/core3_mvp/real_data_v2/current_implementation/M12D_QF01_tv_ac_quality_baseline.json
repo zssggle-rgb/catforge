@@ -1,0 +1,568 @@
+{
+  "captured_at_utc": "2026-07-11T03:32:57.955342+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "categories": {
+    "TV": {
+      "category_code": "TV",
+      "selection": "current_published",
+      "m12d": {
+        "version": {
+          "purchase_reason_version_id": "m12d_ver_07cb258dc9594b908c30d850",
+          "batch_id": "m00_20260623014631_c8630747",
+          "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+          "rule_version": "m12d_sku_purchase_reason_profile_v0.1",
+          "release_status": "published",
+          "release_quality_status": "unassessed",
+          "is_current": true,
+          "source_batch_ids": [
+            "m00_20260623014631_c8630747",
+            "m00_20260619084551_857df63b",
+            "m00_20260613004311_d548f6dc"
+          ]
+        },
+        "profile_count": 377,
+        "anchor_count": 3299,
+        "status_counts": {
+          "ready_degraded": 359,
+          "weak_expression_only": 18
+        },
+        "review_required_count": 377,
+        "review_status_counts": {
+          "review_required": 377
+        },
+        "core_payment_missing_count": 120,
+        "profile_confidence": {
+          "min": "0.0500",
+          "p25": "0.3000",
+          "median": "0.4333",
+          "p75": "0.5000",
+          "max": "0.6000"
+        },
+        "input_status_counts": {
+          "param_profile_status": {
+            "conflict": 377
+          },
+          "claim_fact_status": {
+            "partial": 328,
+            "missing": 49
+          },
+          "comment_profile_status": {
+            "partial": 308,
+            "missing": 29,
+            "ready": 40
+          },
+          "market_profile_status": {
+            "partial": 377
+          },
+          "semantic_profile_status": {
+            "partial": 348,
+            "missing": 29
+          },
+          "semantic_market_status": {
+            "ready": 344,
+            "missing": 33
+          },
+          "claim_value_status": {
+            "partial": 271,
+            "missing": 88,
+            "ready": 18
+          }
+        },
+        "profile_risk_flags": {
+          "row_counts": {
+            "missing_or_partial_inputs": 377,
+            "comment_claim_contradiction": 22
+          },
+          "sku_counts": {
+            "missing_or_partial_inputs": 377,
+            "comment_claim_contradiction": 22
+          }
+        },
+        "anchor_role_counts": {
+          "weak_expression": 492,
+          "supporting": 2014,
+          "core_payment": 793
+        },
+        "anchor_evidence_strength_counts": {
+          "weak": 465,
+          "insufficient": 27,
+          "medium": 2014,
+          "strong": 793
+        },
+        "anchor_risk_flags": {
+          "row_counts": {
+            "missing_or_partial_inputs": 3299,
+            "comment_claim_contradiction": 22
+          },
+          "sku_counts": {
+            "missing_or_partial_inputs": 377,
+            "comment_claim_contradiction": 22
+          }
+        },
+        "review_reasons": {
+          "low_profile_confidence": 201,
+          "missing_or_partial_inputs": 377,
+          "core_payment_missing": 120
+        }
+      },
+      "upstream": {
+        "M03B": {
+          "row_count": 377,
+          "sku_count": 377,
+          "rule_versions": {
+            "m03b_tv_param_profile_v0.1": 377
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 0,
+          "conflict_count_distribution": {
+            "1": 377
+          },
+          "conflict_sku_count": 377
+        },
+        "M04C": {
+          "row_count": 328,
+          "sku_count": 328,
+          "rule_versions": {
+            "m04c_tv_claim_fact_profile_v0.1": 328
+          },
+          "taxonomy_versions": {
+            "tv_claim_taxonomy_manual_v0.1": 328
+          },
+          "quality_flags": {
+            "row_counts": {
+              "m03b_param_profile_missing": 328,
+              "claim_text_unmatched": 293
+            },
+            "sku_counts": {
+              "m03b_param_profile_missing": 328,
+              "claim_text_unmatched": 293
+            }
+          },
+          "review_required_sku_count": 0
+        },
+        "M05C": {
+          "row_count": 348,
+          "sku_count": 348,
+          "rule_versions": {
+            "m05c_tv_comment_fact_profile_v0.1": 348
+          },
+          "taxonomy_versions": {
+            "tv_comment_fact_taxonomy_manual_v0.1": 348
+          },
+          "quality_flags": {
+            "row_counts": {
+              "param_profile_missing": 90,
+              "claim_fact_profile_missing": 165,
+              "service_fulfillment_comment_excluded": 266,
+              "comment_contradicts_existing_param_or_claim": 172
+            },
+            "sku_counts": {
+              "param_profile_missing": 90,
+              "claim_fact_profile_missing": 165,
+              "service_fulfillment_comment_excluded": 266,
+              "comment_contradicts_existing_param_or_claim": 172
+            }
+          },
+          "review_required_sku_count": 0
+        },
+        "M07": {
+          "row_count": 377,
+          "sku_count": 377,
+          "rule_versions": {
+            "m07_market_profile_v1": 377
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {
+              "baseline_window_insufficient": 9,
+              "market_sample_limited": 2,
+              "observed_window_less_than_52w": 377,
+              "online_only_channel": 377,
+              "latest_week_gap": 13,
+              "trend_sample_insufficient": 37,
+              "price_band_sample_insufficient": 8,
+              "size_pool_insufficient": 8,
+              "size_pool_limited": 8,
+              "market_pool_insufficient": 2
+            },
+            "sku_counts": {
+              "baseline_window_insufficient": 9,
+              "market_sample_limited": 2,
+              "observed_window_less_than_52w": 377,
+              "online_only_channel": 377,
+              "latest_week_gap": 13,
+              "trend_sample_insufficient": 37,
+              "price_band_sample_insufficient": 8,
+              "size_pool_insufficient": 8,
+              "size_pool_limited": 8,
+              "market_pool_insufficient": 2
+            }
+          },
+          "review_required_sku_count": 0,
+          "sample_status_counts": {
+            "limited": 2,
+            "sufficient": 375
+          }
+        },
+        "M09C": {
+          "row_count": 348,
+          "sku_count": 348,
+          "rule_versions": {
+            "m09c_tv_user_task_profile_v0.2": 348
+          },
+          "taxonomy_versions": {
+            "m09c_tv_user_task_taxonomy_v0.1": 348
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 348
+        },
+        "M10C": {
+          "row_count": 348,
+          "sku_count": 348,
+          "rule_versions": {
+            "m10c_tv_target_group_profile_v0.2": 348
+          },
+          "taxonomy_versions": {
+            "m10c_tv_target_group_taxonomy_v0.1": 348
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 348
+        },
+        "M11C": {
+          "row_count": 348,
+          "sku_count": 348,
+          "rule_versions": {
+            "m11c_tv_value_battlefield_profile_v0.3": 348
+          },
+          "taxonomy_versions": {
+            "m11c_tv_value_battlefield_taxonomy_v0.2": 348
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 189
+        },
+        "M12C": {
+          "row_count": 12384,
+          "sku_count": 289,
+          "rule_versions": {
+            "m12c_claim_value_quantification_v0.1": 12384
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {
+              "single_sku_comparison_group": 163,
+              "l4_threshold_only": 6136,
+              "relaxed_pool_not_amount_quantifiable": 6136,
+              "l4_threshold_only_no_amount": 6136
+            },
+            "sku_counts": {
+              "single_sku_comparison_group": 54,
+              "l4_threshold_only": 263,
+              "relaxed_pool_not_amount_quantifiable": 263,
+              "l4_threshold_only_no_amount": 263
+            }
+          },
+          "review_required_sku_count": 0
+        }
+      },
+      "category_fingerprint": "10a62f160724af6e673cc4f8c4659d90232c00e67e6d49490e0a578b6f67448b"
+    },
+    "AC": {
+      "category_code": "AC",
+      "selection": "current_published",
+      "m12d": {
+        "version": {
+          "purchase_reason_version_id": "m12d_ver_60fe5fee508b9344ab16ccf9",
+          "batch_id": "m00_20260624000202_1150a669",
+          "m12d_profile_version": "m12d_ac_purchase_reason_profile_v0_2",
+          "rule_version": "m12d_sku_purchase_reason_profile_v0.1",
+          "release_status": "published",
+          "release_quality_status": "unassessed",
+          "is_current": true,
+          "source_batch_ids": [
+            "m00_20260624000202_1150a669"
+          ]
+        },
+        "profile_count": 155,
+        "anchor_count": 1879,
+        "status_counts": {
+          "review_required": 98,
+          "weak_expression_only": 7,
+          "ready_degraded": 50
+        },
+        "review_required_count": 155,
+        "review_status_counts": {
+          "review_required": 155
+        },
+        "core_payment_missing_count": 135,
+        "profile_confidence": {
+          "min": "0.0500",
+          "p25": "0.0500",
+          "median": "0.0500",
+          "p75": "0.3000",
+          "max": "0.5500"
+        },
+        "input_status_counts": {
+          "param_profile_status": {
+            "conflict": 29,
+            "ready": 126
+          },
+          "claim_fact_status": {
+            "partial": 121,
+            "ready": 34
+          },
+          "comment_profile_status": {
+            "partial": 141,
+            "missing": 11,
+            "ready": 3
+          },
+          "market_profile_status": {
+            "partial": 155
+          },
+          "semantic_profile_status": {
+            "partial": 144,
+            "missing": 11
+          },
+          "semantic_market_status": {
+            "ready": 144,
+            "missing": 11
+          },
+          "claim_value_status": {
+            "partial": 140,
+            "missing": 15
+          }
+        },
+        "profile_risk_flags": {
+          "row_counts": {
+            "claim_value_drag_factor": 98,
+            "missing_or_partial_inputs": 155,
+            "ac_missing_m12c_core_cap": 15,
+            "ac_scene_input_missing": 11,
+            "ac_claim_value_risk_role_dominant": 99
+          },
+          "sku_counts": {
+            "claim_value_drag_factor": 98,
+            "missing_or_partial_inputs": 155,
+            "ac_missing_m12c_core_cap": 15,
+            "ac_scene_input_missing": 11,
+            "ac_claim_value_risk_role_dominant": 99
+          }
+        },
+        "anchor_role_counts": {
+          "risk_drag": 1190,
+          "weak_expression": 323,
+          "supporting": 203,
+          "core_payment": 163
+        },
+        "anchor_evidence_strength_counts": {
+          "insufficient": 1235,
+          "medium": 125,
+          "strong": 241,
+          "weak": 278
+        },
+        "anchor_risk_flags": {
+          "row_counts": {
+            "claim_value_drag_factor": 1206,
+            "missing_or_partial_inputs": 1879,
+            "ac_claim_value_risk_role_dominant": 1216,
+            "ac_missing_m12c_core_cap": 154,
+            "ac_scene_input_missing": 108
+          },
+          "sku_counts": {
+            "claim_value_drag_factor": 98,
+            "missing_or_partial_inputs": 155,
+            "ac_claim_value_risk_role_dominant": 99,
+            "ac_missing_m12c_core_cap": 15,
+            "ac_scene_input_missing": 11
+          }
+        },
+        "review_reasons": {
+          "risk_drag_anchor_present": 98,
+          "core_payment_missing": 135,
+          "low_profile_confidence": 135,
+          "missing_or_partial_inputs": 155
+        }
+      },
+      "upstream": {
+        "M03B": {
+          "row_count": 155,
+          "sku_count": 155,
+          "rule_versions": {
+            "m03b_ac_param_profile_v0.1": 155
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 0,
+          "conflict_count_distribution": {
+            "0": 126,
+            "1": 29
+          },
+          "conflict_sku_count": 29
+        },
+        "M04C": {
+          "row_count": 155,
+          "sku_count": 155,
+          "rule_versions": {
+            "m04c_ac_claim_fact_profile_v0.1": 155
+          },
+          "taxonomy_versions": {
+            "ac_claim_taxonomy_manual_v0.1": 155
+          },
+          "quality_flags": {
+            "row_counts": {
+              "claim_text_unmatched": 121
+            },
+            "sku_counts": {
+              "claim_text_unmatched": 121
+            }
+          },
+          "review_required_sku_count": 0
+        },
+        "M05C": {
+          "row_count": 144,
+          "sku_count": 144,
+          "rule_versions": {
+            "m05c_ac_comment_fact_profile_v0.1": 144
+          },
+          "taxonomy_versions": {
+            "ac_comment_fact_taxonomy_manual_v0.1": 144
+          },
+          "quality_flags": {
+            "row_counts": {
+              "comment_contradicts_existing_param_or_claim": 120,
+              "service_fulfillment_comment_excluded": 141
+            },
+            "sku_counts": {
+              "comment_contradicts_existing_param_or_claim": 120,
+              "service_fulfillment_comment_excluded": 141
+            }
+          },
+          "review_required_sku_count": 0
+        },
+        "M07": {
+          "row_count": 155,
+          "sku_count": 155,
+          "rule_versions": {
+            "m07_market_profile_v1": 155
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {
+              "observed_window_less_than_52w": 155,
+              "online_only_channel": 155,
+              "market_pool_limited": 20,
+              "market_pool_insufficient": 20,
+              "price_band_sample_insufficient": 2,
+              "size_pool_insufficient": 2
+            },
+            "sku_counts": {
+              "observed_window_less_than_52w": 155,
+              "online_only_channel": 155,
+              "market_pool_limited": 20,
+              "market_pool_insufficient": 20,
+              "price_band_sample_insufficient": 2,
+              "size_pool_insufficient": 2
+            }
+          },
+          "review_required_sku_count": 0,
+          "sample_status_counts": {
+            "sufficient": 155
+          }
+        },
+        "M09C": {
+          "row_count": 144,
+          "sku_count": 144,
+          "rule_versions": {
+            "m09c_ac_user_task_profile_v0.2": 144
+          },
+          "taxonomy_versions": {
+            "m09c_ac_user_task_taxonomy_v0.1": 144
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 142
+        },
+        "M10C": {
+          "row_count": 144,
+          "sku_count": 144,
+          "rule_versions": {
+            "m10c_ac_target_group_profile_v0.2": 144
+          },
+          "taxonomy_versions": {
+            "m10c_ac_target_group_taxonomy_v0.1": 144
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 144
+        },
+        "M11C": {
+          "row_count": 144,
+          "sku_count": 144,
+          "rule_versions": {
+            "m11c_ac_value_battlefield_profile_v0.2": 144
+          },
+          "taxonomy_versions": {
+            "m11c_ac_value_battlefield_taxonomy_v0.1": 144
+          },
+          "quality_flags": {
+            "row_counts": {},
+            "sku_counts": {}
+          },
+          "review_required_sku_count": 34
+        },
+        "M12C": {
+          "row_count": 6345,
+          "sku_count": 140,
+          "rule_versions": {
+            "m12c_claim_value_quantification_v0.1": 6345
+          },
+          "taxonomy_versions": {},
+          "quality_flags": {
+            "row_counts": {
+              "l4_threshold_only": 2931,
+              "relaxed_pool_not_amount_quantifiable": 2943,
+              "l4_threshold_only_no_amount": 2931,
+              "comment_negative": 665,
+              "single_sku_comparison_group": 85,
+              "insufficient_comparison_group": 12,
+              "sample_not_sufficient_for_amount": 12,
+              "without_claim_group_too_small": 12
+            },
+            "sku_counts": {
+              "l4_threshold_only": 139,
+              "relaxed_pool_not_amount_quantifiable": 140,
+              "l4_threshold_only_no_amount": 139,
+              "comment_negative": 98,
+              "single_sku_comparison_group": 36,
+              "insufficient_comparison_group": 1,
+              "sample_not_sufficient_for_amount": 1,
+              "without_claim_group_too_small": 1
+            }
+          },
+          "review_required_sku_count": 0
+        }
+      },
+      "category_fingerprint": "a3ed6185bdf6023ff2405664740b6d773622bab5621b2da6dc60737709db4862"
+    }
+  },
+  "baseline_fingerprint": "ce96cd3542aa571f93dce47350c54f07c11a7a9b765e76fdf254bfaa84fa8605"
+}

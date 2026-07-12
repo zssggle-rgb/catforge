@@ -21,6 +21,7 @@ from app.services.core3_real_data.m04c_claim_fact_profile_service import M04CRun
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606210001"
+PARAM_BATCH_ID = "m00_202606200001"
 SKU_CODE = "TV00077777"
 
 
@@ -261,6 +262,7 @@ def test_m04c_runner_generates_claim_fact_profile_and_service_separation():
 
     profile = session.execute(select(entities.Core3SkuClaimFactProfile)).scalar_one()
     assert profile.fact_claim_count >= 6
+    assert profile.quality_flags == []
     assert "tv_claim_service_fulfillment" in profile.service_claim_codes
     assert profile.dimension_position_profile_json["supported:picture_quality"]["position_code"] == "picture_flagship_miniled_composite"
 
@@ -334,6 +336,102 @@ def test_m04c_eye_care_does_not_borrow_hdr_brightness_or_refresh_params():
         "anti_glare_flag",
     }
     assert eye_care_fact.wtp_input_guard == "blocked_no_param"
+    profile = session.execute(select(entities.Core3SkuClaimFactProfile)).scalar_one()
+    assert "claim_param_support_conflict" not in profile.quality_flags
+    assert profile.claim_summary_json["fact_support_warning_count"] == 1
+
+
+def test_m04c_unmatched_text_is_row_coverage_warning_not_profile_degradation() -> None:
+    session = make_session()
+    session.add(promo_evidence("ev_claim_unmatched", "测试专用未归类表达XYZ"))
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuClaimFactProfile)).scalar_one()
+    assert "claim_text_unmatched" not in profile.quality_flags
+    assert profile.claim_summary_json["coverage_status"] == "partial"
+    assert profile.claim_summary_json["unmatched_claim_text_count"] == 1
+    assert profile.claim_summary_json["coverage_warnings"] == [
+        {
+            "issue_code": "claim_text_unmatched",
+            "severity": "warning",
+            "scope": "row",
+            "source_claim_key": "evidence:ev_claim_unmatched",
+            "claim_seq": 1,
+            "claim_text": "测试专用未归类表达XYZ",
+            "evidence_id": "ev_claim_unmatched",
+        }
+    ]
+    assert "ev_claim_unmatched" in profile.evidence_ids
+
+
+def test_m04c_reads_current_m03b_from_serving_scope_when_claim_batch_differs() -> None:
+    session = make_session()
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=PARAM_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["attribute_data"],
+            ruleset_version="tv-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+        )
+    )
+    param_profile = session.execute(select(entities.Core3SkuParamProfile)).scalar_one()
+    param_profile.batch_id = PARAM_BATCH_ID
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuClaimFactProfile)).scalar_one()
+    assert "m03b_param_profile_missing" not in profile.quality_flags
+    assert profile.claim_summary_json["m03b_param_profile_batch_id"] == PARAM_BATCH_ID
+    assert profile.claim_summary_json["m03b_param_profile_rule_version"] == CORE3_M03B_RULE_VERSION
+    assert profile.claim_summary_json["m03b_lookup_strategy"] == "same_batch_then_latest_category_rule"
+
+
+def test_m04c_retains_true_m03b_missing_as_profile_issue() -> None:
+    session = make_session()
+    param_profile = session.execute(select(entities.Core3SkuParamProfile)).scalar_one()
+    session.delete(param_profile)
+    session.commit()
+
+    M04CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        input_source="evidence",
+        force_rebuild=True,
+    )
+    session.commit()
+
+    profile = session.execute(select(entities.Core3SkuClaimFactProfile)).scalar_one()
+    assert profile.quality_flags == ["m03b_param_profile_missing"]
+    assert profile.param_unknown_claim_count > 0
 
 
 def test_m04c_theater_scene_is_fact_evidence_but_not_product_wtp_scope():

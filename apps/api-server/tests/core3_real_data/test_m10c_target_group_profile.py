@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_insight, catforge_pipeline
 from app.models import entities
+from app.services.core3_real_data import m10c_target_group_service
 from app.services.core3_real_data.constants import (
     CORE3_M03B_RULE_VERSION,
     CORE3_M03B_TAXONOMY_VERSION,
@@ -21,8 +22,10 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
 )
 from app.services.core3_real_data.m10c_target_group_service import (
+    M10C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
     M10CTargetGroupTaxonomyLoader,
     M10CRunner,
+    _profile_review_decision,
     ac_target_group_taxonomy_v0_1,
 )
 
@@ -632,3 +635,150 @@ def test_m10c_pipeline_and_insight_cli_query_target_groups() -> None:
     assert natural["primary_target_group_code"] == "TG_MAINSTREAM_FAMILY_VIEWER"
     assert taxonomy["target_group_count"] == 10
     assert taxonomy["taxonomy_version"] == CORE3_M10C_TV_TAXONOMY_VERSION
+
+
+def _primary_group_payload(
+    *,
+    code: str = "TG_MAINSTREAM_FAMILY_VIEWER",
+    relation_status: str = "primary_target_group",
+    confidence: Decimal = M10C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+) -> dict:
+    return {
+        "target_group_code": code,
+        "relation_status": relation_status,
+        "target_group_score": Decimal("0.7200"),
+        "comment_audience_motivation_score": Decimal("0.7000"),
+        "task_support_score": Decimal("0.8500"),
+        "claim_alignment_score": Decimal("0.5000"),
+        "param_capability_score": Decimal("0.5000"),
+        "confidence": confidence,
+        "score_breakdown_json": {"size_price": {"gate_status": "matched"}},
+        "review_required": True,
+        "review_reason_json": {
+            "reason_codes": [
+                "service_signal_excluded",
+                "unknown_param_codes_present",
+            ]
+        },
+    }
+
+
+def test_m10c_profile_quality_depends_on_primary_group_not_relation_warnings() -> None:
+    primary = _primary_group_payload()
+    secondary = {
+        **_primary_group_payload(
+            code="TG_VALUE_SENSITIVE_BUYER",
+            relation_status="secondary_target_group",
+        ),
+        "target_group_score": Decimal("0.6900"),
+    }
+
+    review_required, reason = _profile_review_decision(
+        primary,
+        score_payloads=[primary, secondary],
+        no_primary_reason=None,
+    )
+
+    assert review_required is False
+    assert reason == {}
+
+
+def test_m10c_profile_quality_limits_missing_low_confidence_or_ambiguous_primary() -> None:
+    missing_review, missing_reason = _profile_review_decision(
+        None,
+        score_payloads=[],
+        no_primary_reason="评论证据不足，未形成主目标客群。",
+    )
+    low_confidence_primary = _primary_group_payload(confidence=Decimal("0.6667"))
+    low_confidence_review, low_confidence_reason = _profile_review_decision(
+        low_confidence_primary,
+        score_payloads=[low_confidence_primary],
+        no_primary_reason=None,
+    )
+    ambiguous_primary = _primary_group_payload()
+    tied_secondary = _primary_group_payload(
+        code="TG_VALUE_SENSITIVE_BUYER",
+        relation_status="secondary_target_group",
+    )
+    ambiguous_review, ambiguous_reason = _profile_review_decision(
+        ambiguous_primary,
+        score_payloads=[ambiguous_primary, tied_secondary],
+        no_primary_reason=None,
+    )
+
+    assert missing_review is True
+    assert missing_reason["reason_codes"] == ["no_primary_target_group"]
+    assert low_confidence_review is True
+    assert (
+        "primary_target_group_confidence_below_threshold"
+        in low_confidence_reason["reason_codes"]
+    )
+    assert ambiguous_review is True
+    assert "primary_target_group_ambiguous" in ambiguous_reason["reason_codes"]
+    assert ambiguous_reason["competing_target_group_codes"] == [
+        "TG_VALUE_SENSITIVE_BUYER"
+    ]
+
+
+def test_m10c_profile_quality_policy_does_not_change_group_scores_or_relations(
+    monkeypatch,
+) -> None:
+    session = make_session()
+    new_rule_version = "m10c_tv_target_group_profile_qf07_new"
+    legacy_projection_rule_version = "m10c_tv_target_group_profile_qf07_legacy"
+
+    M10CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=new_rule_version,
+        force_rebuild=True,
+    )
+    monkeypatch.setattr(
+        m10c_target_group_service,
+        "_profile_review_decision",
+        lambda primary, *, score_payloads, no_primary_reason: (
+            True,
+            {"scope": "profile", "reason_codes": ["legacy_projection"]},
+        ),
+    )
+    M10CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=legacy_projection_rule_version,
+        force_rebuild=True,
+    )
+
+    def score_snapshot(rule_version: str) -> list[tuple]:
+        rows = session.scalars(
+            select(entities.Core3M10cSkuTargetGroupScore).where(
+                entities.Core3M10cSkuTargetGroupScore.rule_version == rule_version
+            )
+        ).all()
+        return sorted(
+            (
+                row.sku_code,
+                row.target_group_code,
+                row.relation_status,
+                row.target_group_score,
+                row.comment_audience_motivation_score,
+                row.task_support_score,
+                row.size_price_fit_score,
+                row.claim_alignment_score,
+                row.param_capability_score,
+                row.market_validation_score,
+                row.brand_trust_boost,
+                row.confidence,
+                row.evidence_ids_json,
+                row.review_required,
+                row.review_reason_json,
+            )
+            for row in rows
+        )
+
+    assert score_snapshot(new_rule_version) == score_snapshot(
+        legacy_projection_rule_version
+    )

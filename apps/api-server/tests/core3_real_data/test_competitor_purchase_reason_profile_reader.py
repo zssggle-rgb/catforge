@@ -19,9 +19,13 @@ from app.services.core3_real_data.constants import (
     M12DEvidenceStrength,
     M12DInputStatus,
     M12DProfileStatus,
+    M12DReleaseQualityStatus,
 )
-from app.services.core3_real_data.purchase_reason_profile_repositories import PurchaseReasonProfileRepository
+from app.services.core3_real_data.purchase_reason_profile_repositories import (
+    PurchaseReasonProfileRepository,
+)
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
+    M12DDownstreamReadContract,
     M12DPurchaseReasonAnchorRecord,
     M12DPurchaseReasonProfileVersionRecord,
     M12DSkuPurchaseReasonProfileRecord,
@@ -34,8 +38,12 @@ BATCH_ID = "m00_20260623014631_c8630747"
 M12D_VERSION = "m12d_tv_purchase_reason_profile_v0_1_draft"
 
 
-def test_fixture_reader_reads_published_contract_and_marks_degraded_target(repo_root: Path) -> None:
-    reader = FixturePurchaseReasonProfileReader.from_path(repo_root / default_m12d_contract_fixture_path())
+def test_fixture_reader_reads_published_contract_and_marks_degraded_target(
+    repo_root: Path,
+) -> None:
+    reader = FixturePurchaseReasonProfileReader.from_path(
+        repo_root / default_m12d_contract_fixture_path()
+    )
 
     contract = reader.read(
         PurchaseReasonProfileLookupKey(
@@ -62,7 +70,9 @@ def test_fixture_reader_reads_published_contract_and_marks_degraded_target(repo_
 
 
 def test_fixture_reader_blocks_target_when_profile_is_missing(repo_root: Path) -> None:
-    reader = FixturePurchaseReasonProfileReader.from_path(repo_root / default_m12d_contract_fixture_path())
+    reader = FixturePurchaseReasonProfileReader.from_path(
+        repo_root / default_m12d_contract_fixture_path()
+    )
 
     contract = reader.read(
         PurchaseReasonProfileLookupKey(
@@ -82,8 +92,12 @@ def test_fixture_reader_blocks_target_when_profile_is_missing(repo_root: Path) -
     assert "待生成" in decision.message_cn
 
 
-def test_fixture_reader_drops_candidate_when_profile_is_missing(repo_root: Path) -> None:
-    reader = FixturePurchaseReasonProfileReader.from_path(repo_root / default_m12d_contract_fixture_path())
+def test_fixture_reader_drops_candidate_when_profile_is_missing(
+    repo_root: Path,
+) -> None:
+    reader = FixturePurchaseReasonProfileReader.from_path(
+        repo_root / default_m12d_contract_fixture_path()
+    )
 
     contract = reader.read(
         PurchaseReasonProfileLookupKey(
@@ -103,8 +117,36 @@ def test_fixture_reader_drops_candidate_when_profile_is_missing(repo_root: Path)
     assert "不能依赖关键价值锚点进入 Top 3" in decision.message_cn
 
 
-def test_fixture_reader_treats_unpublished_version_as_not_found(repo_root: Path) -> None:
-    reader = FixturePurchaseReasonProfileReader.from_path(repo_root / default_m12d_contract_fixture_path())
+def test_reader_keeps_proposition_only_sku_in_other_dimensions() -> None:
+    contract = M12DDownstreamReadContract(
+        found=True,
+        lookup_key={"category_code": "AC", "sku_code": "AC001"},
+        consumption_state="published_degraded",
+        downstream_action="degraded_pair_scoring",
+        capabilities={
+            "comparison_mode": "facts_only",
+            "fact_dimensions_allowed": True,
+            "proposition_comparison_allowed": True,
+        },
+    )
+
+    target = decide_target_m12d_usage(contract)
+    candidate = decide_candidate_m12d_usage(contract)
+
+    assert target.action == "fact_dimensions_only"
+    assert target.pair_scoring_allowed is False
+    assert target.requires_review is False
+    assert candidate.action == "fact_dimensions_only"
+    assert candidate.pair_scoring_allowed is False
+    assert candidate.top3_eligible is True
+
+
+def test_fixture_reader_treats_unpublished_version_as_not_found(
+    repo_root: Path,
+) -> None:
+    reader = FixturePurchaseReasonProfileReader.from_path(
+        repo_root / default_m12d_contract_fixture_path()
+    )
 
     contract = reader.read(
         PurchaseReasonProfileLookupKey(
@@ -160,14 +202,35 @@ def test_repository_reader_only_reads_published_m12d(client) -> None:
         assert published.found is True
         assert published.consumption_state == "published_ready"
         assert published.profile is not None
-        assert published.profile.core_payment_anchors == ["worth_paying_more_for_experience_upgrade"]
+        assert published.profile.core_payment_anchors == [
+            "worth_paying_more_for_experience_upgrade"
+        ]
         assert decide_candidate_m12d_usage(published).top3_eligible is True
+
+        serving_scope = reader.read(
+            PurchaseReasonProfileLookupKey(
+                project_id="project_competitor_m12d_reader",
+                category_code=Core3CategoryCode.TV,
+                batch_id=(
+                    "serving-scope:TV:batch_without_m12d,batch_competitor_m12d_reader"
+                ),
+                m12d_profile_version="m12d_competitor_reader_v1",
+                sku_code="TV_READER_001",
+            )
+        )
+        assert serving_scope.found is True
+        assert serving_scope.profile is not None
+        assert serving_scope.profile.batch_id == "batch_competitor_m12d_reader"
+        assert serving_scope.lookup_key["batch_id"] == "batch_competitor_m12d_reader"
     finally:
         session.close()
 
 
 def test_competitor_m12d_reader_does_not_import_m12d_runner(repo_root: Path) -> None:
-    source = (repo_root / "apps/api-server/app/services/core3_real_data/analyst/purchase_reason_profile_reader.py").read_text(encoding="utf-8")
+    source = (
+        repo_root
+        / "apps/api-server/app/services/core3_real_data/analyst/purchase_reason_profile_reader.py"
+    ).read_text(encoding="utf-8")
 
     assert "purchase_reason_profile_runner" not in source
     assert "PurchaseReasonProfileBatchGenerator" not in source
@@ -180,6 +243,7 @@ def _version_payload() -> M12DPurchaseReasonProfileVersionRecord:
         category_code=Core3CategoryCode.TV,
         batch_id="batch_competitor_m12d_reader",
         m12d_profile_version="m12d_competitor_reader_v1",
+        release_quality_status=M12DReleaseQualityStatus.READY,
         source_batch_ids_json=["m00_fixture"],
         input_scope_json={"sku_count": 1},
         sku_count=1,

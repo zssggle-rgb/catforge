@@ -107,14 +107,22 @@ def build_pm_comparison_payload(
         ),
     ]
     subject_cn = "四款产品" if len(products) == 4 else "本品与重点竞品"
-    visible_sections = [_replace_subject(section, subject_cn) for section in sections if section is not None]
+    visible_sections = [
+        _replace_subject(section, subject_cn)
+        for section in sections
+        if section is not None
+    ]
     return {
         "schema_version": "competitor_pm_comparison_v1",
         "title": title,
         "product_names": list(names),
         "sections": [section.to_dict() for section in visible_sections],
         "evidence_report_link": (
-            {"label": "查看分析依据", "url": evidence_report_url, "type": "evidence_report"}
+            {
+                "label": "查看分析依据",
+                "url": evidence_report_url,
+                "type": "evidence_report",
+            }
             if evidence_report_url
             else None
         ),
@@ -157,7 +165,11 @@ def render_pm_comparison_report(*, title: str, payload: dict[str, Any]) -> str:
 def pm_business_output_issue(text: str) -> str | None:
     """Return a safe validation error when internal identifiers would leak."""
 
-    return "用户选择对比报告包含未解析的内部字段。" if INTERNAL_OUTPUT_PATTERN.search(text) else None
+    return (
+        "用户选择对比报告包含未解析的内部字段。"
+        if INTERNAL_OUTPUT_PATTERN.search(text)
+        else None
+    )
 
 
 def _overview_section(products: list[dict[str, Any]]) -> PmComparisonSection | None:
@@ -199,13 +211,22 @@ def _market_section(products: list[dict[str, Any]]) -> PmComparisonSection | Non
         highest = max(sales, key=lambda item: item[1])
         lowest = min(sales, key=lambda item: item[1])
         difference_parts.append(f"{highest[0]}周均销量最高，{lowest[0]}周均销量最低")
-    scopes = [str((product.get("market") or {}).get("_pool_scope_key") or "") for product in products]
-    common = "四款产品处在同一市场池，可以直接比较价格、周均销量和池内位置。" if _same_nonempty(scopes) else None
+    scopes = [
+        str((product.get("market") or {}).get("_pool_scope_key") or "")
+        for product in products
+    ]
+    common = (
+        "四款产品处在同一市场池，可以直接比较价格、周均销量和池内位置。"
+        if _same_nonempty(scopes)
+        else None
+    )
     return PmComparisonSection(
         title_cn="一、四款产品分别卖多少钱、卖得怎么样",
         rows=tuple(rows),
         common_ground_cn=common,
-        key_difference_cn="；".join(difference_parts) + "。" if difference_parts else None,
+        key_difference_cn="；".join(difference_parts) + "。"
+        if difference_parts
+        else None,
     )
 
 
@@ -217,7 +238,9 @@ def _matrix_section(
     summary: tuple[str | None, str | None] = (None, None),
 ) -> PmComparisonSection | None:
     row_order = _ordered_labels(products, source_key)
-    rows = _rows_from_source(products, source_key=source_key, row_order=row_order, minimum_assessable=2)
+    rows = _rows_from_source(
+        products, source_key=source_key, row_order=row_order, minimum_assessable=2
+    )
     if not rows:
         return None
     return PmComparisonSection(
@@ -272,8 +295,14 @@ def _message_section(products: list[dict[str, Any]]) -> PmComparisonSection | No
         for product in products
         if (product.get("message_reception") or {}).get("contradicted_tags")
     ]
-    common = f"四款产品都重点表达了{'、'.join(common_tags[:4])}。" if common_tags else None
-    difference = f"{'、'.join(divided)}存在稳定的用户反向反馈，其余产品当前未识别到同类稳定分歧。" if divided else None
+    common = (
+        f"四款产品都重点表达了{'、'.join(common_tags[:4])}。" if common_tags else None
+    )
+    difference = (
+        f"{'、'.join(divided)}存在稳定的用户反向反馈，其余产品当前未识别到同类稳定分歧。"
+        if divided
+        else None
+    )
     return PmComparisonSection(
         title_cn="六、产品重点讲什么，用户实际理解了什么",
         rows=tuple(rows),
@@ -282,18 +311,29 @@ def _message_section(products: list[dict[str, Any]]) -> PmComparisonSection | No
     )
 
 
-def _purchase_reason_section(products: list[dict[str, Any]]) -> PmComparisonSection | None:
+def _purchase_reason_section(
+    products: list[dict[str, Any]],
+) -> PmComparisonSection | None:
     rows = _rows_from_source(
         products,
         source_key="purchase_reasons",
-        row_order=("核心购买理由", "辅助购买理由", "尚未形成的理由", "体验风险"),
+        row_order=(
+            "核心购买理由",
+            "辅助购买理由",
+            "产品希望传达但尚未观察到用户承接",
+            "购买阻力",
+        ),
         minimum_assessable=2,
     )
     if not rows:
         return None
     common_tags = _common_tags(products, "purchase_reasons", tag_key="core_tags")
     unique_parts = _unique_tag_parts(products, "purchase_reasons", tag_key="core_tags")
-    common = f"四款产品共同形成了{'、'.join(common_tags[:4])}等购买理由。" if common_tags else None
+    common = (
+        f"四款产品共同形成了{'、'.join(common_tags[:4])}等购买理由。"
+        if common_tags
+        else None
+    )
     difference = "；".join(unique_parts[:4]) + "。" if unique_parts else None
     return PmComparisonSection(
         title_cn="七、用户为什么会选择四款产品",
@@ -309,7 +349,13 @@ def _substitution_section(
 ) -> PmComparisonSection | None:
     if not substitution_rows or len(product_names) < 2:
         return None
-    labels = ("与本品重合的选择理由", "竞品更突出的理由", "本品保留的理由", "替代程度")
+    labels = (
+        "与本品重合的选择理由",
+        "竞品更突出的理由",
+        "本品保留的理由",
+        "替代程度",
+        "双方各自的购买阻力",
+    )
     by_name = {str(row.get("name") or ""): row for row in substitution_rows}
     rows: list[PmComparisonRow] = []
     for label in labels:
@@ -324,7 +370,9 @@ def _substitution_section(
             rows.append(PmComparisonRow(label_cn=label, values_cn=tuple(values)))
     if not rows:
         return None
-    return PmComparisonSection(title_cn="八、用户在四款产品之间会怎样取舍", rows=tuple(rows))
+    return PmComparisonSection(
+        title_cn="八、用户在四款产品之间会怎样取舍", rows=tuple(rows)
+    )
 
 
 def _rows_from_source(
@@ -336,7 +384,10 @@ def _rows_from_source(
 ) -> list[PmComparisonRow]:
     rows: list[PmComparisonRow] = []
     for label in row_order:
-        values = tuple(str((product.get(source_key) or {}).get(label) or "暂不能判断") for product in products)
+        values = tuple(
+            str((product.get(source_key) or {}).get(label) or "暂不能判断")
+            for product in products
+        )
         if sum(_is_assessable(value) for value in values) < minimum_assessable:
             continue
         rows.append(PmComparisonRow(label_cn=label, values_cn=values))
@@ -353,12 +404,17 @@ def _ordered_labels(products: list[dict[str, Any]], source_key: str) -> tuple[st
     return tuple(labels)
 
 
-def _capability_summary(products: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+def _capability_summary(
+    products: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
     labels = _ordered_labels(products, "capabilities")
     differing: list[str] = []
     common: list[str] = []
     for label in labels:
-        values = [str((product.get("capabilities") or {}).get(label) or "") for product in products]
+        values = [
+            str((product.get("capabilities") or {}).get(label) or "")
+            for product in products
+        ]
         assessable = [value for value in values if _is_assessable(value)]
         if len(assessable) < 2:
             continue
@@ -367,27 +423,46 @@ def _capability_summary(products: list[dict[str, Any]]) -> tuple[str | None, str
         else:
             differing.append(label)
     common_cn = f"四款产品在{'、'.join(common[:4])}上表现接近。" if common else None
-    difference_cn = f"实际能力差异主要集中在{'、'.join(differing[:5])}。" if differing else None
+    difference_cn = (
+        f"实际能力差异主要集中在{'、'.join(differing[:5])}。" if differing else None
+    )
     return common_cn, difference_cn
 
 
-def _value_delivery_summary(products: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+def _value_delivery_summary(
+    products: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
     complete = [
         str(product.get("name") or "产品")
         for product in products
-        if _is_assessable(str((product.get("value_delivery") or {}).get("已形成稳定购买理由") or ""))
+        if _is_assessable(
+            str((product.get("value_delivery") or {}).get("已形成稳定购买理由") or "")
+        )
     ]
     divided = [
         str(product.get("name") or "产品")
         for product in products
-        if _is_assessable(str((product.get("value_delivery") or {}).get("存在体验分歧") or ""))
+        if _is_assessable(
+            str(
+                (product.get("value_delivery") or {}).get("已成立理由上的购买阻力")
+                or ""
+            )
+        )
     ]
-    common = f"{'、'.join(complete)}已有产品事实、用户感知和购买理由共同支撑的价值主题。" if complete else None
-    difference = f"{'、'.join(divided)}仍存在用户体验分歧。" if divided else None
+    common = (
+        f"{'、'.join(complete)}已有产品事实、用户感知和购买理由共同支撑的价值主题。"
+        if complete
+        else None
+    )
+    difference = (
+        f"{'、'.join(divided)}在已成立购买理由上仍存在用户顾虑。" if divided else None
+    )
     return common, difference
 
 
-def _numeric_product_values(products: list[dict[str, Any]], key: str) -> list[tuple[str, Decimal]]:
+def _numeric_product_values(
+    products: list[dict[str, Any]], key: str
+) -> list[tuple[str, Decimal]]:
     values: list[tuple[str, Decimal]] = []
     for product in products:
         value = _decimal((product.get("market") or {}).get(f"_{key}"))
@@ -396,22 +471,46 @@ def _numeric_product_values(products: list[dict[str, Any]], key: str) -> list[tu
     return values
 
 
-def _common_tags(products: list[dict[str, Any]], source_key: str, *, tag_key: str = "_all_tags") -> list[str]:
-    tag_sets = [set(str(value) for value in (product.get(source_key) or {}).get(tag_key) or [] if value) for product in products]
+def _common_tags(
+    products: list[dict[str, Any]], source_key: str, *, tag_key: str = "_all_tags"
+) -> list[str]:
+    tag_sets = [
+        set(
+            str(value)
+            for value in (product.get(source_key) or {}).get(tag_key) or []
+            if value
+        )
+        for product in products
+    ]
     if not tag_sets or any(not values for values in tag_sets):
         return []
     return sorted(set.intersection(*tag_sets))
 
 
-def _unique_tag_parts(products: list[dict[str, Any]], source_key: str, *, tag_key: str = "_all_tags") -> list[str]:
-    tag_sets = [set(str(value) for value in (product.get(source_key) or {}).get(tag_key) or [] if value) for product in products]
+def _unique_tag_parts(
+    products: list[dict[str, Any]], source_key: str, *, tag_key: str = "_all_tags"
+) -> list[str]:
+    tag_sets = [
+        set(
+            str(value)
+            for value in (product.get(source_key) or {}).get(tag_key) or []
+            if value
+        )
+        for product in products
+    ]
     parts: list[str] = []
     for index, product in enumerate(products):
         own = tag_sets[index]
-        others = set().union(*(tag_sets[:index] + tag_sets[index + 1 :])) if len(tag_sets) > 1 else set()
+        others = (
+            set().union(*(tag_sets[:index] + tag_sets[index + 1 :]))
+            if len(tag_sets) > 1
+            else set()
+        )
         unique = sorted(own - others)
         if unique:
-            parts.append(f"{product.get('name') or '产品'}更突出{'、'.join(unique[:3])}")
+            parts.append(
+                f"{product.get('name') or '产品'}更突出{'、'.join(unique[:3])}"
+            )
     return parts
 
 
@@ -428,7 +527,9 @@ def _render_matrix(product_names: list[str], rows: list[dict[str, Any]]) -> list
     return lines
 
 
-def _replace_subject(section: PmComparisonSection, subject_cn: str) -> PmComparisonSection:
+def _replace_subject(
+    section: PmComparisonSection, subject_cn: str
+) -> PmComparisonSection:
     def replace(value: str | None) -> str | None:
         if not value or subject_cn == "四款产品":
             return value
@@ -444,12 +545,20 @@ def _replace_subject(section: PmComparisonSection, subject_cn: str) -> PmCompari
 
 def _is_assessable(value: str) -> bool:
     normalized = str(value or "").strip()
-    return bool(normalized) and normalized not in UNKNOWN_VALUES and not normalized.startswith("暂不能判断")
+    return (
+        bool(normalized)
+        and normalized not in UNKNOWN_VALUES
+        and not normalized.startswith("暂不能判断")
+    )
 
 
 def _same_nonempty(values: list[str]) -> bool:
     normalized = [value.strip() for value in values if _is_assessable(value)]
-    return bool(normalized) and len(normalized) == len(values) and len(set(normalized)) == 1
+    return (
+        bool(normalized)
+        and len(normalized) == len(values)
+        and len(set(normalized)) == 1
+    )
 
 
 def _decimal(value: Any) -> Decimal | None:

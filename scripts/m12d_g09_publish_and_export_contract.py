@@ -170,9 +170,15 @@ def publish_and_export_contract(
         },
         "downstream_contract": {
             "lookup_key": "category_code + project_id + batch_id + m12d_profile_version + sku_code",
+            "required_contract_fields": [
+                "consumption_state",
+                "release_quality_status",
+                "version_quality_notes",
+                "capabilities",
+            ],
             "states": {
-                "published_ready": "已发布且可正常进入 pair 级评分。",
-                "published_degraded": "已发布但低置信/需复核/缺核心理由；下游必须降级评分并展示原因。",
+                "published_ready": "已发布且该 SKU 可正常进入购买理由强比较。",
+                "published_degraded": "已发布且事实维度仍可消费；购买理由比较按 SKU 能力限制执行。",
                 "published_unusable": "已发布但画像失败或关键输入缺失；目标阻断强排序，候选退出强替代判断。",
                 "not_found": "未发布或不存在；下游不得临时生成或补写成交理由。",
             },
@@ -256,6 +262,7 @@ def version_payload(version: Any | None) -> dict[str, Any] | None:
         "batch_id": version.batch_id,
         "m12d_profile_version": version.m12d_profile_version,
         "release_status": version.release_status,
+        "release_quality_status": version.release_quality_status,
         "is_current": version.is_current,
         "published_at": version.published_at,
         "published_by": version.published_by,

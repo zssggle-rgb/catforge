@@ -1,0 +1,790 @@
+{
+  "task_id": "M12D-QF-02",
+  "generated_at": "2026-07-11T04:07:31.650977+00:00",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "write_draft": true,
+  "scope": "M03B only",
+  "allowed_migrations": {
+    "TV": [
+      "screen_size_segment semantic-equivalent conflict_count 1 -> 0",
+      "M03B version metadata v0.1 -> v0.2"
+    ],
+    "AC": [
+      "product_series false conflict_count 1 -> 0",
+      "brand_series_code added while product_series remains the series name",
+      "known_param_count may increase by one for the separated series code",
+      "M03B version metadata v0.1 -> v0.2"
+    ]
+  },
+  "before": {
+    "TV": {
+      "rule_version": "m03b_tv_param_profile_v0.1",
+      "taxonomy_version": "tv_param_taxonomy_manual_v0.1",
+      "profile_count": 377,
+      "conflict_sku_count": 377,
+      "conflict_count": 377,
+      "conflict_param_counts": {},
+      "tier_distribution": {
+        "appearance:appearance_heavy": 25,
+        "appearance:appearance_slim": 37,
+        "appearance:appearance_slim_fullscreen": 18,
+        "appearance:appearance_standard": 108,
+        "appearance:appearance_thick": 106,
+        "appearance:appearance_ultra_slim": 21,
+        "appearance:appearance_unknown": 23,
+        "appearance:appearance_wall_flush": 39,
+        "display_tech:laser": 1,
+        "display_tech:lcd_led": 152,
+        "display_tech:miniled": 125,
+        "display_tech:qd_miniled": 77,
+        "display_tech:qled_lcd": 7,
+        "display_tech:rgb_miniled": 15,
+        "energy:energy_grade_1": 333,
+        "energy:energy_grade_2": 41,
+        "energy:energy_grade_3_4": 3,
+        "local_dimming:z_entry_1_499": 49,
+        "local_dimming:z_flagship_4000_plus": 19,
+        "local_dimming:z_high_1000_1999": 33,
+        "local_dimming:z_mid_500_999": 30,
+        "local_dimming:z_none_0": 207,
+        "local_dimming:z_premium_2000_3999": 39,
+        "performance:perf_basic": 71,
+        "performance:perf_high": 58,
+        "performance:perf_low": 41,
+        "performance:perf_main_plus": 134,
+        "performance:perf_mainstream": 61,
+        "performance:perf_unknown": 12,
+        "picture_overall:picture_basic": 50,
+        "picture_overall:picture_enhanced": 149,
+        "picture_overall:picture_flagship": 55,
+        "picture_overall:picture_mainstream": 6,
+        "picture_overall:picture_premium": 117,
+        "ports:ports_basic": 44,
+        "ports:ports_main_hdmi21": 54,
+        "ports:ports_main_plus": 107,
+        "ports:ports_rich": 131,
+        "ports:ports_weak": 41,
+        "size:giant_98_plus": 53,
+        "size:large_60_69": 53,
+        "size:medium_46_59": 66,
+        "size:small_32_45": 36,
+        "size:xlarge_70_85": 169,
+        "smart:smart_ai_voice": 187,
+        "smart:smart_interaction_iot": 37,
+        "smart:smart_voice_ai_basic": 153
+      }
+    },
+    "AC": {
+      "rule_version": "m03b_ac_param_profile_v0.1",
+      "taxonomy_version": "ac_param_taxonomy_manual_v0.1",
+      "profile_count": 155,
+      "conflict_sku_count": 29,
+      "conflict_count": 29,
+      "conflict_param_counts": {},
+      "tier_distribution": {
+        "airflow:airflow_high_1000_1499": 11,
+        "airflow:airflow_low_lt700": 9,
+        "airflow:airflow_medium_700_999": 66,
+        "airflow:airflow_unknown": 48,
+        "airflow:airflow_very_high_1500_plus": 21,
+        "comfort:comfort_basic": 2,
+        "comfort:comfort_full": 46,
+        "comfort:comfort_self_cleaning": 107,
+        "cooling_capacity:cooling_1_5_3000_3999": 76,
+        "cooling_capacity:cooling_2_4000_5499": 20,
+        "cooling_capacity:cooling_3_6500_7499": 40,
+        "cooling_capacity:cooling_large_7500_plus": 1,
+        "cooling_capacity:cooling_small_lt3000": 18,
+        "energy:energy_grade_1": 154,
+        "energy:energy_grade_3": 1,
+        "health:health_fresh_purification": 1,
+        "health:health_none": 148,
+        "health:health_purification": 6,
+        "heating:heating_high_8000_plus": 38,
+        "heating:heating_none": 7,
+        "heating:heating_present": 110,
+        "horsepower:hp_1_5": 77,
+        "horsepower:hp_1_or_below": 17,
+        "horsepower:hp_2": 21,
+        "horsepower:hp_3": 39,
+        "horsepower:hp_3_plus": 1,
+        "installation:floor_standing": 48,
+        "installation:wall_mounted": 107,
+        "smart:smart_ac_full": 17,
+        "smart:smart_ac_none": 18,
+        "smart:smart_ac_wifi": 120
+      }
+    }
+  },
+  "after": {
+    "TV": {
+      "rule_version": "m03b_tv_param_profile_v0.2",
+      "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
+      "profile_count": 377,
+      "conflict_sku_count": 0,
+      "conflict_count": 0,
+      "conflict_param_counts": {},
+      "tier_distribution": {
+        "appearance:appearance_heavy": 25,
+        "appearance:appearance_slim": 37,
+        "appearance:appearance_slim_fullscreen": 18,
+        "appearance:appearance_standard": 108,
+        "appearance:appearance_thick": 106,
+        "appearance:appearance_ultra_slim": 21,
+        "appearance:appearance_unknown": 23,
+        "appearance:appearance_wall_flush": 39,
+        "display_tech:laser": 1,
+        "display_tech:lcd_led": 152,
+        "display_tech:miniled": 125,
+        "display_tech:qd_miniled": 77,
+        "display_tech:qled_lcd": 7,
+        "display_tech:rgb_miniled": 15,
+        "energy:energy_grade_1": 333,
+        "energy:energy_grade_2": 41,
+        "energy:energy_grade_3_4": 3,
+        "local_dimming:z_entry_1_499": 49,
+        "local_dimming:z_flagship_4000_plus": 19,
+        "local_dimming:z_high_1000_1999": 33,
+        "local_dimming:z_mid_500_999": 30,
+        "local_dimming:z_none_0": 207,
+        "local_dimming:z_premium_2000_3999": 39,
+        "performance:perf_basic": 71,
+        "performance:perf_high": 58,
+        "performance:perf_low": 41,
+        "performance:perf_main_plus": 134,
+        "performance:perf_mainstream": 61,
+        "performance:perf_unknown": 12,
+        "picture_overall:picture_basic": 50,
+        "picture_overall:picture_enhanced": 149,
+        "picture_overall:picture_flagship": 55,
+        "picture_overall:picture_mainstream": 6,
+        "picture_overall:picture_premium": 117,
+        "ports:ports_basic": 44,
+        "ports:ports_main_hdmi21": 54,
+        "ports:ports_main_plus": 107,
+        "ports:ports_rich": 131,
+        "ports:ports_weak": 41,
+        "size:giant_98_plus": 53,
+        "size:large_60_69": 53,
+        "size:medium_46_59": 66,
+        "size:small_32_45": 36,
+        "size:xlarge_70_85": 169,
+        "smart:smart_ai_voice": 187,
+        "smart:smart_interaction_iot": 37,
+        "smart:smart_voice_ai_basic": 153
+      }
+    },
+    "AC": {
+      "rule_version": "m03b_ac_param_profile_v0.2",
+      "taxonomy_version": "ac_param_taxonomy_manual_v0.2",
+      "profile_count": 155,
+      "conflict_sku_count": 0,
+      "conflict_count": 0,
+      "conflict_param_counts": {},
+      "tier_distribution": {
+        "airflow:airflow_high_1000_1499": 11,
+        "airflow:airflow_low_lt700": 9,
+        "airflow:airflow_medium_700_999": 66,
+        "airflow:airflow_unknown": 48,
+        "airflow:airflow_very_high_1500_plus": 21,
+        "comfort:comfort_basic": 2,
+        "comfort:comfort_full": 46,
+        "comfort:comfort_self_cleaning": 107,
+        "cooling_capacity:cooling_1_5_3000_3999": 76,
+        "cooling_capacity:cooling_2_4000_5499": 20,
+        "cooling_capacity:cooling_3_6500_7499": 40,
+        "cooling_capacity:cooling_large_7500_plus": 1,
+        "cooling_capacity:cooling_small_lt3000": 18,
+        "energy:energy_grade_1": 154,
+        "energy:energy_grade_3": 1,
+        "health:health_fresh_purification": 1,
+        "health:health_none": 148,
+        "health:health_purification": 6,
+        "heating:heating_high_8000_plus": 38,
+        "heating:heating_none": 7,
+        "heating:heating_present": 110,
+        "horsepower:hp_1_5": 77,
+        "horsepower:hp_1_or_below": 17,
+        "horsepower:hp_2": 21,
+        "horsepower:hp_3": 39,
+        "horsepower:hp_3_plus": 1,
+        "installation:floor_standing": 48,
+        "installation:wall_mounted": 107,
+        "smart:smart_ac_full": 17,
+        "smart:smart_ac_none": 18,
+        "smart:smart_ac_wifi": 120
+      }
+    }
+  },
+  "comparisons": {
+    "TV": {
+      "common_profile_count": 377,
+      "missing_after_count": 0,
+      "extra_after_count": 0,
+      "business_profile_changed_count": 0,
+      "business_profile_changed_sample": [],
+      "completeness_changed_count": 0,
+      "tier_changed_count": 0,
+      "tier_changed_sample": [],
+      "known_param_count_delta_distribution": {
+        "0": 377
+      },
+      "conflict_migration_distribution": {
+        "1->0": 377
+      },
+      "affected_profile_count": 377,
+      "affected_profile_sample": [
+        "m00_20260613004311_d548f6dc:TV00009549",
+        "m00_20260613004311_d548f6dc:TV00023850",
+        "m00_20260613004311_d548f6dc:TV00026886",
+        "m00_20260613004311_d548f6dc:TV00026941",
+        "m00_20260613004311_d548f6dc:TV00027302",
+        "m00_20260613004311_d548f6dc:TV00027353",
+        "m00_20260613004311_d548f6dc:TV00027442",
+        "m00_20260613004311_d548f6dc:TV00027443",
+        "m00_20260613004311_d548f6dc:TV00027463",
+        "m00_20260613004311_d548f6dc:TV00027475",
+        "m00_20260613004311_d548f6dc:TV00027483",
+        "m00_20260613004311_d548f6dc:TV00027485",
+        "m00_20260613004311_d548f6dc:TV00027487",
+        "m00_20260613004311_d548f6dc:TV00027492",
+        "m00_20260613004311_d548f6dc:TV00027511",
+        "m00_20260613004311_d548f6dc:TV00027523",
+        "m00_20260613004311_d548f6dc:TV00027524",
+        "m00_20260613004311_d548f6dc:TV00027526",
+        "m00_20260613004311_d548f6dc:TV00027541",
+        "m00_20260613004311_d548f6dc:TV00027547"
+      ],
+      "unaffected_regression_pool_count": 377,
+      "unaffected_regression_sample": [
+        "m00_20260613004311_d548f6dc:TV00009549",
+        "m00_20260613004311_d548f6dc:TV00023850",
+        "m00_20260613004311_d548f6dc:TV00026886",
+        "m00_20260613004311_d548f6dc:TV00026941",
+        "m00_20260613004311_d548f6dc:TV00027302",
+        "m00_20260613004311_d548f6dc:TV00027353",
+        "m00_20260613004311_d548f6dc:TV00027442",
+        "m00_20260613004311_d548f6dc:TV00027443",
+        "m00_20260613004311_d548f6dc:TV00027463",
+        "m00_20260613004311_d548f6dc:TV00027475",
+        "m00_20260613004311_d548f6dc:TV00027483",
+        "m00_20260613004311_d548f6dc:TV00027485",
+        "m00_20260613004311_d548f6dc:TV00027487",
+        "m00_20260613004311_d548f6dc:TV00027492",
+        "m00_20260613004311_d548f6dc:TV00027511",
+        "m00_20260613004311_d548f6dc:TV00027523",
+        "m00_20260613004311_d548f6dc:TV00027524",
+        "m00_20260613004311_d548f6dc:TV00027526",
+        "m00_20260613004311_d548f6dc:TV00027541",
+        "m00_20260613004311_d548f6dc:TV00027547"
+      ]
+    },
+    "AC": {
+      "common_profile_count": 155,
+      "missing_after_count": 0,
+      "extra_after_count": 0,
+      "business_profile_changed_count": 0,
+      "business_profile_changed_sample": [],
+      "completeness_changed_count": 0,
+      "tier_changed_count": 0,
+      "tier_changed_sample": [],
+      "known_param_count_delta_distribution": {
+        "0": 19,
+        "1": 136
+      },
+      "conflict_migration_distribution": {
+        "0->0": 126,
+        "1->0": 29
+      },
+      "affected_profile_count": 29,
+      "affected_profile_sample": [
+        "m00_20260624000202_1150a669:AC00032506",
+        "m00_20260624000202_1150a669:AC00032705",
+        "m00_20260624000202_1150a669:AC00033789",
+        "m00_20260624000202_1150a669:AC00034659",
+        "m00_20260624000202_1150a669:AC00034660",
+        "m00_20260624000202_1150a669:AC00034959",
+        "m00_20260624000202_1150a669:AC00036116",
+        "m00_20260624000202_1150a669:AC00036313",
+        "m00_20260624000202_1150a669:AC00036333",
+        "m00_20260624000202_1150a669:AC00036405",
+        "m00_20260624000202_1150a669:AC00036525",
+        "m00_20260624000202_1150a669:AC00036763",
+        "m00_20260624000202_1150a669:AC00036792",
+        "m00_20260624000202_1150a669:AC00036877",
+        "m00_20260624000202_1150a669:AC00036924",
+        "m00_20260624000202_1150a669:AC00038063",
+        "m00_20260624000202_1150a669:AC00038470",
+        "m00_20260624000202_1150a669:AC00038662",
+        "m00_20260624000202_1150a669:AC00038680",
+        "m00_20260624000202_1150a669:AC00038686"
+      ],
+      "unaffected_regression_pool_count": 126,
+      "unaffected_regression_sample": [
+        "m00_20260624000202_1150a669:AC00026378",
+        "m00_20260624000202_1150a669:AC00028640",
+        "m00_20260624000202_1150a669:AC00028642",
+        "m00_20260624000202_1150a669:AC00029097",
+        "m00_20260624000202_1150a669:AC00029319",
+        "m00_20260624000202_1150a669:AC00029751",
+        "m00_20260624000202_1150a669:AC00030362",
+        "m00_20260624000202_1150a669:AC00030631",
+        "m00_20260624000202_1150a669:AC00030929",
+        "m00_20260624000202_1150a669:AC00032008",
+        "m00_20260624000202_1150a669:AC00032338",
+        "m00_20260624000202_1150a669:AC00032615",
+        "m00_20260624000202_1150a669:AC00033476",
+        "m00_20260624000202_1150a669:AC00033612",
+        "m00_20260624000202_1150a669:AC00033721",
+        "m00_20260624000202_1150a669:AC00034284",
+        "m00_20260624000202_1150a669:AC00034502",
+        "m00_20260624000202_1150a669:AC00034712",
+        "m00_20260624000202_1150a669:AC00034716",
+        "m00_20260624000202_1150a669:AC00034717"
+      ]
+    }
+  },
+  "run_results": {
+    "TV": [
+      {
+        "batch_id": "m00_20260613004311_d548f6dc",
+        "status": "success",
+        "input_count": 6900,
+        "output_count": 4868,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260613004311_d548f6dc",
+          "module_version": "m03b-sku-param-profile-0.2.0",
+          "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
+          "parser_version": "m03b_tv_parser_v0.2",
+          "rule_version": "m03b_tv_param_profile_v0.2",
+          "target_sku_codes": [],
+          "input_param_raw_count": 6900,
+          "sku_profile_count": 84,
+          "param_value_count": 3974,
+          "dimension_tier_count": 756,
+          "tier_coverage_count": 54,
+          "false_by_absence_count": 675,
+          "conflict_count": 0,
+          "ignored_raw_field_count": 1666,
+          "ignored_raw_fields": {
+            "HEVC参数": 84,
+            "HEVC视频压缩": 84,
+            "UI界面": 84,
+            "三维技术": 84,
+            "三维技术细分": 84,
+            "分体": 84,
+            "前框材质": 84,
+            "响应时间": 84,
+            "对比度": 84,
+            "屏幕尺寸": 84,
+            "屏幕边框": 84,
+            "屏幕面积": 84,
+            "应用程序": 6,
+            "手势识别": 84,
+            "接口技术": 84,
+            "数字信号方式": 26,
+            "数字电视": 26,
+            "数字电视类型": 6,
+            "整机厚度": 84,
+            "整机宽度": 84,
+            "曲面": 84,
+            "曲面弧度": 6,
+            "水平/垂直视角": 84,
+            "灯珠数量": 84
+          },
+          "category_boundary_filter": "sku_code_prefix_TV",
+          "tier_distribution": {
+            "appearance": {
+              "appearance_heavy": 3,
+              "appearance_slim": 4,
+              "appearance_slim_fullscreen": 1,
+              "appearance_standard": 31,
+              "appearance_thick": 35,
+              "appearance_ultra_slim": 2,
+              "appearance_unknown": 4,
+              "appearance_wall_flush": 4
+            },
+            "display_tech": {
+              "lcd_led": 52,
+              "miniled": 21,
+              "qd_miniled": 5,
+              "qled_lcd": 5,
+              "rgb_miniled": 1
+            },
+            "energy": {
+              "energy_grade_1": 72,
+              "energy_grade_2": 11,
+              "energy_grade_3_4": 1
+            },
+            "local_dimming": {
+              "z_entry_1_499": 11,
+              "z_flagship_4000_plus": 1,
+              "z_high_1000_1999": 5,
+              "z_mid_500_999": 6,
+              "z_none_0": 58,
+              "z_premium_2000_3999": 3
+            },
+            "performance": {
+              "perf_basic": 20,
+              "perf_high": 2,
+              "perf_low": 11,
+              "perf_main_plus": 21,
+              "perf_mainstream": 25,
+              "perf_unknown": 5
+            },
+            "picture_overall": {
+              "picture_basic": 18,
+              "picture_enhanced": 43,
+              "picture_flagship": 4,
+              "picture_mainstream": 1,
+              "picture_premium": 18
+            },
+            "ports": {
+              "ports_basic": 14,
+              "ports_main_hdmi21": 15,
+              "ports_main_plus": 22,
+              "ports_rich": 22,
+              "ports_weak": 11
+            },
+            "size": {
+              "giant_98_plus": 2,
+              "large_60_69": 15,
+              "medium_46_59": 23,
+              "small_32_45": 10,
+              "xlarge_70_85": 34
+            },
+            "smart": {
+              "smart_ai_voice": 43,
+              "smart_interaction_iot": 11,
+              "smart_voice_ai_basic": 30
+            }
+          },
+          "taxonomy_hash": "sha256:m03b_taxonomy_asset_hash_v1:6d014de07459a143b64245be7549b6927d8563e590f0d95c31fb9392f93e2d50",
+          "write_summary": {
+            "param_values": {
+              "created_count": 0,
+              "reused_count": 3974
+            },
+            "sku_param_profiles": {
+              "created_count": 0,
+              "reused_count": 84
+            },
+            "dimension_tiers": {
+              "created_count": 0,
+              "reused_count": 756
+            },
+            "tier_coverages": {
+              "created_count": 0,
+              "reused_count": 54
+            }
+          }
+        }
+      },
+      {
+        "batch_id": "m00_20260619084551_857df63b",
+        "status": "success",
+        "input_count": 23951,
+        "output_count": 17029,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260619084551_857df63b",
+          "module_version": "m03b-sku-param-profile-0.2.0",
+          "taxonomy_version": "tv_param_taxonomy_manual_v0.2",
+          "parser_version": "m03b_tv_parser_v0.2",
+          "rule_version": "m03b_tv_param_profile_v0.2",
+          "target_sku_codes": [],
+          "input_param_raw_count": 23951,
+          "sku_profile_count": 293,
+          "param_value_count": 14045,
+          "dimension_tier_count": 2637,
+          "tier_coverage_count": 54,
+          "false_by_absence_count": 2224,
+          "conflict_count": 0,
+          "ignored_raw_field_count": 5780,
+          "ignored_raw_fields": {
+            "HEVC参数": 293,
+            "HEVC视频压缩": 293,
+            "UI界面": 293,
+            "三维技术": 293,
+            "三维技术细分": 293,
+            "分体": 293,
+            "前框材质": 293,
+            "响应时间": 293,
+            "对比度": 293,
+            "屏幕尺寸": 293,
+            "屏幕边框": 293,
+            "屏幕面积": 293,
+            "应用程序": 35,
+            "手势识别": 293,
+            "接口技术": 293,
+            "数字信号方式": 54,
+            "数字电视": 54,
+            "数字电视类型": 35,
+            "整机厚度": 293,
+            "整机宽度": 293,
+            "曲面": 293,
+            "曲面弧度": 35,
+            "水平/垂直视角": 293,
+            "灯珠数量": 293
+          },
+          "category_boundary_filter": "sku_code_prefix_TV",
+          "tier_distribution": {
+            "appearance": {
+              "appearance_heavy": 22,
+              "appearance_slim": 33,
+              "appearance_slim_fullscreen": 17,
+              "appearance_standard": 77,
+              "appearance_thick": 71,
+              "appearance_ultra_slim": 19,
+              "appearance_unknown": 19,
+              "appearance_wall_flush": 35
+            },
+            "display_tech": {
+              "laser": 1,
+              "lcd_led": 100,
+              "miniled": 104,
+              "qd_miniled": 72,
+              "qled_lcd": 2,
+              "rgb_miniled": 14
+            },
+            "energy": {
+              "energy_grade_1": 261,
+              "energy_grade_2": 30,
+              "energy_grade_3_4": 2
+            },
+            "local_dimming": {
+              "z_entry_1_499": 38,
+              "z_flagship_4000_plus": 18,
+              "z_high_1000_1999": 28,
+              "z_mid_500_999": 24,
+              "z_none_0": 149,
+              "z_premium_2000_3999": 36
+            },
+            "performance": {
+              "perf_basic": 51,
+              "perf_high": 56,
+              "perf_low": 30,
+              "perf_main_plus": 113,
+              "perf_mainstream": 36,
+              "perf_unknown": 7
+            },
+            "picture_overall": {
+              "picture_basic": 32,
+              "picture_enhanced": 106,
+              "picture_flagship": 51,
+              "picture_mainstream": 5,
+              "picture_premium": 99
+            },
+            "ports": {
+              "ports_basic": 30,
+              "ports_main_hdmi21": 39,
+              "ports_main_plus": 85,
+              "ports_rich": 109,
+              "ports_weak": 30
+            },
+            "size": {
+              "giant_98_plus": 51,
+              "large_60_69": 38,
+              "medium_46_59": 43,
+              "small_32_45": 26,
+              "xlarge_70_85": 135
+            },
+            "smart": {
+              "smart_ai_voice": 144,
+              "smart_interaction_iot": 26,
+              "smart_voice_ai_basic": 123
+            }
+          },
+          "taxonomy_hash": "sha256:m03b_taxonomy_asset_hash_v1:6d014de07459a143b64245be7549b6927d8563e590f0d95c31fb9392f93e2d50",
+          "write_summary": {
+            "param_values": {
+              "created_count": 0,
+              "reused_count": 14045
+            },
+            "sku_param_profiles": {
+              "created_count": 0,
+              "reused_count": 293
+            },
+            "dimension_tiers": {
+              "created_count": 0,
+              "reused_count": 2637
+            },
+            "tier_coverages": {
+              "created_count": 0,
+              "reused_count": 54
+            }
+          }
+        }
+      }
+    ],
+    "AC": [
+      {
+        "batch_id": "m00_20260624000202_1150a669",
+        "status": "success",
+        "input_count": 4761,
+        "output_count": 6996,
+        "warnings": [],
+        "summary": {
+          "batch_id": "m00_20260624000202_1150a669",
+          "module_version": "m03b-sku-param-profile-0.2.0",
+          "taxonomy_version": "ac_param_taxonomy_manual_v0.2",
+          "parser_version": "m03b_ac_parser_v0.2",
+          "rule_version": "m03b_ac_param_profile_v0.2",
+          "target_sku_codes": [],
+          "input_param_raw_count": 4761,
+          "sku_profile_count": 155,
+          "param_value_count": 5405,
+          "dimension_tier_count": 1395,
+          "tier_coverage_count": 41,
+          "false_by_absence_count": 19,
+          "conflict_count": 0,
+          "ignored_raw_field_count": 0,
+          "ignored_raw_fields": {},
+          "category_boundary_filter": "sku_code_prefix_AC",
+          "tier_distribution": {
+            "airflow": {
+              "airflow_high_1000_1499": 11,
+              "airflow_low_lt700": 9,
+              "airflow_medium_700_999": 66,
+              "airflow_unknown": 48,
+              "airflow_very_high_1500_plus": 21
+            },
+            "comfort": {
+              "comfort_basic": 2,
+              "comfort_full": 46,
+              "comfort_self_cleaning": 107
+            },
+            "cooling_capacity": {
+              "cooling_1_5_3000_3999": 76,
+              "cooling_2_4000_5499": 20,
+              "cooling_3_6500_7499": 40,
+              "cooling_large_7500_plus": 1,
+              "cooling_small_lt3000": 18
+            },
+            "energy": {
+              "energy_grade_1": 154,
+              "energy_grade_3": 1
+            },
+            "health": {
+              "health_fresh_purification": 1,
+              "health_none": 148,
+              "health_purification": 6
+            },
+            "heating": {
+              "heating_high_8000_plus": 38,
+              "heating_none": 7,
+              "heating_present": 110
+            },
+            "horsepower": {
+              "hp_1_5": 77,
+              "hp_1_or_below": 17,
+              "hp_2": 21,
+              "hp_3": 39,
+              "hp_3_plus": 1
+            },
+            "installation": {
+              "floor_standing": 48,
+              "wall_mounted": 107
+            },
+            "smart": {
+              "smart_ac_full": 17,
+              "smart_ac_none": 18,
+              "smart_ac_wifi": 120
+            }
+          },
+          "taxonomy_hash": "sha256:m03b_taxonomy_asset_hash_v1:2e195ac13d7a7fa945469091f83d362a35c8ac83d2daf11af6889bb8bf92d32d",
+          "write_summary": {
+            "param_values": {
+              "created_count": 0,
+              "reused_count": 5405
+            },
+            "sku_param_profiles": {
+              "created_count": 0,
+              "reused_count": 155
+            },
+            "dimension_tiers": {
+              "created_count": 0,
+              "reused_count": 1395
+            },
+            "tier_coverages": {
+              "created_count": 0,
+              "reused_count": 41
+            }
+          }
+        }
+      }
+    ]
+  },
+  "downstream_guard": {
+    "before": {
+      "core3_sku_claim_fact_profile": {
+        "row_count": 776,
+        "max_updated_at": "2026-06-29T07:57:45.172636"
+      },
+      "core3_sku_comment_fact_profile": {
+        "row_count": 492,
+        "max_updated_at": "2026-07-08T06:25:00.613104"
+      },
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "after": {
+      "core3_sku_claim_fact_profile": {
+        "row_count": 776,
+        "max_updated_at": "2026-06-29T07:57:45.172636"
+      },
+      "core3_sku_comment_fact_profile": {
+        "row_count": 492,
+        "max_updated_at": "2026-07-08T06:25:00.613104"
+      },
+      "core3_sku_market_profile": {
+        "row_count": 2670,
+        "max_updated_at": "2026-07-10T08:58:03.757596"
+      },
+      "core3_m09c_sku_user_task_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:58:51.377733"
+      },
+      "core3_m10c_sku_target_group_profile": {
+        "row_count": 859,
+        "max_updated_at": "2026-07-10T08:59:23.946205"
+      },
+      "core3_sku_value_battlefield_profile": {
+        "row_count": 1335,
+        "max_updated_at": "2026-07-10T08:59:43.606161"
+      },
+      "core3_sku_claim_value_quantification": {
+        "row_count": 78839,
+        "max_updated_at": "2026-07-10T09:01:24.100754"
+      },
+      "core3_sku_purchase_reason_profile": {
+        "row_count": 687,
+        "max_updated_at": "2026-07-10T09:04:05.187302"
+      }
+    },
+    "unchanged": true
+  }
+}

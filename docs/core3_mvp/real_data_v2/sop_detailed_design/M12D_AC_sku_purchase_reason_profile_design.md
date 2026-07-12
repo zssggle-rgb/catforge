@@ -260,6 +260,7 @@ AC M12D 不直接在一个大任务中完成，必须按以下顺序推进：
 - 一级能效、新风、静音、柔风、低价等弱表达上限生效。
 - 参数缺失保持 unknown，不当作 false。
 - M12C 缺失时画像降级，不生成强核心支付理由。
+- AC M12C 金额不可量化时不生成 WTP/金额结论，但卖点价值判断可继续作为对应 AC 锚点的定性证据；未引用卖点不得拖累该锚点。
 - Repository 只读取已发布 current AC 版本。
 - 竞品智能体在 AC M12D 缺失时降级，不补跑 M12D。
 
@@ -275,3 +276,44 @@ AC M12D 不直接在一个大任务中完成，必须按以下顺序推进：
 | G08 | AC 全量 batch 结果、质量统计和失败清单。 |
 | G09 | 已发布 AC M12D 版本和下游消费 fixture。 |
 | AC-CA-G01 | 竞品智能体读取 AC M12D 的端到端验收报告。 |
+
+## 14. TV/AC 共享质量修复
+
+M03B、M04C、M05C、M07、M09C、M10C、M11C、M12C、M12D ContextBuilder 和评分服务存在共享实现时，系统质量问题必须在同一个模块任务中同时审计和修复 TV/AC，不能只修 TV 后把 AC 留到最终非回归。
+
+权威任务链：
+
+- `docs/core3_mvp/real_data_v2/development/M12D_TV_AC_QUALITY_FIX_development_tasks.md`
+- `docs/core3_mvp/real_data_v2/development/M12D_TV_AC_QUALITY_FIX_goal_dispatch.md`
+
+执行要求：
+
+- TV/AC 分别使用自己的参数、评论、任务、客群、价值战场、购买理由 taxonomy 和市场池。
+- 每个模块分别生成 TV/AC 修复前后报告和 draft 重跑结果。
+- 任一品类出现同一 blocking 问题覆盖超过 20%，都必须阻断该品类发布。
+- 两个品类分别计算发布质量，不能合并分母或用一个品类的正常率覆盖另一个品类失败。
+- AC 锚点只消费 AC claim code 和 `m12c_ac_claim_value_quantification_v0.2`；TV claim code 或 TV M12C 规则版本不得进入 AC。
+
+### 14.1 QF-10 AC 输入适配
+
+AC ContextBuilder 复用 `M12DInputQualityAdapter` 的契约和调度方式，但加载 `m12d_ac_anchor_taxonomy_v0.1` 及 AC 各模块规则版本。适配结果写入七组 `input_quality_json`，不改变候选业务字段。
+
+| 输入 | AC 作用域规则 |
+| --- | --- |
+| M03B/M04C | 参数、卖点问题按 AC taxonomy 的匹数、冷暖、能效、风感、新风、静音、维护证据模式映射到具体购买理由。 |
+| M05C | 服务履约评论排除为 info；卖点事实与评论矛盾只影响引用该 AC claim 的锚点。 |
+| M07 | 新上市、零销量、观察窗口和线上渠道保留为市场事实；样本池限制只标记依赖对应市场证据的锚点。 |
+| M09C/M10C/M11C/M11D | 主关系缺失只限制相应语义/市场关系，不使用 TV 关系码，也不扩散到整个 AC 画像。 |
+| M12C | 固定读取 `m12c_ac_claim_value_quantification_v0.2`，仅聚合当前 AC 购买理由引用的 claim code。 |
+
+AC 兼容状态投影和 TV 一致，但判断输入使用 AC 数据：真实缺失保持 `missing`；row/relation/anchor issue 留在 typed DTO 中，兼容字段为 `ready`；只有 profile/release 范围问题才限制整个画像。
+
+### 14.2 QF-11 AC 锚点评分
+
+AC 使用通用 `M12DAnchorIssuePolicy` 契约，但价格理由清单、claim 映射和替代证据均为 AC 专用：
+
+- 价格理由：`cooling_heating_performance_justifies_price`、`long_term_energy_saving_offsets_price`、`same_price_efficiency_capacity_gain`、`low_price_core_ac_experience_intact`。
+- ContextBuilder 使用 AC taxonomy 对 M12C 明细逐行匹配，生成 `anchor_claim_value_roles`；评分器不再扁平化整个 SKU 的 role map。
+- 当前锚点 claim 进入 attribution `drag_claims_json` 才生成 `claim_value_drag_factor` hard risk；同一 claim 在多个比较 context 下的 role 以列表保留，`m12c_related_claim_negative` 只是 -2/-0.10 warning，不自动转 risk_drag。
+- 当前价格理由缺少 M12C 时，只有同时命中评论感知和 AC 匹数/形态价格市场承接才能越过价格证据门槛。
+- 非价格功能理由不读取 `price_value_core_evidence_missing`，TV claim、TV reason code 和 TV M12C 版本均不得进入 AC。

@@ -1,0 +1,2807 @@
+{
+  "task_id": "M12D-QF-15",
+  "generated_at": "2026-07-11T13:43:14.702843+00:00",
+  "scope": {
+    "impact_set": "TV 377 SKU、AC 155 SKU；QF02-QF09 新版 draft 和 QF10-QF13 影子结果。",
+    "allowed_migrations": [
+      "QF02-QF09 各模块既定的版本内业务迁移",
+      "M07 幂等重写后 evidence lineage 标识刷新，但分数、关系状态和 M12D 业务结果不得变化"
+    ],
+    "unaffected_regression": "TV/AC 各 20 个非重点 SKU；另比较全量 M12D 重跑前后结果。",
+    "forbidden": [
+      "降低强证据、场景或弱表达门槛",
+      "添加 SKU/品牌白名单",
+      "跨品类 taxonomy/市场池",
+      "写 current/published 或改变竞品 Top 3"
+    ]
+  },
+  "execution": {
+    "modules": {
+      "M03B": {
+        "task_id": "M12D-QF-02",
+        "write_draft": true,
+        "after_matches_approved_exactly": true,
+        "changed_summary_paths": [],
+        "lineage_digest_refresh_only": false,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 377,
+            "conflict_sku_count": 0,
+            "conflict_count": 0
+          },
+          "AC": {
+            "profile_count": 155,
+            "conflict_sku_count": 0,
+            "conflict_count": 0
+          }
+        }
+      },
+      "M04C": {
+        "task_id": "M12D-QF-03",
+        "write_draft": true,
+        "after_matches_approved_exactly": true,
+        "changed_summary_paths": [],
+        "lineage_digest_refresh_only": false,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 328,
+            "fact_count": 7993,
+            "quality_flag_counts": {}
+          },
+          "AC": {
+            "profile_count": 155,
+            "fact_count": 3931,
+            "quality_flag_counts": {}
+          }
+        }
+      },
+      "M05C": {
+        "task_id": "M12D-QF-04",
+        "write_draft": true,
+        "after_matches_approved_exactly": true,
+        "changed_summary_paths": [],
+        "lineage_digest_refresh_only": false,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 348,
+            "fact_count": 43750,
+            "profile_flag_counts": {
+              "claim_fact_profile_missing": 49
+            }
+          },
+          "AC": {
+            "profile_count": 144,
+            "fact_count": 68109,
+            "profile_flag_counts": {}
+          }
+        }
+      },
+      "M07": {
+        "task_id": "M12D-QF-05",
+        "write_draft": true,
+        "after_matches_approved_exactly": true,
+        "changed_summary_paths": [],
+        "lineage_digest_refresh_only": false,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "sku_count": 377,
+            "profile_count": 1885,
+            "member_count": 1088980,
+            "full_review_required_count": 0
+          },
+          "AC": {
+            "sku_count": 155,
+            "profile_count": 775,
+            "member_count": 316666,
+            "full_review_required_count": 0
+          }
+        }
+      },
+      "M09C": {
+        "task_id": "M12D-QF-06",
+        "write_draft": true,
+        "after_matches_approved_exactly": false,
+        "changed_summary_paths": [
+          "TV.score_business_digest"
+        ],
+        "lineage_digest_refresh_only": true,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 348,
+            "score_count": 4176,
+            "review_status_counts": {
+              "auto_pass": 337,
+              "review_required": 11
+            },
+            "no_primary_count": 11
+          },
+          "AC": {
+            "profile_count": 144,
+            "score_count": 1728,
+            "review_status_counts": {
+              "auto_pass": 143,
+              "review_required": 1
+            },
+            "no_primary_count": 1
+          }
+        }
+      },
+      "M10C": {
+        "task_id": "M12D-QF-07",
+        "write_draft": true,
+        "after_matches_approved_exactly": false,
+        "changed_summary_paths": [
+          "TV.score_business_digest"
+        ],
+        "lineage_digest_refresh_only": true,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 348,
+            "score_count": 3480,
+            "review_status_counts": {
+              "auto_pass": 244,
+              "review_required": 104
+            },
+            "no_primary_count": 48
+          },
+          "AC": {
+            "profile_count": 144,
+            "score_count": 1440,
+            "review_status_counts": {
+              "auto_pass": 132,
+              "review_required": 12
+            },
+            "no_primary_count": 3
+          }
+        }
+      },
+      "M11C": {
+        "task_id": "M12D-QF-08",
+        "write_draft": true,
+        "after_matches_approved_exactly": false,
+        "changed_summary_paths": [
+          "TV.score_business_digest"
+        ],
+        "lineage_digest_refresh_only": true,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "profile_count": 348,
+            "score_count": 4524,
+            "review_status_counts": {
+              "auto_pass": 292,
+              "review_required": 56
+            },
+            "no_primary_count": 56
+          },
+          "AC": {
+            "profile_count": 144,
+            "score_count": 1584,
+            "review_status_counts": {
+              "auto_pass": 142,
+              "review_required": 2
+            },
+            "no_primary_count": 2
+          }
+        }
+      },
+      "M12C": {
+        "task_id": "M12D-QF-09",
+        "write_draft": true,
+        "after_matches_approved_exactly": true,
+        "changed_summary_paths": [],
+        "lineage_digest_refresh_only": false,
+        "non_lineage_summary_changes": [],
+        "downstream_guard_unchanged": true,
+        "business_summary_stable": true,
+        "category_summaries": {
+          "TV": {
+            "sku_count": 284,
+            "missing_sku_count": 93,
+            "claim_scoped_status_counts": {
+              "usable": 284,
+              "missing": 93
+            }
+          },
+          "AC": {
+            "sku_count": 140,
+            "missing_sku_count": 15,
+            "claim_scoped_status_counts": {
+              "usable": 140,
+              "missing": 15
+            }
+          }
+        }
+      }
+    },
+    "m07_recovery": {
+      "initial_exit_code": 137,
+      "failure_phase": "post_write_full_capture",
+      "draft_chunks_committed_before_exit": true,
+      "root_cause": "后置验收把约 140 万市场池成员再次整体载入内存，触发容器 OOM。",
+      "recovery": "未重复写 draft；使用批准影子收据执行 validate-persisted-only 紧凑校验。",
+      "compact_validation_passed": true
+    },
+    "context_matches_qf10_approved": true,
+    "focus_pre_post_unchanged": true,
+    "m12d_persisted_tables_unchanged": true
+  },
+  "categories": {
+    "TV": {
+      "sku_count": 377,
+      "taxonomy_version": "m12d_tv_purchase_reason_anchor_taxonomy_v0.1",
+      "persisted_distribution": {
+        "status_counts": {
+          "ready_degraded": 359,
+          "weak_expression_only": 18
+        },
+        "core_missing_count": 120
+      },
+      "draft_distribution": {
+        "status_counts": {
+          "ready": 238,
+          "ready_limited": 94,
+          "weak_expression_only": 45
+        },
+        "core_missing_count": 139,
+        "pre_to_final_role_counts": {
+          "core_payment->core_payment": 501,
+          "core_payment->supporting": 306,
+          "risk_drag->risk_drag": 242,
+          "supporting->supporting": 1624,
+          "weak_expression->weak_expression": 869
+        }
+      },
+      "focus_selection_count": 10,
+      "unaffected_regression_count": 20,
+      "price_value_guard": {
+        "observed_count": 239,
+        "violations": []
+      },
+      "no_core_diagnosis": {
+        "sku_count": 139,
+        "reason_counts": {
+          "all_anchor_evidence_weak_or_insufficient": 20,
+          "price_value_core_evidence_missing": 92,
+          "risk_drag_present": 32,
+          "supporting_evidence_below_core_gate": 16
+        },
+        "review_bucket_counts": {
+          "evidence_or_business_gate_insufficient": 139
+        },
+        "downgrade_reason_counts": {
+          "hard_risk_signal": 123,
+          "insufficient_evidence": 3,
+          "price_value_core_evidence_missing": 128
+        },
+        "risk_flag_counts": {
+          "claim_value_drag_factor": 123,
+          "comment_claim_contradiction": 511,
+          "m09c_primary_relation_unavailable": 37,
+          "m10c_primary_relation_unavailable": 345,
+          "m11c_primary_relation_unavailable": 238,
+          "m12c_related_claim_negative": 174,
+          "market_pool_insufficient": 8,
+          "price_band_sample_insufficient": 18,
+          "price_value_core_evidence_missing": 135,
+          "size_pool_insufficient": 18,
+          "size_pool_limited": 21
+        },
+        "representative_profiles": [
+          {
+            "sku_code": "TV00009549",
+            "display_name_cn": "康佳 LED32E330CE",
+            "market": {
+              "price_wavg": 556.577,
+              "price_latest": 580.395349,
+              "sales_volume_total": 21606.0,
+              "screen_size_inch": 32.0,
+              "size_segment": "custom_32",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00022396",
+            "display_name_cn": "TCL 55V8M",
+            "market": {
+              "price_wavg": 1742.6655,
+              "price_latest": 1404.582018,
+              "sales_volume_total": 13164.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00023850",
+            "display_name_cn": "酷开 50P31",
+            "market": {
+              "price_wavg": 1122.6664,
+              "price_latest": 944.782058,
+              "sales_volume_total": 39746.0,
+              "screen_size_inch": 50.0,
+              "size_segment": "50",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain"
+            ],
+            "weak_expression_anchors": [
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00025519",
+            "display_name_cn": "红米 L55RA-RA",
+            "market": {
+              "price_wavg": 1783.6276,
+              "price_latest": 2126.66426,
+              "sales_volume_total": 14116.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00026064",
+            "display_name_cn": "小米 L55MA-SPL",
+            "market": {
+              "price_wavg": 2705.8577,
+              "price_latest": 2693.444444,
+              "sales_volume_total": 7891.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00026106",
+            "display_name_cn": "小米 L75MA-SPL",
+            "market": {
+              "price_wavg": 4216.4759,
+              "price_latest": 4949.0,
+              "sales_volume_total": 16556.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00026131",
+            "display_name_cn": "三星 QA85QNX9DAJ",
+            "market": {
+              "price_wavg": 11004.4051,
+              "price_latest": 8981.038065,
+              "sales_volume_total": 3121.0,
+              "screen_size_inch": 85.0,
+              "size_segment": "85",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "high",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "living_room_upgrade_one_step",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00026983",
+            "display_name_cn": "TCL 75S11-JN",
+            "market": {
+              "price_wavg": 3151.5695,
+              "price_latest": 2926.105017,
+              "sales_volume_total": 43754.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid_low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027015",
+            "display_name_cn": "酷开 55P3DGT",
+            "market": {
+              "price_wavg": 1382.7454,
+              "price_latest": 1499.0,
+              "sales_volume_total": 20907.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027027",
+            "display_name_cn": "小米 L65MB-SP",
+            "market": {
+              "price_wavg": 4280.1364,
+              "price_latest": 3803.95311,
+              "sales_volume_total": 10618.0,
+              "screen_size_inch": 65.0,
+              "size_segment": "65",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027301",
+            "display_name_cn": "VIDDA 50V1ND-R",
+            "market": {
+              "price_wavg": 1443.5217,
+              "price_latest": 1399.0,
+              "sales_volume_total": 11028.0,
+              "screen_size_inch": 50.0,
+              "size_segment": "50",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "picture_upgrade_justifies_price",
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027351",
+            "display_name_cn": "VIDDA 43V1ND-R",
+            "market": {
+              "price_wavg": 1420.3251,
+              "price_latest": 1231.65,
+              "sales_volume_total": 9399.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027378",
+            "display_name_cn": "飞利浦 43PFF6590",
+            "market": {
+              "price_wavg": 882.5171,
+              "price_latest": 964.782609,
+              "sales_volume_total": 26128.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient"
+            ]
+          },
+          {
+            "sku_code": "TV00027405",
+            "display_name_cn": "雷鸟 43F295C",
+            "market": {
+              "price_wavg": 1196.0065,
+              "price_latest": 1999.2,
+              "sales_volume_total": 20521.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027406",
+            "display_name_cn": "雷鸟 50F295C",
+            "market": {
+              "price_wavg": 1398.8411,
+              "price_latest": null,
+              "sales_volume_total": 9308.0,
+              "screen_size_inch": 50.0,
+              "size_segment": "50",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "supporting_evidence_below_core_gate"
+            ]
+          },
+          {
+            "sku_code": "TV00027442",
+            "display_name_cn": "红米 L32RA-RAE",
+            "market": {
+              "price_wavg": 631.4093,
+              "price_latest": 629.46683,
+              "sales_volume_total": 69465.0,
+              "screen_size_inch": 32.0,
+              "size_segment": "custom_32",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027443",
+            "display_name_cn": "红米 L55RB-RAE",
+            "market": {
+              "price_wavg": 1573.4021,
+              "price_latest": 1319.624369,
+              "sales_volume_total": 238526.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027463",
+            "display_name_cn": "红米 L43RB-APE",
+            "market": {
+              "price_wavg": 1346.2258,
+              "price_latest": 1088.003648,
+              "sales_volume_total": 27630.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution"
+            ],
+            "weak_expression_anchors": [
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027475",
+            "display_name_cn": "红米 L55RB-APE",
+            "market": {
+              "price_wavg": 1769.7755,
+              "price_latest": 1948.496923,
+              "sales_volume_total": 47377.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution"
+            ],
+            "weak_expression_anchors": [
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027487",
+            "display_name_cn": "TCL 75V8L PRO",
+            "market": {
+              "price_wavg": 3264.0485,
+              "price_latest": 2946.979228,
+              "sales_volume_total": 35287.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          }
+        ]
+      },
+      "weak_profile_diagnosis": {
+        "sku_count": 45,
+        "reason_counts": {
+          "all_anchor_evidence_weak_or_insufficient": 20,
+          "price_value_core_evidence_missing": 28,
+          "risk_drag_present": 12,
+          "supporting_evidence_below_core_gate": 3
+        },
+        "review_bucket_counts": {
+          "evidence_or_business_gate_insufficient": 45
+        },
+        "downgrade_reason_counts": {
+          "hard_risk_signal": 48,
+          "insufficient_evidence": 3,
+          "price_value_core_evidence_missing": 53
+        },
+        "risk_flag_counts": {
+          "claim_value_drag_factor": 48,
+          "comment_claim_contradiction": 197,
+          "m09c_primary_relation_unavailable": 27,
+          "m10c_primary_relation_unavailable": 93,
+          "m11c_primary_relation_unavailable": 88,
+          "m12c_related_claim_negative": 72,
+          "price_band_sample_insufficient": 6,
+          "price_value_core_evidence_missing": 55,
+          "size_pool_insufficient": 6,
+          "size_pool_limited": 11
+        },
+        "representative_profiles": [
+          {
+            "sku_code": "TV00009549",
+            "display_name_cn": "康佳 LED32E330CE",
+            "market": {
+              "price_wavg": 556.577,
+              "price_latest": 580.395349,
+              "sales_volume_total": 21606.0,
+              "screen_size_inch": 32.0,
+              "size_segment": "custom_32",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00026064",
+            "display_name_cn": "小米 L55MA-SPL",
+            "market": {
+              "price_wavg": 2705.8577,
+              "price_latest": 2693.444444,
+              "sales_volume_total": 7891.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00026983",
+            "display_name_cn": "TCL 75S11-JN",
+            "market": {
+              "price_wavg": 3151.5695,
+              "price_latest": 2926.105017,
+              "sales_volume_total": 43754.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid_low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027015",
+            "display_name_cn": "酷开 55P3DGT",
+            "market": {
+              "price_wavg": 1382.7454,
+              "price_latest": 1499.0,
+              "sales_volume_total": 20907.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027027",
+            "display_name_cn": "小米 L65MB-SP",
+            "market": {
+              "price_wavg": 4280.1364,
+              "price_latest": 3803.95311,
+              "sales_volume_total": 10618.0,
+              "screen_size_inch": 65.0,
+              "size_segment": "65",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027351",
+            "display_name_cn": "VIDDA 43V1ND-R",
+            "market": {
+              "price_wavg": 1420.3251,
+              "price_latest": 1231.65,
+              "sales_volume_total": 9399.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027378",
+            "display_name_cn": "飞利浦 43PFF6590",
+            "market": {
+              "price_wavg": 882.5171,
+              "price_latest": 964.782609,
+              "sales_volume_total": 26128.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient"
+            ]
+          },
+          {
+            "sku_code": "TV00027405",
+            "display_name_cn": "雷鸟 43F295C",
+            "market": {
+              "price_wavg": 1196.0065,
+              "price_latest": 1999.2,
+              "sales_volume_total": 20521.0,
+              "screen_size_inch": 43.0,
+              "size_segment": "custom_43",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027442",
+            "display_name_cn": "红米 L32RA-RAE",
+            "market": {
+              "price_wavg": 631.4093,
+              "price_latest": 629.46683,
+              "sales_volume_total": 69465.0,
+              "screen_size_inch": 32.0,
+              "size_segment": "custom_32",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027487",
+            "display_name_cn": "TCL 75V8L PRO",
+            "market": {
+              "price_wavg": 3264.0485,
+              "price_latest": 2946.979228,
+              "sales_volume_total": 35287.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027490",
+            "display_name_cn": "长虹 50P6S-G1",
+            "market": {
+              "price_wavg": 1237.3224,
+              "price_latest": 1449.0,
+              "sales_volume_total": 16040.0,
+              "screen_size_inch": 50.0,
+              "size_segment": "50",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "supporting_evidence_below_core_gate"
+            ]
+          },
+          {
+            "sku_code": "TV00027638",
+            "display_name_cn": "长虹 85JD900F-G1",
+            "market": {
+              "price_wavg": 5180.067,
+              "price_latest": 6999.0,
+              "sales_volume_total": 11059.0,
+              "screen_size_inch": 85.0,
+              "size_segment": "85",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027686",
+            "display_name_cn": "TCL 85Q10L",
+            "market": {
+              "price_wavg": 10432.1635,
+              "price_latest": null,
+              "sales_volume_total": 10246.0,
+              "screen_size_inch": 85.0,
+              "size_segment": "85",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "high",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027699",
+            "display_name_cn": "雷鸟 55F295C",
+            "market": {
+              "price_wavg": 1684.5184,
+              "price_latest": 1751.272727,
+              "sales_volume_total": 17796.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "av_user_willing_to_pay_for_picture",
+              "family_operation_less_friction"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027759",
+            "display_name_cn": "创维 75A6F PRO",
+            "market": {
+              "price_wavg": 5378.5132,
+              "price_latest": null,
+              "sales_volume_total": 3740.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "diagnosis_reasons": [
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "TV00027769",
+            "display_name_cn": "海信 75E8Q",
+            "market": {
+              "price_wavg": 7996.2941,
+              "price_latest": 6982.69,
+              "sales_volume_total": 5301.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid_high",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "picture_upgrade_justifies_price",
+              "same_size_picture_step_up",
+              "worth_paying_more_for_experience_upgrade",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "living_room_upgrade_one_step"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027819",
+            "display_name_cn": "雷鸟 55F270C-JN",
+            "market": {
+              "price_wavg": 1613.75,
+              "price_latest": 1338.893052,
+              "sales_volume_total": 67629.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027973",
+            "display_name_cn": "海尔 75D50C",
+            "market": {
+              "price_wavg": 3950.2979,
+              "price_latest": 3808.85,
+              "sales_volume_total": 6409.0,
+              "screen_size_inch": 75.0,
+              "size_segment": "75",
+              "screen_size_class": "large_upgrade",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [],
+            "weak_expression_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain",
+              "same_size_picture_step_up",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "all_anchor_evidence_weak_or_insufficient",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00027994",
+            "display_name_cn": "三星 QA55LS01DBJ",
+            "market": {
+              "price_wavg": 7244.4869,
+              "price_latest": 8897.913043,
+              "sales_volume_total": 3161.0,
+              "screen_size_inch": 55.0,
+              "size_segment": "55",
+              "screen_size_class": "mainstream_living",
+              "price_band_category": "mid_high",
+              "price_band_size": "high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "worth_paying_more_for_experience_upgrade",
+              "family_operation_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "TV00028087",
+            "display_name_cn": "雷鸟 32F195C",
+            "market": {
+              "price_wavg": 649.2762,
+              "price_latest": 1099.05,
+              "sales_volume_total": 8199.0,
+              "screen_size_inch": 32.0,
+              "size_segment": "custom_32",
+              "screen_size_class": "compact_screen",
+              "price_band_category": "low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "low_price_core_experience_intact",
+              "same_price_core_config_gain"
+            ],
+            "weak_expression_anchors": [
+              "av_user_willing_to_pay_for_picture",
+              "gaming_device_fit_reduces_risk",
+              "sports_motion_stability",
+              "big_screen_cinema_substitution",
+              "family_operation_less_friction",
+              "new_home_aesthetic_fit"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          }
+        ]
+      },
+      "release_quality_status": "limited",
+      "release_metrics": {
+        "expected_sku_count": 377,
+        "profile_count": 377,
+        "unique_sku_count": 377,
+        "status_counts": {
+          "failed": 0,
+          "missing_input": 0,
+          "ready": 238,
+          "ready_limited": 94,
+          "weak_expression_only": 45
+        },
+        "ready_count": 238,
+        "ready_limited_count": 94,
+        "review_required_count": 0,
+        "missing_input_count": 0,
+        "failed_count": 0,
+        "profile_gap_count": 0,
+        "core_payment_missing_count": 139,
+        "focus_validation_evaluated": true,
+        "focus_validation_count": 1,
+        "generation_success_rate": "1.0000",
+        "ready_rate": "0.6313",
+        "ready_or_limited_rate": "0.8806",
+        "review_required_rate": "0.0000",
+        "missing_or_failed_rate": "0.0000",
+        "core_payment_missing_rate": "0.3687",
+        "focus_sku_pass_rate": "1.0000"
+      },
+      "release_failure_reason_codes": [
+        "ready_rate",
+        "ready_or_limited_rate",
+        "core_payment_missing_rate"
+      ],
+      "release_threshold_failures": [
+        {
+          "metric_code": "ready_rate",
+          "numerator": 238,
+          "denominator": 377,
+          "observed_rate": "0.6313",
+          "operator": ">=",
+          "threshold": "0.8500",
+          "applicable": true,
+          "passed": false,
+          "reason_cn": "可供强消费的 ready 画像比例为 0.6313，门槛为 >= 0.8500，结果未通过。"
+        },
+        {
+          "metric_code": "ready_or_limited_rate",
+          "numerator": 332,
+          "denominator": 377,
+          "observed_rate": "0.8806",
+          "operator": ">=",
+          "threshold": "0.9500",
+          "applicable": true,
+          "passed": false,
+          "reason_cn": "ready 与 ready_limited 合计比例为 0.8806，门槛为 >= 0.9500，结果未通过。"
+        },
+        {
+          "metric_code": "core_payment_missing_rate",
+          "numerator": 139,
+          "denominator": 377,
+          "observed_rate": "0.3687",
+          "operator": "<=",
+          "threshold": "0.1500",
+          "applicable": true,
+          "passed": false,
+          "reason_cn": "缺少核心成交理由的画像比例为 0.3687，门槛为 <= 0.1500，结果未通过。"
+        }
+      ],
+      "system_issues": [],
+      "qf01_feasibility_reference_deviation_pp": {
+        "ready": "-24.93pp",
+        "ready_limited": "16.18pp",
+        "weak_expression_only": "8.75pp"
+      },
+      "qf01_reference_deviation_explanation_cn": "QF01 约 332 ready 是早期可行性投影；QF11 锚点作用域门槛和 QF12 核心族收敛后，强消费 ready 降为 238。QF14 已逐项确认无系统性误杀，差异不能通过降低证据门槛消除。"
+    },
+    "AC": {
+      "sku_count": 155,
+      "taxonomy_version": "m12d_ac_purchase_reason_anchor_taxonomy_v0.1",
+      "persisted_distribution": {
+        "status_counts": {
+          "ready_degraded": 50,
+          "review_required": 98,
+          "weak_expression_only": 7
+        },
+        "core_missing_count": 135
+      },
+      "draft_distribution": {
+        "status_counts": {
+          "ready": 130,
+          "ready_limited": 23,
+          "weak_expression_only": 2
+        },
+        "core_missing_count": 25,
+        "pre_to_final_role_counts": {
+          "core_payment->core_payment": 321,
+          "core_payment->supporting": 214,
+          "risk_drag->risk_drag": 191,
+          "supporting->supporting": 702,
+          "weak_expression->weak_expression": 451
+        }
+      },
+      "focus_selection_count": 18,
+      "unaffected_regression_count": 20,
+      "price_value_guard": {
+        "observed_count": 46,
+        "violations": []
+      },
+      "no_core_diagnosis": {
+        "sku_count": 25,
+        "reason_counts": {
+          "ac_claim_value_risk_role_dominant": 11,
+          "price_value_core_evidence_missing": 14,
+          "risk_drag_present": 3,
+          "weak_expression_role_cap_present": 11
+        },
+        "review_bucket_counts": {
+          "evidence_or_business_gate_insufficient": 25
+        },
+        "downgrade_reason_counts": {
+          "ac_claim_value_risk_role_dominant": 28,
+          "hard_risk_signal": 9,
+          "insufficient_evidence": 2,
+          "price_value_core_evidence_missing": 38,
+          "role_cap_weak_expression": 32
+        },
+        "risk_flag_counts": {
+          "ac_claim_value_risk_role_dominant": 32,
+          "claim_value_drag_factor": 9,
+          "comment_claim_contradiction": 67,
+          "m09c_primary_relation_unavailable": 7,
+          "m10c_primary_relation_unavailable": 37,
+          "m12c_related_claim_negative": 65,
+          "market_pool_insufficient": 9,
+          "market_pool_limited": 14,
+          "price_value_core_evidence_missing": 38
+        },
+        "representative_profiles": [
+          {
+            "sku_code": "AC00033476",
+            "display_name_cn": "小米 KFR-50GW/N2A1",
+            "market": {
+              "price_wavg": 2258.5415,
+              "price_latest": 1956.354319,
+              "sales_volume_total": 36375.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_2",
+              "screen_size_class": "wall_hp_2",
+              "price_band_category": "mid",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "AC00034959",
+            "display_name_cn": "美的 KFR-72LW/QJ201-1",
+            "market": {
+              "price_wavg": 5622.7288,
+              "price_latest": 5156.528948,
+              "sales_volume_total": 30227.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "high",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00035345",
+            "display_name_cn": "格力 KFR-26GW/NHGR1BT",
+            "market": {
+              "price_wavg": 2588.1355,
+              "price_latest": 2337.973966,
+              "sales_volume_total": 41614.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_or_below",
+              "screen_size_class": "wall_hp_1_or_below",
+              "price_band_category": "mid",
+              "price_band_size": "high"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "cooling_heating_performance_justifies_price",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          },
+          {
+            "sku_code": "AC00036098",
+            "display_name_cn": "TCL KFR-35GW/JD61+B1",
+            "market": {
+              "price_wavg": 1543.4202,
+              "price_latest": 1646.570207,
+              "sales_volume_total": 224770.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00036116",
+            "display_name_cn": "美的 KFR-35GW/MJD2-1",
+            "market": {
+              "price_wavg": 1554.8866,
+              "price_latest": 1779.728106,
+              "sales_volume_total": 868695.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00036174",
+            "display_name_cn": "华凌 KFR-50GW/N8HE1II",
+            "market": {
+              "price_wavg": 2793.2253,
+              "price_latest": 2541.381798,
+              "sales_volume_total": 22387.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_2",
+              "screen_size_class": "wall_hp_2",
+              "price_band_category": "mid",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "cooling_heating_performance_justifies_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "humidity_dehumidification_reassurance"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          },
+          {
+            "sku_code": "AC00036207",
+            "display_name_cn": "奥克斯 KFR-35GW/BPR3AES1(B1)",
+            "market": {
+              "price_wavg": 1750.0702,
+              "price_latest": 1619.183321,
+              "sales_volume_total": 70354.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "low",
+              "price_band_size": "mid_low"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "AC00036237",
+            "display_name_cn": "海信 KFR-35GW/A330UPRO-X1",
+            "market": {
+              "price_wavg": 2182.8572,
+              "price_latest": 2239.347271,
+              "sales_volume_total": 52520.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "humidity_dehumidification_reassurance"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          },
+          {
+            "sku_code": "AC00036291",
+            "display_name_cn": "奥克斯 KFR-35GW/BPR3AEG28(B1)",
+            "market": {
+              "price_wavg": 1506.2926,
+              "price_latest": 1386.645574,
+              "sales_volume_total": 358175.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00036763",
+            "display_name_cn": "美的 KFR-35GW/MJ1P",
+            "market": {
+              "price_wavg": 1877.1749,
+              "price_latest": 1608.61,
+              "sales_volume_total": 652346.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00036792",
+            "display_name_cn": "美的 KFR-72LW/MJ1P",
+            "market": {
+              "price_wavg": 5262.9816,
+              "price_latest": 4917.986664,
+              "sales_volume_total": 70921.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "high",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price"
+            ],
+            "weak_expression_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00036924",
+            "display_name_cn": "美的 KFR-35GW/JY1",
+            "market": {
+              "price_wavg": 2124.5467,
+              "price_latest": 2100.64,
+              "sales_volume_total": 164710.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00038400",
+            "display_name_cn": "AUFIT KFR-35GW/BPR3AFQG(B1)",
+            "market": {
+              "price_wavg": 1339.9021,
+              "price_latest": 1321.119377,
+              "sales_volume_total": 168813.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "low",
+              "price_band_size": "low"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "humidity_dehumidification_reassurance"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          },
+          {
+            "sku_code": "AC00038478",
+            "display_name_cn": "晶弘 KFR-35GW/JHFNHAA1BT",
+            "market": {
+              "price_wavg": 2377.9968,
+              "price_latest": 2199.0,
+              "sales_volume_total": 34398.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "fresh_air_health_reduces_stuffy_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "large_space_one_step_cooling_heating",
+              "sleep_room_quiet_comfort_assurance",
+              "self_cleaning_reduces_maintenance_risk"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00038686",
+            "display_name_cn": "美的 KFR-72LW/MJ2",
+            "market": {
+              "price_wavg": 4534.7494,
+              "price_latest": 4666.454077,
+              "sales_volume_total": 77997.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "high",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00038751",
+            "display_name_cn": "美的 KFR-72LW/MWD2",
+            "market": {
+              "price_wavg": 5885.4798,
+              "price_latest": 5977.617628,
+              "sales_volume_total": 30142.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "high",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00038777",
+            "display_name_cn": "AUFIT KFR-72LW/BPR3AFQA(B1)",
+            "market": {
+              "price_wavg": 3521.157,
+              "price_latest": 3646.558134,
+              "sales_volume_total": 22447.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "mid_high",
+              "price_band_size": "low"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "cooling_heating_performance_justifies_price",
+              "long_term_energy_saving_offsets_price",
+              "fresh_air_health_reduces_stuffy_risk",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk"
+            ],
+            "risk_drag_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant",
+              "risk_drag_present"
+            ]
+          },
+          {
+            "sku_code": "AC00039044",
+            "display_name_cn": "统帅 KFR-35GW/LTB2-1",
+            "market": {
+              "price_wavg": 1980.5601,
+              "price_latest": 1699.188071,
+              "sales_volume_total": 32899.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "weak_expression_only",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00039082",
+            "display_name_cn": "晶弘 KFR-35GW/JH5K1FNHAEB1",
+            "market": {
+              "price_wavg": 2075.5658,
+              "price_latest": 2327.3,
+              "sales_volume_total": 59923.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "small_room_installation_fit"
+            ],
+            "weak_expression_anchors": [
+              "long_term_energy_saving_offsets_price",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "weak_expression_role_cap_present",
+              "price_value_core_evidence_missing"
+            ]
+          },
+          {
+            "sku_code": "AC00039091",
+            "display_name_cn": "小米 KFR-26GW-PG10/V1A1",
+            "market": {
+              "price_wavg": 1863.4033,
+              "price_latest": 1706.627499,
+              "sales_volume_total": 32868.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_5",
+              "screen_size_class": "wall_hp_1_5",
+              "price_band_category": "mid_low",
+              "price_band_size": "mid"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "ready_limited",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit"
+            ],
+            "weak_expression_anchors": [
+              "humidity_dehumidification_reassurance",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          }
+        ]
+      },
+      "weak_profile_diagnosis": {
+        "sku_count": 2,
+        "reason_counts": {
+          "ac_claim_value_risk_role_dominant": 1,
+          "price_value_core_evidence_missing": 1
+        },
+        "review_bucket_counts": {
+          "evidence_or_business_gate_insufficient": 2
+        },
+        "downgrade_reason_counts": {
+          "ac_claim_value_risk_role_dominant": 3,
+          "insufficient_evidence": 1,
+          "price_value_core_evidence_missing": 2
+        },
+        "risk_flag_counts": {
+          "ac_claim_value_risk_role_dominant": 3,
+          "comment_claim_contradiction": 12,
+          "m09c_primary_relation_unavailable": 7,
+          "m10c_primary_relation_unavailable": 9,
+          "market_pool_limited": 5,
+          "price_value_core_evidence_missing": 2
+        },
+        "representative_profiles": [
+          {
+            "sku_code": "AC00035345",
+            "display_name_cn": "格力 KFR-26GW/NHGR1BT",
+            "market": {
+              "price_wavg": 2588.1355,
+              "price_latest": 2337.973966,
+              "sales_volume_total": 41614.0,
+              "screen_size_inch": null,
+              "size_segment": "wall_hp_1_or_below",
+              "screen_size_class": "wall_hp_1_or_below",
+              "price_band_category": "mid",
+              "price_band_size": "high"
+            },
+            "persisted_status": "review_required",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "cooling_heating_performance_justifies_price",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "low_price_core_ac_experience_intact"
+            ],
+            "weak_expression_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "self_cleaning_reduces_maintenance_risk",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "ac_claim_value_risk_role_dominant"
+            ]
+          },
+          {
+            "sku_code": "AC00038751",
+            "display_name_cn": "美的 KFR-72LW/MWD2",
+            "market": {
+              "price_wavg": 5885.4798,
+              "price_latest": 5977.617628,
+              "sales_volume_total": 30142.0,
+              "screen_size_inch": null,
+              "size_segment": "floor_hp_3",
+              "screen_size_class": "floor_hp_3",
+              "price_band_category": "high",
+              "price_band_size": "mid_high"
+            },
+            "persisted_status": "ready_degraded",
+            "shadow_status": "weak_expression_only",
+            "shadow_confidence": "0.0000",
+            "core_payment_anchors": [],
+            "supporting_anchors": [
+              "room_size_capacity_match_reduces_risk",
+              "large_space_one_step_cooling_heating",
+              "long_term_energy_saving_offsets_price",
+              "same_price_efficiency_capacity_gain",
+              "small_room_installation_fit",
+              "smart_remote_control_less_friction"
+            ],
+            "weak_expression_anchors": [
+              "sleep_room_quiet_comfort_assurance",
+              "elderly_child_soft_wind_comfort",
+              "fresh_air_health_reduces_stuffy_risk",
+              "humidity_dehumidification_reassurance",
+              "self_cleaning_reduces_maintenance_risk"
+            ],
+            "risk_drag_anchors": [],
+            "diagnosis_reasons": [
+              "price_value_core_evidence_missing"
+            ]
+          }
+        ]
+      },
+      "release_quality_status": "limited",
+      "release_metrics": {
+        "expected_sku_count": 155,
+        "profile_count": 155,
+        "unique_sku_count": 155,
+        "status_counts": {
+          "failed": 0,
+          "missing_input": 0,
+          "ready": 130,
+          "ready_limited": 23,
+          "weak_expression_only": 2
+        },
+        "ready_count": 130,
+        "ready_limited_count": 23,
+        "review_required_count": 0,
+        "missing_input_count": 0,
+        "failed_count": 0,
+        "profile_gap_count": 0,
+        "core_payment_missing_count": 25,
+        "focus_validation_evaluated": true,
+        "focus_validation_count": 1,
+        "generation_success_rate": "1.0000",
+        "ready_rate": "0.8387",
+        "ready_or_limited_rate": "0.9871",
+        "review_required_rate": "0.0000",
+        "missing_or_failed_rate": "0.0000",
+        "core_payment_missing_rate": "0.1613",
+        "focus_sku_pass_rate": "1.0000"
+      },
+      "release_failure_reason_codes": [
+        "ready_rate",
+        "core_payment_missing_rate"
+      ],
+      "release_threshold_failures": [
+        {
+          "metric_code": "ready_rate",
+          "numerator": 130,
+          "denominator": 155,
+          "observed_rate": "0.8387",
+          "operator": ">=",
+          "threshold": "0.8500",
+          "applicable": true,
+          "passed": false,
+          "reason_cn": "可供强消费的 ready 画像比例为 0.8387，门槛为 >= 0.8500，结果未通过。"
+        },
+        {
+          "metric_code": "core_payment_missing_rate",
+          "numerator": 25,
+          "denominator": 155,
+          "observed_rate": "0.1613",
+          "operator": "<=",
+          "threshold": "0.1500",
+          "applicable": true,
+          "passed": false,
+          "reason_cn": "缺少核心成交理由的画像比例为 0.1613，门槛为 <= 0.1500，结果未通过。"
+        }
+      ],
+      "system_issues": []
+    }
+  },
+  "acceptance": {
+    "full_chain_execution_passed": true,
+    "release_gate_passed": false,
+    "release_blocked_categories": [
+      "TV",
+      "AC"
+    ],
+    "workflow_decision": "stop_before_qf16",
+    "reason_cn": "全链路重跑一致，但 TV/AC 发布质量均为 limited；按 QF15 验收契约停在 QF16 前。"
+  }
+}

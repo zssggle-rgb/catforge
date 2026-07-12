@@ -69,11 +69,13 @@ from app.services.core3_real_data.runner import Core3ModuleTarget
 
 
 M10C_PROFILE_ID_HASH_VERSION = "m10c-target-group-profile-id-v1"
-M10C_PROFILE_HASH_VERSION = "m10c-target-group-profile-v1"
+M10C_PROFILE_HASH_VERSION = "m10c-target-group-profile-v2"
 M10C_SCORE_ID_HASH_VERSION = "m10c-target-group-score-id-v1"
 M10C_SCORE_HASH_VERSION = "m10c-target-group-score-v1"
 M10C_COVERAGE_ID_HASH_VERSION = "m10c-target-group-coverage-id-v1"
 M10C_COVERAGE_HASH_VERSION = "m10c-target-group-coverage-v1"
+
+M10C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD = Decimal("0.8333")
 
 REL_PRIMARY = "primary_target_group"
 REL_SECONDARY = "secondary_target_group"
@@ -1434,19 +1436,9 @@ class M10CProfileBuilder:
             payload
             for payload in score_payloads
             if payload["relation_status"] == REL_SECONDARY
-            and payload["target_group_score"] >= Decimal("0.6800")
-            and payload["score_breakdown_json"]["size_price"]["gate_status"]
-            in {"matched", "adjacent"}
+            and _primary_candidate_evidence_eligible(payload)
         ]
-        eligible.sort(
-            key=lambda item: (
-                item["target_group_score"],
-                item["comment_audience_motivation_score"],
-                item["task_support_score"],
-                item["claim_alignment_score"],
-            ),
-            reverse=True,
-        )
+        eligible.sort(key=_primary_selection_rank, reverse=True)
         if eligible:
             eligible[0]["relation_status"] = REL_PRIMARY
             eligible[0]["status_reason_cn"] = eligible[0]["status_reason_cn"].replace(
@@ -1528,6 +1520,11 @@ class M10CProfileBuilder:
                 score_payloads, sku_input, self.taxonomy.product_category
             )
         )
+        review_required, profile_review_reason = _profile_review_decision(
+            primary,
+            score_payloads=score_payloads,
+            no_primary_reason=no_primary_reason,
+        )
         summary = {
             "primary": _compact_score(primary) if primary else None,
             "secondary": [_compact_score(item) for item in secondary],
@@ -1579,15 +1576,9 @@ class M10CProfileBuilder:
                 item["target_group_code"] for item in unmet
             ],
             "target_group_summary_json": _json_safe(summary),
-            "review_required": bool(no_primary_reason)
-            or any(item["review_required"] for item in score_payloads),
-            "review_status": "review_required"
-            if bool(no_primary_reason)
-            or any(item["review_required"] for item in score_payloads)
-            else "auto_pass",
-            "review_reason_json": {"no_primary_reason_cn": no_primary_reason}
-            if no_primary_reason
-            else {},
+            "review_required": review_required,
+            "review_status": "review_required" if review_required else "auto_pass",
+            "review_reason_json": _json_safe(profile_review_reason),
             "confidence": _avg_decimal(
                 [
                     item["confidence"]
@@ -1608,6 +1599,10 @@ class M10CProfileBuilder:
                 "latent": payload["latent_group_codes_json"],
                 "unmet": payload["unmet_group_need_codes_json"],
                 "summary": payload["target_group_summary_json"],
+                "review_required": payload["review_required"],
+                "review_status": payload["review_status"],
+                "review_reason": payload["review_reason_json"],
+                "confidence": payload["confidence"],
                 "taxonomy_version": self.taxonomy.taxonomy_version,
                 "rule_version": self.rule_version,
             },
@@ -2217,6 +2212,101 @@ def _confidence(
     if sku_input.market_profile is not None:
         domain_count += 1
     return _clamp_decimal(Decimal(domain_count) / Decimal("6"))
+
+
+def _primary_candidate_evidence_eligible(payload: Mapping[str, Any]) -> bool:
+    score_breakdown = payload.get("score_breakdown_json") or {}
+    size_price_gate_status = (
+        (score_breakdown.get("size_price") or {}).get("gate_status") or "unknown"
+    )
+    return (
+        (_decimal(payload.get("target_group_score")) or Decimal("0.0000"))
+        >= Decimal("0.6800")
+        and size_price_gate_status in {"matched", "adjacent"}
+        and (
+            (_decimal(payload.get("comment_audience_motivation_score")) or Decimal("0.0000"))
+            >= Decimal("0.5500")
+            or (_decimal(payload.get("task_support_score")) or Decimal("0.0000"))
+            >= Decimal("0.5500")
+        )
+        and (
+            (_decimal(payload.get("claim_alignment_score")) or Decimal("0.0000"))
+            >= Decimal("0.3000")
+            or (_decimal(payload.get("param_capability_score")) or Decimal("0.0000"))
+            >= Decimal("0.3000")
+        )
+    )
+
+
+def _primary_selection_rank(payload: Mapping[str, Any]) -> tuple[Decimal, ...]:
+    return (
+        _decimal(payload.get("target_group_score")) or Decimal("0.0000"),
+        _decimal(payload.get("comment_audience_motivation_score"))
+        or Decimal("0.0000"),
+        _decimal(payload.get("task_support_score")) or Decimal("0.0000"),
+        _decimal(payload.get("claim_alignment_score")) or Decimal("0.0000"),
+    )
+
+
+def _profile_review_decision(
+    primary: Mapping[str, Any] | None,
+    *,
+    score_payloads: Sequence[Mapping[str, Any]],
+    no_primary_reason: str | None,
+) -> tuple[bool, dict[str, Any]]:
+    if primary is None:
+        return True, {
+            "scope": "profile",
+            "reason_codes": ["no_primary_target_group"],
+            "reason_cn": [no_primary_reason or "未形成主目标客群。"],
+            "no_primary_reason_cn": no_primary_reason,
+        }
+
+    reason_codes: list[str] = []
+    reason_cn: list[str] = []
+    relation_status = str(primary.get("relation_status") or "")
+    confidence = _decimal(primary.get("confidence")) or Decimal("0.0000")
+    size_price_gate_status = str(
+        ((primary.get("score_breakdown_json") or {}).get("size_price") or {}).get(
+            "gate_status"
+        )
+        or "unknown"
+    )
+    primary_rank = _primary_selection_rank(primary)
+    competing_group_codes = sorted(
+        str(item.get("target_group_code"))
+        for item in score_payloads
+        if item is not primary
+        and item.get("relation_status") in {REL_SECONDARY, REL_LATENT}
+        and _primary_candidate_evidence_eligible(item)
+        and _primary_selection_rank(item) == primary_rank
+    )
+
+    if relation_status != REL_PRIMARY:
+        reason_codes.append("primary_relation_status_invalid")
+        reason_cn.append("主客群记录与主关系状态不一致。")
+    if confidence < M10C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD:
+        reason_codes.append("primary_target_group_confidence_below_threshold")
+        reason_cn.append("主客群证据域覆盖不足，尚未达到画像自动通过门槛。")
+    if size_price_gate_status == "mismatch":
+        reason_codes.append("primary_size_price_conflict")
+        reason_cn.append("主客群与该 SKU 的尺寸价格适配结论冲突。")
+    if competing_group_codes:
+        reason_codes.append("primary_target_group_ambiguous")
+        reason_cn.append("存在排序证据完全相同的主客群候选，无法客观区分唯一主客群。")
+
+    if not reason_codes:
+        return False, {}
+    return True, {
+        "scope": "profile",
+        "reason_codes": reason_codes,
+        "reason_cn": reason_cn,
+        "primary_target_group_code": primary.get("target_group_code"),
+        "primary_relation_status": relation_status,
+        "primary_confidence": confidence,
+        "primary_confidence_threshold": M10C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+        "competing_target_group_codes": competing_group_codes,
+    }
 
 
 def _compact_score(payload: Mapping[str, Any] | None) -> dict[str, Any] | None:

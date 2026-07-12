@@ -7,14 +7,18 @@ from app.services.core3_real_data.market_profile_service import (
     MarketProfileService,
     _ac_size_segment,
     _market_size_class,
+    _market_quality_issues,
     _market_pool_key,
     _observed_window_sample_status,
     _quality_flags,
+    _review_reason,
     _rows_for_window,
     _screen_size_class,
     _select_screen_size_param_value,
     _size_segment,
+    _sku_matches_product_category,
     _trend_metrics,
+    _window_period_bounds,
 )
 from app.services.core3_real_data.sku_signal_profile_schemas import M08SkuSignalProfileRecord
 from app.services.core3_real_data.sku_signal_profile_service import _business_signal_index, _view_payload
@@ -85,6 +89,52 @@ def test_m07_market_pool_fields_separate_small_and_large_size_classes() -> None:
     assert by_sku["TV75"].same_pool_price_percentile == Decimal("0.333333")
     assert by_sku["TV85A"].same_pool_volume_percentile == Decimal("1.000000")
     assert by_sku["TV85B"].price_per_inch_percentile == Decimal("1.000000")
+
+
+def test_m07_scoped_target_keeps_full_candidate_pool() -> None:
+    repository = SimpleNamespace(project_id="project", category_code="TV")
+    service = MarketProfileService(repository=repository)
+    metrics = service._apply_percentiles(
+        [
+            _metric("TV-A", size="65", price="2999", volume="80", amount="239920"),
+            _metric("TV-B", size="65", price="3999", volume="40", amount="159960"),
+        ]
+    )
+    candidate_profiles = [
+        service._profile_record(
+            item,
+            batch_id="batch",
+            run_id=None,
+            module_run_id=None,
+            rule_version="m07_test",
+            price_band_rule_version="price_test",
+        )
+        for item in metrics
+    ]
+
+    pools, members = service._build_pools_and_members(
+        [candidate_profiles[0]],
+        {M07AnalysisWindow.FULL_OBSERVED_WINDOW.value: metrics},
+        candidate_profiles=candidate_profiles,
+        batch_id="batch",
+        run_id=None,
+        module_run_id=None,
+        rule_version="m07_test",
+        pool_rule_version="pool_test",
+    )
+
+    same_size_pool = next(pool for pool in pools if pool.pool_type == "same_size")
+    assert same_size_pool.candidate_sku_codes == ["TV-A", "TV-B"]
+    assert {member.member_sku_code for member in members if member.pool_id == same_size_pool.pool_id} == {
+        "TV-A",
+        "TV-B",
+    }
+
+
+def test_m07_product_category_rejects_cross_category_sku_rows() -> None:
+    assert _sku_matches_product_category("TV00000001", "TV") is True
+    assert _sku_matches_product_category("AC00000001", "TV") is False
+    assert _sku_matches_product_category("AC00000001", "AC") is True
 
 
 def test_m07_screen_size_helpers_reject_zero_and_prefer_exact_size() -> None:
@@ -176,6 +226,8 @@ def test_m07_ac_market_size_inputs_use_horsepower_and_installation() -> None:
         product_category="AC",
     )
     assert "size_missing" not in flags
+    assert "observed_window_less_than_52w" not in flags
+    assert "online_only_channel" not in flags
 
 
 def test_m07_ac_floor_three_and_above_share_market_size_segment() -> None:
@@ -342,18 +394,106 @@ def test_m07_latest_week_uses_global_week_and_missing_sales_is_zero() -> None:
     )
 
 
+def test_m07_full_window_uses_dataset_calendar_not_sku_sales_weeks() -> None:
+    assert _window_period_bounds(
+        [_market_row("TV-NEW", 20, "10", "29990")],
+        M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+        global_latest_week=24,
+        global_first_week=1,
+    ) == (1, 24)
+
+
 def test_m07_trend_treats_missing_sales_weeks_as_zero() -> None:
-    trend = _trend_metrics([_market_row("AC-LATE", 17, "10", "29990")], global_latest_week=24)
+    trend = _trend_metrics(
+        [_market_row("AC-LATE", 17, "10", "29990")],
+        global_latest_week=24,
+        global_first_week=17,
+    )
 
     assert trend["sales_growth_recent_4w"] == Decimal("-1.000000")
     assert trend["amount_growth_recent_4w"] == Decimal("-1.000000")
     assert trend["quality_flags"] == []
 
 
+def test_m07_new_launch_uses_complete_market_calendar_and_zero_fills_prior_weeks() -> None:
+    trend = _trend_metrics(
+        [_market_row("TV-NEW", 23, "10", "29990")],
+        global_latest_week=24,
+        global_first_week=1,
+    )
+
+    assert trend["recent_available_week_count"] == 4
+    assert trend["baseline_available_week_count"] == 4
+    assert trend["quality_flags"] == []
+    assert trend["price_change_recent_4w"] is None
+    assert trend["sales_growth_recent_4w"] is None
+    assert trend["amount_growth_recent_4w"] is None
+
+
+def test_m07_short_dataset_range_is_not_a_sku_quality_failure() -> None:
+    trend = _trend_metrics(
+        [_market_row("TV-NEW", 23, "10", "29990")],
+        global_latest_week=24,
+        global_first_week=23,
+    )
+
+    assert trend["recent_available_week_count"] == 2
+    assert trend["baseline_available_week_count"] == 0
+    assert trend["quality_flags"] == []
+    assert trend["availability_status"] == "dataset_range_insufficient"
+    assert trend["sales_growth_recent_4w"] is None
+
+
+def test_m07_full_window_new_launch_is_market_fact_not_quality_failure() -> None:
+    assert (
+        _observed_window_sample_status(
+            active_week_count=5,
+            has_rows=True,
+            analysis_window=M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+            first_week=20,
+            global_latest_week=24,
+            product_category="TV",
+        )
+        == M07SampleStatus.SUFFICIENT
+    )
+    assert (
+        _observed_window_sample_status(
+            active_week_count=3,
+            has_rows=True,
+            analysis_window=M07AnalysisWindow.FULL_OBSERVED_WINDOW,
+            first_week=22,
+            global_latest_week=24,
+            product_category="AC",
+        )
+        == M07SampleStatus.SUFFICIENT
+    )
+
+
+def test_m07_quality_contract_keeps_range_info_but_not_zero_sales_facts() -> None:
+    item = _metric("TV-GAP", size="65", price="3999", volume="20", amount="79980").model_copy(
+        update={
+            "global_week_count": 24,
+            "channel_share_json": {"线上": {"volume_share": Decimal("1")}},
+            "latest_week_gap": 4,
+            "quality_flags": [],
+        }
+    )
+
+    issues = {issue["issue_code"]: issue for issue in _market_quality_issues(item)}
+    assert issues["observed_window_less_than_52w"]["severity"] == "info"
+    assert issues["online_only_channel"]["scope"] == "channel_range"
+    assert _review_reason(item)["quality_issues"] == list(issues.values())
+    assert "latest_week_gap" not in issues
+    assert "trend_sample_insufficient" not in issues
+
+
 def test_m07_zero_sales_window_is_not_price_or_platform_missing() -> None:
+    source_row = _market_row("AC-LATE", 20, "8", "23992").model_copy(
+        update={"quality_flags": ["observed_window_less_than_52w", "latest_week_gap"]}
+    )
     flags = _quality_flags(
         rows=[],
-        all_rows=[_market_row("AC-LATE", 20, "8", "23992")],
+        all_rows=[source_row],
         size_input=SimpleNamespace(size_segment="wall_hp_1_5"),
         global_week_count=8,
         latest_week_gap=4,
@@ -368,6 +508,8 @@ def test_m07_zero_sales_window_is_not_price_or_platform_missing() -> None:
 
     assert "price_missing" not in flags
     assert "platform_missing" not in flags
+    assert "observed_window_less_than_52w" not in flags
+    assert "latest_week_gap" not in flags
 
 
 def test_m07_sufficient_zero_sales_profile_does_not_emit_sample_insufficient_signal() -> None:
@@ -456,7 +598,7 @@ def test_m07_short_window_missing_price_is_quality_note_not_execution_warning() 
 
     assert service._warnings([full_profile, short_window_profile], []) == []
     assert service._quality_notes([full_profile, short_window_profile], []) == [
-        "部分 SKU 在自身可观测期内周样本不完整，相关市场趋势和增长判断低置信使用。",
+        "当前批次未形成可用市场时间轴，相关市场趋势暂不输出。",
         "部分 SKU 在短周期窗口无可计算成交价格；零销量周按 0 销量处理，不作为销量样本缺失。",
     ]
 

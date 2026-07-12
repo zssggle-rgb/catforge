@@ -12,7 +12,12 @@ from app.services.core3_real_data.analyst.purchase_reason_profile_reader import 
     decide_candidate_m12d_usage,
     decide_target_m12d_usage,
 )
-from app.services.core3_real_data.constants import M12DAnchorRole, M12DEvidenceDomain, M12DEvidenceStrength
+from app.services.core3_real_data.constants import (
+    M12DAnchorRole,
+    M12DEvidenceDomain,
+    M12DEvidenceStrength,
+    M12DReasonEstablishmentStatus,
+)
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
     M12DDownstreamAnchorContract,
     M12DDownstreamProfileContract,
@@ -25,11 +30,14 @@ AnchorMatchType = Literal[
     "candidate_stronger",
     "target_only",
     "candidate_only",
+    "proposition_only",
     "weak_expression",
     "unsupported",
 ]
 
-AnchorSubstitutabilityLevel = Literal["strong", "medium", "partial", "insufficient", "blocked"]
+AnchorSubstitutabilityLevel = Literal[
+    "strong", "medium", "partial", "insufficient", "blocked"
+]
 
 CORE_ROLE = M12DAnchorRole.CORE_PAYMENT.value
 SUPPORTING_ROLE = M12DAnchorRole.SUPPORTING.value
@@ -90,6 +98,7 @@ class AnchorSubstitutabilityResult:
     candidate_stronger_anchors: list[str] = field(default_factory=list)
     weak_expression_anchors: list[str] = field(default_factory=list)
     candidate_only_anchors: list[str] = field(default_factory=list)
+    proposition_only_anchors: list[str] = field(default_factory=list)
     risk_drag_anchors: list[str] = field(default_factory=list)
     match_details: list[AnchorMatchDetail] = field(default_factory=list)
     anchor_substitution_summary_cn: str = ""
@@ -102,7 +111,9 @@ class AnchorSubstitutabilityResult:
 
     @property
     def normalized_score(self) -> Decimal:
-        return (Decimal(self.anchor_substitutability_score) / Decimal("15")).quantize(Decimal("0.0001"))
+        return (Decimal(self.anchor_substitutability_score) / Decimal("15")).quantize(
+            Decimal("0.0001")
+        )
 
     def to_legacy_value_anchor(self) -> dict[str, Any]:
         return {
@@ -113,6 +124,7 @@ class AnchorSubstitutabilityResult:
             "anchor_substitutability_score": self.anchor_substitutability_score,
             "anchor_substitutability_level": self.anchor_substitutability_level,
             "weak_expression_anchors": list(self.weak_expression_anchors),
+            "proposition_only_anchors": list(self.proposition_only_anchors),
             "match_details": [
                 {
                     "target_anchor_cn": detail.target_anchor_cn,
@@ -126,6 +138,11 @@ class AnchorSubstitutabilityResult:
             "anchor_substitution_summary_cn": self.anchor_substitution_summary_cn,
             "pair_scoring_allowed": self.pair_scoring_allowed,
             "primary_direct_eligible": self.primary_direct_eligible,
+            "candidate_top3_eligible": (
+                self.candidate_usage_decision.top3_eligible
+                if self.candidate_usage_decision is not None
+                else True
+            ),
             "requires_review": self.requires_review,
             "gate_reasons": list(self.gate_reasons),
         }
@@ -166,7 +183,13 @@ class ValueAnchorMatcher:
                 summary_cn="目标或候选 SKU 成交理由画像缺失，不能计算关键价值锚点可替代性。",
             )
 
-        target_core_anchors = _anchors_by_codes(target_profile, target_profile.core_payment_anchors)
+        target_core_anchors = [
+            anchor
+            for anchor in _anchors_by_codes(
+                target_profile, target_profile.core_payment_anchors
+            )
+            if _is_established_reason(anchor)
+        ]
         if not target_core_anchors:
             return _insufficient_result(
                 target_decision=target_decision,
@@ -181,6 +204,7 @@ class ValueAnchorMatcher:
         target_only_anchors: list[str] = []
         candidate_stronger_anchors: list[str] = []
         weak_expression_anchors: list[str] = []
+        proposition_only_anchors: list[str] = []
         risk_drag_anchors: list[str] = []
 
         for target_anchor in target_core_anchors:
@@ -191,12 +215,18 @@ class ValueAnchorMatcher:
             )
             detail_scores.append(detail_score)
             detail = detail_score.detail
-            if detail.match_type in {"exact_substitute", "adjacent_substitute", "candidate_stronger"}:
+            if detail.match_type in {
+                "exact_substitute",
+                "adjacent_substitute",
+                "candidate_stronger",
+            }:
                 shared_core_anchors.append(detail.target_anchor_cn)
             elif detail.match_type == "target_only":
                 target_only_anchors.append(detail.target_anchor_cn)
             elif detail.match_type == "weak_expression":
                 weak_expression_anchors.append(detail.target_anchor_cn)
+            elif detail.match_type == "proposition_only":
+                proposition_only_anchors.append(detail.target_anchor_cn)
             elif detail.match_type == "unsupported":
                 risk_drag_anchors.append(detail.target_anchor_cn)
             if detail.match_type == "candidate_stronger" and detail.candidate_anchor_cn:
@@ -209,8 +239,11 @@ class ValueAnchorMatcher:
         }
         candidate_only_anchors = [
             anchor.anchor_cn
-            for anchor in _anchors_by_codes(candidate_profile, candidate_profile.core_payment_anchors)
+            for anchor in _anchors_by_codes(
+                candidate_profile, candidate_profile.core_payment_anchors
+            )
             if anchor.anchor_code not in matched_candidate_codes
+            and _is_established_reason(anchor)
         ]
 
         breakdown = _score_breakdown(
@@ -218,12 +251,22 @@ class ValueAnchorMatcher:
             target_decision=target_decision,
             candidate_decision=candidate_decision,
         )
-        raw_score = max(Decimal("0"), min(Decimal("15"), breakdown.total_before_penalty - breakdown.penalties))
+        raw_score = max(
+            Decimal("0"),
+            min(Decimal("15"), breakdown.total_before_penalty - breakdown.penalties),
+        )
         score = _round_points(raw_score)
-        level = _level(score, blocked=not target_decision.strong_ranking_allowed or not candidate_decision.strong_ranking_allowed)
+        level = _level(
+            score,
+            blocked=not target_decision.strong_ranking_allowed
+            or not candidate_decision.strong_ranking_allowed,
+        )
         primary_direct_eligible = (
             score >= 7
-            and any(item.detail.match_type in {"exact_substitute", "candidate_stronger"} for item in detail_scores)
+            and any(
+                item.detail.match_type in {"exact_substitute", "candidate_stronger"}
+                for item in detail_scores
+            )
             and candidate_decision.strong_ranking_allowed
         )
         gate_reasons = _gate_reasons(
@@ -243,6 +286,7 @@ class ValueAnchorMatcher:
             candidate_stronger_anchors=_dedupe(candidate_stronger_anchors),
             weak_expression_anchors=_dedupe(weak_expression_anchors),
             candidate_only_anchors=_dedupe(candidate_only_anchors),
+            proposition_only_anchors=_dedupe(proposition_only_anchors),
             risk_drag_anchors=_dedupe(risk_drag_anchors),
             match_details=[item.detail for item in detail_scores],
             anchor_substitution_summary_cn=_summary_cn(
@@ -251,13 +295,16 @@ class ValueAnchorMatcher:
                 target_only_anchors=target_only_anchors,
                 candidate_stronger_anchors=candidate_stronger_anchors,
                 weak_expression_anchors=weak_expression_anchors,
-                requires_review=target_decision.requires_review or candidate_decision.requires_review,
+                proposition_only_anchors=proposition_only_anchors,
+                requires_review=target_decision.requires_review
+                or candidate_decision.requires_review,
             ),
             target_usage_decision=target_decision,
             candidate_usage_decision=candidate_decision,
             pair_scoring_allowed=True,
             primary_direct_eligible=primary_direct_eligible,
-            requires_review=target_decision.requires_review or candidate_decision.requires_review,
+            requires_review=target_decision.requires_review
+            or candidate_decision.requires_review,
             gate_reasons=gate_reasons,
         )
 
@@ -270,7 +317,9 @@ class ValueAnchorMatcher:
     ) -> "_DetailScore":
         candidate_anchor = candidate_anchor_index.get(target_anchor.anchor_code)
         if candidate_anchor is None and target_anchor.anchor_family_code:
-            candidate_anchor = _best_family_anchor(candidate_family_index.get(target_anchor.anchor_family_code) or [])
+            candidate_anchor = _best_family_anchor(
+                candidate_family_index.get(target_anchor.anchor_family_code) or []
+            )
 
         if candidate_anchor is None:
             return _detail_score(
@@ -283,7 +332,26 @@ class ValueAnchorMatcher:
             )
 
         candidate_role = _value(candidate_anchor.role)
+        establishment_status = _value(candidate_anchor.establishment_status)
         same_code = candidate_anchor.anchor_code == target_anchor.anchor_code
+        if establishment_status == M12DReasonEstablishmentStatus.PROPOSITION_ONLY.value:
+            return _detail_score(
+                target_anchor=target_anchor,
+                candidate_anchor=candidate_anchor,
+                match_type="proposition_only",
+                coverage_weight=Decimal("0"),
+                advantage_weight=Decimal("0"),
+                evidence_comparison_cn="候选希望传达该产品价值，但尚未观察到用户承接，不能计为购买理由替代。",
+            )
+        if not _is_established_reason(candidate_anchor):
+            return _detail_score(
+                target_anchor=target_anchor,
+                candidate_anchor=candidate_anchor,
+                match_type="unsupported",
+                coverage_weight=Decimal("0"),
+                advantage_weight=Decimal("0"),
+                evidence_comparison_cn="候选在该锚点上的购买理由未成立，不能作为正向替代。",
+            )
         if candidate_role == WEAK_ROLE:
             return _detail_score(
                 target_anchor=target_anchor,
@@ -303,7 +371,9 @@ class ValueAnchorMatcher:
                 evidence_comparison_cn="候选在该锚点上存在风险或拖累信号，不能作为正向替代。",
             )
 
-        coverage_weight = _coverage_weight(same_code=same_code, candidate_role=candidate_role)
+        coverage_weight = _coverage_weight(
+            same_code=same_code, candidate_role=candidate_role
+        )
         candidate_is_stronger = _candidate_is_stronger(target_anchor, candidate_anchor)
         if candidate_is_stronger and candidate_role == CORE_ROLE:
             match_type: AnchorMatchType = "candidate_stronger"
@@ -317,8 +387,12 @@ class ValueAnchorMatcher:
             candidate_anchor=candidate_anchor,
             match_type=match_type,
             coverage_weight=coverage_weight,
-            advantage_weight=_advantage_weight(match_type, candidate_role=candidate_role),
-            evidence_comparison_cn=_evidence_comparison_cn(target_anchor, candidate_anchor, match_type=match_type),
+            advantage_weight=_advantage_weight(
+                match_type, candidate_role=candidate_role
+            ),
+            evidence_comparison_cn=_evidence_comparison_cn(
+                target_anchor, candidate_anchor, match_type=match_type
+            ),
         )
 
 
@@ -347,27 +421,41 @@ def _detail_score(
         penalty += Decimal("0.75")
     elif match_type == "unsupported":
         penalty += Decimal("1.25")
-    candidate_role = _value(candidate_anchor.role) if candidate_anchor is not None else None
+    candidate_role = (
+        _value(candidate_anchor.role) if candidate_anchor is not None else None
+    )
     detail = AnchorMatchDetail(
         target_anchor_code=target_anchor.anchor_code,
         target_anchor_cn=target_anchor.anchor_cn,
-        candidate_anchor_code=candidate_anchor.anchor_code if candidate_anchor is not None else None,
-        candidate_anchor_cn=candidate_anchor.anchor_cn if candidate_anchor is not None else None,
+        candidate_anchor_code=candidate_anchor.anchor_code
+        if candidate_anchor is not None
+        else None,
+        candidate_anchor_cn=candidate_anchor.anchor_cn
+        if candidate_anchor is not None
+        else None,
         match_type=match_type,
         score=(coverage_weight * Decimal("5")).quantize(Decimal("0.0001")),
         target_role=_value(target_anchor.role),
         candidate_role=candidate_role,
         target_evidence_strength=_value(target_anchor.evidence_strength),
-        candidate_evidence_strength=_value(candidate_anchor.evidence_strength) if candidate_anchor is not None else None,
+        candidate_evidence_strength=_value(candidate_anchor.evidence_strength)
+        if candidate_anchor is not None
+        else None,
         evidence_comparison_cn=evidence_comparison_cn,
     )
     return _DetailScore(
         detail=detail,
         coverage_weight=coverage_weight,
-        parity_weight=_parity_weight(target_anchor, candidate_anchor, coverage_weight=coverage_weight),
+        parity_weight=_parity_weight(
+            target_anchor, candidate_anchor, coverage_weight=coverage_weight
+        ),
         advantage_weight=advantage_weight,
-        scenario_fit_weight=_scenario_fit_weight(target_anchor, candidate_anchor, coverage_weight=coverage_weight),
-        market_comment_weight=_market_comment_weight(candidate_anchor, coverage_weight=coverage_weight),
+        scenario_fit_weight=_scenario_fit_weight(
+            target_anchor, candidate_anchor, coverage_weight=coverage_weight
+        ),
+        market_comment_weight=_market_comment_weight(
+            candidate_anchor, coverage_weight=coverage_weight
+        ),
         penalty=penalty,
     )
 
@@ -379,21 +467,47 @@ def _score_breakdown(
     candidate_decision: PurchaseReasonProfileUsageDecision,
 ) -> AnchorSubstitutabilityBreakdown:
     denominator = Decimal(max(len(detail_scores), 1))
-    target_core_anchor_coverage = sum((item.coverage_weight for item in detail_scores), Decimal("0")) / denominator * Decimal("5")
-    evidence_parity = sum((item.parity_weight for item in detail_scores), Decimal("0")) / denominator * Decimal("4")
-    candidate_relative_advantage = sum((item.advantage_weight for item in detail_scores), Decimal("0")) / denominator * Decimal("3")
-    scenario_task_audience_fit = sum((item.scenario_fit_weight for item in detail_scores), Decimal("0")) / denominator * Decimal("2")
-    market_comment_validation = sum((item.market_comment_weight for item in detail_scores), Decimal("0")) / denominator * Decimal("1")
+    target_core_anchor_coverage = (
+        sum((item.coverage_weight for item in detail_scores), Decimal("0"))
+        / denominator
+        * Decimal("5")
+    )
+    evidence_parity = (
+        sum((item.parity_weight for item in detail_scores), Decimal("0"))
+        / denominator
+        * Decimal("4")
+    )
+    candidate_relative_advantage = (
+        sum((item.advantage_weight for item in detail_scores), Decimal("0"))
+        / denominator
+        * Decimal("3")
+    )
+    scenario_task_audience_fit = (
+        sum((item.scenario_fit_weight for item in detail_scores), Decimal("0"))
+        / denominator
+        * Decimal("2")
+    )
+    market_comment_validation = (
+        sum((item.market_comment_weight for item in detail_scores), Decimal("0"))
+        / denominator
+        * Decimal("1")
+    )
     penalties = sum((item.penalty for item in detail_scores), Decimal("0"))
     if target_decision.confidence_state == "degraded":
         penalties += Decimal("1.00")
     if candidate_decision.confidence_state == "degraded":
         penalties += Decimal("1.00")
     return AnchorSubstitutabilityBreakdown(
-        target_core_anchor_coverage=target_core_anchor_coverage.quantize(Decimal("0.0001")),
+        target_core_anchor_coverage=target_core_anchor_coverage.quantize(
+            Decimal("0.0001")
+        ),
         evidence_parity=evidence_parity.quantize(Decimal("0.0001")),
-        candidate_relative_advantage=candidate_relative_advantage.quantize(Decimal("0.0001")),
-        scenario_task_audience_fit=scenario_task_audience_fit.quantize(Decimal("0.0001")),
+        candidate_relative_advantage=candidate_relative_advantage.quantize(
+            Decimal("0.0001")
+        ),
+        scenario_task_audience_fit=scenario_task_audience_fit.quantize(
+            Decimal("0.0001")
+        ),
         market_comment_validation=market_comment_validation.quantize(Decimal("0.0001")),
         penalties=penalties.quantize(Decimal("0.0001")),
     )
@@ -425,7 +539,10 @@ def _parity_weight(
     target_confidence = max(_decimal(target_anchor.confidence), Decimal("0.0001"))
     candidate_confidence = _decimal(candidate_anchor.confidence)
     confidence_ratio = min(Decimal("1.00"), candidate_confidence / target_confidence)
-    return (coverage_weight * (strength_ratio * Decimal("0.70") + confidence_ratio * Decimal("0.30"))).quantize(Decimal("0.0001"))
+    return (
+        coverage_weight
+        * (strength_ratio * Decimal("0.70") + confidence_ratio * Decimal("0.30"))
+    ).quantize(Decimal("0.0001"))
 
 
 def _advantage_weight(match_type: AnchorMatchType, *, candidate_role: str) -> Decimal:
@@ -483,10 +600,11 @@ def _candidate_is_stronger(
     target_anchor: M12DDownstreamAnchorContract,
     candidate_anchor: M12DDownstreamAnchorContract,
 ) -> bool:
-    return (
-        _strength_score(candidate_anchor) > _strength_score(target_anchor)
-        or _decimal(candidate_anchor.confidence) >= _decimal(target_anchor.confidence) + Decimal("0.1000")
-    )
+    return _strength_score(candidate_anchor) > _strength_score(
+        target_anchor
+    ) or _decimal(candidate_anchor.confidence) >= _decimal(
+        target_anchor.confidence
+    ) + Decimal("0.1000")
 
 
 def _evidence_comparison_cn(
@@ -523,7 +641,9 @@ def _blocked_result(
         pair_scoring_allowed=False,
         primary_direct_eligible=False,
         requires_review=True,
-        gate_reasons=_dedupe(list(target_decision.reasons) + list(candidate_decision.reasons)),
+        gate_reasons=_dedupe(
+            list(target_decision.reasons) + list(candidate_decision.reasons)
+        ),
     )
 
 
@@ -555,9 +675,12 @@ def _summary_cn(
     target_only_anchors: list[str],
     candidate_stronger_anchors: list[str],
     weak_expression_anchors: list[str],
+    proposition_only_anchors: list[str],
     requires_review: bool,
 ) -> str:
-    level_text = "强" if score >= 13 else "中" if score >= 10 else "弱" if score >= 7 else "不足"
+    level_text = (
+        "强" if score >= 13 else "中" if score >= 10 else "弱" if score >= 7 else "不足"
+    )
     parts = [f"关键价值锚点可替代性为{level_text}，得分{score}/15。"]
     if shared_core_anchors:
         parts.append(f"候选覆盖目标核心成交理由：{_join_cn(shared_core_anchors[:5])}。")
@@ -567,6 +690,10 @@ def _summary_cn(
         parts.append(f"目标独有或候选未覆盖：{_join_cn(target_only_anchors[:4])}。")
     if weak_expression_anchors:
         parts.append(f"弱表达不计强替代：{_join_cn(weak_expression_anchors[:4])}。")
+    if proposition_only_anchors:
+        parts.append(
+            f"候选希望传达但尚未观察到用户承接：{_join_cn(proposition_only_anchors[:4])}，不计购买理由替代。"
+        )
     if requires_review:
         parts.append("当前 M12D 画像存在降级或复核标记，排序结论必须同步降置信度。")
     return "".join(parts)
@@ -596,14 +723,19 @@ def _gate_reasons(
         reasons.append("target_m12d_degraded")
     if candidate_decision.confidence_state == "degraded":
         reasons.append("candidate_m12d_degraded")
-    if not any(item.detail.match_type in {"exact_substitute", "candidate_stronger"} for item in detail_scores):
+    if not any(
+        item.detail.match_type in {"exact_substitute", "candidate_stronger"}
+        for item in detail_scores
+    ):
         reasons.append("target_core_anchor_not_exactly_covered")
     if not primary_direct_eligible:
         reasons.append("not_primary_direct_eligible")
     return _dedupe(reasons)
 
 
-def _anchors_by_codes(profile: M12DDownstreamProfileContract, codes: list[str]) -> list[M12DDownstreamAnchorContract]:
+def _anchors_by_codes(
+    profile: M12DDownstreamProfileContract, codes: list[str]
+) -> list[M12DDownstreamAnchorContract]:
     index = _anchor_index(profile)
     return [index[code] for code in codes if code in index]
 
@@ -611,14 +743,22 @@ def _anchors_by_codes(profile: M12DDownstreamProfileContract, codes: list[str]) 
 def _core_anchor_names(profile: M12DDownstreamProfileContract | None) -> list[str]:
     if profile is None:
         return []
-    return [anchor.anchor_cn for anchor in _anchors_by_codes(profile, profile.core_payment_anchors)]
+    return [
+        anchor.anchor_cn
+        for anchor in _anchors_by_codes(profile, profile.core_payment_anchors)
+        if _is_established_reason(anchor)
+    ]
 
 
-def _anchor_index(profile: M12DDownstreamProfileContract) -> dict[str, M12DDownstreamAnchorContract]:
+def _anchor_index(
+    profile: M12DDownstreamProfileContract,
+) -> dict[str, M12DDownstreamAnchorContract]:
     return {anchor.anchor_code: anchor for anchor in profile.anchors}
 
 
-def _anchor_family_index(profile: M12DDownstreamProfileContract) -> dict[str, list[M12DDownstreamAnchorContract]]:
+def _anchor_family_index(
+    profile: M12DDownstreamProfileContract,
+) -> dict[str, list[M12DDownstreamAnchorContract]]:
     result: dict[str, list[M12DDownstreamAnchorContract]] = {}
     for anchor in profile.anchors:
         if anchor.anchor_family_code:
@@ -626,13 +766,20 @@ def _anchor_family_index(profile: M12DDownstreamProfileContract) -> dict[str, li
     return result
 
 
-def _best_family_anchor(anchors: list[M12DDownstreamAnchorContract]) -> M12DDownstreamAnchorContract | None:
-    usable = [anchor for anchor in anchors if _value(anchor.role) in {CORE_ROLE, SUPPORTING_ROLE, WEAK_ROLE, RISK_ROLE}]
+def _best_family_anchor(
+    anchors: list[M12DDownstreamAnchorContract],
+) -> M12DDownstreamAnchorContract | None:
+    usable = [
+        anchor
+        for anchor in anchors
+        if _value(anchor.role) in {CORE_ROLE, SUPPORTING_ROLE, WEAK_ROLE, RISK_ROLE}
+    ]
     if not usable:
         return None
     return sorted(
         usable,
         key=lambda anchor: (
+            _establishment_rank(anchor),
             _role_rank(_value(anchor.role)),
             _strength_score(anchor),
             _decimal(anchor.confidence),
@@ -640,6 +787,28 @@ def _best_family_anchor(anchors: list[M12DDownstreamAnchorContract]) -> M12DDown
         ),
         reverse=True,
     )[0]
+
+
+def _is_established_reason(anchor: M12DDownstreamAnchorContract) -> bool:
+    return _value(anchor.establishment_status) in {
+        M12DReasonEstablishmentStatus.UNASSESSED.value,
+        M12DReasonEstablishmentStatus.ESTABLISHED.value,
+        M12DReasonEstablishmentStatus.ESTABLISHED_LIMITED.value,
+    }
+
+
+def _establishment_rank(anchor: M12DDownstreamAnchorContract) -> Decimal:
+    status = _value(anchor.establishment_status)
+    if status in {
+        M12DReasonEstablishmentStatus.ESTABLISHED.value,
+        M12DReasonEstablishmentStatus.ESTABLISHED_LIMITED.value,
+    }:
+        return Decimal("3")
+    if status == M12DReasonEstablishmentStatus.UNASSESSED.value:
+        return Decimal("2")
+    if status == M12DReasonEstablishmentStatus.PROPOSITION_ONLY.value:
+        return Decimal("1")
+    return Decimal("0")
 
 
 def _role_rank(role: str) -> Decimal:

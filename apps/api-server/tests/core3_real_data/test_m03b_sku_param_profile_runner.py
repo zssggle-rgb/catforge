@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -17,7 +18,15 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
     Core3TargetScopeType,
 )
-from app.services.core3_real_data.m03b_param_profile_service import M03BParamEvidenceReader, M03BRunner, _display_tech_class
+from app.services.core3_real_data.m03b_param_profile_service import (
+    M03BParamEvidenceReader,
+    M03BRunner,
+    _ac_cooling_capacity_tier_by_number,
+    _ac_horsepower_tier_by_number,
+    _declared_segment_contains,
+    _display_tech_class,
+    _size_tier_by_number,
+)
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from app.services.core3_real_data.run_context import build_run_context
 from app.services.core3_real_data.runner import Core3ModuleTarget
@@ -25,6 +34,7 @@ from app.services.core3_real_data.runner import Core3ModuleTarget
 
 PROJECT_ID = "core3_mvp"
 BATCH_ID = "m00_202606180001"
+AC_BATCH_ID = "m00_202606180002"
 RUN_ID = "run-m03b"
 MODULE_RUN_ID = "module-run-m03b"
 SKU_CODE = "TV00027549"
@@ -99,6 +109,25 @@ def seed_foundation(session: Session) -> None:
             review_status="auto_pass",
         )
     )
+    session.add(
+        entities.Core3SourceBatch(
+            batch_id=AC_BATCH_ID,
+            project_id=PROJECT_ID,
+            category_code="AC",
+            run_id=RUN_ID,
+            module_run_id=MODULE_RUN_ID,
+            batch_type="incremental",
+            source_system="postgresql_205",
+            source_database="catforge_dev",
+            source_tables=["week_sales_data", "attribute_data", "selling_points_data", "comment_data"],
+            ruleset_version="ac-core3-real-data-v2-0.1.0",
+            module_version="m00-source-registry-0.1.0",
+            hash_version="m00_row_hash_v1",
+            scan_started_at=datetime(2026, 6, 18, tzinfo=timezone.utc),
+            status=Core3SourceBatchStatus.REGISTERED.value,
+            review_status="auto_pass",
+        )
+    )
     session.flush()
 
 
@@ -149,6 +178,7 @@ def test_display_tech_class_uses_rgb_only_when_miniled_type_is_explicit_rgb_mini
 def seed_tv_param_evidence(session: Session) -> None:
     raw_fields = {
         "尺寸": "65英寸",
+        "尺寸段": "60-69",
         "分辨率": "3840×2160",
         "清晰度2": "4K",
         "屏幕刷新率": "144HZ",
@@ -228,7 +258,7 @@ def seed_ac_param_evidence(session: Session) -> None:
     ac_fields = {
         "标准品牌": "美的",
         "系列": "风语者",
-        "三大品牌系列": "风语者",
+        "三大品牌系列": "FSZ",
         "产品类型": "挂机冷暖",
         "安装方式": "挂机",
         "内机尺寸": "885*293*196",
@@ -236,7 +266,7 @@ def seed_ac_param_evidence(session: Session) -> None:
         "冷暖": "冷暖",
         "净化功能": "否",
         "制冷量": "3510",
-        "制冷量段": "1匹半",
+        "制冷量段": "1匹半(3500W-3999W)",
         "制热量": "0",
         "匹数": "1.5",
         "匹数段": "1-1.5匹",
@@ -260,6 +290,8 @@ def seed_ac_param_evidence(session: Session) -> None:
                 sku_code="AC00000001",
                 model_name="KFR-35GW",
                 brand_name="美的",
+                category_code="AC",
+                batch_id=AC_BATCH_ID,
                 evidence_field=raw_field,
                 clean_value=value,
             )
@@ -275,6 +307,8 @@ def evidence(
     sku_code: str = SKU_CODE,
     model_name: str = "65E3Q",
     brand_name: str = "海信",
+    category_code: str = "TV",
+    batch_id: str = BATCH_ID,
     evidence_type: str = "param_raw",
     evidence_grain: str = "field",
     evidence_field: str,
@@ -285,10 +319,10 @@ def evidence(
 ) -> dict:
     return {
         "evidence_id": evidence_id,
-        "evidence_key": f"{BATCH_ID}:{sku_code}:{evidence_type}:{evidence_field}:{evidence_id}",
+        "evidence_key": f"{batch_id}:{sku_code}:{evidence_type}:{evidence_field}:{evidence_id}",
         "project_id": PROJECT_ID,
-        "category_code": "TV",
-        "batch_id": BATCH_ID,
+        "category_code": category_code,
+        "batch_id": batch_id,
         "run_id": RUN_ID,
         "module_run_id": MODULE_RUN_ID,
         "sku_code": sku_code,
@@ -366,7 +400,7 @@ def test_m03b_reader_consumes_only_current_tv_param_raw_evidence():
     assert "ev_market" not in evidence_ids
     assert "ev_ac_size" not in evidence_ids
     assert {record.evidence_type for record in records} == {"param_raw"}
-    assert len(records) == 24
+    assert len(records) == 25
 
 
 def test_m03b_runner_builds_sku_param_profile_dimension_tiers_and_tier_coverage():
@@ -377,15 +411,17 @@ def test_m03b_runner_builds_sku_param_profile_dimension_tiers_and_tier_coverage(
 
     assert result.module_code == "M03B"
     assert result.status == Core3RunStatus.SUCCESS
-    assert result.input_count == 24
+    assert result.input_count == 25
     assert result.output_count > 0
 
     profile = session.execute(select(entities.Core3SkuParamProfile).where(entities.Core3SkuParamProfile.sku_code == SKU_CODE)).scalar_one()
     profile_json = profile.param_values_json
     assert profile_json["screen_size_inch"]["normalized_value"] == 65
-    assert profile_json["screen_size_segment"]["normalized_value"] == "large_60_69"
+    assert profile_json["screen_size_segment"]["normalized_value"] == "60-69"
     assert profile_json["display_tech_class"]["normalized_value"] == "lcd_led"
     assert profile_json["camera_flag"]["normalized_value"] is False
+    assert profile.conflict_count == 0
+    assert profile.quality_summary_json["conflicts"] == []
     assert profile_json["dimension_tier_profile"] == {
         "appearance": "appearance_standard",
         "display_tech": "lcd_led",
@@ -458,8 +494,8 @@ def test_m03b_runner_builds_ac_param_profile_with_ac_taxonomy_and_prefix_boundar
 
     result = M03BRunner(session).run_batch(
         project_id=PROJECT_ID,
-        category_code="TV",
-        batch_id=BATCH_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
         taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
         parser_version=CORE3_M03B_AC_PARSER_VERSION,
         rule_version=CORE3_M03B_AC_RULE_VERSION,
@@ -479,10 +515,14 @@ def test_m03b_runner_builds_ac_param_profile_with_ac_taxonomy_and_prefix_boundar
     values = profile.param_values_json
     assert values["_metadata"]["taxonomy_version"] == CORE3_M03B_AC_TAXONOMY_VERSION
     assert values["horsepower_hp"]["normalized_value"] == 1.5
+    assert values["product_series"]["normalized_value"] == "风语者"
+    assert values["brand_series_code"]["normalized_value"] == "FSZ"
     assert values["heating_capacity_w"]["normalized_value"] == 0
     assert values["heating_function_flag"]["normalized_value"] is False
     assert values["airflow_volume_m3h"]["value_presence"] == "unknown"
     assert values["energy_grade_normalized"]["normalized_value"] == "一级"
+    assert profile.conflict_count == 0
+    assert profile.quality_summary_json["conflicts"] == []
     assert values["dimension_tier_profile"] == {
         "airflow": "airflow_unknown",
         "comfort": "comfort_full",
@@ -502,3 +542,169 @@ def test_m03b_runner_builds_ac_param_profile_with_ac_taxonomy_and_prefix_boundar
         .where(entities.Core3ParamTierCoverage.tier_code == "health_fresh_air")
     ).scalar_one()
     assert coverage.sku_codes == ["AC00000001"]
+
+
+def test_m03b_ac_taxonomy_rejects_tv_source_category_with_structured_failure() -> None:
+    session = make_session()
+
+    result = M03BRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+        parser_version=CORE3_M03B_AC_PARSER_VERSION,
+        rule_version=CORE3_M03B_AC_RULE_VERSION,
+        sku_code_prefix="AC",
+    )
+
+    assert result.status == Core3RunStatus.FAILED
+    assert result.review_issues[0].issue_code == "m03b_param_profile_failed"
+    assert result.review_issues[0].issue_type == "runtime_error"
+    assert result.review_issues[0].object_type == "batch"
+
+
+@pytest.mark.parametrize(
+    ("size", "declared_segment", "expected_tier"),
+    [
+        ("32", "32-36", "small_32_45"),
+        ("43", "40-45", "small_32_45"),
+        ("55", "51-59", "medium_46_59"),
+        ("65", "60-69", "large_60_69"),
+        ("75", "≥70", "xlarge_70_85"),
+        ("85", "≥70", "xlarge_70_85"),
+        ("98", "≥70", "giant_98_plus"),
+        ("100", "≥70", "giant_98_plus"),
+    ],
+)
+def test_tv_size_segment_uses_numeric_membership_instead_of_label_equality(
+    size: str,
+    declared_segment: str,
+    expected_tier: str,
+) -> None:
+    numeric_size = Decimal(size)
+
+    assert _size_tier_by_number(numeric_size) == expected_tier
+    assert _declared_segment_contains(declared_segment, numeric_size, unit_kind="inch") is True
+
+
+@pytest.mark.parametrize(
+    ("horsepower", "declared_segment", "expected_tier"),
+    [
+        ("1", "1匹(含)及以下", "hp_1_or_below"),
+        ("1.5", "1-1.5匹(含)", "hp_1_5"),
+        ("2", "1.5-2匹(含)", "hp_2"),
+        ("3", "2-3匹(含)", "hp_3"),
+        ("3.5", "3匹以上", "hp_3_plus"),
+    ],
+)
+def test_ac_horsepower_segment_respects_declared_range_boundaries(
+    horsepower: str,
+    declared_segment: str,
+    expected_tier: str,
+) -> None:
+    numeric_horsepower = Decimal(horsepower)
+
+    assert _ac_horsepower_tier_by_number(numeric_horsepower) == expected_tier
+    assert _declared_segment_contains(declared_segment, numeric_horsepower, unit_kind="horsepower") is True
+
+
+@pytest.mark.parametrize(
+    ("cooling", "declared_segment", "expected_tier"),
+    [
+        ("2999", "1匹(2500W-2999W)", "cooling_small_lt3000"),
+        ("3000", "小1匹半(3000W-3499W)", "cooling_1_5_3000_3999"),
+        ("3999", "1匹半(3500W-3999W)", "cooling_1_5_3000_3999"),
+        ("4000", "小2匹(4000W-4999W)", "cooling_2_4000_5499"),
+        ("5499", "2匹(4800W-5499W)", "cooling_2_4000_5499"),
+        ("5500", "5500W-6499W", "cooling_2_5_5500_6499"),
+        ("6499", "5500W-6499W", "cooling_2_5_5500_6499"),
+        ("6500", "3匹(6500W-7499W)", "cooling_3_6500_7499"),
+        ("7499", "3匹(6500W-7499W)", "cooling_3_6500_7499"),
+        ("7500", "小4匹(7500W-9599W)", "cooling_large_7500_plus"),
+    ],
+)
+def test_ac_cooling_capacity_segment_has_continuous_boundaries(
+    cooling: str,
+    declared_segment: str,
+    expected_tier: str,
+) -> None:
+    numeric_cooling = Decimal(cooling)
+
+    assert _ac_cooling_capacity_tier_by_number(numeric_cooling) == expected_tier
+    assert _declared_segment_contains(declared_segment, numeric_cooling, unit_kind="watt") is True
+
+
+def test_tv_true_size_contradiction_is_retained_with_traceable_candidates() -> None:
+    session = make_session()
+    seed_tv_param_evidence(session)
+    session.add(
+        entities.Core3EvidenceAtom(
+            **evidence(
+                "ev_tv_size_contradiction",
+                evidence_field="尺寸段",
+                clean_value="40-45",
+            )
+        )
+    )
+    session.flush()
+
+    result = M03BRunner(session).run(make_run_context(), make_target())
+
+    assert result.status == Core3RunStatus.WARNING
+    profile = session.execute(
+        select(entities.Core3SkuParamProfile).where(entities.Core3SkuParamProfile.sku_code == SKU_CODE)
+    ).scalar_one()
+    assert profile.conflict_count == 1
+    conflict = profile.quality_summary_json["conflicts"][0]
+    assert conflict["param_code"] == "screen_size_segment"
+    assert conflict["comparison_basis"] == {
+        "param_code": "screen_size_inch",
+        "numeric_value": 65,
+        "expected_tier": "large_60_69",
+    }
+    assert {item["raw_param_value"] for item in conflict["candidate_values"] if item["raw_param_value"]} == {
+        "40-45",
+        "60-69",
+    }
+    assert conflict["selected_value"]["raw_param_value"] == "60-69"
+    assert conflict["affected_dimension_codes"] == ["size"]
+
+
+def test_ac_true_installation_contradiction_is_retained_while_series_fields_stay_separate() -> None:
+    session = make_session()
+    seed_ac_param_evidence(session)
+    installation = session.execute(
+        select(entities.Core3EvidenceAtom)
+        .where(entities.Core3EvidenceAtom.batch_id == AC_BATCH_ID)
+        .where(entities.Core3EvidenceAtom.evidence_field == "安装方式")
+    ).scalar_one()
+    installation.clean_value = "柜机"
+    installation.raw_value = "柜机"
+    installation.evidence_payload_json = {"clean_value": "柜机"}
+    session.flush()
+
+    result = M03BRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="AC",
+        batch_id=AC_BATCH_ID,
+        taxonomy_version=CORE3_M03B_AC_TAXONOMY_VERSION,
+        parser_version=CORE3_M03B_AC_PARSER_VERSION,
+        rule_version=CORE3_M03B_AC_RULE_VERSION,
+        sku_code_prefix="AC",
+    )
+
+    assert result.status == Core3RunStatus.WARNING
+    profile = session.execute(
+        select(entities.Core3SkuParamProfile).where(entities.Core3SkuParamProfile.sku_code == "AC00000001")
+    ).scalar_one()
+    assert profile.conflict_count == 1
+    conflict = profile.quality_summary_json["conflicts"][0]
+    assert conflict["param_code"] == "installation_type"
+    assert {item["normalized_value"] for item in conflict["candidate_values"]} == {
+        "floor_standing",
+        "wall_mounted",
+    }
+    assert conflict["selected_value"]["normalized_value"] == "floor_standing"
+    assert conflict["affected_dimension_codes"] == ["installation"]
+    assert profile.param_values_json["product_series"]["normalized_value"] == "风语者"
+    assert profile.param_values_json["brand_series_code"]["normalized_value"] == "FSZ"

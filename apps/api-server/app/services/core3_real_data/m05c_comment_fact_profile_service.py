@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
 import httpx
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import entities
@@ -1547,9 +1547,10 @@ class M05CService:
             sku_codes=sku_codes,
             rule_version=_param_rule_version_for_product_category(taxonomy.product_category),
         )
-        claim_facts = self._read_claim_facts(
+        claim_profiles, claim_facts = self._read_claim_context(
             batch_id,
             sku_codes=sku_codes,
+            product_category=taxonomy.product_category,
             rule_version=_claim_rule_version_for_product_category(taxonomy.product_category),
         )
         profiles, facts, coverages, review_issues, summary = M05CProfileBuilder(
@@ -1563,7 +1564,22 @@ class M05CService:
             llm_mode=llm_mode,
             llm_batch_size=llm_batch_size,
             llm_parallelism=llm_parallelism,
-        ).build(records, param_profiles, claim_facts, build_coverage=build_coverage)
+        ).build(
+            records,
+            param_profiles,
+            claim_facts,
+            claim_profile_sku_codes=set(claim_profiles),
+            build_coverage=build_coverage,
+        )
+        summary["input_context"] = {
+            "lookup_strategy": "same_batch_then_current_category_serving_scope",
+            "param_profile_sku_count": len(param_profiles),
+            "param_profile_missing_sku_count": len(set(sku_codes) - set(param_profiles)),
+            "param_profile_source_batch_counts": dict(sorted(Counter(row.batch_id for row in param_profiles.values()).items())),
+            "claim_fact_profile_sku_count": len(claim_profiles),
+            "claim_fact_profile_missing_sku_count": len(set(sku_codes) - set(claim_profiles)),
+            "claim_fact_profile_source_batch_counts": dict(sorted(Counter(row.batch_id for row in claim_profiles.values()).items())),
+        }
         repository = M05CCommentFactRepository(self.context)
         if force_rebuild:
             repository.delete_outputs(
@@ -1708,40 +1724,74 @@ class M05CService:
             select(entities.Core3SkuParamProfile)
             .where(entities.Core3SkuParamProfile.project_id == self.context.project_id)
             .where(entities.Core3SkuParamProfile.category_code == self.context.category_code.value)
-            .where(entities.Core3SkuParamProfile.batch_id == batch_id)
             .where(entities.Core3SkuParamProfile.rule_version == rule_version)
             .where(entities.Core3SkuParamProfile.sku_code.in_(tuple(sku_codes)))
-            .order_by(entities.Core3SkuParamProfile.updated_at.desc(), entities.Core3SkuParamProfile.created_at.desc())
+            .order_by(
+                case((entities.Core3SkuParamProfile.batch_id == batch_id, 0), else_=1),
+                entities.Core3SkuParamProfile.updated_at.desc(),
+                entities.Core3SkuParamProfile.created_at.desc(),
+                entities.Core3SkuParamProfile.batch_id.desc(),
+            )
         )
         result: dict[str, entities.Core3SkuParamProfile] = {}
         for profile in self.context.db.execute(stmt).scalars():
             result.setdefault(profile.sku_code, profile)
         return result
 
-    def _read_claim_facts(
+    def _read_claim_context(
         self,
         batch_id: str,
         *,
         sku_codes: Sequence[str],
+        product_category: str,
         rule_version: str,
-    ) -> dict[str, dict[str, list[entities.Core3SkuClaimFact]]]:
+    ) -> tuple[
+        dict[str, entities.Core3SkuClaimFactProfile],
+        dict[str, dict[str, list[entities.Core3SkuClaimFact]]],
+    ]:
         if not sku_codes:
-            return {}
-        stmt = (
+            return {}, {}
+        profile_stmt = (
+            select(entities.Core3SkuClaimFactProfile)
+            .where(entities.Core3SkuClaimFactProfile.project_id == self.context.project_id)
+            .where(entities.Core3SkuClaimFactProfile.category_code == self.context.category_code.value)
+            .where(entities.Core3SkuClaimFactProfile.product_category == product_category)
+            .where(entities.Core3SkuClaimFactProfile.rule_version == rule_version)
+            .where(entities.Core3SkuClaimFactProfile.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3SkuClaimFactProfile.is_current.is_(True))
+            .order_by(
+                case((entities.Core3SkuClaimFactProfile.batch_id == batch_id, 0), else_=1),
+                entities.Core3SkuClaimFactProfile.updated_at.desc(),
+                entities.Core3SkuClaimFactProfile.created_at.desc(),
+                entities.Core3SkuClaimFactProfile.batch_id.desc(),
+            )
+        )
+        profiles: dict[str, entities.Core3SkuClaimFactProfile] = {}
+        for profile in self.context.db.execute(profile_stmt).scalars():
+            profiles.setdefault(profile.sku_code, profile)
+        if not profiles:
+            return {}, {}
+        fact_stmt = (
             select(entities.Core3SkuClaimFact)
             .where(entities.Core3SkuClaimFact.project_id == self.context.project_id)
             .where(entities.Core3SkuClaimFact.category_code == self.context.category_code.value)
-            .where(entities.Core3SkuClaimFact.batch_id == batch_id)
+            .where(entities.Core3SkuClaimFact.product_category == product_category)
             .where(entities.Core3SkuClaimFact.rule_version == rule_version)
-            .where(entities.Core3SkuClaimFact.sku_code.in_(tuple(sku_codes)))
+            .where(entities.Core3SkuClaimFact.sku_code.in_(tuple(profiles)))
             .where(entities.Core3SkuClaimFact.fact_claim_flag.is_(True))
             .where(entities.Core3SkuClaimFact.is_current.is_(True))
-            .order_by(entities.Core3SkuClaimFact.sku_code, entities.Core3SkuClaimFact.claim_code)
+            .order_by(
+                entities.Core3SkuClaimFact.sku_code,
+                entities.Core3SkuClaimFact.claim_code,
+                entities.Core3SkuClaimFact.updated_at.desc(),
+            )
         )
         result: dict[str, dict[str, list[entities.Core3SkuClaimFact]]] = defaultdict(lambda: defaultdict(list))
-        for row in self.context.db.execute(stmt).scalars():
+        for row in self.context.db.execute(fact_stmt).scalars():
+            if row.batch_id != profiles[row.sku_code].batch_id:
+                continue
             result[row.sku_code][row.claim_code].append(row)
-        return {sku_code: dict(claims) for sku_code, claims in result.items()}
+        return profiles, {sku_code: dict(claims) for sku_code, claims in result.items()}
 
 
 class M05CProfileBuilder:
@@ -1776,6 +1826,7 @@ class M05CProfileBuilder:
         param_profiles: Mapping[str, entities.Core3SkuParamProfile],
         claim_facts_by_sku: Mapping[str, Mapping[str, Sequence[entities.Core3SkuClaimFact]]],
         *,
+        claim_profile_sku_codes: set[str],
         build_coverage: bool = True,
     ) -> tuple[list[M05CWritePayload], list[M05CWritePayload], list[M05CWritePayload], list[M05CWritePayload], dict[str, Any]]:
         clean_records = [record for record in records if _sku_allowed(record.sku_code, self.taxonomy.sku_code_prefix) and _present_text(record.comment_text)]
@@ -1821,6 +1872,7 @@ class M05CProfileBuilder:
                 records_by_sku[sku_code],
                 param_profiles.get(sku_code),
                 claim_facts_by_sku.get(sku_code, {}),
+                sku_code in claim_profile_sku_codes,
                 classification.annotations,
             )
             profiles.append(sku_result["profile"])
@@ -1860,6 +1912,7 @@ class M05CProfileBuilder:
         records: list[M05CCommentRecord],
         param_profile: entities.Core3SkuParamProfile | None,
         claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
+        claim_profile_available: bool,
         annotations: Mapping[str, M05CLlmAnnotation],
     ) -> dict[str, Any]:
         model_name = _first_present(record.model_name for record in records) or getattr(param_profile, "model_name", None)
@@ -1913,6 +1966,7 @@ class M05CProfileBuilder:
                 review_issues=review_issues,
                 param_profile=param_profile,
                 claim_facts=claim_facts,
+                claim_profile_available=claim_profile_available,
             )
         )
         return {
@@ -1973,6 +2027,21 @@ class M05CProfileBuilder:
             quality_flags.append("comment_contradicts_existing_param_or_claim")
         if not support["param_snapshot"] and definition.linked_param_codes:
             quality_flags.append("linked_param_not_found_or_unknown")
+        quality_contract: dict[str, Any] = {}
+        if definition.dimension_type == DIMENSION_TYPE_SERVICE:
+            quality_contract = {
+                "issue_code": "service_fulfillment_comment_excluded",
+                "severity": "info",
+                "scope": "comment_fact",
+                "downstream_usage": "excluded_from_product_fact_analysis",
+            }
+        elif support["relation"] == RELATION_CONTRADICTS:
+            quality_contract = {
+                "issue_code": "comment_contradicts_existing_param_or_claim",
+                "severity": "warning",
+                "scope": "comment_fact",
+                "propagation_policy": "related_anchor_only",
+            }
         payload = {
             "comment_fact_id": _comment_fact_id(self.project_id, self.batch_id, sku_code, source_comment_key, definition.subdimension_code, self.rule_version),
             "project_id": self.project_id,
@@ -2010,6 +2079,7 @@ class M05CProfileBuilder:
                 "rule_summary": definition.rule_summary,
                 "linked_param_codes": list(definition.linked_param_codes),
                 "linked_claim_codes": list(definition.linked_claim_codes),
+                "quality_contract": quality_contract,
             },
             "extraction_payload_json": {
                 "method": "llm" if annotation and annotation.confidence is not None else "taxonomy_rule",
@@ -2049,6 +2119,7 @@ class M05CProfileBuilder:
         review_issues: Sequence[M05CWritePayload],
         param_profile: entities.Core3SkuParamProfile | None,
         claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
+        claim_profile_available: bool,
     ) -> dict[str, Any]:
         fact_payloads = [fact.payload for fact in facts]
         source_keys_by_polarity = _source_keys_by_polarity(fact_payloads)
@@ -2062,6 +2133,29 @@ class M05CProfileBuilder:
         known_claim_codes = sorted(claim_facts.keys())
         dimension_summary = _dimension_summary(fact_payloads)
         signal_summary = _signal_summary(fact_payloads)
+        quality_notices = []
+        if service_keys:
+            quality_notices.append(
+                {
+                    "issue_code": "service_fulfillment_comment_excluded",
+                    "severity": "info",
+                    "scope": "comment_fact",
+                    "sentence_count": len(service_keys),
+                    "downstream_usage": "excluded_from_product_fact_analysis",
+                }
+            )
+        if review_issues:
+            quality_notices.append(
+                {
+                    "issue_code": "comment_contradicts_existing_param_or_claim",
+                    "severity": "warning",
+                    "scope": "comment_fact",
+                    "issue_count": len(review_issues),
+                    "propagation_policy": "related_anchor_only",
+                }
+            )
+        if quality_notices:
+            signal_summary = {**signal_summary, "quality_notices": quality_notices}
         payload = {
             "comment_profile_id": _comment_profile_id(self.project_id, self.batch_id, sku_code, self.taxonomy.taxonomy_version, self.rule_version),
             "project_id": self.project_id,
@@ -2096,7 +2190,11 @@ class M05CProfileBuilder:
             "contradicted_claim_codes": contradicted_claim_codes,
             "unmentioned_claim_codes": [code for code in known_claim_codes if code not in set(supported_claim_codes) | set(contradicted_claim_codes)],
             "evidence_ids": evidence_ids,
-            "quality_flags": _profile_quality_flags(fact_payloads, param_profile=param_profile, claim_facts=claim_facts),
+            "quality_flags": _profile_quality_flags(
+                fact_payloads,
+                param_profile=param_profile,
+                claim_profile_available=claim_profile_available,
+            ),
             "review_required_count": len(review_issues),
             "confidence": Decimal("0.8500") if fact_payloads else Decimal("0.0000"),
             "is_current": True,
@@ -2267,9 +2365,15 @@ class M05CProfileBuilder:
             "issue_payload_json": {
                 "source_comment_key": fact_payload["source_comment_key"],
                 "comment_text": fact_payload["clean_comment_text"],
+                "scope": "comment_fact",
+                "dimension_code": fact_payload["dimension_code"],
                 "subdimension_code": fact_payload["subdimension_code"],
+                "comment_topic_code": fact_payload["subdimension_code"],
                 "contradicted_param_codes": fact_payload["contradicted_param_codes"],
                 "contradicted_claim_codes": fact_payload["contradicted_claim_codes"],
+                "affected_anchor_codes": [],
+                "affected_anchor_mapping_status": "deferred_to_downstream_category_taxonomy",
+                "propagation_policy": "related_anchor_only",
             },
             "evidence_ids": fact_payload["evidence_ids"],
             "review_required": True,
@@ -2745,19 +2849,15 @@ def _profile_quality_flags(
     rows: Sequence[Mapping[str, Any]],
     *,
     param_profile: entities.Core3SkuParamProfile | None,
-    claim_facts: Mapping[str, Sequence[entities.Core3SkuClaimFact]],
+    claim_profile_available: bool,
 ) -> list[str]:
     flags = []
     if not rows:
         flags.append("no_comment_fact_matched")
     if param_profile is None:
         flags.append("param_profile_missing")
-    if not claim_facts:
+    if not claim_profile_available:
         flags.append("claim_fact_profile_missing")
-    if any(row["support_relation"] == RELATION_CONTRADICTS for row in rows):
-        flags.append("comment_contradicts_existing_param_or_claim")
-    if any(row["dimension_type"] == DIMENSION_TYPE_SERVICE for row in rows):
-        flags.append("service_fulfillment_comment_excluded")
     return flags
 
 
@@ -2832,8 +2932,6 @@ def _warnings(
         warnings.append("m05c_param_profile_missing_for_some_skus")
     if sku_codes and len(claim_facts) < len(set(sku_codes)):
         warnings.append("m05c_claim_fact_profile_missing_for_some_skus")
-    if int(summary.get("contradicted_fact_count") or 0) > 0:
-        warnings.append("m05c_comment_contradiction_review_required")
     warnings.extend(str(item) for item in summary.get("llm_warnings") or [])
     return warnings
 

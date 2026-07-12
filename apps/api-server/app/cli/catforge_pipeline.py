@@ -58,7 +58,8 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
-    CORE3_M12C_RULE_VERSION,
+    CORE3_M12C_AC_RULE_VERSION,
+    CORE3_M12C_TV_RULE_VERSION,
     Core3ModuleCode,
     Core3EvidenceStatus,
     Core3EvidenceType,
@@ -129,7 +130,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
         "value_battlefield_rule_version": CORE3_M11C_TV_RULE_VERSION,
         "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
-        "claim_value_quantification_rule_version": CORE3_M12C_RULE_VERSION,
+        "claim_value_quantification_rule_version": CORE3_M12C_TV_RULE_VERSION,
     },
     "AC": {
         "label_cn": "空调",
@@ -151,7 +152,7 @@ PRODUCT_CATEGORY_CONFIGS = {
         "value_battlefield_taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION,
         "value_battlefield_rule_version": CORE3_M11C_AC_RULE_VERSION,
         "semantic_market_rule_version": CORE3_M11D_RULE_VERSION,
-        "claim_value_quantification_rule_version": CORE3_M12C_RULE_VERSION,
+        "claim_value_quantification_rule_version": CORE3_M12C_AC_RULE_VERSION,
     },
 }
 

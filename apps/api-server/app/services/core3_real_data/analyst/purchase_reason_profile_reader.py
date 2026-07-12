@@ -12,14 +12,20 @@ from sqlalchemy.orm import Session
 from app.services.core3_real_data.constants import Core3CategoryCode
 from app.services.core3_real_data.purchase_reason_profile_contract import (
     build_downstream_read_contract,
+    derive_consumption_capabilities,
     get_downstream_read_contract,
 )
-from app.services.core3_real_data.purchase_reason_profile_repositories import PurchaseReasonProfileRepository
-from app.services.core3_real_data.purchase_reason_profile_schemas import M12DDownstreamReadContract
+from app.services.core3_real_data.purchase_reason_profile_repositories import (
+    PurchaseReasonProfileRepository,
+)
+from app.services.core3_real_data.purchase_reason_profile_schemas import (
+    M12DDownstreamReadContract,
+)
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 M12D_G09_CONTRACT_FIXTURE = "docs/core3_mvp/real_data_v2/current_implementation/M12D_G09_published_contract_fixture.json"
 CURRENT_PUBLISHED_VERSION = "current_published"
+SERVING_SCOPE_BATCH_ID_PREFIX = "serving-scope:"
 
 
 @dataclass(frozen=True)
@@ -51,17 +57,25 @@ class PurchaseReasonProfileLookupKey:
             m12d_profile_version=payload.get("m12d_profile_version"),
         )
 
-    def to_contract_lookup_key(self, *, default_m12d_profile_version: str | None = None) -> dict[str, str]:
+    def to_contract_lookup_key(
+        self, *, default_m12d_profile_version: str | None = None
+    ) -> dict[str, str]:
         return {
             "project_id": self.project_id,
             "category_code": self.category_code.value,
             "batch_id": self.batch_id,
-            "m12d_profile_version": self.m12d_profile_version or default_m12d_profile_version or CURRENT_PUBLISHED_VERSION,
+            "m12d_profile_version": self.m12d_profile_version
+            or default_m12d_profile_version
+            or CURRENT_PUBLISHED_VERSION,
             "sku_code": self.sku_code,
         }
 
-    def index_tuple(self, *, default_m12d_profile_version: str | None = None) -> tuple[str, str, str, str, str]:
-        lookup_key = self.to_contract_lookup_key(default_m12d_profile_version=default_m12d_profile_version)
+    def index_tuple(
+        self, *, default_m12d_profile_version: str | None = None
+    ) -> tuple[str, str, str, str, str]:
+        lookup_key = self.to_contract_lookup_key(
+            default_m12d_profile_version=default_m12d_profile_version
+        )
         return (
             lookup_key["project_id"],
             lookup_key["category_code"],
@@ -70,9 +84,27 @@ class PurchaseReasonProfileLookupKey:
             lookup_key["sku_code"],
         )
 
+    def candidate_batch_ids(self) -> tuple[str, ...]:
+        """Return real source batches in serving precedence order."""
+
+        if not self.batch_id.startswith(SERVING_SCOPE_BATCH_ID_PREFIX):
+            return (self.batch_id,)
+        scope_category, separator, raw_batch_ids = self.batch_id.removeprefix(
+            SERVING_SCOPE_BATCH_ID_PREFIX
+        ).partition(":")
+        if not separator or scope_category.upper() != self.category_code.value:
+            return ()
+        return tuple(
+            batch_id
+            for batch_id in (item.strip() for item in raw_batch_ids.split(","))
+            if batch_id
+        )
+
 
 class PurchaseReasonProfileReader(Protocol):
-    def read(self, lookup_key: PurchaseReasonProfileLookupKey) -> M12DDownstreamReadContract:
+    def read(
+        self, lookup_key: PurchaseReasonProfileLookupKey
+    ) -> M12DDownstreamReadContract:
         """Read a frozen M12D downstream contract without generating M12D."""
 
 
@@ -80,7 +112,9 @@ class PurchaseReasonProfileReader(Protocol):
 class RepositoryPurchaseReasonProfileReader:
     db: Session
 
-    def read(self, lookup_key: PurchaseReasonProfileLookupKey) -> M12DDownstreamReadContract:
+    def read(
+        self, lookup_key: PurchaseReasonProfileLookupKey
+    ) -> M12DDownstreamReadContract:
         repository = PurchaseReasonProfileRepository(
             Core3RepositoryContext(
                 db=self.db,
@@ -88,12 +122,16 @@ class RepositoryPurchaseReasonProfileReader:
                 category_code=lookup_key.category_code,
             )
         )
-        return get_downstream_read_contract(
-            repository,
-            batch_id=lookup_key.batch_id,
-            sku_code=lookup_key.sku_code,
-            m12d_profile_version=lookup_key.m12d_profile_version,
-        )
+        for batch_id in lookup_key.candidate_batch_ids():
+            contract = get_downstream_read_contract(
+                repository,
+                batch_id=batch_id,
+                sku_code=lookup_key.sku_code,
+                m12d_profile_version=lookup_key.m12d_profile_version,
+            )
+            if contract.found:
+                return contract
+        return _not_found_contract(lookup_key, default_m12d_profile_version=None)
 
 
 class FixturePurchaseReasonProfileReader:
@@ -105,7 +143,7 @@ class FixturePurchaseReasonProfileReader:
     ) -> None:
         self.default_m12d_profile_version = default_m12d_profile_version
         self._contracts_by_key = {
-            _contract_index_tuple(contract): contract
+            _contract_index_tuple(contract): _hydrate_legacy_contract(contract)
             for contract in contracts
         }
 
@@ -114,23 +152,37 @@ class FixturePurchaseReasonProfileReader:
         return cls.from_path(default_m12d_contract_fixture_path())
 
     @classmethod
-    def from_path(cls, fixture_path: str | Path) -> "FixturePurchaseReasonProfileReader":
+    def from_path(
+        cls, fixture_path: str | Path
+    ) -> "FixturePurchaseReasonProfileReader":
         path = Path(fixture_path)
         payload = json.loads(path.read_text(encoding="utf-8"))
         contracts: list[M12DDownstreamReadContract] = []
         for item in payload.get("sample_contracts") or []:
-            contracts.append(M12DDownstreamReadContract.model_validate(item))
+            contracts.append(
+                _hydrate_legacy_contract(
+                    M12DDownstreamReadContract.model_validate(item)
+                )
+            )
         for key in ("missing_contract_fixture", "unpublished_version_contract_fixture"):
             item = payload.get(key)
             if item:
-                contracts.append(M12DDownstreamReadContract.model_validate(item))
+                contracts.append(
+                    _hydrate_legacy_contract(
+                        M12DDownstreamReadContract.model_validate(item)
+                    )
+                )
         return cls(
             contracts,
             default_m12d_profile_version=payload.get("m12d_profile_version"),
         )
 
-    def read(self, lookup_key: PurchaseReasonProfileLookupKey) -> M12DDownstreamReadContract:
-        indexed_key = lookup_key.index_tuple(default_m12d_profile_version=self.default_m12d_profile_version)
+    def read(
+        self, lookup_key: PurchaseReasonProfileLookupKey
+    ) -> M12DDownstreamReadContract:
+        indexed_key = lookup_key.index_tuple(
+            default_m12d_profile_version=self.default_m12d_profile_version
+        )
         contract = self._contracts_by_key.get(indexed_key)
         if contract is not None:
             return contract
@@ -146,6 +198,7 @@ class PurchaseReasonProfileUsageDecision:
     action: Literal[
         "normal_pair_scoring",
         "degraded_pair_scoring",
+        "fact_dimensions_only",
         "block_strong_ranking",
         "drop_candidate_or_review",
     ]
@@ -158,7 +211,9 @@ class PurchaseReasonProfileUsageDecision:
     reasons: tuple[str, ...] = ()
 
 
-def decide_target_m12d_usage(contract: M12DDownstreamReadContract) -> PurchaseReasonProfileUsageDecision:
+def decide_target_m12d_usage(
+    contract: M12DDownstreamReadContract,
+) -> PurchaseReasonProfileUsageDecision:
     if _is_blocked(contract):
         return PurchaseReasonProfileUsageDecision(
             subject_role="target",
@@ -171,7 +226,19 @@ def decide_target_m12d_usage(contract: M12DDownstreamReadContract) -> PurchaseRe
             message_cn="目标 SKU 成交理由画像待生成/置信度不足，不能输出强排序结论。",
             reasons=_contract_reasons(contract),
         )
-    if contract.consumption_state == "published_degraded":
+    if contract.capabilities.comparison_mode == "facts_only":
+        return PurchaseReasonProfileUsageDecision(
+            subject_role="target",
+            action="fact_dimensions_only",
+            pair_scoring_allowed=False,
+            strong_ranking_allowed=False,
+            top3_eligible=False,
+            requires_review=False,
+            confidence_state="degraded",
+            message_cn="该 SKU 的参数、卖点、市场和产品价值主张可用，但不能据此输出强购买理由比较。",
+            reasons=_contract_reasons(contract),
+        )
+    if not contract.capabilities.strong_reason_comparison_allowed:
         return PurchaseReasonProfileUsageDecision(
             subject_role="target",
             action="degraded_pair_scoring",
@@ -196,7 +263,9 @@ def decide_target_m12d_usage(contract: M12DDownstreamReadContract) -> PurchaseRe
     )
 
 
-def decide_candidate_m12d_usage(contract: M12DDownstreamReadContract) -> PurchaseReasonProfileUsageDecision:
+def decide_candidate_m12d_usage(
+    contract: M12DDownstreamReadContract,
+) -> PurchaseReasonProfileUsageDecision:
     if _is_blocked(contract):
         return PurchaseReasonProfileUsageDecision(
             subject_role="candidate",
@@ -209,7 +278,19 @@ def decide_candidate_m12d_usage(contract: M12DDownstreamReadContract) -> Purchas
             message_cn="候选 SKU 成交理由画像缺失或未发布，不能依赖关键价值锚点进入 Top 3。",
             reasons=_contract_reasons(contract),
         )
-    if contract.consumption_state == "published_degraded":
+    if contract.capabilities.comparison_mode == "facts_only":
+        return PurchaseReasonProfileUsageDecision(
+            subject_role="candidate",
+            action="fact_dimensions_only",
+            pair_scoring_allowed=False,
+            strong_ranking_allowed=False,
+            top3_eligible=True,
+            requires_review=False,
+            confidence_state="degraded",
+            message_cn="该候选仍可参与参数、卖点、市场等维度比较，但不能依赖产品价值主张形成强购买理由替代结论。",
+            reasons=_contract_reasons(contract),
+        )
+    if not contract.capabilities.strong_reason_comparison_allowed:
         return PurchaseReasonProfileUsageDecision(
             subject_role="candidate",
             action="degraded_pair_scoring",
@@ -249,12 +330,39 @@ def _not_found_contract(
 ) -> M12DDownstreamReadContract:
     return build_downstream_read_contract(
         None,
-        lookup_key=lookup_key.to_contract_lookup_key(default_m12d_profile_version=default_m12d_profile_version),
+        lookup_key=lookup_key.to_contract_lookup_key(
+            default_m12d_profile_version=default_m12d_profile_version
+        ),
     )
 
 
-def _contract_index_tuple(contract: M12DDownstreamReadContract) -> tuple[str, str, str, str, str]:
-    return PurchaseReasonProfileLookupKey.from_mapping(contract.lookup_key).index_tuple()
+def _contract_index_tuple(
+    contract: M12DDownstreamReadContract,
+) -> tuple[str, str, str, str, str]:
+    return PurchaseReasonProfileLookupKey.from_mapping(
+        contract.lookup_key
+    ).index_tuple()
+
+
+def _hydrate_legacy_contract(
+    contract: M12DDownstreamReadContract,
+) -> M12DDownstreamReadContract:
+    if (
+        not contract.found
+        or contract.profile is None
+        or contract.consumption_state == "published_unusable"
+        or contract.capabilities.comparison_mode != "blocked"
+    ):
+        return contract
+    return contract.model_copy(
+        update={
+            "capabilities": derive_consumption_capabilities(
+                profile=contract.profile,
+                anchors=contract.profile.anchors,
+                release_quality_status=contract.release_quality_status,
+            )
+        }
+    )
 
 
 def _is_blocked(contract: M12DDownstreamReadContract) -> bool:

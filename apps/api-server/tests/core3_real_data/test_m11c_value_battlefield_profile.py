@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_insight, catforge_pipeline
 from app.models import entities
+from app.services.core3_real_data import m11c_value_battlefield_service
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
@@ -26,6 +27,7 @@ from app.services.core3_real_data.constants import (
     Core3SourceBatchStatus,
 )
 from app.services.core3_real_data.m11c_value_battlefield_service import (
+    M11C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
     M11CProfileBuilder,
     M11CValueBattlefieldTaxonomyLoader,
     M11CRunner,
@@ -33,6 +35,7 @@ from app.services.core3_real_data.m11c_value_battlefield_service import (
     _derive_comparable_market_contexts,
     _derive_price_bands,
     _market_validation_score,
+    _profile_review_decision,
     ac_value_battlefield_taxonomy_v0_1,
 )
 
@@ -250,6 +253,172 @@ def test_m11c_tv_does_not_promote_adjacent_opportunity_to_primary() -> None:
     updated = builder._assign_primary_secondary([payload])
 
     assert updated[0]["relation_status"] == "opportunity_battlefield"
+
+
+def _primary_battlefield_payload(
+    *,
+    code: str = "BF_MAINSTREAM_PICTURE_VALUE",
+    relation_status: str = "primary_battlefield",
+    confidence: Decimal = M11C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+) -> dict:
+    return {
+        "battlefield_code": code,
+        "relation_status": relation_status,
+        "battlefield_score": Decimal("0.7200"),
+        "market_gate_status": "matched",
+        "user_voice_score": Decimal("0.7000"),
+        "claim_alignment_score": Decimal("0.5000"),
+        "param_capability_score": Decimal("0.5000"),
+        "confidence": confidence,
+        "score_breakdown_json": {
+            "primary_reason": {
+                "score": Decimal("0.6800"),
+                "relative_comment_intensity_score": Decimal("0.7000"),
+                "direct_value_reason_score": Decimal("0.6000"),
+            }
+        },
+        "review_required": True,
+        "review_reason_json": {
+            "reason_codes": ["unknown_param_codes_present"]
+        },
+    }
+
+
+def test_m11c_profile_quality_ignores_non_primary_and_drag_relation_reviews() -> None:
+    primary = _primary_battlefield_payload()
+    drag = {
+        **_primary_battlefield_payload(
+            code="BF_GAMING_PERFORMANCE",
+            relation_status="drag_factor_battlefield",
+        ),
+        "battlefield_score": Decimal("0.5500"),
+    }
+    observed = {
+        **_primary_battlefield_payload(
+            code="BF_SMART_CONNECTED_EXPERIENCE",
+            relation_status="user_observed_battlefield",
+        ),
+        "battlefield_score": Decimal("0.5800"),
+    }
+
+    review_required, reason = _profile_review_decision(
+        primary,
+        score_payloads=[primary, drag, observed],
+        product_category="TV",
+        no_primary_reason=None,
+    )
+
+    assert review_required is False
+    assert reason == {}
+    assert drag["relation_status"] == "drag_factor_battlefield"
+    assert drag["review_required"] is True
+
+
+def test_m11c_profile_quality_limits_missing_low_confidence_or_ambiguous_primary() -> None:
+    missing_review, missing_reason = _profile_review_decision(
+        None,
+        score_payloads=[],
+        product_category="TV",
+        no_primary_reason="未形成主价值战场。",
+    )
+    low_confidence_primary = _primary_battlefield_payload(
+        confidence=Decimal("0.6000")
+    )
+    low_confidence_review, low_confidence_reason = _profile_review_decision(
+        low_confidence_primary,
+        score_payloads=[low_confidence_primary],
+        product_category="TV",
+        no_primary_reason=None,
+    )
+    ambiguous_primary = _primary_battlefield_payload()
+    tied_secondary = _primary_battlefield_payload(
+        code="BF_SMART_CONNECTED_EXPERIENCE",
+        relation_status="secondary_battlefield",
+    )
+    ambiguous_review, ambiguous_reason = _profile_review_decision(
+        ambiguous_primary,
+        score_payloads=[ambiguous_primary, tied_secondary],
+        product_category="TV",
+        no_primary_reason=None,
+    )
+
+    assert missing_review is True
+    assert missing_reason["reason_codes"] == ["no_primary_battlefield"]
+    assert low_confidence_review is True
+    assert (
+        "primary_battlefield_confidence_below_threshold"
+        in low_confidence_reason["reason_codes"]
+    )
+    assert ambiguous_review is True
+    assert "primary_battlefield_ambiguous" in ambiguous_reason["reason_codes"]
+    assert ambiguous_reason["competing_battlefield_codes"] == [
+        "BF_SMART_CONNECTED_EXPERIENCE"
+    ]
+
+
+def test_m11c_profile_quality_policy_does_not_change_scores_or_relations(
+    monkeypatch,
+) -> None:
+    session = make_session()
+    new_rule_version = "m11c_tv_value_battlefield_profile_qf08_new"
+    legacy_projection_rule_version = "m11c_tv_value_battlefield_profile_qf08_legacy"
+
+    M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=new_rule_version,
+        force_rebuild=True,
+    )
+    monkeypatch.setattr(
+        m11c_value_battlefield_service,
+        "_profile_review_decision",
+        lambda primary, *, score_payloads, product_category, no_primary_reason: (
+            True,
+            {"scope": "profile", "reason_codes": ["legacy_projection"]},
+        ),
+    )
+    M11CRunner(session).run_batch(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        product_category="TV",
+        rule_version=legacy_projection_rule_version,
+        force_rebuild=True,
+    )
+
+    def score_snapshot(rule_version: str) -> list[tuple]:
+        rows = session.scalars(
+            select(entities.Core3SkuValueBattlefieldScore).where(
+                entities.Core3SkuValueBattlefieldScore.rule_version == rule_version
+            )
+        ).all()
+        return sorted(
+            (
+                row.sku_code,
+                row.battlefield_code,
+                row.relation_status,
+                row.value_effect,
+                row.battlefield_score,
+                row.market_gate_status,
+                row.market_pool_fit_score,
+                row.user_voice_score,
+                row.task_group_fit_score,
+                row.claim_alignment_score,
+                row.param_capability_score,
+                row.market_validation_score,
+                row.confidence,
+                row.evidence_ids_json,
+                row.review_required,
+                row.review_reason_json,
+            )
+            for row in rows
+        )
+
+    assert score_snapshot(new_rule_version) == score_snapshot(
+        legacy_projection_rule_version
+    )
 
 
 def make_session() -> Session:

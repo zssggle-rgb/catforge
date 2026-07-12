@@ -32,11 +32,12 @@ from app.services.core3_real_data.constants import (
     CORE3_M11C_AC_RULE_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11D_RULE_VERSION,
-    CORE3_M12C_RULE_VERSION,
+    CORE3_M12C_AC_RULE_VERSION,
+    CORE3_M12C_TV_RULE_VERSION,
     Core3RunStatus,
 )
 from app.services.core3_real_data.hash_utils import stable_hash
-from app.services.core3_real_data.repositories import Core3BaseRepository, Core3RepositoryContext
+from app.services.core3_real_data.repositories import Core3BaseRepository
 
 
 ANALYSIS_POPULATION_READY = "claim_value_ready"
@@ -120,6 +121,23 @@ M12C_CLAIM_TYPE_INTERCEPT = "competitor_intercept_claim"
 M12C_CLAIM_TYPE_PRICE_PRESSURE = "price_pressure_claim"
 M12C_CLAIM_TYPE_SAMPLE = "sample_insufficient_claim"
 M12C_CLAIM_TYPE_UNIQUE = "unique_payment_potential_claim"
+
+M12C_AMOUNT_LIMITATION_FLAGS = frozenset(
+    {
+        "relaxed_pool_not_amount_quantifiable",
+        "l2_sample_not_sufficient",
+        "sample_not_sufficient_for_amount",
+        "with_claim_group_too_small",
+        "without_claim_group_too_small",
+        "l4_threshold_only",
+        "l4_threshold_only_no_amount",
+    }
+)
+M12C_RELATIVE_COMPARISON_LIMITATION_FLAGS = frozenset(
+    {
+        "single_sku_comparison_group",
+    }
+)
 
 M12C_SCORE_WEIGHTS = {
     "battlefield_relevance": Decimal("0.20"),
@@ -489,6 +507,10 @@ class ClaimGroupSplit:
 def _m12c_input_rules(product_category: str) -> dict[str, str]:
     normalized = str(product_category or "TV").upper()
     return M12C_PRODUCT_CATEGORY_INPUT_RULES.get(normalized, M12C_PRODUCT_CATEGORY_INPUT_RULES["TV"])
+
+
+def m12c_rule_version_for_category(product_category: str) -> str:
+    return CORE3_M12C_AC_RULE_VERSION if str(product_category).strip().upper() == "AC" else CORE3_M12C_TV_RULE_VERSION
 
 
 def _m12c_input_rule(product_category: str, key: str) -> str:
@@ -1067,9 +1089,10 @@ class M12CClaimValueQuantificationService:
         target_sku_codes: Sequence[str] = (),
         run_id: str | None = None,
         module_run_id: str | None = None,
-        rule_version: str = CORE3_M12C_RULE_VERSION,
+        rule_version: str | None = None,
     ) -> M12CServiceResult:
         normalized_category = product_category.upper()
+        rule_version = rule_version or m12c_rule_version_for_category(normalized_category)
         markets_all = self.repository.list_market_states(batch_id=batch_id, market_window=market_window, product_category=normalized_category)
         claims_all = self.repository.list_claim_states(batch_id=batch_id, product_category=normalized_category, sku_codes=set(markets_all))
         param_profiles_all = self.repository.list_param_states(batch_id=batch_id, product_category=normalized_category)
@@ -1230,11 +1253,9 @@ class M12CClaimValueQuantificationService:
         updated = sum(item.updated_count for item in (pool_write, metric_write, quant_write, attr_write, summary_write, review_write))
         role_counts = Counter(row["claim_value_role"] for row in quant_rows)
         sample_counts = Counter(pool.sample_status for pool in pools)
-        warnings = []
-        if review_rows:
-            warnings.append(f"M12C 生成 {len(review_rows)} 条样本或可比池复核问题。")
+        warnings: list[str] = []
         return M12CServiceResult(
-            status=Core3RunStatus.WARNING if review_rows else Core3RunStatus.SUCCESS,
+            status=Core3RunStatus.SUCCESS,
             input_count=len(output_skus),
             output_count=len(pool_rows) + len(metric_rows) + len(quant_rows) + len(attribution_rows) + len(summary_rows) + len(review_rows),
             warnings=warnings,
@@ -1256,6 +1277,8 @@ class M12CClaimValueQuantificationService:
                 "sku_attribution_count": len(attribution_rows),
                 "dimension_summary_count": len(summary_rows),
                 "review_issue_count": len(review_rows),
+                "review_issue_scope": "claim_context_pool",
+                "profile_review_required": False,
                 "role_counts": dict(role_counts),
                 "sample_status_counts": dict(sample_counts),
                 "created_output_count": created,
@@ -1996,7 +2019,6 @@ def _quantification_rows(
     module_run_id: str | None,
     rule_version: str,
 ) -> tuple[list[dict[str, Any]], dict[tuple[str, str, str, str, str], list[dict[str, Any]]]]:
-    rows: list[dict[str, Any]] = []
     by_sku_context: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for pool in pools:
         pool_id = _record_id("m12c_pool", batch_id, product_category, market_window, analysis_population, pool.claim_code, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group, rule_version)
@@ -2116,6 +2138,11 @@ def _quantification_rows(
             effective_price_space = _effective_price_space(market, baseline_price, market_position, market_acceptance)
             weekly_sales_space = max(Decimal("0.000000"), _q6(market.avg_weekly_sales_volume - baseline_sales))
             weekly_amount_space = max(Decimal("0.000000"), _q6(market.avg_weekly_sales_amount - baseline_amount))
+            quality_assessment = _claim_quality_assessment(
+                pool=pool,
+                amount_basis=amount_basis,
+                has_negative=has_negative,
+            )
             payload = {
                 "sku_claim_value_id": _record_id("m12c_sku_claim", batch_id, sku, pool.claim_code, pool.context_type, pool.context_code, pool.size_tier, pool.price_band_group, rule_version),
                 "pool_id": pool_id,
@@ -2207,6 +2234,7 @@ def _quantification_rows(
                     },
                     "market_acceptance": market_acceptance,
                     "amount_quantification_basis": amount_basis,
+                    "quality_assessment": quality_assessment,
                     "unique_payment_potential_scorecard": unique_potential_scorecard or {},
                     "value_space": {
                         "raw_price_gap": float(_q4(market.price - baseline_price)),
@@ -2263,18 +2291,28 @@ def _quantification_rows(
         for row in context_rows:
             share = Decimal("0.000000")
             type_total = positive_total_by_type.get(str(row["_business_claim_type"]), Decimal("0"))
-            if row["claim_value_role"] in POSITIVE_ROLES and type_total > 0:
+            amount_ready = bool(
+                row["supporting_dimensions_json"]
+                .get("amount_quantification_basis", {})
+                .get("amount_quantification_ready", False)
+            )
+            if row["claim_value_role"] in POSITIVE_ROLES and type_total > 0 and amount_ready:
                 share = _q6(max(Decimal("0"), _q6(row["_claim_value_score"])) / type_total)
             battlefield_weight = _q6(row.get("_battlefield_weight") or Decimal("0"))
             weighted_share = _q6(share * battlefield_weight)
             row["contribution_share_in_sku"] = weighted_share
             coeff = _q4(row["_claim_type_coefficient"])
-            if row["_business_claim_type"] == M12C_CLAIM_TYPE_PREMIUM:
-                row["estimated_price_premium_abs"] = _q4(row["_effective_price_space"] * weighted_share * coeff)
-            else:
-                row["estimated_price_premium_abs"] = Decimal("0.0000")
-            row["estimated_weekly_sales_lift_abs"] = _q6(row["_weekly_sales_space"] * weighted_share * coeff)
-            row["estimated_weekly_sales_amount_lift_abs"] = _q6(row["_weekly_amount_space"] * weighted_share * coeff)
+            row.update(
+                _claim_contribution_amounts(
+                    amount_ready=amount_ready,
+                    business_claim_type=str(row["_business_claim_type"]),
+                    effective_price_space=_q4(row["_effective_price_space"]),
+                    weekly_sales_space=_q6(row["_weekly_sales_space"]),
+                    weekly_amount_space=_q6(row["_weekly_amount_space"]),
+                    weighted_share=weighted_share,
+                    coefficient=coeff,
+                )
+            )
             save_row = {key: value for key, value in row.items() if not key.startswith("_")}
             save_row["result_hash"] = stable_hash(save_row, version="m12c-sku-claim-v1")
             normalized_rows.append(save_row)
@@ -2439,7 +2477,7 @@ def _review_issue_rows(
             "product_category": product_category,
             "market_window": market_window,
             "analysis_population": analysis_population,
-            "issue_scope": "pool",
+            "issue_scope": "claim_context_pool",
             "sku_code": "",
             "claim_code": pool.claim_code,
             "claim_name": pool.claim_name,
@@ -2447,15 +2485,18 @@ def _review_issue_rows(
             "context_type": pool.context_type,
             "context_code": pool.context_code,
             "issue_code": issue_code,
-            "issue_level": "warning" if pool.sample_status == "weak" else "blocker",
-            "issue_cn": f"{pool.claim_name} 在 {pool.context_name} / {pool.size_tier} / {pool.price_band_group} 的可比池样本不足。",
-            "recommended_action_cn": "保留观察结果，但不要把该卖点强判为溢价或销量贡献。",
+            "issue_level": "warning",
+            "issue_cn": f"{pool.claim_name} 在 {pool.context_name} / {pool.size_tier} / {pool.price_band_group} 的可比池不足以稳定量化金额。",
+            "recommended_action_cn": "保留该卖点的价值判断，只限制当前卖点在当前战场比较池中的金额和相对贡献量化。",
             "resolved_status": "open",
             "issue_payload_json": {
                 "pool_sku_count": len(pool.sku_codes),
                 "with_claim_sku_count": len(pool.with_claim_skus),
                 "without_claim_sku_count": len(pool.without_claim_skus),
                 "quality_flags": list(pool.quality_flags),
+                "impact_scope": "amount_quantification_only",
+                "profile_blocking": False,
+                "affected_claim_codes": [pool.claim_code],
             },
             "input_fingerprint": stable_hash({"pool_id": pool_id, "issue_code": issue_code}, version="m12c-issue-input-v1"),
             "rule_version": rule_version,
@@ -3112,6 +3153,153 @@ def _unique_nonempty(values: Iterable[str]) -> list[str]:
         seen.add(text)
         result.append(text)
     return result
+
+
+def _claim_quality_assessment(
+    *,
+    pool: ClaimPool,
+    amount_basis: Mapping[str, Any],
+    has_negative: bool,
+) -> dict[str, Any]:
+    flags = set(pool.quality_flags) | {
+        str(flag) for flag in amount_basis.get("quality_flags", ()) if str(flag)
+    }
+    amount_limitations = sorted(flags & M12C_AMOUNT_LIMITATION_FLAGS)
+    relative_limitations = sorted(flags & M12C_RELATIVE_COMPARISON_LIMITATION_FLAGS)
+    return {
+        "scope": "claim_context",
+        "affected_claim_codes": [pool.claim_code],
+        "value_judgement_status": "usable",
+        "relative_comparison_status": "limited" if relative_limitations else "ready",
+        "amount_quantification_status": (
+            "ready" if amount_basis.get("amount_quantification_ready") else "not_quantifiable"
+        ),
+        "amount_limitation_flags": amount_limitations,
+        "relative_comparison_limitation_flags": relative_limitations,
+        "business_risk_flags": ["comment_negative"] if has_negative else [],
+        "profile_blocking": False,
+    }
+
+
+def _claim_contribution_amounts(
+    *,
+    amount_ready: bool,
+    business_claim_type: str,
+    effective_price_space: Decimal,
+    weekly_sales_space: Decimal,
+    weekly_amount_space: Decimal,
+    weighted_share: Decimal,
+    coefficient: Decimal,
+) -> dict[str, Decimal]:
+    if not amount_ready:
+        return {
+            "estimated_price_premium_abs": Decimal("0.0000"),
+            "estimated_weekly_sales_lift_abs": Decimal("0.000000"),
+            "estimated_weekly_sales_amount_lift_abs": Decimal("0.000000"),
+        }
+    return {
+        "estimated_price_premium_abs": (
+            _q4(effective_price_space * weighted_share * coefficient)
+            if business_claim_type == M12C_CLAIM_TYPE_PREMIUM
+            else Decimal("0.0000")
+        ),
+        "estimated_weekly_sales_lift_abs": _q6(
+            weekly_sales_space * weighted_share * coefficient
+        ),
+        "estimated_weekly_sales_amount_lift_abs": _q6(
+            weekly_amount_space * weighted_share * coefficient
+        ),
+    }
+
+
+def assess_m12c_claim_value_quality(
+    rows: Sequence[Any],
+    *,
+    referenced_claim_codes: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Assess M12C usability without spreading claim-local limitations."""
+
+    requested = {str(code) for code in referenced_claim_codes if str(code)}
+    selected = [
+        row
+        for row in rows
+        if not requested or str(_m12c_row_value(row, "claim_code") or "") in requested
+    ]
+    if not selected:
+        return {
+            "availability": "missing",
+            "usability": "not_usable",
+            "review_required": False,
+            "scope": "referenced_claims" if requested else "sku_claim_rows",
+            "referenced_claim_codes": sorted(requested),
+            "selected_claim_codes": [],
+            "amount_quantification_status": "missing",
+            "relative_comparison_status": "missing",
+            "limitation_flags": [],
+        }
+
+    amount_statuses: set[str] = set()
+    relative_statuses: set[str] = set()
+    limitation_flags: set[str] = set()
+    selected_claim_codes: set[str] = set()
+    for row in selected:
+        claim_code = str(_m12c_row_value(row, "claim_code") or "")
+        if claim_code:
+            selected_claim_codes.add(claim_code)
+        supporting = _m12c_row_value(row, "supporting_dimensions_json") or {}
+        assessment = supporting.get("quality_assessment", {}) if isinstance(supporting, Mapping) else {}
+        flags = {
+            str(flag)
+            for flag in (_m12c_row_value(row, "quality_flags_json") or ())
+            if str(flag)
+        }
+        limitation_flags.update(
+            flags & (M12C_AMOUNT_LIMITATION_FLAGS | M12C_RELATIVE_COMPARISON_LIMITATION_FLAGS)
+        )
+        amount_statuses.add(
+            str(assessment.get("amount_quantification_status") or _legacy_amount_status(flags))
+        )
+        relative_statuses.add(
+            str(assessment.get("relative_comparison_status") or _legacy_relative_status(flags))
+        )
+
+    return {
+        "availability": "available",
+        "usability": "usable",
+        "review_required": False,
+        "scope": "referenced_claims" if requested else "sku_claim_rows",
+        "referenced_claim_codes": sorted(requested),
+        "selected_claim_codes": sorted(selected_claim_codes),
+        "amount_quantification_status": _aggregate_quantification_status(amount_statuses),
+        "relative_comparison_status": _aggregate_quantification_status(relative_statuses),
+        "limitation_flags": sorted(limitation_flags),
+    }
+
+
+def _m12c_row_value(row: Any, field_name: str) -> Any:
+    if isinstance(row, Mapping):
+        return row.get(field_name)
+    return getattr(row, field_name, None)
+
+
+def _legacy_amount_status(flags: set[str]) -> str:
+    return "not_quantifiable" if flags & M12C_AMOUNT_LIMITATION_FLAGS else "ready"
+
+
+def _legacy_relative_status(flags: set[str]) -> str:
+    return "limited" if flags & M12C_RELATIVE_COMPARISON_LIMITATION_FLAGS else "ready"
+
+
+def _aggregate_quantification_status(statuses: set[str]) -> str:
+    if not statuses:
+        return "missing"
+    if statuses == {"ready"}:
+        return "ready"
+    if "ready" in statuses:
+        return "partially_ready"
+    if "limited" in statuses:
+        return "limited"
+    return "not_quantifiable"
 
 
 def _amount_quantification_basis(pool: ClaimPool, target_sku: str) -> dict[str, Any]:

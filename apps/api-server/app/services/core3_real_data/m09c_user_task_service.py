@@ -68,11 +68,14 @@ from app.services.core3_real_data.runner import Core3ModuleTarget
 
 
 M09C_PROFILE_ID_HASH_VERSION = "m09c-user-task-profile-id-v1"
-M09C_PROFILE_HASH_VERSION = "m09c-user-task-profile-v1"
+M09C_PROFILE_HASH_VERSION = "m09c-user-task-profile-v2"
 M09C_SCORE_ID_HASH_VERSION = "m09c-user-task-score-id-v1"
 M09C_SCORE_HASH_VERSION = "m09c-user-task-score-v1"
 M09C_COVERAGE_ID_HASH_VERSION = "m09c-user-task-coverage-id-v1"
 M09C_COVERAGE_HASH_VERSION = "m09c-user-task-coverage-v1"
+
+M09C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD = Decimal("0.8000")
+M09C_PROFILE_PRIMARY_CONFLICT_DRAG_THRESHOLD = Decimal("0.4500")
 
 REL_PRIMARY = "primary_user_task"
 REL_SECONDARY = "secondary_user_task"
@@ -1595,6 +1598,10 @@ class M09CProfileBuilder:
         no_primary_reason = (
             None if primary else _no_primary_reason(score_payloads, sku_input)
         )
+        review_required, profile_review_reason = _profile_review_decision(
+            primary,
+            no_primary_reason=no_primary_reason,
+        )
         summary = {
             "primary": _compact_score(primary) if primary else None,
             "secondary": [_compact_score(item) for item in secondary],
@@ -1606,9 +1613,6 @@ class M09CProfileBuilder:
             "comment_summary": _comment_summary(score_payloads),
             "claim_param_summary": _claim_param_summary(score_payloads),
         }
-        review_required = bool(no_primary_reason) or any(
-            item["review_required"] for item in score_payloads
-        )
         payload = {
             "profile_id": _profile_id(
                 self.project_id,
@@ -1650,9 +1654,7 @@ class M09CProfileBuilder:
             "no_primary_reason": no_primary_reason,
             "review_required": review_required,
             "review_status": "review_required" if review_required else "auto_pass",
-            "review_reason_json": {"no_primary_reason_cn": no_primary_reason}
-            if no_primary_reason
-            else {},
+            "review_reason_json": _json_safe(profile_review_reason),
             "confidence": _avg_decimal(
                 [
                     item["confidence"]
@@ -1673,6 +1675,10 @@ class M09CProfileBuilder:
                 "latent": payload["latent_capability_task_codes_json"],
                 "drag": payload["drag_factor_task_codes_json"],
                 "summary": payload["user_task_summary_json"],
+                "review_required": payload["review_required"],
+                "review_status": payload["review_status"],
+                "review_reason": payload["review_reason_json"],
+                "confidence": payload["confidence"],
                 "taxonomy_version": self.taxonomy.taxonomy_version,
                 "rule_version": self.rule_version,
             },
@@ -2248,6 +2254,63 @@ def _confidence(
     if sku_input.market_profile is not None:
         domain_count += 1
     return _clamp_decimal(Decimal(domain_count) / Decimal("5"))
+
+
+def _profile_review_decision(
+    primary: Mapping[str, Any] | None,
+    *,
+    no_primary_reason: str | None,
+) -> tuple[bool, dict[str, Any]]:
+    if primary is None:
+        return True, {
+            "scope": "profile",
+            "reason_codes": ["no_primary_user_task"],
+            "reason_cn": [no_primary_reason or "未形成主用户任务。"],
+            "no_primary_reason_cn": no_primary_reason,
+        }
+
+    reason_codes: list[str] = []
+    reason_cn: list[str] = []
+    relation_status = str(primary.get("relation_status") or "")
+    confidence = _decimal(primary.get("confidence")) or Decimal("0.0000")
+    negative_drag_score = (
+        _decimal(primary.get("negative_drag_score")) or Decimal("0.0000")
+    )
+    size_price_gate_status = str(
+        (primary.get("score_breakdown_json") or {})
+        .get("size_price", {})
+        .get("gate_status")
+        or "unknown"
+    )
+
+    if relation_status != REL_PRIMARY:
+        reason_codes.append("primary_relation_status_invalid")
+        reason_cn.append("主任务记录与主关系状态不一致。")
+    if confidence < M09C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD:
+        reason_codes.append("primary_task_confidence_below_threshold")
+        reason_cn.append(
+            "主任务证据域覆盖不足，尚未达到画像自动通过门槛。"
+        )
+    if size_price_gate_status == "mismatch":
+        reason_codes.append("primary_size_price_conflict")
+        reason_cn.append("主任务与该 SKU 的尺寸价格适配结论冲突。")
+    if negative_drag_score >= M09C_PROFILE_PRIMARY_CONFLICT_DRAG_THRESHOLD:
+        reason_codes.append("primary_task_evidence_conflict")
+        reason_cn.append("主任务存在达到阻断阈值的用户反证或能力反证。")
+
+    if not reason_codes:
+        return False, {}
+    return True, {
+        "scope": "profile",
+        "reason_codes": reason_codes,
+        "reason_cn": reason_cn,
+        "primary_user_task_code": primary.get("user_task_code"),
+        "primary_relation_status": relation_status,
+        "primary_confidence": confidence,
+        "primary_confidence_threshold": M09C_PROFILE_PRIMARY_CONFIDENCE_THRESHOLD,
+        "primary_negative_drag_score": negative_drag_score,
+        "primary_conflict_drag_threshold": M09C_PROFILE_PRIMARY_CONFLICT_DRAG_THRESHOLD,
+    }
 
 
 def _no_primary_reason(

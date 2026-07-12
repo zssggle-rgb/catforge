@@ -90,6 +90,16 @@ flowchart TD
 | `service_exclusion_rules` | 服务履约隔离规则 |
 | `status_caps` | 不同证据缺口下的最高关系状态 |
 
+规则版本：
+
+| 项 | 版本 |
+| --- | --- |
+| TV taxonomy | `m11c_tv_value_battlefield_taxonomy_v0.2` |
+| TV rule | `m11c_tv_value_battlefield_profile_v0.4` |
+| AC taxonomy | `m11c_ac_value_battlefield_taxonomy_v0.1` |
+| AC rule | `m11c_ac_value_battlefield_profile_v0.3` |
+| module | `m11c-value-battlefield-profile-0.2.0` |
+
 ### 3.2 价格带派生
 
 M11C 在 `size_tier` 内按 SKU 加权均价计算价格分位：
@@ -268,6 +278,40 @@ secondary_battlefield_codes includes BF_GAMING_SPORTS_FLUENCY
 - 最多 2 个 `secondary_battlefield`。
 - 可以有多个 `opportunity_battlefield` 和 `drag_factor_battlefield`。
 - 可以没有主战场，但必须写明原因。
+
+### 4.4 画像质量聚合
+
+关系质量、锚点风险与画像质量分开计算：
+
+```text
+relation_review_required = 当前 SKU x 战场关系自身的问题
+anchor_risk = 当前锚点引用的机会、观察或拖后腿战场风险
+
+profile_review_required =
+  no_primary_battlefield
+  or primary_relation_status_invalid
+  or primary_confidence < 0.80
+  or primary_market_gate_conflict
+  or effective_primary_selection_rank_tie
+```
+
+`effective_primary_selection_rank_tie` 必须同时比较：
+
+1. 近分兜底排序：购买理由强度、用户声音、参数能力、卖点对齐。
+2. 原始排序：战场综合分、用户声音、卖点对齐。
+
+两阶段仍完全相同才是不可消解歧义；综合分接近或单个排序键相同不构成画像复核。
+
+实现约束：
+
+1. `_profile_payload` 只把主战场问题写入画像 `review_reason_json`。
+2. `drag_factor_battlefield`、`user_observed_battlefield` 和机会战场复核不参与画像聚合。
+3. 拖后腿战场继续写入画像代码列表、关系行、图谱和后续 anchor 风险，不因画像 auto-pass 丢失。
+4. 质量策略不得改变 taxonomy、主辅/机会/拖后腿 code、关系状态、六个分项得分、综合分、value effect、销量分配和证据。
+5. `profile_hash` 纳入画像复核字段和画像置信度。
+6. TV/AC 共用聚合函数，但分别执行自己的 market gate 与 taxonomy。
+
+量价范围语义沿用 M07：无销量行按 0 销量事实处理；新品观测周数短不构成缺失或低质量，M11C 不增加固定 8 周门槛。
 
 ### 4.4 价值作用
 
@@ -558,7 +602,9 @@ CLI 实现后更新两个 skill。
 | `unsupported_claim_premium` | 卖点宣称高端但参数不支撑 | 不得 `premium_driver` |
 | `service_signal_misused` | 服务履约进入产品战场 | 阻断或复核 |
 | `no_primary_battlefield` | SKU 无主战场 | 如果评论不足则允许，否则复核 |
-| `too_many_primary_candidates` | 多个战场竞争主战场且分差小 | 复核 |
+| `primary_battlefield_ambiguous` | 近分兜底和原始排序的完整键均相同 | 画像复核；只分差小不复核 |
+
+作用域规则：无主战场、主战场低置信、主市场门槛冲突和不可消解主候选并列属于画像级问题；用户观察、机会和拖后腿战场只属于 relation/anchor 级问题。拖后腿战场保留为锚点风险，不代表整张价值战场画像不可用。
 
 ## 10. 测试计划
 

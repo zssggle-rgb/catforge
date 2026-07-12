@@ -24,9 +24,11 @@ from app.services.core3_real_data.purchase_reason_anchor_candidate_generator imp
 from app.services.core3_real_data.purchase_reason_anchor_taxonomy import M12DAnchorTaxonomyLoader
 from app.services.core3_real_data.purchase_reason_context_builder import SkuPurchaseReasonContextBuilder
 from app.services.core3_real_data.purchase_reason_profile_repositories import PurchaseReasonProfileRepository
+from app.services.core3_real_data.purchase_reason_release_quality import M12DReleaseQualityEvaluator
 from app.services.core3_real_data.purchase_reason_profile_scoring import PurchaseReasonProfileScoringService
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
     M12DAnchorTaxonomy,
+    M12DFocusSkuValidationResult,
     M12DProfileScoreResult,
     M12DPurchaseReasonAnchorRecord,
     M12DPurchaseReasonProfileVersionRecord,
@@ -52,12 +54,14 @@ class PurchaseReasonProfileBatchGenerator:
         context_builder: SkuPurchaseReasonContextBuilder | None = None,
         taxonomy_loader: M12DAnchorTaxonomyLoader | None = None,
         scoring_service: PurchaseReasonProfileScoringService | None = None,
+        release_quality_evaluator: M12DReleaseQualityEvaluator | None = None,
         repository: PurchaseReasonProfileRepository | None = None,
     ) -> None:
         self.context = context
         self.context_builder = context_builder or SkuPurchaseReasonContextBuilder(context)
         self.taxonomy_loader = taxonomy_loader or M12DAnchorTaxonomyLoader()
         self.scoring_service = scoring_service or PurchaseReasonProfileScoringService()
+        self.release_quality_evaluator = release_quality_evaluator or M12DReleaseQualityEvaluator()
         self.repository = repository or PurchaseReasonProfileRepository(context)
 
     def generate(
@@ -74,6 +78,7 @@ class PurchaseReasonProfileBatchGenerator:
         write: bool = False,
         generated_by: str = "system",
         detail_limit: int = 50,
+        focus_validation_results: Sequence[M12DFocusSkuValidationResult | dict[str, Any]] | None = None,
     ) -> M12DServiceResult:
         normalized_product_category = product_category.strip().upper()
         if normalized_product_category not in {"TV", "AC"}:
@@ -176,6 +181,16 @@ class PurchaseReasonProfileBatchGenerator:
                 )
 
         quality_summary = _quality_summary(profiles, anchors, failures)
+        release_quality_evaluation = self.release_quality_evaluator.evaluate(
+            category_code=self.context.category_code,
+            product_category=normalized_product_category,
+            profiles=profiles,
+            expected_sku_count=len(normalized_sku_codes),
+            focus_validation_results=focus_validation_results,
+        )
+        quality_summary["release_quality_evaluation"] = release_quality_evaluation.model_dump(
+            mode="json"
+        )
         version = _version_record(
             version_id=version_id,
             project_id=self.context.project_id,
@@ -219,7 +234,11 @@ class PurchaseReasonProfileBatchGenerator:
             "reused_output_count": reused_count,
             "failure_skus": failures,
         }
-        status = Core3RunStatus.WARNING if failures else Core3RunStatus.SUCCESS
+        status = (
+            Core3RunStatus.WARNING
+            if failures or quality_summary["failed_count"]
+            else Core3RunStatus.SUCCESS
+        )
         return M12DServiceResult(
             status=status,
             input_count=len(normalized_sku_codes),
@@ -259,6 +278,8 @@ def _profile_record(
         "weak_expression_count": len(score_result.weak_expression_anchors_json),
         "risk_drag_count": len(score_result.risk_drag_anchors_json),
         "evidence_domain_counts": _domain_counts(score_result.scored_anchors),
+        "confidence_basis": score_result.confidence_basis_json,
+        "input_quality_policy_version": context.input_quality_policy_version,
     }
     hash_payload = {
         "context_input_fingerprint": context.input_fingerprint,
@@ -292,6 +313,7 @@ def _profile_record(
         risk_drag_anchors_json=score_result.risk_drag_anchors_json,
         evidence_summary_json=evidence_summary,
         input_status_json=context.input_status_json,
+        input_quality_json=context.input_quality_json,
         param_profile_status=context.param_profile_status,
         claim_fact_status=context.claim_fact_status,
         comment_profile_status=context.comment_profile_status,
@@ -310,7 +332,11 @@ def _profile_record(
         input_fingerprint=context.input_fingerprint,
         result_hash=_fingerprint(hash_payload),
         is_current=True,
-        processing_status="success",
+        processing_status=(
+            "failed"
+            if score_result.status == M12DProfileStatus.FAILED.value
+            else "success"
+        ),
         review_required=score_result.review_required,
         review_status="review_required" if score_result.review_required else "auto_pass",
         review_reason_json=score_result.review_reason_json,
@@ -465,6 +491,12 @@ def _version_record(
         "low_confidence_skus": quality_summary["low_confidence_skus"],
         "review_required_skus": quality_summary["review_required_skus"],
         "core_payment_missing_skus": quality_summary["core_payment_missing_skus"],
+        "release_quality_failure_reason_codes": quality_summary[
+            "release_quality_evaluation"
+        ]["failure_reason_codes"],
+        "release_system_issues": quality_summary["release_quality_evaluation"][
+            "system_issues"
+        ],
     }
     hash_payload = {
         "m12d_profile_version": m12d_profile_version,
@@ -483,6 +515,9 @@ def _version_record(
         product_category=product_category,
         m12d_profile_version=m12d_profile_version,
         release_status=M12DReleaseStatus.DRAFT,
+        release_quality_status=quality_summary["release_quality_evaluation"][
+            "release_quality_status"
+        ],
         is_current=False,
         generated_by=generated_by,
         source_batch_ids_json=list(source_batch_ids),
@@ -507,8 +542,12 @@ def _quality_summary(
     failures: Sequence[dict[str, str]],
 ) -> dict[str, Any]:
     total = len(profiles)
-    ready_statuses = {M12DProfileStatus.READY.value, M12DProfileStatus.READY_DEGRADED.value}
-    ready = [profile for profile in profiles if _value(profile.status) in ready_statuses]
+    ready = [profile for profile in profiles if _value(profile.status) == M12DProfileStatus.READY.value]
+    ready_limited = [
+        profile
+        for profile in profiles
+        if _value(profile.status) == M12DProfileStatus.READY_LIMITED.value
+    ]
     review_required = [profile for profile in profiles if bool(profile.review_required)]
     missing_input = [profile for profile in profiles if _value(profile.status) == M12DProfileStatus.MISSING_INPUT.value]
     low_confidence = [profile for profile in profiles if Decimal(str(profile.profile_confidence)) < Decimal("0.5000")]
@@ -518,17 +557,20 @@ def _quality_summary(
     for anchor in anchors:
         role_counts[_value(anchor.role)] = role_counts.get(_value(anchor.role), 0) + 1
         anchor_code_counts[anchor.anchor_code] = anchor_code_counts.get(anchor.anchor_code, 0) + 1
+    failed_profiles = [profile for profile in profiles if _value(profile.status) == M12DProfileStatus.FAILED.value]
     return {
         "total_sku_count": total,
         "profile_record_count": len(profiles),
         "anchor_record_count": len(anchors),
         "ready_count": len(ready),
+        "ready_limited_count": len(ready_limited),
+        "usable_profile_count": len(ready) + len(ready_limited),
         "review_required_count": len(review_required),
         "missing_input_count": len(missing_input),
-        "failed_count": len(failures),
+        "failed_count": len(failed_profiles),
         "low_confidence_count": len(low_confidence),
         "core_payment_missing_count": len(core_missing),
-        "success_rate": _rate(total - len(failures), total),
+        "success_rate": _rate(total - len(failed_profiles), total),
         "low_confidence_rate": _rate(len(low_confidence), total),
         "core_payment_missing_rate": _rate(len(core_missing), total),
         "review_required_rate": _rate(len(review_required), total),

@@ -359,12 +359,16 @@ M04C 可以保留多条标准卖点事实，但必须标记它们属于同一 `s
 | 情况 | 处理 |
 | --- | --- |
 | SKU 没有结构化卖点 | 标记 `structured_claim_missing`，不能写“没有卖点” |
-| SKU 有卖点但无 M03B 参数画像 | 生成卖点画像，参数支撑统一为 `param_unknown` |
+| 当前品类 serving scope 内确实没有该 SKU 的 M03B 参数画像 | 生成卖点画像，画像级标记 `m03b_param_profile_missing`，参数支撑统一为 `param_unknown` |
+| M03B 与 M04C 的源 batch 不同，但当前品类 serving scope 内存在该 SKU 的有效 M03B 画像 | 使用有效 M03B 画像；记录其 batch、规则版本和 lookup strategy，不得沿用历史 `m03b_param_profile_missing` |
+| 单条卖点文本未命中 taxonomy | 作为 claim/row 级 `claim_text_unmatched` coverage warning，保留原文和 evidence；不新增事实，也不降级该 SKU 的其他卖点事实或整个画像 |
 | 卖点提到某参数，但参数缺失 | `param_unknown`，不当作不支持 |
 | 卖点提到某参数，参数明确相反 | `conflicted`，进入复核 |
 | 卖点属于服务履约 | `service_separate_flag=true`，不进入产品主分析 |
 | 卖点属于行业背书 | 保留为 `authority`，不作为产品能力参数事实 |
 | 卖点属于价格补贴 | 保留为 `energy_value/price_value`，是否溢价留给后续市场/战场判断 |
+
+质量问题必须按作用范围存储：画像级问题进入 `quality_summary_json.profile_flags`；未匹配文本进入 `claim_summary_json.coverage_warnings`；参数未知、不支持或冲突保留在对应 `core3_sku_claim_fact`。不得因为一条文本未匹配或一个卖点参数不足，把已匹配且证据成立的其他卖点降级。
 
 ## 8. 多品类要求
 
@@ -372,8 +376,8 @@ M04C 必须以 `product_category` 加载 taxonomy：
 
 | 品类 | taxonomy | 状态 |
 | --- | --- | --- |
-| TV / 彩电 | `tv_claim_taxonomy_manual_v0.1` | 首版设计对象 |
-| AC / 空调 | `ac_claim_taxonomy_manual_v0.1` | 待从空调卖点表按同流程生成 |
+| TV / 彩电 | `tv_claim_taxonomy_manual_v0.1` | 已发布 taxonomy；M04C 质量规则 `m04c_tv_claim_fact_profile_v0.2` |
+| AC / 空调 | `ac_claim_taxonomy_manual_v0.1` | 已发布独立 taxonomy；M04C 质量规则 `m04c_ac_claim_fact_profile_v0.2` |
 
 不同品类不得共享标准卖点。空调不能复用电视的 Mini LED、高刷、HDMI2.1 等 taxonomy。
 
@@ -433,6 +437,9 @@ TV 首版验收：
 6. 服务履约类卖点被隔离，不进入产品主事实。
 7. 查询 CLI 能按 SKU、标准卖点、维度位置返回结果。
 8. 所有输出保留 `project_id`、`category_code`、`product_category`、`batch_id`、`taxonomy_version`、`rule_version`、`evidence_ids`、`profile_hash`。
+9. TV/AC 当前 serving scope 内已有 M03B 时，M04C 不得因源 batch 不同报告画像缺失；只有真实缺失才保留画像级 `m03b_param_profile_missing`。
+10. `claim_text_unmatched` 只影响对应文本的 taxonomy 覆盖统计，不能降低同 SKU 已匹配卖点的事实、置信度或参数支撑结果。
+11. TV/AC 分别生成 M04C draft；taxonomy、M03B 规则和版本保持品类隔离。验证阶段不得切换 current/published，也不得顺带重跑 M05C 及后续模块。
 
 ## 11. 后续关系
 

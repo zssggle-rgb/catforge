@@ -131,8 +131,8 @@ tv_comment_fact_taxonomy_manual_v0.1
 
 | 品类 | taxonomy version | 状态 |
 | --- | --- | --- |
-| TV | `tv_comment_fact_taxonomy_manual_v0.1` | 首版计划发布 |
-| AC | `ac_comment_fact_taxonomy_manual_v0.1` | 未生成前不可执行 |
+| TV | `tv_comment_fact_taxonomy_manual_v0.1` | 已发布；规则 `m05c_tv_comment_fact_profile_v0.2` |
+| AC | `ac_comment_fact_taxonomy_manual_v0.1` | 已发布；规则 `m05c_ac_comment_fact_profile_v0.2` |
 | WASHER | `washer_comment_fact_taxonomy_manual_v0.1` | 未生成前不可执行 |
 
 ### 4.2 Taxonomy 顶层结构
@@ -333,6 +333,7 @@ SKU 评论事实画像聚合表。每个 SKU 每个 taxonomy/rule 一条。
 | `positive_evidence_examples_json` | jsonb | 是 | 典型正向证据 |
 | `negative_evidence_examples_json` | jsonb | 是 | 典型负向证据 |
 | `review_issue_summary_json` | jsonb | 是 | 复核摘要 |
+| `signal_summary_json.quality_notices` | jsonb | 是 | 服务排除 info 和局部矛盾 warning；不得替代画像级质量 flag |
 | `input_fingerprint` | text | 是 | 输入 fingerprint |
 | `profile_hash` | text | 是 | 画像 hash |
 | `processing_status` | text | 是 | `success`、`warning`、`blocked`、`failed` |
@@ -438,6 +439,8 @@ project_id + category_code + product_category + batch_id
 - `service_leakage`
 - `llm_parse_failed`
 
+`comment_param_contradiction` / `comment_claim_contradiction` 的 `issue_payload_json` 必须包含 `scope=comment_fact`、`dimension_code`、`comment_topic_code`、`contradicted_param_codes`、`contradicted_claim_codes`、`affected_anchor_codes`、`affected_anchor_mapping_status` 和 `propagation_policy=related_anchor_only`。M05C 不直接依赖 M12D taxonomy；本模块只声明局部作用域，锚点代码由下游按品类 taxonomy 映射。
+
 ## 6. 服务组件设计
 
 ### 6.1 组件列表
@@ -465,6 +468,18 @@ project_id + category_code + product_category + batch_id
 | 未指定 taxonomy version | 使用该品类默认发布版本 |
 | 指定 taxonomy version 不存在 | 抛出明确错误 |
 | SKU 前缀与 product_category 不匹配 | 阻断或进入复核，不得跨品类混跑 |
+
+### 6.1.1 M03B/M04C serving scope
+
+M05C 读取上游上下文的顺序为：
+
+1. 限定相同项目、源品类、业务品类、SKU 和该品类当前规则版本。
+2. 同评论 batch 的上游画像优先。
+3. 同 batch 不存在时，选择该品类 serving scope 内更新时间最新的有效画像。
+4. M04C 缺失按 `core3_sku_claim_fact_profile` 是否存在判断，不能因画像存在但 `fact_claim_flag=true` 的事实为零而误报缺失。
+5. run summary 记录 lookup strategy、M03B/M04C 来源 batch 分布及真实缺失 SKU 数。
+
+TV 和 AC 必须使用各自的 M03B/M04C rule version。不得以另一个品类的上游资产或 taxonomy 作为 fallback。
 
 ### 6.2 SKU 上下文压缩
 
@@ -635,6 +650,15 @@ LLM 配置只从环境变量读取：
 | 评论说“音质很好”，但缺音响硬参数 | `comment_only_product_fact` + `comment_claim_candidate` |
 | 评论说“创维老牌子，值得信赖” | `brand_power_signal_only` |
 | 评论说“比索尼便宜，画质也够用” | `competitor_signal_only` + 价格/画质事实 |
+
+服务事实和评论矛盾的作用域：
+
+| 情况 | fact/review 输出 | SKU 画像质量 |
+| --- | --- | --- |
+| 服务/安装评论被正确识别 | `service_excluded`，`severity=info`，保留 evidence | 不加入画像级 `quality_flags` |
+| 单条评论与参数/卖点反向 | fact 标记矛盾并生成局部 review issue | 不加入画像级 `quality_flags`；仅增加局部复核计数 |
+| 当前 serving scope 真实缺少 M03B | `param_profile_missing` | 画像级问题 |
+| 当前 serving scope 真实缺少 M04C profile | `claim_fact_profile_missing` | 画像级问题 |
 
 ## 8. 增量与性能设计
 
@@ -876,6 +900,11 @@ API 必须复用 CLI/service，不允许另写业务逻辑。
 | `test_m05c_supports_param_when_sku_has_param` | 评论支持本 SKU 参数 |
 | `test_m05c_comment_only_when_param_missing` | 参数缺失时不自动补参数 |
 | `test_m05c_service_excluded` | 服务履约不进入产品事实 |
+| `test_m05c_reads_current_category_serving_scope` | M03B/M04C 跨 batch 有效时不误报缺失，且不跨品类 |
+| `test_m05c_true_dependency_missing` | 只有 serving scope 真实缺失才输出画像级问题 |
+| `test_m05c_claim_profile_without_fact_claims` | M04C profile 存在但无事实卖点时不误报画像缺失 |
+| `test_m05c_localized_contradiction_scope` | 矛盾记录主题、参数、卖点和下游锚点映射状态，不扩散到整 SKU |
+| `test_m05c_service_exclusion_is_info` | 服务排除保留 evidence 且仅为 info |
 | `test_m05c_llm_json_schema_validation` | LLM 输出 schema 校验 |
 
 ### 12.2 集成测试

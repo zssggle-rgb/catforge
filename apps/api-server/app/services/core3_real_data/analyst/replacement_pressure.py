@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
-from enum import Enum
 from typing import Any, Literal
 
-from app.services.core3_real_data.analyst.anchor_substitutability import AnchorSubstitutabilityResult
+from app.services.core3_real_data.analyst.anchor_substitutability import (
+    AnchorSubstitutabilityResult,
+)
 
 PressureType = Literal[
     "value_substitution",
@@ -69,7 +70,9 @@ class ReplacementPressureInput:
     purchase_pool_score: Decimal | int | float | str | None
     anchor_substitutability: AnchorSubstitutabilityResult
     price_gap_pct_to_target: Decimal | int | float | str | None = None
-    weighted_overlap: dict[str, Decimal | int | float | str | None] = field(default_factory=dict)
+    weighted_overlap: dict[str, Decimal | int | float | str | None] = field(
+        default_factory=dict
+    )
     market_validation_level: str | None = None
     candidate_config_advantage_score: Decimal | int | float | str | None = None
     candidate_scenario_mindshare_score: Decimal | int | float | str | None = None
@@ -93,7 +96,9 @@ class ReplacementPressureResult:
 
     @property
     def normalized_score(self) -> Decimal:
-        return (Decimal(self.replacement_pressure_score) / Decimal("10")).quantize(Decimal("0.0001"))
+        return (Decimal(self.replacement_pressure_score) / Decimal("10")).quantize(
+            Decimal("0.0001")
+        )
 
     def to_legacy_replacement_pressure(self) -> dict[str, Any]:
         return {
@@ -103,12 +108,24 @@ class ReplacementPressureResult:
             "replacement_pressure_score": self.replacement_pressure_score,
             "replacement_pressure_level": self.replacement_pressure_level,
             "score_breakdown": {
-                "purchase_pool_pressure": _decimal_to_number(self.score_breakdown.purchase_pool_pressure),
-                "purchase_reason_pressure": _decimal_to_number(self.score_breakdown.purchase_reason_pressure),
-                "price_or_config_impact": _decimal_to_number(self.score_breakdown.price_or_config_impact),
-                "scenario_mindshare_shift": _decimal_to_number(self.score_breakdown.scenario_mindshare_shift),
-                "market_diversion_validation": _decimal_to_number(self.score_breakdown.market_diversion_validation),
-                "confidence_adjustment": _decimal_to_number(self.score_breakdown.confidence_adjustment),
+                "purchase_pool_pressure": _decimal_to_number(
+                    self.score_breakdown.purchase_pool_pressure
+                ),
+                "purchase_reason_pressure": _decimal_to_number(
+                    self.score_breakdown.purchase_reason_pressure
+                ),
+                "price_or_config_impact": _decimal_to_number(
+                    self.score_breakdown.price_or_config_impact
+                ),
+                "scenario_mindshare_shift": _decimal_to_number(
+                    self.score_breakdown.scenario_mindshare_shift
+                ),
+                "market_diversion_validation": _decimal_to_number(
+                    self.score_breakdown.market_diversion_validation
+                ),
+                "confidence_adjustment": _decimal_to_number(
+                    self.score_breakdown.confidence_adjustment
+                ),
             },
             "auxiliary_pressure_types": [
                 {
@@ -131,24 +148,34 @@ class ReplacementPressureClassifier:
     def classify(self, payload: ReplacementPressureInput) -> ReplacementPressureResult:
         anchor = payload.anchor_substitutability
         breakdown = ReplacementPressureBreakdown(
-            purchase_pool_pressure=_purchase_pool_pressure(payload.purchase_pool_level, payload.purchase_pool_score),
+            purchase_pool_pressure=_purchase_pool_pressure(
+                payload.purchase_pool_level, payload.purchase_pool_score
+            ),
             purchase_reason_pressure=_purchase_reason_pressure(anchor),
             price_or_config_impact=_price_or_config_impact(payload),
             scenario_mindshare_shift=_scenario_mindshare_shift(payload),
-            market_diversion_validation=_market_diversion_validation(payload.market_validation_level),
+            market_diversion_validation=_market_diversion_validation(
+                payload.market_validation_level
+            ),
             confidence_adjustment=_confidence_adjustment(payload),
         )
         raw_score = max(Decimal("0"), min(Decimal("10"), breakdown.total_before_cap))
         score = _round_points(raw_score)
         level = _level(score)
         type_candidates = _pressure_type_candidates(payload, breakdown=breakdown)
-        primary = type_candidates[0] if score >= 5 and type_candidates else _low_pressure_candidate(score)
+        primary = (
+            type_candidates[0]
+            if score >= 5 and type_candidates
+            else _low_pressure_candidate(score)
+        )
         auxiliaries = [
             candidate
             for candidate in type_candidates
             if candidate.pressure_type != primary.pressure_type and candidate.score > 0
         ][:2]
-        requires_review = anchor.requires_review or breakdown.confidence_adjustment < 0 or score < 5
+        requires_review = (
+            anchor.requires_review or breakdown.confidence_adjustment < 0 or score < 5
+        )
         strong_pressure_allowed = score >= 5 and anchor.pair_scoring_allowed
         reason_cn = _reason_cn(
             score=score,
@@ -172,7 +199,9 @@ class ReplacementPressureClassifier:
         )
 
 
-def _purchase_pool_pressure(level: str, score: Decimal | int | float | str | None) -> Decimal:
+def _purchase_pool_pressure(
+    level: str, score: Decimal | int | float | str | None
+) -> Decimal:
     normalized = str(level or "").upper()
     by_level = {
         "P0": Decimal("2.0000"),
@@ -189,20 +218,26 @@ def _purchase_pool_pressure(level: str, score: Decimal | int | float | str | Non
 def _purchase_reason_pressure(anchor: AnchorSubstitutabilityResult) -> Decimal:
     if not anchor.pair_scoring_allowed:
         return Decimal("0.0000")
-    return (Decimal(anchor.anchor_substitutability_score) / Decimal("15") * Decimal("3")).quantize(Decimal("0.0001"))
+    return (
+        Decimal(anchor.anchor_substitutability_score) / Decimal("15") * Decimal("3")
+    ).quantize(Decimal("0.0001"))
 
 
 def _price_or_config_impact(payload: ReplacementPressureInput) -> Decimal:
     anchor_score = payload.anchor_substitutability.anchor_substitutability_score
     price_gap = _decimal(payload.price_gap_pct_to_target)
     config_advantage = _clamp01(_decimal(payload.candidate_config_advantage_score))
-    candidate_stronger = bool(payload.anchor_substitutability.candidate_stronger_anchors)
+    candidate_stronger = bool(
+        payload.anchor_substitutability.candidate_stronger_anchors
+    )
     options: list[Decimal] = [config_advantage * Decimal("2")]
     if price_gap <= Decimal("-0.15") and anchor_score >= 7:
         options.append(Decimal("1.7000"))
     elif price_gap <= Decimal("-0.08") and anchor_score >= 7:
         options.append(Decimal("1.3000"))
-    if abs(price_gap) <= Decimal("0.08") and (candidate_stronger or config_advantage >= Decimal("0.60")):
+    if abs(price_gap) <= Decimal("0.08") and (
+        candidate_stronger or config_advantage >= Decimal("0.60")
+    ):
         options.append(Decimal("1.5000"))
     if price_gap >= Decimal("0.15") and anchor_score >= 10:
         options.append(Decimal("1.3000"))
@@ -212,7 +247,9 @@ def _price_or_config_impact(payload: ReplacementPressureInput) -> Decimal:
 def _scenario_mindshare_shift(payload: ReplacementPressureInput) -> Decimal:
     semantic_score = _semantic_overlap_score(payload.weighted_overlap)
     explicit_score = _clamp01(_decimal(payload.candidate_scenario_mindshare_score))
-    candidate_has_stronger_anchor = bool(payload.anchor_substitutability.candidate_stronger_anchors)
+    candidate_has_stronger_anchor = bool(
+        payload.anchor_substitutability.candidate_stronger_anchors
+    )
     if candidate_has_stronger_anchor and semantic_score >= Decimal("0.65"):
         return Decimal("1.0000")
     if semantic_score >= Decimal("0.50"):
@@ -241,11 +278,22 @@ def _confidence_adjustment(payload: ReplacementPressureInput) -> Decimal:
         adjustment -= Decimal("0.3000")
     for flag in payload.risk_flags:
         lowered = str(flag).lower()
-        if lowered in {"sample_limited", "market_missing", "evidence_conflict", "claim_only", "service_signal_overweight"}:
+        if lowered in {
+            "sample_limited",
+            "market_missing",
+            "evidence_conflict",
+            "claim_only",
+            "service_signal_overweight",
+        }:
             adjustment -= Decimal("0.3000")
-    if str(payload.market_validation_level or "").lower() == "strong" and not anchor.requires_review:
+    if (
+        str(payload.market_validation_level or "").lower() == "strong"
+        and not anchor.requires_review
+    ):
         adjustment += Decimal("0.5000")
-    return max(Decimal("-1.0000"), min(Decimal("1.0000"), adjustment)).quantize(Decimal("0.0001"))
+    return max(Decimal("-1.0000"), min(Decimal("1.0000"), adjustment)).quantize(
+        Decimal("0.0001")
+    )
 
 
 def _pressure_type_candidates(
@@ -283,7 +331,11 @@ def _pressure_type_candidates(
     candidates.append(
         _type_candidate(
             "configuration_benchmark",
-            max(config_advantage, Decimal("1.00") if anchor.candidate_stronger_anchors else Decimal("0")) * Decimal("0.70")
+            max(
+                config_advantage,
+                Decimal("1.00") if anchor.candidate_stronger_anchors else Decimal("0"),
+            )
+            * Decimal("0.70")
             + (Decimal("0.30") if abs(price_gap) <= Decimal("0.12") else Decimal("0")),
             "候选配置或成交理由表达更强，抬高同价位用户预期。",
         )
@@ -291,7 +343,11 @@ def _pressure_type_candidates(
     candidates.append(
         _type_candidate(
             "scenario_mindshare",
-            max(scenario, semantic if anchor.candidate_stronger_anchors else Decimal("0")) * Decimal("0.90")
+            max(
+                scenario,
+                semantic if anchor.candidate_stronger_anchors else Decimal("0"),
+            )
+            * Decimal("0.90")
             + Decimal("0.10"),
             "候选把同类锚点转译成更清晰的场景心智。",
         )
@@ -307,7 +363,10 @@ def _pressure_type_candidates(
         _type_candidate(
             "downtrade_diversion",
             (Decimal("1.00") if price_gap <= Decimal("-0.15") else Decimal("0"))
-            * (Decimal("0.40") + min(anchor_score / Decimal("15"), Decimal("1")) * Decimal("0.60")),
+            * (
+                Decimal("0.40")
+                + min(anchor_score / Decimal("15"), Decimal("1")) * Decimal("0.60")
+            ),
             "用户降低预算后仍能满足部分核心需求，形成下探分流。",
         )
     )
@@ -315,18 +374,33 @@ def _pressure_type_candidates(
         _type_candidate(
             "uptrade_alternative",
             (Decimal("1.00") if price_gap >= Decimal("0.15") else Decimal("0"))
-            * (Decimal("0.30") + min(anchor_score / Decimal("15"), Decimal("1")) * Decimal("0.70")),
+            * (
+                Decimal("0.30")
+                + min(anchor_score / Decimal("15"), Decimal("1")) * Decimal("0.70")
+            ),
             "用户追加预算后可获得更明确高端理由，形成上探替代。",
         )
     )
     if pool_is_close and anchor_score >= 10:
-        candidates[0] = _type_candidate("value_substitution", candidates[0].score + Decimal("0.1500"), candidates[0].reason_cn)
+        candidates[0] = _type_candidate(
+            "value_substitution",
+            candidates[0].score + Decimal("0.1500"),
+            candidates[0].reason_cn,
+        )
     if price_gap <= Decimal("-0.15") and anchor_score >= 7:
-        candidates[1] = _type_candidate("price_suppression", candidates[1].score + Decimal("0.1500"), candidates[1].reason_cn)
-    return sorted(candidates, key=lambda item: (item.score, item.pressure_type), reverse=True)
+        candidates[1] = _type_candidate(
+            "price_suppression",
+            candidates[1].score + Decimal("0.1500"),
+            candidates[1].reason_cn,
+        )
+    return sorted(
+        candidates, key=lambda item: (item.score, item.pressure_type), reverse=True
+    )
 
 
-def _type_candidate(pressure_type: PressureType, score: Decimal, reason_cn: str) -> PressureTypeCandidate:
+def _type_candidate(
+    pressure_type: PressureType, score: Decimal, reason_cn: str
+) -> PressureTypeCandidate:
     return PressureTypeCandidate(
         pressure_type=pressure_type,
         pressure_type_cn=PRESSURE_TYPE_CN[pressure_type],
@@ -353,9 +427,20 @@ def _reason_cn(
     anchor: AnchorSubstitutabilityResult,
 ) -> str:
     if not strong_pressure_allowed:
-        return f"替代压力较弱，得分{score}/10；当前不能输出强替代话术，主要原因是成交理由替代或市场/置信证据不足。"
-    aux_text = "，辅压力为" + "、".join(item.pressure_type_cn for item in auxiliaries) if auxiliaries else ""
-    anchor_text = "，成交理由可替代性较强" if anchor.anchor_substitutability_score >= 10 else "，成交理由只形成局部替代"
+        return (
+            f"替代压力较弱，得分{score}/10。候选与本品的购买理由重合或市场分流证据有限，"
+            "当前更适合作为参考竞品。"
+        )
+    aux_text = (
+        "，辅压力为" + "、".join(item.pressure_type_cn for item in auxiliaries)
+        if auxiliaries
+        else ""
+    )
+    anchor_text = (
+        "，成交理由可替代性较强"
+        if anchor.anchor_substitutability_score >= 10
+        else "，成交理由只形成局部替代"
+    )
     return f"{primary.pressure_type_cn}为主压力，得分{score}/10{aux_text}{anchor_text}。{primary.reason_cn}"
 
 
@@ -378,7 +463,9 @@ def _semantic_overlap_score(values: dict[str, Any]) -> Decimal:
     ]
     if not scores:
         return Decimal("0")
-    return (sum(scores, Decimal("0")) / Decimal(len(scores))).quantize(Decimal("0.0001"))
+    return (sum(scores, Decimal("0")) / Decimal(len(scores))).quantize(
+        Decimal("0.0001")
+    )
 
 
 def _price_pressure_signal(price_gap: Decimal) -> Decimal:
