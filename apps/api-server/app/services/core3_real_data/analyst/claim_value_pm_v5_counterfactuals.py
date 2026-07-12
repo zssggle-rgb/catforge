@@ -699,11 +699,39 @@ def _flatten_parameter_configuration(
     prefix: str,
     output: dict[str, str],
 ) -> None:
+    metadata_keys = {
+        "evidence_id",
+        "evidence_ids",
+        "source",
+        "source_ref",
+        "source_refs",
+        "confidence",
+        "review_status",
+        "value_presence",
+    }
     for key in sorted(payload):
+        if key in metadata_keys:
+            continue
         value = payload[key]
         path = f"{prefix}.{key}"
         if isinstance(value, dict):
-            _flatten_parameter_configuration(value, prefix=path, output=output)
+            normalized = next(
+                (
+                    value.get(candidate_key)
+                    for candidate_key in (
+                        "normalized_value",
+                        "numeric_value",
+                        "value_text",
+                        "value",
+                    )
+                    if value.get(candidate_key) not in (None, "", "unknown", "-")
+                ),
+                None,
+            )
+            if normalized is not None:
+                output[path] = str(normalized).strip()
+            else:
+                _flatten_parameter_configuration(value, prefix=path, output=output)
         elif isinstance(value, list):
             normalized = [str(item).strip() for item in value if str(item).strip()]
             if normalized:

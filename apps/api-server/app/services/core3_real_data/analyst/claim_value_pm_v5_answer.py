@@ -616,12 +616,17 @@ def _performance_comparison_summary(market_reference: dict[str, Any]) -> str:
         for item in differences
         if item.get("direction") == "high"
     ]
-    suffix = (
-        f"；高销量组更常具备{'、'.join(high_values[:3])}"
-        if high_values
-        else ""
-    )
-    return f"{high}；{low}{suffix}"
+    low_values = [
+        str(item.get("value_name_cn") or "")
+        for item in differences
+        if item.get("direction") == "low"
+    ]
+    clauses = [high.rstrip("。"), low.rstrip("。")]
+    if high_values:
+        clauses.append(f"高销量组更常具备{'、'.join(high_values[:3])}")
+    if low_values:
+        clauses.append(f"低销量组更常具备{'、'.join(low_values[:3])}")
+    return "；".join(clauses)
 
 
 def render_v5_feishu_card(
@@ -1293,9 +1298,11 @@ def _market_reference_cn(context, rows, synthetic_by_bundle, archetypes):
         if code not in active_codes:
             continue
         if result.status == "available" and result.sales_difference is not None:
+            difference = result.sales_difference.estimate
+            direction = "高" if difference is not None and difference >= 0 else "低"
             summary = (
-                "与用户评价较弱的同类产品组合相比，本品每个共同市场单元的销量优势约 "
-                f"{_interval_text(result.sales_difference)}。"
+                f"与 {result.diagnostics.donor_count} 款同尺寸、相近价格产品的中位表现相比，"
+                f"本品周均销量{direction} {abs(difference or 0):.1f} 台/周。"
             )
             baselines.append(
                 {
