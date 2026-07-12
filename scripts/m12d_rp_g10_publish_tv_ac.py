@@ -50,7 +50,7 @@ DEFAULT_FOCUS_PATH = (
     "M12D_RP_G06_validated_fixture.json"
 )
 PROFILE_VERSIONS = {
-    "TV": "m12d_tv_purchase_reason_profile_v0_2",
+    "TV": "m12d_tv_purchase_reason_profile_v0_3",
     "AC": "m12d_ac_purchase_reason_profile_v0_3",
 }
 TAXONOMY_VERSIONS = {
@@ -223,6 +223,22 @@ def generate_category(
         raise G10ReleaseError("current version has no source_batch_ids_json")
     read_scope = f"serving-scope:{category}:{','.join(source_batch_ids)}"
     version = PROFILE_VERSIONS[category]
+    if write:
+        existing_target = db.execute(
+            select(entities.Core3PurchaseReasonProfileVersion)
+            .where(entities.Core3PurchaseReasonProfileVersion.project_id == PROJECT_ID)
+            .where(entities.Core3PurchaseReasonProfileVersion.category_code == category)
+            .where(entities.Core3PurchaseReasonProfileVersion.batch_id == current.batch_id)
+            .where(
+                entities.Core3PurchaseReasonProfileVersion.m12d_profile_version
+                == version
+            )
+            .where(
+                entities.Core3PurchaseReasonProfileVersion.rule_version
+                == CORE3_M12D_RULE_VERSION
+            )
+        ).scalar_one_or_none()
+        assert_write_target_safe(existing_target, version=version)
     context = Core3RepositoryContext(
         db=db,
         project_id=PROJECT_ID,
@@ -272,6 +288,19 @@ def generate_category(
         "result_digest": records_digest(result.profiles, result.anchors),
         "business_digest": business_records_digest(result.profiles, result.anchors),
     }
+
+
+def assert_write_target_safe(existing_version: Any | None, *, version: str) -> None:
+    """Keep published/current releases immutable during draft generation."""
+
+    if existing_version is None:
+        return
+    release_status = str(getattr(existing_version, "release_status", ""))
+    is_current = bool(getattr(existing_version, "is_current", False))
+    if release_status == M12DReleaseStatus.PUBLISHED.value or is_current:
+        raise G10ReleaseError(
+            f"write-draft cannot overwrite published/current version: {version}"
+        )
 
 
 def publish_category(db: Session, *, category: str) -> dict[str, Any]:

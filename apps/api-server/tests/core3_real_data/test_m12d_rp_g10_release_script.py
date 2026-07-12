@@ -3,6 +3,8 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[4]
@@ -85,6 +87,32 @@ def test_business_digest_changes_when_purchase_reason_outcome_changes() -> None:
     anchor.pressure_level = "high"
 
     assert business_records_digest([profile], [anchor]) != baseline
+
+
+def test_write_draft_rejects_published_or_current_version() -> None:
+    module = load_release_module()
+
+    with pytest.raises(module.G10ReleaseError, match="cannot overwrite"):
+        module.assert_write_target_safe(
+            SimpleNamespace(release_status="published", is_current=False),
+            version="m12d_tv_purchase_reason_profile_v0_2",
+        )
+    with pytest.raises(module.G10ReleaseError, match="cannot overwrite"):
+        module.assert_write_target_safe(
+            SimpleNamespace(release_status="draft", is_current=True),
+            version="m12d_tv_purchase_reason_profile_v0_2",
+        )
+
+    module.assert_write_target_safe(
+        SimpleNamespace(release_status="draft", is_current=False),
+        version="m12d_tv_purchase_reason_profile_v0_3",
+    )
+
+
+def test_tv_recovery_release_uses_new_immutable_version() -> None:
+    module = load_release_module()
+
+    assert module.PROFILE_VERSIONS["TV"] == "m12d_tv_purchase_reason_profile_v0_3"
 
 
 def test_business_diff_reports_the_sku_anchor_and_changed_field() -> None:
