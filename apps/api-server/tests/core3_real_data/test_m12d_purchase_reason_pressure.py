@@ -16,6 +16,7 @@ from app.services.core3_real_data.constants import (
 )
 from app.services.core3_real_data.purchase_reason_pressure import (
     PurchasePressureClassifier,
+    _dedupe_source_refs,
 )
 from app.services.core3_real_data.purchase_reason_profile_schemas import (
     M12DAnchorCandidate,
@@ -32,6 +33,25 @@ from app.services.core3_real_data.purchase_reason_profile_schemas import (
 from app.services.core3_real_data.purchase_reason_profile_scoring import (
     PurchaseReasonProfileScoringService,
 )
+
+
+def test_pressure_source_refs_are_canonical_across_input_orders() -> None:
+    first = M12DSourceRef(
+        module_code="M12C",
+        table_name="core3_sku_claim_value_quantification",
+        record_id="record-a",
+    )
+    second = M12DSourceRef(
+        module_code="M12C",
+        table_name="core3_sku_claim_value_quantification",
+        record_id="record-b",
+    )
+
+    forward = _dedupe_source_refs([second, first, second])
+    reverse = _dedupe_source_refs([first, second, first])
+
+    assert [ref.record_id for ref in forward] == ["record-a", "record-b"]
+    assert [ref.record_id for ref in reverse] == ["record-a", "record-b"]
 
 
 def test_comment_localized_negative_and_mixed_feedback_are_parallel_pressure() -> None:

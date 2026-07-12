@@ -945,11 +945,12 @@ def _m12c_summary_role_refs(
     if not isinstance(payload, Mapping):
         return []
     refs: list[M12DSourceRef] = []
-    for claim_code, roles in roles_by_claim.items():
+    for claim_code in sorted(roles_by_claim):
+        roles = roles_by_claim[claim_code]
         claim_payload = payload.get(claim_code) or {}
         if not isinstance(claim_payload, Mapping):
             continue
-        for role in roles & M12C_HEADWIND_ROLES:
+        for role in sorted(roles & M12C_HEADWIND_ROLES):
             for raw in claim_payload.get(role) or []:
                 ref = _m12c_summary_ref(raw, claim_code=claim_code, role=role)
                 if ref is not None:
@@ -965,11 +966,12 @@ def _m12c_summary_negative_refs(
     if not isinstance(payload, Mapping):
         return []
     refs: list[M12DSourceRef] = []
-    for claim_code in claim_scope:
+    for claim_code in sorted(claim_scope):
         claim_payload = payload.get(claim_code) or {}
         if not isinstance(claim_payload, Mapping):
             continue
-        for role, records in claim_payload.items():
+        for role in sorted(claim_payload):
+            records = claim_payload[role]
             for raw in records or []:
                 if not isinstance(raw, Mapping) or "comment_negative" not in {
                     str(flag) for flag in raw.get("quality_flags_json") or []
@@ -1289,7 +1291,10 @@ def _dedupe_source_refs(refs: Iterable[M12DSourceRef]) -> list[M12DSourceRef]:
         if key not in seen:
             seen.add(key)
             result.append(ref)
-    return result
+    return sorted(
+        result,
+        key=lambda ref: (str(ref.module_code), ref.table_name, ref.record_id),
+    )
 
 
 def _level_cn(level: str) -> str:
