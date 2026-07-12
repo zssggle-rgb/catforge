@@ -258,6 +258,10 @@ def test_no_evidence_does_not_force_a_highlight() -> None:
     report = build_perceived_value_market_report(_v5_context())
 
     assert report.decision_summary.highlights == []
+    assert all(
+        not row.price_realization.realization_comparisons
+        for row in report.value_account_rows
+    )
     assert report.decision_summary.no_highlight_reason_cn == (
         "当前未识别出同时具备具体用户结果和可靠相对证据的亮点。"
     )

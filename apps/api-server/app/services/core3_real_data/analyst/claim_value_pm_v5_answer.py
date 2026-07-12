@@ -182,7 +182,12 @@ def build_perceived_value_market_report(
         )
         synthetic = _synthetic_for_bundle(context, link.bundle.bundle_code, sets)
         synthetic_by_bundle[link.bundle.bundle_code] = synthetic
-        realization_comparisons = _realization_market_comparisons(context, sets)
+        value_status = _v5_value_status(link)
+        realization_comparisons = (
+            _realization_market_comparisons(context, sets)
+            if value_status in {"observed_positive", "partial"}
+            else []
+        )
         v4_assessments = build_counterfactual_assessments(context.v4_context, link)
         quantification = quantify_sellpoint_value(
             context.v4_context,
@@ -223,7 +228,6 @@ def build_perceived_value_market_report(
                 limitations=[],
             )
         )
-        value_status = _v5_value_status(link)
         row_allocation = next(
             (item for item in allocations if item.battlefield_code == link.battlefield_code),
             None,
