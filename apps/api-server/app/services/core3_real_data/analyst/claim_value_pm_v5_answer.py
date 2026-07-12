@@ -1139,31 +1139,34 @@ def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any
 
 
 def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
-    comparisons = [
-        comparison
+    comparison_rows = [
+        (len(row.sellpoint_bundle.members), row.sellpoint_bundle.bundle_code, comparison)
         for row in rows
         for comparison in row.price_realization.realization_comparisons
         if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None
     ]
-    if comparisons:
-        strongest = max(comparisons, key=lambda item: item.price_gap_pct or 0.0)
+    if comparison_rows:
+        _, _, representative = min(
+            comparison_rows,
+            key=lambda item: (item[0], -(item[2].price_gap_pct or 0.0), item[1]),
+        )
         strongest_text = _market_gap_cn(
-            strongest.price_gap_abs or 0.0,
-            strongest.price_gap_pct or 0.0,
+            representative.price_gap_abs or 0.0,
+            representative.price_gap_pct or 0.0,
             metric="均价",
             unit="元",
         )
         if (
-            strongest.price_gap_abs is not None
-            and strongest.price_gap_abs > 0
-            and strongest.sales_volume_gap_abs is not None
-            and strongest.sales_volume_gap_abs >= 0
+            representative.price_gap_abs is not None
+            and representative.price_gap_abs > 0
+            and representative.sales_volume_gap_abs is not None
+            and representative.sales_volume_gap_abs >= 0
         ):
-            strongest_text = f"最强一组市场隐含支付意愿体现为{strongest_text}"
+            strongest_text = f"最具体一组的市场隐含支付意愿体现为{strongest_text}"
         else:
-            strongest_text = f"最强一组{strongest_text}"
+            strongest_text = f"最具体一组{strongest_text}"
         return (
-            f"{len(comparisons)} 组用户价值形成可比价格承接；"
+            f"{len(comparison_rows)} 组用户价值形成可比价格承接；"
             f"{strongest_text}。"
         )
     available = [
@@ -1178,20 +1181,27 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
 
 
 def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
-    comparisons = [
-        comparison
+    comparison_rows = [
+        (len(row.sellpoint_bundle.members), row.sellpoint_bundle.bundle_code, comparison)
         for row in rows
         for comparison in row.volume_realization.realization_comparisons
         if comparison.sales_volume_gap_abs is not None
         and comparison.sales_volume_gap_pct is not None
         and comparison.sales_volume_gap_abs > 0
     ]
-    if comparisons:
-        strongest = max(comparisons, key=lambda item: item.sales_volume_gap_abs or 0.0)
+    if comparison_rows:
+        _, _, representative = min(
+            comparison_rows,
+            key=lambda item: (
+                item[0],
+                -(item[2].sales_volume_gap_abs or 0.0),
+                item[1],
+            ),
+        )
         return (
-            f"{len(comparisons)} 组用户价值形成正向销量贡献；按价值未兑现反事实估算，"
-            f"最强一组约 {strongest.sales_volume_gap_abs:.0f} 台"
-            f"（相对基线高 {strongest.sales_volume_gap_pct * 100:.1f}%）。"
+            f"{len(comparison_rows)} 组用户价值形成正向销量贡献；按价值未兑现反事实估算，"
+            f"最具体一组约 {representative.sales_volume_gap_abs:.0f} 台"
+            f"（相对基线高 {representative.sales_volume_gap_pct * 100:.1f}%）。"
         )
     positive = [
         row
