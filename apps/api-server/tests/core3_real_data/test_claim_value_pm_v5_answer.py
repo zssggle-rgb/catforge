@@ -87,6 +87,8 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert "1 组价值" in summary.price_summary_cn
     assert "无法识别销量承接" in summary.volume_summary_cn
     assert "已进入 4 个" in summary.existing_battlefield_summary_cn
+    assert "组合优先级问题" in summary.existing_battlefield_summary_cn
+    assert "优先比较" not in summary.existing_battlefield_summary_cn
     assert "未识别出" in summary.expansion_summary_cn
 
 

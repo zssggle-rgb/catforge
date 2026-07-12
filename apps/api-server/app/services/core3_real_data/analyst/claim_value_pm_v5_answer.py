@@ -935,10 +935,40 @@ def _existing_summary(options, context):
     existing = [row for row in options if row.option_type == "strengthen_existing"]
     if not existing:
         return "当前没有可用的已进入战场资料。"
-    first = existing[0]
+    path_priority = {
+        "capability_completion": 0,
+        "communication_activation": 1,
+        "market_activation": 2,
+        "portfolio_priority": 3,
+        "maintain_or_cap": 4,
+    }
+    actionable = sorted(
+        [row for row in existing if row.strengthen_path != "maintain_or_cap"],
+        key=lambda row: (
+            path_priority[row.strengthen_path],
+            _battlefield_name(context, row.battlefield_code),
+        ),
+    )
+    clauses = []
+    for row in actionable[:2]:
+        name = _battlefield_name(context, row.battlefield_code)
+        clauses.append(
+            {
+                "capability_completion": f"“{name}”已进入但能力仍有缺口",
+                "communication_activation": f"“{name}”已有用户价值、产品表达仍偏弱",
+                "market_activation": f"“{name}”已有价值证据、量价承接尚未确认",
+                "portfolio_priority": f"“{name}”属于组合优先级问题",
+            }[row.strengthen_path]
+        )
+    if clauses:
+        detail = "；".join(clauses)
+        return (
+            f"已进入 {len(existing)} 个可复核战场；{detail}。"
+            "其余战场没有证据支持继续加码，不自动下达增减配指令。"
+        )
     return (
-        f"已进入 {len(existing)} 个可复核战场；优先比较“{_battlefield_name(context, first.battlefield_code)}”"
-        f"的{STRENGTHEN_CN[first.strengthen_path]}方案，不自动下达增减配指令。"
+        f"已进入 {len(existing)} 个可复核战场；当前没有证据支持继续加码，"
+        "先保持现有组合，不自动下达增减配指令。"
     )
 
 
