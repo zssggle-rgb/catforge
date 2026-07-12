@@ -7,8 +7,11 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     _dedupe_value_account_rows,
     _market_fraction,
     _market_number,
+    _parameter_dimension,
+    _parameter_value_conclusion,
     _realization_market_comparisons,
     _select_highlights,
+    _supported_claim_gaps,
     adapt_v4_context_to_v5,
     build_perceived_value_market_report,
     build_v5_answer_artifacts,
@@ -27,6 +30,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     LineageIssue,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
+    _value_unit_by_code,
     build_reason_value_bundle_links,
 )
 from tests.core3_real_data.test_claim_value_pm_v4_quantification import (
@@ -116,6 +120,78 @@ def test_report_uses_question_driven_comparisons_instead_of_pairwise_inventory()
     assert "更多比较" not in short
     assert "逐一比较" not in short
     assert "不同参数组合" not in short
+
+
+def test_shortfall_gap_requires_repeated_peer_support() -> None:
+    context = _v5_context()
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+
+    assert _supported_claim_gaps(
+        snapshots,
+        "DIRECT-LOWER",
+        ["TARGET", "SAME-CLAIM"],
+        {"CLAIM-PICTURE"},
+    ) == ["CLAIM-PICTURE"]
+    assert _supported_claim_gaps(
+        snapshots,
+        "DIRECT-LOWER",
+        ["SAME-CLAIM", "BRAND-LOWER"],
+        {"CLAIM-PICTURE"},
+    ) == []
+
+
+def test_parameter_value_comparison_never_crosses_parameter_dimensions() -> None:
+    context = _v5_context()
+    report = build_perceived_value_market_report(context)
+    bundle = report.value_account_rows[0].sellpoint_bundle
+    definitions = _value_unit_by_code(context.category_code)
+    claim_codes = {
+        claim_code
+        for member in bundle.members
+        for claim_code in definitions[member.capability_code].claim_codes
+    }
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    for sku_code in ("DIRECT-LOWER", "SAME-CLAIM"):
+        snapshot = snapshots[sku_code]
+        snapshots[sku_code] = snapshot.model_copy(
+            update={
+                "facts": {
+                    **snapshot.facts,
+                    "supported_claim_codes": sorted(claim_codes),
+                }
+            }
+        )
+    comparisons = [
+        RealizationMarketComparison(
+            method="parameter_configuration",
+            comparison_basis_cn=basis,
+            comparator_sku_codes=codes,
+            comparator_names=codes,
+            comparator_count=2,
+            evidence_strength="candidate",
+            causal_claim=False,
+        )
+        for basis, codes in (
+            ("参数组合：backlight_subtype=Q-LED", ["DIRECT-LOWER", "SAME-CLAIM"]),
+            ("参数组合：backlight_subtype=MiniLED", ["BRAND-LOWER", "DONOR-0"]),
+            ("参数组合：local_dimming_zone_count=0", ["BRAND-LOWER", "DONOR-1"]),
+        )
+    ]
+
+    result = _parameter_value_conclusion(
+        snapshots,
+        {
+            "bundle": bundle,
+            "value_name_cn": "画质升级感",
+            "comparisons": comparisons,
+        },
+        definitions,
+    )
+
+    assert _parameter_dimension("参数组合：backlight_subtype=Q-LED") == "backlight_subtype"
+    assert result is not None
+    assert "背光类型=Q-LED" in result["conclusion_cn"]
+    assert "分区数" not in result["conclusion_cn"]
 
 
 def test_highlight_summary_keeps_one_specific_result_per_battlefield() -> None:

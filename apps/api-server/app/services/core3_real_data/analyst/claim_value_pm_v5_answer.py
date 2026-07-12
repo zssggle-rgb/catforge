@@ -50,7 +50,10 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_service import (
     build_market_synthetic_control,
     build_performance_archetypes,
 )
-from app.services.core3_real_data.analyst.competitor_answer import _publish_report
+from app.services.core3_real_data.analyst.competitor_answer import (
+    CLAIM_LABELS_CN,
+    _publish_report,
+)
 
 
 VALUE_STATUS_CN = {
@@ -598,22 +601,49 @@ def _performance_comparison_summary(market_reference: dict[str, Any]) -> str:
     if not high or not low or high.startswith("当前样本不足"):
         return ""
     differences = market_reference.get("performance_value_differences") or []
-    high_values = [
-        str(item.get("value_name_cn") or "")
-        for item in differences
-        if item.get("direction") == "high"
-    ]
-    low_values = [
-        str(item.get("value_name_cn") or "")
-        for item in differences
-        if item.get("direction") == "low"
-    ]
+    high_values = _value_themes(differences, direction="high")
+    low_values = _value_themes(differences, direction="low")
+    shared_values = high_values & low_values
+    high_values -= shared_values
+    low_values -= shared_values
     clauses = [high.rstrip("。"), low.rstrip("。")]
     if high_values:
-        clauses.append(f"高销量组更常具备{'、'.join(high_values[:3])}")
+        clauses.append(f"高销量组更突出{'、'.join(sorted(high_values))}")
     if low_values:
-        clauses.append(f"低销量组更常具备{'、'.join(low_values[:3])}")
+        clauses.append(f"低销量组更集中于{'、'.join(sorted(low_values))}")
+    high_price = (market_reference.get("high_performance") or {}).get("price_median")
+    low_price = (market_reference.get("low_performance") or {}).get("price_median")
+    if low_values and high_price is not None and low_price is not None and low_price > high_price:
+        clauses.append(
+            "结合低销量组价格中位数更高，这些价值组合更像高价定位，"
+            "不能直接当作走量配方"
+        )
     return "；".join(clauses)
+
+
+def _value_themes(
+    differences: Sequence[dict[str, Any]], *, direction: str
+) -> set[str]:
+    result: set[str] = set()
+    labels = (
+        ("画质升级感", "画质升级"),
+        ("客厅沉浸感", "客厅沉浸"),
+        ("动态画面稳定感", "动态画面"),
+        ("游戏操控顺滑感", "游戏操控"),
+        ("日常使用省心感", "日常易用"),
+    )
+    for item in differences:
+        if item.get("direction") != direction:
+            continue
+        name = str(item.get("value_name_cn") or "")
+        matched = False
+        for token, label in labels:
+            if token in name:
+                result.add(label)
+                matched = True
+        if name and not matched:
+            result.add(name)
+    return result
 
 
 def render_v5_feishu_card(
@@ -1333,6 +1363,8 @@ def _question_driven_comparisons(
 ) -> list[dict[str, Any]]:
     snapshots = {row.identity.sku_code: row for row in context.market_universe}
     definitions = _value_unit_by_code(context.category_code)
+    target_name = context.v4_context.target.model_name or "本品"
+    target_brand = context.v4_context.target.brand_name or "本品牌"
     candidates = [
         item
         for item in comparison_catalog
@@ -1365,6 +1397,13 @@ def _question_driven_comparisons(
             snapshots, comparison.comparator_sku_codes, claims
         )
         value_name = str(budget_entry.get("value_name_cn") or "用户价值")
+        coverage_gap = target_coverage - peer_coverage
+        peer_advantages = _peer_advantage_claims(
+            snapshots,
+            context.v4_context.target.sku_code,
+            comparison.comparator_sku_codes,
+            claims,
+        )
         conclusion = (
             f"选择{'、'.join(comparison.comparator_names)}作为同预算组。"
             f"“{value_name}”所包含的用户反馈要点，本品覆盖约"
@@ -1376,9 +1415,33 @@ def _question_driven_comparisons(
                 f"在此基础上，本品均价高{comparison.price_gap_abs:.0f}元，"
                 f"周均销量高{comparison.sales_volume_gap_abs:.1f}台。"
             )
+        if coverage_gap <= -0.05:
+            improvement = ""
+            if peer_advantages:
+                improvement = (
+                    "优先补强"
+                    f"{'、'.join(CLAIM_LABELS_CN.get(code, code) for code in peer_advantages)}"
+                    "对应的用户体验或卖点表达。"
+                )
+            conclusion += (
+                f"本品的反馈覆盖反而少{abs(coverage_gap) * 100:.0f}个百分点，"
+                "说明优势并不来自画质卖点覆盖更多，更可能来自少数关键体验或整机组合，"
+                "不能把全部销量差都归因于这组画质卖点。"
+                f"{improvement}"
+            )
+        elif coverage_gap >= 0.05:
+            conclusion += (
+                f"本品的反馈覆盖多{coverage_gap * 100:.0f}个百分点，"
+                "价值反馈与量价表现方向一致，可作为同预算竞争的重点表达。"
+            )
+        else:
+            conclusion += (
+                "两组的反馈覆盖接近，量价优势不能用卖点数量解释，"
+                "应继续比较具体体验和整机组合。"
+            )
         result.append(
             {
-                "question_cn": "同预算下为什么选择本品",
+                "question_cn": "同预算竞争中本品赢在哪里",
                 "selected_products": comparison.comparator_names,
                 "conclusion_cn": conclusion,
             }
@@ -1394,26 +1457,41 @@ def _question_driven_comparisons(
     )
     if brand_entry is not None:
         comparison = _catalog_comparison(brand_entry, "same_brand_size_ladder")
-        conclusion = f"选择{'、'.join(comparison.comparator_names)}比较海信内部定位。"
+        conclusion = (
+            f"选择{'、'.join(comparison.comparator_names)}比较{target_brand}内部定位。"
+        )
         if comparison.price_gap_abs is not None and comparison.sales_volume_gap_abs is not None:
             price_role = "建立了更高价格" if comparison.price_gap_abs > 0 else "价格更低"
+            price_direction = "高" if comparison.price_gap_abs > 0 else "低"
             volume_role = (
                 "但销量规模更小"
                 if comparison.sales_volume_gap_abs < 0
                 else "并获得更大销量"
             )
             conclusion += (
-                f"65E7Q{price_role}（高{abs(comparison.price_gap_abs):.0f}元），"
+                f"{target_name}{price_role}（{price_direction}"
+                f"{abs(comparison.price_gap_abs):.0f}元），"
                 f"{volume_role}（相差{abs(comparison.sales_volume_gap_abs):.1f}台/周），"
                 "因此承担高端溢价款而不是主走量款的角色。"
             )
         result.append(
             {
-                "question_cn": "65E7Q在海信产品线中的角色",
+                "question_cn": f"{target_name}在{target_brand}产品线中的角色",
                 "selected_products": comparison.comparator_names,
                 "conclusion_cn": conclusion,
             }
         )
+
+    weakness_result = _weakness_comparison(
+        context,
+        candidates,
+        definitions,
+        budget_entry=budget_entry,
+        brand_entry=brand_entry,
+        high=high,
+    )
+    if weakness_result is not None:
+        result.append(weakness_result)
 
     parameter_entry = next(
         (
@@ -1500,6 +1578,141 @@ def _group_claim_coverage(
     return round(sum(coverage) / len(coverage), 6) if coverage else 0.0
 
 
+def _peer_advantage_claims(
+    snapshots: dict[str, SkuEvidenceSnapshot],
+    target_sku_code: str,
+    peer_sku_codes: Sequence[str],
+    claim_codes: set[str],
+) -> list[str]:
+    target = snapshots.get(target_sku_code)
+    if target is None:
+        return []
+    target_supported = _snapshot_code_set(target, "supported_claim_codes")
+    peer_snapshots = [
+        snapshots[sku_code]
+        for sku_code in peer_sku_codes
+        if sku_code in snapshots
+    ]
+    if not peer_snapshots:
+        return []
+    scored = []
+    for claim_code in claim_codes - target_supported:
+        peer_rate = sum(
+            claim_code in _snapshot_code_set(snapshot, "supported_claim_codes")
+            for snapshot in peer_snapshots
+        ) / len(peer_snapshots)
+        if peer_rate >= 1 / len(peer_snapshots):
+            scored.append((peer_rate, claim_code))
+    return [code for _, code in sorted(scored, key=lambda item: (-item[0], item[1]))[:3]]
+
+
+def _weakness_comparison(
+    context: SellpointValueV5Context,
+    catalog: Sequence[dict[str, Any]],
+    definitions,
+    *,
+    budget_entry: dict[str, Any] | None,
+    brand_entry: dict[str, Any] | None,
+    high: PerformanceArchetype | None,
+) -> dict[str, Any] | None:
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    target_code = context.v4_context.target.sku_code
+    claim_codes = {
+        claim_code
+        for entry in catalog
+        for claim_code in _catalog_claim_codes(entry, definitions)
+    }
+    groups: list[tuple[str, list[str], list[str]]] = []
+    if budget_entry is not None:
+        comparison = _catalog_comparison(budget_entry, "same_budget_pool")
+        if comparison is not None:
+            groups.append(
+                (
+                    "同预算产品",
+                    comparison.comparator_sku_codes,
+                    comparison.comparator_names,
+                )
+            )
+    if brand_entry is not None:
+        comparison = _catalog_comparison(brand_entry, "same_brand_size_ladder")
+        if comparison is not None:
+            groups.append(
+                (
+                    "同品牌走量款",
+                    comparison.comparator_sku_codes,
+                    comparison.comparator_names,
+                )
+            )
+    if high is not None:
+        names = {
+            snapshot.identity.sku_code: snapshot.identity.model_name
+            or snapshot.identity.sku_code
+            for snapshot in context.market_universe
+        }
+        groups.append(
+            (
+                "高销量产品",
+                high.representative_sku_codes,
+                [names.get(code, code) for code in high.representative_sku_codes],
+            )
+        )
+    clauses = []
+    selected_products: set[str] = set()
+    seen_claims: set[str] = set()
+    for label, sku_codes, product_names in groups:
+        gaps = _supported_claim_gaps(
+            snapshots,
+            target_code,
+            sku_codes,
+            claim_codes,
+        )
+        gaps = [code for code in gaps if code not in seen_claims][:3]
+        if not gaps:
+            continue
+        seen_claims.update(gaps)
+        selected_products.update(product_names)
+        clauses.append(
+            f"相较{label}，本品用户反馈尚未覆盖"
+            f"{'、'.join(CLAIM_LABELS_CN.get(code, code) for code in gaps)}"
+        )
+    if not clauses:
+        return None
+    return {
+        "question_cn": "本品当前最明显的短板",
+        "selected_products": sorted(selected_products),
+        "conclusion_cn": (
+            "；".join(clauses)
+            + "。这些是用户反馈覆盖短板：能力已经具备的，应强化体验表达；"
+            "能力尚未具备的，应回到产品定义补齐。"
+        ),
+    }
+
+
+def _supported_claim_gaps(
+    snapshots: dict[str, SkuEvidenceSnapshot],
+    target_sku_code: str,
+    peer_sku_codes: Sequence[str],
+    claim_codes: set[str],
+) -> list[str]:
+    target = snapshots.get(target_sku_code)
+    peers = [snapshots[code] for code in peer_sku_codes if code in snapshots]
+    if target is None or not peers:
+        return []
+    target_supported = _snapshot_code_set(target, "supported_claim_codes")
+    target_contradicted = _snapshot_code_set(target, "contradicted_claim_codes")
+    scored = []
+    for claim_code in claim_codes - target_supported:
+        peer_rate = sum(
+            claim_code in _snapshot_code_set(peer, "supported_claim_codes")
+            for peer in peers
+        ) / len(peers)
+        if peer_rate < 0.5:
+            continue
+        contradiction_bonus = 1.0 if claim_code in target_contradicted else 0.0
+        scored.append((contradiction_bonus + peer_rate, claim_code))
+    return [code for _, code in sorted(scored, key=lambda item: (-item[0], item[1]))]
+
+
 def _parameter_value_conclusion(
     snapshots: dict[str, SkuEvidenceSnapshot],
     entry: dict[str, Any],
@@ -1513,45 +1726,66 @@ def _parameter_value_conclusion(
         and comparison.comparator_count >= 2
         and "-1100" not in comparison.comparison_basis_cn
     ]
-    by_products: dict[tuple[str, ...], tuple[int, RealizationMarketComparison]] = {}
+    by_dimension_and_products: dict[
+        tuple[str, tuple[str, ...]], RealizationMarketComparison
+    ] = {}
     for comparison in comparisons:
-        key = tuple(comparison.comparator_sku_codes)
-        priority = _parameter_business_priority(comparison.comparison_basis_cn)
-        current = by_products.get(key)
-        if current is None or priority < current[0]:
-            by_products[key] = (priority, comparison)
-    scored = [
-        (
-            _group_claim_coverage(
-                snapshots, comparison.comparator_sku_codes, claims
-            ),
-            comparison,
+        dimension = _parameter_dimension(comparison.comparison_basis_cn)
+        if not dimension:
+            continue
+        key = (dimension, tuple(comparison.comparator_sku_codes))
+        by_dimension_and_products.setdefault(key, comparison)
+    by_dimension: dict[
+        str, list[tuple[float, RealizationMarketComparison]]
+    ] = {}
+    for (dimension, _), comparison in by_dimension_and_products.items():
+        by_dimension.setdefault(dimension, []).append(
+            (
+                _group_claim_coverage(
+                    snapshots, comparison.comparator_sku_codes, claims
+                ),
+                comparison,
+            )
         )
-        for _, comparison in by_products.values()
-    ]
-    if len(scored) < 2:
+    contrasts = []
+    for dimension, scored in by_dimension.items():
+        if len(scored) < 2:
+            continue
+        scored.sort(key=lambda item: (item[0], item[1].comparison_basis_cn))
+        low_rate, low_group = scored[0]
+        high_rate, high_group = scored[-1]
+        contrasts.append(
+            (
+                high_rate - low_rate,
+                _parameter_business_priority(dimension),
+                low_rate,
+                low_group,
+                high_rate,
+                high_group,
+            )
+        )
+    if not contrasts:
         return None
-    scored.sort(
-        key=lambda item: (
-            item[0],
-            item[1].comparison_basis_cn,
-        )
+    (
+        coverage_gap,
+        _,
+        low_rate,
+        low_group,
+        high_rate,
+        high_group,
+    ) = max(
+        contrasts,
+        key=lambda item: (item[0], -item[1], item[5].comparison_basis_cn),
     )
-    low_rate, low_group = scored[0]
-    high_rate, high_group = scored[-1]
     value_name = str(entry.get("value_name_cn") or "用户价值")
-    if high_rate - low_rate < 0.15:
-        conclusion = (
-            f"不同参数值对应的“{value_name}”反馈要点覆盖度差异不足15%，"
-            "目前没有单一参数可以稳定解释用户为什么认可这项价值。"
-        )
-    else:
-        conclusion = (
-            f"在至少两款产品组成的参数组中，{_parameter_basis_cn(high_group.comparison_basis_cn)}"
-            f"对应的“{value_name}”反馈要点覆盖度约{high_rate * 100:.0f}%，"
-            f"高于{_parameter_basis_cn(low_group.comparison_basis_cn)}组的"
-            f"{low_rate * 100:.0f}%。这说明参数只有转化成用户可感知体验时才形成卖点价值。"
-        )
+    if coverage_gap < 0.15:
+        return None
+    conclusion = (
+        f"在同一参数的不同取值中，{_parameter_basis_cn(high_group.comparison_basis_cn)}"
+        f"对应的“{value_name}”反馈要点覆盖度约{high_rate * 100:.0f}%，"
+        f"高于{_parameter_basis_cn(low_group.comparison_basis_cn)}组的"
+        f"{low_rate * 100:.0f}%。该参数与用户价值反馈同向，可作为配置取舍的优先验证项。"
+    )
     return {
         "question_cn": "哪些参数真正转化成用户价值",
         "selected_products": sorted(
@@ -1571,6 +1805,10 @@ def _parameter_business_priority(basis: str) -> int:
         "declared_refresh_rate_hz",
     )
     return next((index for index, token in enumerate(tokens) if token in basis), len(tokens))
+
+
+def _parameter_dimension(basis: str) -> str:
+    return basis.removeprefix("参数组合：").partition("=")[0].strip()
 
 
 def _parameter_basis_cn(basis: str) -> str:
@@ -1689,6 +1927,8 @@ def _archetype_cn(
         "sku_count": row.sku_count,
         "sku_codes": row.representative_sku_codes,
         "product_names": product_names,
+        "volume_median": row.volume_interval.estimate,
+        "price_median": row.price_interval.estimate,
     }
 
 
