@@ -1,0 +1,62 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_g09_release_receipt_v1",
+  "goal": "V5-G09",
+  "status": "complete",
+  "date": "2026-07-12",
+  "m12d_consumption": {
+    "mode": "read_only",
+    "category_code": "TV",
+    "profile_version": "m12d_tv_purchase_reason_profile_v0_3",
+    "profile_version_id": "m12d_ver_e4867984531b4300254eddb2",
+    "database_writes": 0,
+    "publish_switches": 0
+  },
+  "code_commits": [
+    "4bc68be8fd63a44eb946980248f2011aae01d8a9",
+    "6c6e6b69ebbcfb78925f87908dee58ef8eb4c90c",
+    "1fb243c3009ffd743d7d3b4127cf901d75c88ad6",
+    "867293463394294d6efd3c6e76479100b9037888",
+    "6749bc6ffbcce4f8fe16a4eedc16f8234c049866"
+  ],
+  "server_205": {
+    "runtime_revision": "6749bc6ffbcce4f8fe16a4eedc16f8234c049866",
+    "health": "ready",
+    "database": "ok"
+  },
+  "validation": {
+    "v4_v5_tests_passed": 170,
+    "v5_tests_passed": 76,
+    "cohort_sku_count": 18,
+    "cohort_double_run_hash_match": 18,
+    "analysis_states": {
+      "ready": 15,
+      "partial": 3,
+      "blocked": 0
+    },
+    "skus_with_highlights": 4,
+    "highlight_count": 5,
+    "strict_wtp_available": 0,
+    "synthetic_sales_available": 0,
+    "net_increment_available": 0,
+    "eligible_expansions": 0,
+    "elapsed_seconds": 32.963
+  },
+  "sample_65e7q": {
+    "sku_code": "TV00029112",
+    "analysis_state": "ready",
+    "result_hash": "3bf1668afd39eadd19814e3be40ee16a917deb3ae9c3dc9ec8e7a8f0ba5c2614",
+    "value_account_row_count": 5,
+    "highlight_count": 1,
+    "highlight_titles": ["画质升级感"],
+    "whole_product_price_percentile": 0.962963,
+    "whole_product_volume_percentile": 0.135802,
+    "strict_wtp_available": 0,
+    "synthetic_sales_available": 0,
+    "net_increment_available": 0,
+    "feishu_url": "https://my.feishu.cn/docx/J656dlZ9JoWsPCxnEz8cjdvCnYe",
+    "feishu_revision": 3,
+    "feishu_readback": "passed"
+  },
+  "release_state": "default_off_shadow",
+  "default_route_changed": false
+}
