@@ -878,7 +878,14 @@ def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
             metric="均价",
             unit="元",
         )
-        results.append(f"价格承接表现为{price_text}")
+        if (
+            comparison.price_gap_abs > 0
+            and comparison.sales_volume_gap_abs is not None
+            and comparison.sales_volume_gap_abs >= 0
+        ):
+            results.append(f"销量仍高于基线时，市场隐含支付意愿体现为{price_text}")
+        else:
+            results.append(f"价格承接表现为{price_text}")
     if (
         comparison.sales_volume_gap_abs is not None
         and comparison.sales_volume_gap_pct is not None
@@ -1140,15 +1147,24 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
     ]
     if comparisons:
         strongest = max(comparisons, key=lambda item: item.price_gap_pct or 0.0)
+        strongest_text = _market_gap_cn(
+            strongest.price_gap_abs or 0.0,
+            strongest.price_gap_pct or 0.0,
+            metric="均价",
+            unit="元",
+        )
+        if (
+            strongest.price_gap_abs is not None
+            and strongest.price_gap_abs > 0
+            and strongest.sales_volume_gap_abs is not None
+            and strongest.sales_volume_gap_abs >= 0
+        ):
+            strongest_text = f"最强一组市场隐含支付意愿体现为{strongest_text}"
+        else:
+            strongest_text = f"最强一组{strongest_text}"
         return (
             f"{len(comparisons)} 组用户价值形成可比价格承接；"
-            + _market_gap_cn(
-                strongest.price_gap_abs or 0.0,
-                strongest.price_gap_pct or 0.0,
-                metric="最强一组均价",
-                unit="元",
-            )
-            + "。"
+            f"{strongest_text}。"
         )
     available = [
         row.price_realization.strict_bundle_interval
@@ -1303,12 +1319,19 @@ def _price_cn(price: PriceRealization) -> str:
         None,
     )
     if comparison is not None:
-        return _market_gap_cn(
+        gap_text = _market_gap_cn(
             comparison.price_gap_abs,
             comparison.price_gap_pct,
             metric="均价",
             unit="元",
         )
+        if (
+            comparison.price_gap_abs > 0
+            and comparison.sales_volume_gap_abs is not None
+            and comparison.sales_volume_gap_abs >= 0
+        ):
+            return f"市场隐含支付意愿体现为{gap_text}"
+        return gap_text
     interval = price.strict_bundle_interval
     if interval and interval.status == "available" and interval.estimate is not None:
         return f"价值组合的市场价格承接区间约 {_interval_text(interval.estimate)}"

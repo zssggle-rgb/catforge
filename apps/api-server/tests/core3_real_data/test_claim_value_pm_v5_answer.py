@@ -250,6 +250,7 @@ def test_market_realization_highlight_answers_sales_contribution() -> None:
     highlight = _select_highlights([row])[0]
 
     assert highlight.highlight_type == "market_realization"
+    assert "市场隐含支付意愿" in highlight.reason_cn
     assert "销量贡献约 1000 台" in highlight.reason_cn
     assert "应保留并强化" in highlight.reason_cn
 
