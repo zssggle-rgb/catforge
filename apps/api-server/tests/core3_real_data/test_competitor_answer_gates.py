@@ -15,13 +15,20 @@ def test_selected_top3_is_ranked_by_business_score_after_role_coverage() -> None
             },
             "role": role,
             "business_score": score,
+            "weighted_overlap": {
+                "battlefield": score,
+                "user_task": score,
+                "target_group": score,
+            },
+            "value_anchor": {"score": score},
+            "replacement_pressure": {"score": score},
             "top3_eligible": True,
             "selection_gate": {
                 "primary_direct_eligible": True,
                 "strong_pressure_allowed": True,
                 "market_validation_priority": market_priority,
             },
-            "purchase_pool": {"score": 1.0},
+            "purchase_pool": {"score": score},
         }
 
     selected = _select_top_competitors(

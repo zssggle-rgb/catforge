@@ -6524,7 +6524,7 @@ def _selected_top_rank_key(
         )
     )
     return (
-        float(item.get("business_score") or 0),
+        float(_candidate_score_breakdown(item)["total"]),
         direct_role_rank,
         market_rank,
         purchase_pool_rank,

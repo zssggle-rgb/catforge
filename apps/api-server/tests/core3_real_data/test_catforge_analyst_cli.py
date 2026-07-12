@@ -5282,7 +5282,10 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert top_codes[:3] == ["TV00040001", "TV00040004", "TV00040003"]
     assert "TV00040002" not in top_codes[:2]
     assert answer["top_competitors"][0]["role"] == "primary_direct"
-    scores = [item["business_score"] for item in answer["top_competitors"]]
+    scores = [
+        competitor_answer._candidate_score_breakdown(item)["total"]
+        for item in answer["top_competitors"]
+    ]
     assert scores == sorted(scores, reverse=True)
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品识别与分析依据报告")
