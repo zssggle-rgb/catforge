@@ -1135,21 +1135,41 @@ def _option_summary(option):
 
 
 def _market_number(context, *keys):
-    market = context.v4_context.target_snapshot.market
-    for key in keys:
-        value = _number(market.get(key))
+    for value in _market_values(context, keys):
+        value = _number(value)
         if value is not None:
             return value
     return None
 
 
 def _market_fraction(context, *keys):
-    market = context.v4_context.target_snapshot.market
-    for key in keys:
-        value = _fraction(market.get(key))
+    for value in _market_values(context, keys):
+        value = _fraction(value)
         if value is not None:
             return value
     return None
+
+
+def _market_values(context, keys):
+    market = context.v4_context.target_snapshot.market
+    sections = [
+        market,
+        market.get("market_metrics") or {},
+        market.get("market_position") or {},
+    ]
+    aliases = {
+        "avg_price": ("price_wavg",),
+        "sales_volume": ("sales_volume_total",),
+        "price_percentile": ("price_percentile_in_size",),
+        "volume_percentile": ("volume_percentile_in_size",),
+        "amount_percentile": ("amount_percentile_in_size",),
+    }
+    for key in keys:
+        lookup_keys = (key, *aliases.get(key, ()))
+        for section in sections:
+            for lookup_key in lookup_keys:
+                if lookup_key in section:
+                    yield section.get(lookup_key)
 
 
 def _number(value):

@@ -4208,6 +4208,10 @@ def _market_payload(row: entities.Core3SkuMarketProfile | None) -> dict[str, Any
             "price_band_in_size_tier": row.price_band_size,
             "price_percentile_in_size": _number(row.price_percentile_in_size),
             "volume_percentile_in_size": _number(row.volume_percentile_in_size),
+            "amount_percentile_in_size": _number(row.amount_percentile_in_size),
+            "same_pool_price_percentile": _number(row.same_pool_price_percentile),
+            "same_pool_volume_percentile": _number(row.same_pool_volume_percentile),
+            "same_pool_amount_percentile": _number(row.same_pool_amount_percentile),
             "same_pool_sku_count": row.same_pool_sku_count,
         },
         "quality": {

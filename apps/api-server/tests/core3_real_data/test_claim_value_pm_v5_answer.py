@@ -4,6 +4,8 @@ import json
 
 from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     _dedupe_value_account_rows,
+    _market_fraction,
+    _market_number,
     _select_highlights,
     adapt_v4_context_to_v5,
     build_perceived_value_market_report,
@@ -136,6 +138,40 @@ def test_value_account_separates_user_value_price_and_volume() -> None:
     assert row.increment is not None
     assert row.increment.net is None
     assert row.increment.cannibalization is None
+
+
+def test_nested_m07_market_payload_reaches_realization_accounting() -> None:
+    v4 = _synthetic_context()
+    target = v4.target_snapshot.model_copy(
+        update={
+            "market": {
+                "market_metrics": {
+                    "price_wavg": 5949.39,
+                    "sales_volume_total": 6023,
+                },
+                "market_position": {
+                    "same_pool_price_percentile": 0.72,
+                    "same_pool_volume_percentile": 0.64,
+                    "same_pool_amount_percentile": 0.68,
+                },
+            }
+        }
+    )
+    context = adapt_v4_context_to_v5(
+        v4.model_copy(update={"target_snapshot": target})
+    )
+
+    assert _market_number(context, "price_wavg", "avg_price") == 5949.39
+    assert _market_number(context, "sales_volume_total", "sales_volume") == 6023
+    assert _market_fraction(
+        context, "same_pool_price_percentile", "price_percentile"
+    ) == 0.72
+    assert _market_fraction(
+        context, "same_pool_volume_percentile", "volume_percentile"
+    ) == 0.64
+    assert _market_fraction(
+        context, "same_pool_amount_percentile", "amount_percentile"
+    ) == 0.68
 
 
 def test_no_evidence_does_not_force_a_highlight() -> None:
