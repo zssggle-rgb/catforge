@@ -51,7 +51,7 @@ DEFAULT_FOCUS_PATH = (
 )
 PROFILE_VERSIONS = {
     "TV": "m12d_tv_purchase_reason_profile_v0_3",
-    "AC": "m12d_ac_purchase_reason_profile_v0_3",
+    "AC": "m12d_ac_purchase_reason_profile_v0_4",
 }
 TAXONOMY_VERSIONS = {
     "TV": CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,

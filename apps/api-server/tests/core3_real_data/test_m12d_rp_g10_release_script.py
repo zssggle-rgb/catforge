@@ -109,10 +109,11 @@ def test_write_draft_rejects_published_or_current_version() -> None:
     )
 
 
-def test_tv_recovery_release_uses_new_immutable_version() -> None:
+def test_recovery_release_uses_new_immutable_versions() -> None:
     module = load_release_module()
 
     assert module.PROFILE_VERSIONS["TV"] == "m12d_tv_purchase_reason_profile_v0_3"
+    assert module.PROFILE_VERSIONS["AC"] == "m12d_ac_purchase_reason_profile_v0_4"
 
 
 def test_business_diff_reports_the_sku_anchor_and_changed_field() -> None:
