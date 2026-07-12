@@ -1643,6 +1643,34 @@ def _weakness_comparison(
                     comparison.comparator_names,
                 )
             )
+    lower_price_higher_sales: dict[str, str] = {}
+    for entry in catalog:
+        for comparison in entry.get("comparisons") or []:
+            if (
+                comparison.method == "direct_comparable"
+                and comparison.price_gap_abs is not None
+                and comparison.price_gap_abs > 0
+                and comparison.sales_volume_gap_abs is not None
+                and comparison.sales_volume_gap_abs < 0
+            ):
+                lower_price_higher_sales.update(
+                    zip(
+                        comparison.comparator_sku_codes,
+                        comparison.comparator_names,
+                        strict=True,
+                    )
+                )
+    if lower_price_higher_sales:
+        groups.append(
+            (
+                "价格更低但销量更高的产品",
+                sorted(lower_price_higher_sales),
+                [
+                    lower_price_higher_sales[code]
+                    for code in sorted(lower_price_higher_sales)
+                ],
+            )
+        )
     if high is not None:
         names = {
             snapshot.identity.sku_code: snapshot.identity.model_name
