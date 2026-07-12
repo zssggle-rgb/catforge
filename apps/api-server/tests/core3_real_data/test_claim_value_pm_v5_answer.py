@@ -94,8 +94,8 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert report.analysis_state == "ready"
     assert len(summary.highlights) == 1
     assert summary.highlights[0].title_cn == "画质升级感"
-    assert "稳定价格承接" in summary.highlights[0].reason_cn
-    assert "1 组价值" in summary.price_summary_cn
+    assert "价格溢价" in summary.highlights[0].reason_cn
+    assert "1 组用户价值" in summary.price_summary_cn
     assert "当前没有形成可展示" in summary.volume_summary_cn
     assert "已进入 4 个" in summary.existing_battlefield_summary_cn
     assert "组合优先级问题" in summary.existing_battlefield_summary_cn
@@ -135,7 +135,7 @@ def test_highlight_summary_keeps_one_specific_result_per_battlefield() -> None:
 
     assert len(highlights) == 1
     assert highlights[0].title_cn == "画质升级感"
-    assert "用户购后反馈显示“明暗层次更清楚”" in highlights[0].reason_cn
+    assert "用户实际体验认可了“明暗层次更清楚”" in highlights[0].reason_cn
     assert "用户购后反馈只部分支持" not in highlights[0].reason_cn
 
 
@@ -250,9 +250,9 @@ def test_market_realization_highlight_answers_sales_contribution() -> None:
     highlight = _select_highlights([row])[0]
 
     assert highlight.highlight_type == "market_realization"
-    assert "市场隐含支付意愿" in highlight.reason_cn
-    assert "销量贡献约 1000 台" in highlight.reason_cn
-    assert "应保留并强化" in highlight.reason_cn
+    assert "500 元（9.1%）的价格溢价" in highlight.reason_cn
+    assert "1000 台（100.0%）的销量优势" in highlight.reason_cn
+    assert "应继续保留并强化" in highlight.reason_cn
 
 
 def test_no_evidence_does_not_force_a_highlight() -> None:
@@ -313,7 +313,7 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
     markdown = render_v5_markdown(_report())
 
     assert (
-        "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 相对市场是什么位置 | 价格承接 | 销量承接 | 当前结论边界 |"
+        "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 对比哪些同类产品 | 带来多少价格溢价 | 带来多少销量优势 | 产品判断 |"
         in markdown
     )
     assert "高/低表现组合" not in markdown
@@ -324,6 +324,11 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         "BF_",
         "M11D",
         "WTP",
+        "反事实",
+        "用户兑现",
+        "市场隐含支付意愿",
+        "价格承接",
+        "销量承接",
         "增加销量",
         "下一步工作清单",
         "建议涨价",
@@ -354,7 +359,7 @@ def test_markdown_collapses_repeated_unavailable_market_references() -> None:
     )
 
     assert markdown.count(repeated) == 0
-    assert "合成市场对照（覆盖 5 组用户价值）" not in markdown
+    assert "同类产品市场基准（覆盖 5 组用户价值）" not in markdown
     assert "高/低表现组合" not in markdown
 
 

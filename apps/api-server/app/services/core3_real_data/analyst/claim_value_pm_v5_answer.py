@@ -75,7 +75,7 @@ METHOD_CN = {
     "same_budget_pool": "同预算产品",
     "same_brand_size_ladder": "同品牌同尺寸梯度",
     "param_tier_pool": "参数档位产品",
-    "same_claim_realization": "同宣传、不同用户兑现产品",
+    "same_claim_realization": "同类卖点产品用户评价对比",
     "own_price_curve": "本品历史价格变化",
     "market_synthetic": "市场合成基线",
     "performance_archetype": "高低表现组合",
@@ -83,7 +83,7 @@ METHOD_CN = {
 STRENGTHEN_CN = {
     "communication_activation": "表达激活",
     "capability_completion": "能力补全",
-    "market_activation": "市场承接复核",
+    "market_activation": "市场表现验证",
     "portfolio_priority": "组合优先级调整",
     "maintain_or_cap": "保持或控制重叠",
 }
@@ -317,8 +317,8 @@ def build_perceived_value_market_report(
         "market_reference": market_reference,
         "battlefield_options": options,
         "overall_boundary_cn": (
-            "本报告从用户购后兑现出发，通过同卖点、不同兑现产品的量价差判断"
-            "哪些用户价值正在形成市场承接；无法形成有效比较的项目不进入主结论。"
+            "本报告从用户实际体验出发，通过同类卖点产品的价格和销量差异判断"
+            "哪些卖点已经产生商业价值；无法形成有效比较的项目不进入主结论。"
         ),
         "data_scope_cn": (
             "使用已发布采购理由、产品事实、用户购后体验、周度市场量价和当前战场分配；"
@@ -346,7 +346,7 @@ def build_v5_answer_artifacts(
     selection_compare_url: str | None = None,
     evidence_report_url: str | None = None,
 ) -> dict[str, Any]:
-    title = report_title or f"{_display_name(report)} 用户感知价值与市场兑现"
+    title = report_title or f"{_display_name(report)} 用户卖点价值分析"
     initial_links = _report_links(selection_compare_url, evidence_report_url)
     markdown = render_v5_markdown(report, title=title, links=initial_links)
     markdown_path = (
@@ -387,9 +387,9 @@ def render_v5_short_answer(
     else:
         lines.append(report.decision_summary.no_highlight_reason_cn or "")
     if _has_reportable_price(report.value_account_rows):
-        lines.append(f"价格承接｜{report.decision_summary.price_summary_cn}")
+        lines.append(f"价格价值｜{report.decision_summary.price_summary_cn}")
     if _has_reportable_volume(report.value_account_rows):
-        lines.append(f"销量承接｜{report.decision_summary.volume_summary_cn}")
+        lines.append(f"销量价值｜{report.decision_summary.volume_summary_cn}")
     lines.extend(
         [
             f"已有战场｜{report.decision_summary.existing_battlefield_summary_cn}",
@@ -412,7 +412,7 @@ def render_v5_markdown(
     title: str | None = None,
     links: Sequence[dict[str, str]] = (),
 ) -> str:
-    title = title or f"{_display_name(report)} 用户感知价值与市场兑现"
+    title = title or f"{_display_name(report)} 用户卖点价值分析"
     lines = [f"# {_md(title)}", "", "## 一、核心结论", ""]
     if report.decision_summary.highlights:
         for index, item in enumerate(report.decision_summary.highlights, start=1):
@@ -429,9 +429,9 @@ def render_v5_markdown(
     else:
         lines.extend([report.decision_summary.no_highlight_reason_cn or "", ""])
     if _has_reportable_price(report.value_account_rows):
-        lines.append(f"- **价格承接**：{_md(report.decision_summary.price_summary_cn)}")
+        lines.append(f"- **价格价值**：{_md(report.decision_summary.price_summary_cn)}")
     if _has_reportable_volume(report.value_account_rows):
-        lines.append(f"- **销量承接**：{_md(report.decision_summary.volume_summary_cn)}")
+        lines.append(f"- **销量价值**：{_md(report.decision_summary.volume_summary_cn)}")
     lines.extend(
         [
             f"- **已有战场**：{_md(report.decision_summary.existing_battlefield_summary_cn)}",
@@ -439,7 +439,7 @@ def render_v5_markdown(
             "",
             "## 二、用户价值与市场表现",
             "",
-            "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 相对市场是什么位置 | 价格承接 | 销量承接 | 当前结论边界 |",
+            "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 对比哪些同类产品 | 带来多少价格溢价 | 带来多少销量优势 | 产品判断 |",
             "| --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
@@ -524,9 +524,9 @@ def _market_reference_markdown_lines(market_reference: dict[str, Any]) -> list[s
     lines = []
     for summary, names in by_summary.items():
         if len(names) == 1:
-            label = names[0] or "合成市场对照"
+            label = names[0] or "同类产品市场基准"
         else:
-            label = f"合成市场对照（覆盖 {len(names)} 组用户价值）"
+            label = f"同类产品市场基准（覆盖 {len(names)} 组用户价值）"
         lines.append(f"- **{_md(label)}**：{_md(summary)}")
 
     high = str((market_reference.get("high_performance") or {}).get("summary_cn") or "")
@@ -547,7 +547,7 @@ def render_v5_feishu_card(
     title: str | None = None,
     links: Sequence[dict[str, str]] = (),
 ) -> dict[str, Any]:
-    title = title or f"{_display_name(report)} 用户感知价值与市场兑现"
+    title = title or f"{_display_name(report)} 用户卖点价值分析"
     elements: list[dict[str, Any]] = [
         {
             "tag": "markdown",
@@ -584,6 +584,11 @@ def pm_v5_business_output_issue(text: str) -> str | None:
         "evidence_id": "内部证据字段",
         "BF_": "内部战场编码",
         "WTP": "内部方法术语",
+        "反事实": "分析过程术语",
+        "用户兑现": "分析过程术语",
+        "市场隐含支付意愿": "分析过程术语",
+        "价格承接": "分析过程术语",
+        "销量承接": "分析过程术语",
         "心理最高价": "不支持的支付表述",
         "增加销量": "因果销量表述",
         "下一步工作清单": "泛化任务清单",
@@ -780,34 +785,35 @@ def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
         elif "relative_value" in types:
             highlight_type = "relative_value"
             reason = (
-                f"用户购后反馈显示“{user_result}”；与同宣传但用户兑现较弱的可比产品相比，"
-                "这组卖点形成了可复核的相对优势。"
+                f"用户实际体验认可了“{user_result}”；与同样主打这项价值但用户评价较弱"
+                "的同类产品相比，这组卖点已经形成用户优势。"
             )
             score = 4.0
         elif "candidate_relative_value" in types:
             highlight_type = "candidate_relative_value"
             reason = (
-                f"用户购后反馈显示“{user_result}”；在同宣传产品中观察到相关好处的"
-                "兑现差异，可作为候选差异点继续比较。"
+                f"用户实际体验认可了“{user_result}”；同类卖点产品的用户评价出现差异，"
+                "可作为候选优势继续比较。"
             )
             score = 2.25
         elif "volume_realization" in types:
             highlight_type = "volume_realization"
             reason = (
-                f"用户购后反馈显示“{user_result}”；在控制基础条件后的市场基线中，"
-                "这组卖点表现出更强销量承接。"
+                f"用户实际体验认可了“{user_result}”；与同类产品相比，这组卖点带来了"
+                "更高销量。"
             )
             score = 3.0
         elif "price_realization" in types:
             highlight_type = "price_realization"
             reason = (
-                f"用户购后反馈显示“{user_result}”；可比市场支持这组价值存在稳定价格承接。"
+                f"用户实际体验认可了“{user_result}”；同类产品的量价表现显示这组卖点"
+                "带来了价格溢价。"
             )
             score = 2.5
         else:
             highlight_type = "user_realization"
             reason = (
-                f"用户购后反馈显示“{user_result}”；这项好处来自实际体验，"
+                f"用户实际体验认可了“{user_result}”；这项好处来自实际使用，"
                 "不是仅由技术参数推演。"
             )
             score = 2.0
@@ -867,44 +873,47 @@ def _highlight_user_result(outcome: str) -> str:
 def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
     comparison = row.price_realization.realization_comparisons[0]
     if comparison.comparator_count == 1:
-        basis = f"可比产品{comparison.comparator_names[0]}"
+        basis = f"同样主打这项价值但用户评价较弱的{comparison.comparator_names[0]}"
     else:
-        basis = f"{comparison.comparator_count} 款同宣传、兑现较弱的可比产品中位数"
+        basis = f"{comparison.comparator_count} 款同样主打这项价值但用户评价较弱的同类产品"
     results = []
     if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None:
-        price_text = _market_gap_cn(
-            comparison.price_gap_abs,
-            comparison.price_gap_pct,
-            metric="均价",
-            unit="元",
-        )
         if (
             comparison.price_gap_abs > 0
             and comparison.sales_volume_gap_abs is not None
             and comparison.sales_volume_gap_abs >= 0
         ):
-            results.append(f"销量仍高于基线时，市场隐含支付意愿体现为{price_text}")
+            results.append(
+                f"{comparison.price_gap_abs:.0f} 元"
+                f"（{comparison.price_gap_pct * 100:.1f}%）的价格溢价"
+            )
         else:
-            results.append(f"价格承接表现为{price_text}")
+            results.append(
+                _market_gap_cn(
+                    comparison.price_gap_abs,
+                    comparison.price_gap_pct,
+                    metric="均价",
+                    unit="元",
+                )
+            )
     if (
         comparison.sales_volume_gap_abs is not None
         and comparison.sales_volume_gap_pct is not None
     ):
         if comparison.sales_volume_gap_abs >= 0:
             results.append(
-                "按该反事实估算，销量贡献约 "
                 f"{comparison.sales_volume_gap_abs:.0f} 台"
-                f"（相对基线高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
+                f"（{comparison.sales_volume_gap_pct * 100:.1f}%）的销量优势"
             )
         else:
             results.append(
-                "按该反事实估算，销量未形成正贡献，较基线低 "
+                "销量未形成优势，较同类产品低 "
                 f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
             )
     market_result = "、".join(results)
     return (
-        f"用户购后反馈显示“{user_result}”；以{basis}作为价值未兑现反事实，{market_result}。"
-        "用户兑现优势已经形成更强市场承接，是应保留并强化的有效差异化价值。"
+        f"用户实际体验认可了“{user_result}”。与{basis}相比，这项用户价值为本品带来"
+        f"{market_result}。这是已经产生商业价值的核心卖点，应继续保留并强化。"
     )
 
 
@@ -1107,7 +1116,7 @@ def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
             continue
         if result.status == "available" and result.sales_difference is not None:
             summary = (
-                "按较弱该组价值的合成市场基线估算，本品每个共同市场单元的销量贡献约 "
+                "与用户评价较弱的同类产品组合相比，本品每个共同市场单元的销量优势约 "
                 f"{_interval_text(result.sales_difference)}。"
             )
             baselines.append(
@@ -1132,7 +1141,7 @@ def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any
     return {
         "summary_cn": (
             f"{label}组包含 {row.sku_count} 个稳定样本，可用于识别哪些用户价值组合"
-            "更容易获得市场承接。"
+            "更容易获得更好的价格和销量。"
         ),
         "sku_count": row.sku_count,
     }
@@ -1162,11 +1171,14 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
             and representative.sales_volume_gap_abs is not None
             and representative.sales_volume_gap_abs >= 0
         ):
-            strongest_text = f"最具体一组的市场隐含支付意愿体现为{strongest_text}"
+            strongest_text = (
+                f"最具体一组带来 {representative.price_gap_abs:.0f} 元"
+                f"（{representative.price_gap_pct * 100:.1f}%）的价格溢价"
+            )
         else:
             strongest_text = f"最具体一组{strongest_text}"
         return (
-            f"{len(comparison_rows)} 组用户价值形成可比价格承接；"
+            f"{len(comparison_rows)} 组用户价值带来价格溢价；"
             f"{strongest_text}。"
         )
     available = [
@@ -1176,7 +1188,7 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
         and row.price_realization.strict_bundle_interval.status == "available"
     ]
     if available:
-        return f"{len(available)} 组价值通过严格可比门槛形成市场价格承接区间；其余组合不补金额。"
+        return f"{len(available)} 组用户价值带来可识别的价格溢价。"
     return "当前没有形成可展示的用户价值价格比较。"
 
 
@@ -1199,9 +1211,9 @@ def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
             ),
         )
         return (
-            f"{len(comparison_rows)} 组用户价值形成正向销量贡献；按价值未兑现反事实估算，"
-            f"最具体一组约 {representative.sales_volume_gap_abs:.0f} 台"
-            f"（相对基线高 {representative.sales_volume_gap_pct * 100:.1f}%）。"
+            f"{len(comparison_rows)} 组用户价值带来销量优势；最具体一组约 "
+            f"{representative.sales_volume_gap_abs:.0f} 台"
+            f"（高 {representative.sales_volume_gap_pct * 100:.1f}%）。"
         )
     positive = [
         row
@@ -1211,7 +1223,7 @@ def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
         and row.volume_realization.synthetic_difference.low > 0
     ]
     if positive:
-        return f"{len(positive)} 组用户价值相对较弱价值的合成市场基线形成正向销量贡献。"
+        return f"{len(positive)} 组用户价值比用户评价较弱的同类产品带来更高销量。"
     return "当前没有形成可展示的用户价值销量比较。"
 
 
@@ -1295,7 +1307,7 @@ def _counterfactual_summary_cn(
 ) -> str:
     if comparisons:
         count = sum(item.comparator_count for item in comparisons)
-        return f"{count} 款同尺寸、同卖点宣传但用户兑现较弱的产品"
+        return f"{count} 款同尺寸、同样主打该卖点但用户评价较弱的同类产品"
     methods = []
     for row in sets:
         if row.highest_available_method is not None:
@@ -1304,18 +1316,18 @@ def _counterfactual_summary_cn(
                 methods.append(name)
     if methods:
         return "可用参照：" + "、".join(methods[:3])
-    return "当前只有召回候选，没有通过可比门槛的相对参照。"
+    return "当前没有足够接近的同类产品可用于量价比较。"
 
 
 def _row_boundary_cn(value_status, price: PriceRealization, volume: VolumeRealization) -> str:
     if value_status in {"not_observed", "unknown", "conflicted"}:
-        return "用户价值尚未稳定成立，不能进入价格或销量归因。"
+        return "用户尚未稳定认可这项价值，暂不列为有效卖点。"
     if price.realization_comparisons:
-        return "以同卖点但用户兑现较弱的产品作为反事实，估算这项用户价值对应的价格承接和销量贡献。"
+        return "与同样主打该卖点但用户评价较弱的同类产品相比，判断这项价值带来的价格溢价和销量优势。"
     if price.strict_bundle_interval and price.strict_bundle_interval.status == "available":
-        return "价值已被用户感知，金额只代表可比市场中的组合价格承接，不代表用户个人的最高接受价格。"
+        return "用户已经认可这项价值，同类产品量价差显示其带来了价格溢价。"
     if volume.synthetic_difference is not None:
-        return "以较弱用户价值的合成市场作为反事实，估算这项价值对应的销量贡献。"
+        return "与用户评价较弱的同类产品组合相比，估算这项价值带来的销量优势。"
     return "用户已感知到这项价值，但可比产品未显示显著量价优势，暂不列为量价亮点。"
 
 
@@ -1340,11 +1352,14 @@ def _price_cn(price: PriceRealization) -> str:
             and comparison.sales_volume_gap_abs is not None
             and comparison.sales_volume_gap_abs >= 0
         ):
-            return f"市场隐含支付意愿体现为{gap_text}"
+            return (
+                f"这项价值带来 {comparison.price_gap_abs:.0f} 元"
+                f"（{comparison.price_gap_pct * 100:.1f}%）的价格溢价"
+            )
         return gap_text
     interval = price.strict_bundle_interval
     if interval and interval.status == "available" and interval.estimate is not None:
-        return f"价值组合的市场价格承接区间约 {_interval_text(interval.estimate)}"
+        return f"这组价值带来的价格溢价区间约 {_interval_text(interval.estimate)}"
     return "—"
 
 
@@ -1361,15 +1376,15 @@ def _volume_cn(volume: VolumeRealization) -> str:
     if comparison is not None:
         if comparison.sales_volume_gap_abs >= 0:
             return (
-                f"反事实估算销量贡献约 {comparison.sales_volume_gap_abs:.0f} 台"
-                f"（相对基线高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
+                f"这项价值带来约 {comparison.sales_volume_gap_abs:.0f} 台销量优势"
+                f"（高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
             )
         return (
-            f"反事实估算未形成正向销量贡献，较基线低 "
+            f"这项价值未形成销量优势，较同类产品低 "
             f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
         )
     if volume.synthetic_difference is not None:
-        return f"相对合成市场的观察性销量差约 {_interval_text(volume.synthetic_difference)}"
+        return f"与同类产品组合相比，销量优势约 {_interval_text(volume.synthetic_difference)}"
     return "—"
 
 
