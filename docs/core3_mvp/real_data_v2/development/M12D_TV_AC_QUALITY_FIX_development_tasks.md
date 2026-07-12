@@ -102,7 +102,7 @@ M12D-QF-01 已采集 AC 当前基线：155 SKU，50 `ready_degraded`、98 `revie
 | 16 | M12D-QF-16 | completed | TV/AC 竞品智能体消费和 Top 3 回归；由 RP-G07 承接 | M12D-QF-15 |
 | 17 | M12D-QF-17 | completed | 跨品类隔离和共享链路总回归；由 RP-G08 承接 | M12D-QF-16 |
 | 18 | M12D-QF-18 | completed | 提交并部署代码到 205 | M12D-QF-17 |
-| 19 | M12D-QF-19 | pending | 205 全量重跑、发布切换和上线验收 | M12D-QF-18；需发布门槛通过 |
+| 19 | M12D-QF-19 | completed | 205 全量重跑、发布切换和上线验收 | M12D-QF-18；发布门槛通过 |
 
 ## 6. 任务明细
 
@@ -546,6 +546,9 @@ M12D-QF-01 已采集 AC 当前基线：155 SKU，50 `ready_degraded`、98 `revie
 - 每个品类只有在自身质量门槛全部通过后才切换该品类 current published-ready；旧异常版本分别 deprecated。
 - 验证 TV 377 SKU 分布、AC 全量分布、两个品类重点竞品结果、飞书报告和内部 code 隔离。
 - 验收：TV/AC 各只有一个 current published-ready 版本；统计分别与 M12D-QF-15 一致；任一品类失败只阻断该品类切换并保留回滚点。
+- 执行回填：TV 发布 `m12d_tv_purchase_reason_profile_v0_3`，`377 profiles / 3,542 anchors`；AC 发布 `m12d_ac_purchase_reason_profile_v0_4`，`155 profiles / 1,879 anchors`。两品类 release quality 均为 `ready`，各只有一个 current 版本，canonical compare 差异均为 `0`。
+- 线上验收：TV/AC 重点 SKU 和竞品 Top 3 均消费 `published_ready`；飞书详细报告创建并回读成功，候选附录内部英文码命中 `0`，卡片未暴露用户选择对比链接；205 服务 healthy/ready，Alembic `0044`。
+- 回滚点和收据：`/var/backups/catforge/m12d-rp-g10-20260712_091334`、`M12D_RP_G10_release_receipt.json`、`M12D_RP_G10_release_report.md`。
 
 ## 7. 单任务执行模板
 
@@ -576,5 +579,5 @@ HISTORICAL: M12D-QF-15 旧口径全链路执行通过，但发布质量门槛未
 COMPLETED: RP-G06/G08 按新批准分层口径完成双品类全量影子与集成验收，QF15 记为 completed (superseded)。
 COMPLETED: M12D-QF-16 由 RP-G07 完成；M12D-QF-17 由 RP-G08 完成。
 COMPLETED: M12D-QF-18 / M12D-RP-G09 已提交部署，205 revision 为 adeab0a，Alembic 为 0044。
-PAUSED: M12D-QF-19 / M12D-RP-G10 正式全量重跑和发布需要明确批准。
+COMPLETED: M12D-QF-19 / M12D-RP-G10 已完成 TV/AC 独立全量重跑、发布切换和线上验收；任务链结束。
 ```

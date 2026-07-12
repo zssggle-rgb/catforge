@@ -14,7 +14,7 @@
 4. 不把 M12D 生产逻辑写进竞品智能体。
 5. 每个任务记录 TV/AC 影响集合、允许迁移和至少 20 个未影响回归 SKU。
 6. 不降低到 7 分以下，不加入 SKU/品牌白名单。
-7. 代码提交、migration 和部署按任务门槛直接执行；正式全量重跑和切换 current/published 仍需明确发布批准。
+7. 用户已明确授权：代码提交、migration、部署、正式全量重跑和 `current/published` 切换均按任务门槛直接执行，不再单独审批。
 
 ## 3. 任务总览
 
@@ -29,7 +29,7 @@
 | 7 | M12D-RP-G07 | completed | 竞品智能体消费、Top 3 和报告业务语言回归 | G06 |
 | 8 | M12D-RP-G08 | completed | 跨品类集成验收、QF15 回填和上线前结论 | G07 |
 | 9 | M12D-RP-G09 | completed | 提交并部署代码/migration 到 205 | G08 |
-| 10 | M12D-RP-G10 | pending | 205 全量重跑、分品类发布和线上验收 | G09；需用户批准 |
+| 10 | M12D-RP-G10 | completed | 205 全量重跑、分品类发布和线上验收 | G09 |
 
 ## 4. 任务明细
 
@@ -95,7 +95,7 @@
 - 运行 M03B-M12D、竞品 reader、CLI、报告和品类隔离回归。
 - 回填 QF15 阻塞结论和 QF16 前置状态。
 - 输出 TV/AC 分品类 go/no-go；一个品类通过不能覆盖另一个品类失败。
-- 到此暂停并请求提交部署批准。
+- 到此进入提交部署任务；提交、部署和后续正式发布不再单独请求审批。
 
 ### M12D-RP-G09 提交部署
 
@@ -105,7 +105,7 @@
 
 ### M12D-RP-G10 全量重跑发布
 
-- 仅在用户明确批准后执行。
+- 用户已授权按任务门槛直接执行，不再单独请求批准。
 - 205 分别重跑 TV/AC；各自达标后分别切换 current。
 - 验证 API、竞品智能体、飞书报告和回滚点。
 
@@ -117,7 +117,7 @@
 - TV/AC taxonomy、门槛或市场池串用。
 - 已有 ready SKU 出现无法解释的大规模核心理由变化。
 - 需要低于 7 分或白名单才能达到覆盖率。
-- G10 正式全量重跑和发布时未取得用户明确批准。
+- 任一品类未通过自身质量门槛却被切换为 current/published。
 
 ## 6. 当前指针
 
@@ -131,7 +131,7 @@ COMPLETED: M12D-RP-G06 TV/AC 全量 shadow、业务审计和发布门槛复算�
 COMPLETED: M12D-RP-G07 竞品智能体消费、Top 3 和报告业务语言回归。
 COMPLETED: M12D-RP-G08 跨品类集成验收、QF15/QF16 回填和上线前结论。
 COMPLETED: M12D-RP-G09 已提交部署，205 revision 和 migration 验收通过。
-PAUSED: M12D-RP-G10 正式全量重跑和切换 current/published 需要明确发布批准。
+COMPLETED: M12D-RP-G10 已完成 TV/AC 独立全量重跑、发布切换和线上验收；任务链结束。
 ```
 
 ## 7. M12D-RP-G01 执行记录
@@ -321,4 +321,23 @@ PAUSED: M12D-RP-G10 正式全量重跑和切换 current/published 需要明确�
 - 产物：
   - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G09_deployment_receipt.json`
   - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G09_deployment_report.md`
-- 下一任务：M12D-RP-G10 正式全量重跑和发布；需要明确发布批准。
+- 下一任务：M12D-RP-G10 正式全量重跑和发布；已执行完成。
+
+## 16. M12D-RP-G10 执行记录
+
+- 完成时间：`2026-07-12`。
+- 授权口径：用户明确授权提交、部署、正式全量重跑和 `current/published` 切换均不再单独审批；本任务按 TV/AC 各自门槛独立发布。
+- TV 发布：`m12d_tv_purchase_reason_profile_v0_3`，`377 profiles / 3,542 anchors`，`335 ready / 13 ready_limited / 29 weak_expression_only`，release quality=`ready`，当前版本数 `1`。
+- AC 发布：`m12d_ac_purchase_reason_profile_v0_4`，`155 profiles / 1,879 anchors`，`143 ready / 1 ready_limited / 11 weak_expression_only`，release quality=`ready`，当前版本数 `1`。
+- 确定性：TV/AC 均完成独立 canonical draft 与 compare-draft，`difference_count=0`；发布后 profile/anchor/current 版本、数量、状态分布及业务摘要逐项复核一致。
+- 竞品消费：TV/AC 重点 SKU 和全部 Top 3 候选均为 `published_ready`；AC Top 3 保持三款格力柜机。65E7Q 全量发布结果为 `TCL 65Q9L PRO / 创维 65A7H PRO / 华为 VISION智慧屏 5 PRO 65`，华为在价格下探分流槽中以购买理由重合 `14/15`、替代压力 `10/10` 和更高语义总分入选；G07 的 `65A6F ULTRA` 结果属于受限 fixture 回放，不为恢复旧名单硬编码型号。
+- 报告验收：TV/AC 飞书“重点竞品识别与分析依据报告”均创建并从飞书端回读成功；目录按评分维度拆分，候选附录内部码命中 `0`。卡片只保留“查看分析依据”和“查看详细对比结果”，未恢复“用户选择对比”链接。
+- 报告修复：提交并部署 `7b61cbd fix(analyst): translate competitor gate reasons`；原始内部门槛仍保留在 JSON 追溯层，业务报告只显示中文条件，正常状态不展示，未知内部码不原样外泄。
+- 回滚点：`/var/backups/catforge/m12d-rp-g10-20260712_091334`；原始数据库 dump SHA256=`a6bda4c5cbab84036d3fefcb510e7a3616362eeb258187e4c320b43996f7f053`，目录含重跑、发布、线上验收和飞书收据。
+- 运行事件：一次并发执行已停止且未继续写入；一次双品类 one-off 因 3G 限额退出 `137`，改为分品类顺序执行并使用 6G one-off 限额后成功，服务未中断；一次误用默认 Compose 只创建空 PostgreSQL 容器并重建 Redis，空容器已删除、Redis 已按 cloud 配置恢复，数据库未被触碰，API 始终 healthy/ready。
+- 飞书运行配置：发现重建后的 205 `.env` 未持久化飞书发布器变量，已按部署手册恢复只读 CLI/认证目录挂载；备份为 `/home/deploy/catforge.env.bak.20260712_1030_pre_feishu_restore`。
+- 验证：M12D/reader/竞品相关回归 `106 passed`，CLI 报告回归 `1 passed`，Ruff 和 compileall 通过；205 Alembic 为 `0044_core3_m12d_reason_pressure`，服务器本机 `/healthz`、`/readyz` 通过，API 日志无 `ERROR/Traceback`。
+- 产物：
+  - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G10_release_receipt.json`
+  - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G10_release_report.md`
+- 下一任务：无；本任务链完成。
