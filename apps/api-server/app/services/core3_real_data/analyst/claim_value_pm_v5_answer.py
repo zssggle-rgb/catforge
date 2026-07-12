@@ -1179,7 +1179,12 @@ def _realization_market_comparisons(
         configuration = candidate.control_dimensions.get(
             "peer_parameter_configuration"
         ) or {}
+        target_configuration = candidate.control_dimensions.get(
+            "target_parameter_configuration"
+        ) or {}
         for parameter_code, parameter_value in sorted(configuration.items()):
+            if target_configuration.get(parameter_code) == parameter_value:
+                continue
             key = (str(parameter_code), str(parameter_value))
             parameter_groups.setdefault(key, []).append(candidate)
     for key in sorted(parameter_groups):
