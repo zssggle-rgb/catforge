@@ -97,10 +97,10 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert "价格溢价" in summary.highlights[0].reason_cn
     assert "1 组用户价值" in summary.price_summary_cn
     assert "当前没有形成可展示" in summary.volume_summary_cn
-    assert "已进入 4 个" in summary.existing_battlefield_summary_cn
-    assert "组合优先级问题" in summary.existing_battlefield_summary_cn
+    assert "本品已覆盖 4 类用户价值" in summary.existing_battlefield_summary_cn
+    assert "产品组合重点" in summary.existing_battlefield_summary_cn
     assert "优先比较" not in summary.existing_battlefield_summary_cn
-    assert "未识别出" in summary.expansion_summary_cn
+    assert "没有明确的新用户价值方向" in summary.expansion_summary_cn
 
 
 def test_highlight_summary_keeps_one_specific_result_per_battlefield() -> None:
@@ -250,8 +250,8 @@ def test_market_realization_highlight_answers_sales_contribution() -> None:
     highlight = _select_highlights([row])[0]
 
     assert highlight.highlight_type == "market_realization"
-    assert "500 元（9.1%）的价格溢价" in highlight.reason_cn
-    assert "1000 台（100.0%）的销量优势" in highlight.reason_cn
+    assert "500元（9.1%）的价格溢价" in highlight.reason_cn
+    assert "1000台（100.0%）的销量优势" in highlight.reason_cn
     assert "应继续保留并强化" in highlight.reason_cn
 
 
@@ -317,7 +317,7 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         in markdown
     )
     assert "高/低表现组合" not in markdown
-    assert "已有战场增强" in markdown
+    assert "已有用户价值" in markdown
     assert "家庭护眼舒适" in markdown
     assert pm_v5_business_output_issue(markdown) is None
     for forbidden in (
@@ -329,6 +329,9 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         "市场隐含支付意愿",
         "价格承接",
         "销量承接",
+        "战场",
+        "门槛",
+        "任务相邻",
         "增加销量",
         "下一步工作清单",
         "建议涨价",

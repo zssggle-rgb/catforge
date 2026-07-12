@@ -63,12 +63,12 @@ VALUE_STATUS_CN = {
     "unknown": "现有证据不足以判断",
 }
 MEMBERSHIP_CN = {
-    "primary": "主战场",
-    "secondary": "辅战场",
-    "opportunity": "机会战场（本品已进入）",
-    "user_observed": "用户已观察战场",
-    "drag": "拖累战场",
-    "excluded": "当前未进入战场",
+    "primary": "核心用户价值",
+    "secondary": "辅助用户价值",
+    "opportunity": "待验证用户价值（本品已覆盖）",
+    "user_observed": "用户实际认可的价值",
+    "drag": "用户负面体验",
+    "excluded": "本品尚未覆盖的用户价值",
 }
 METHOD_CN = {
     "direct_sku": "直接竞品",
@@ -236,9 +236,11 @@ def build_perceived_value_market_report(
             ValueAccountRow(
                 battlefield={
                     "code": link.battlefield_code,
-                    "name_cn": link.battlefield_name_cn
-                    or ALL_BATTLEFIELD_CN.get(link.battlefield_code)
-                    or "未命名价值战场",
+                    "name_cn": _business_value_name(
+                        link.battlefield_name_cn
+                        or ALL_BATTLEFIELD_CN.get(link.battlefield_code)
+                        or "未命名用户价值"
+                    ),
                     "membership_cn": _membership_cn(context, link.battlefield_code),
                     "market_space": link.battlefield_market_space or {},
                 },
@@ -321,7 +323,7 @@ def build_perceived_value_market_report(
             "哪些卖点已经产生商业价值；无法形成有效比较的项目不进入主结论。"
         ),
         "data_scope_cn": (
-            "使用已发布采购理由、产品事实、用户购后体验、周度市场量价和当前战场分配；"
+            "使用已发布采购理由、产品事实、用户购后体验、周度市场量价和当前用户价值分配；"
             "不推断购买前传播心智，不使用成本或利润数据。"
         ),
         "audit": {
@@ -387,13 +389,13 @@ def render_v5_short_answer(
     else:
         lines.append(report.decision_summary.no_highlight_reason_cn or "")
     if _has_reportable_price(report.value_account_rows):
-        lines.append(f"价格价值｜{report.decision_summary.price_summary_cn}")
+        lines.append(f"卖贵多少｜{report.decision_summary.price_summary_cn}")
     if _has_reportable_volume(report.value_account_rows):
-        lines.append(f"销量价值｜{report.decision_summary.volume_summary_cn}")
+        lines.append(f"多卖多少｜{report.decision_summary.volume_summary_cn}")
     lines.extend(
         [
-            f"已有战场｜{report.decision_summary.existing_battlefield_summary_cn}",
-            f"新战场｜{report.decision_summary.expansion_summary_cn}",
+            f"产品取舍｜{report.decision_summary.existing_battlefield_summary_cn}",
+            f"新增价值机会｜{report.decision_summary.expansion_summary_cn}",
         ]
     )
     suffix = "\n".join(
@@ -429,13 +431,13 @@ def render_v5_markdown(
     else:
         lines.extend([report.decision_summary.no_highlight_reason_cn or "", ""])
     if _has_reportable_price(report.value_account_rows):
-        lines.append(f"- **价格价值**：{_md(report.decision_summary.price_summary_cn)}")
+        lines.append(f"- **卖贵多少**：{_md(report.decision_summary.price_summary_cn)}")
     if _has_reportable_volume(report.value_account_rows):
-        lines.append(f"- **销量价值**：{_md(report.decision_summary.volume_summary_cn)}")
+        lines.append(f"- **多卖多少**：{_md(report.decision_summary.volume_summary_cn)}")
     lines.extend(
         [
-            f"- **已有战场**：{_md(report.decision_summary.existing_battlefield_summary_cn)}",
-            f"- **新战场**：{_md(report.decision_summary.expansion_summary_cn)}",
+            f"- **产品取舍**：{_md(report.decision_summary.existing_battlefield_summary_cn)}",
+            f"- **新增价值机会**：{_md(report.decision_summary.expansion_summary_cn)}",
             "",
             "## 二、用户价值与市场表现",
             "",
@@ -464,13 +466,13 @@ def render_v5_markdown(
         lines.append("| 当前没有可用价值关系 | — | — | — | — | — | 当前证据不足 |")
     market_reference_lines = _market_reference_markdown_lines(report.market_reference)
     if market_reference_lines:
-        lines.extend(["", "## 三、市场参照", "", *market_reference_lines])
+        lines.extend(["", "## 三、同类产品表现", "", *market_reference_lines])
     lines.extend(
         [
             "",
-            "## 四、价值战场组合",
+            "## 四、产品价值取舍",
             "",
-            "| 已有战场增强 | 当前判断 | 新战场拓展 | 当前判断 |",
+            "| 已有用户价值 | 产品判断 | 新增用户价值 | 产品判断 |",
             "| --- | --- | --- | --- |",
         ]
     )
@@ -589,6 +591,9 @@ def pm_v5_business_output_issue(text: str) -> str | None:
         "市场隐含支付意愿": "分析过程术语",
         "价格承接": "分析过程术语",
         "销量承接": "分析过程术语",
+        "战场": "内部分析框架术语",
+        "门槛": "内部分析框架术语",
+        "任务相邻": "内部分析框架术语",
         "心理最高价": "不支持的支付表述",
         "增加销量": "因果销量表述",
         "下一步工作清单": "泛化任务清单",
@@ -872,10 +877,14 @@ def _highlight_user_result(outcome: str) -> str:
 
 def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
     comparison = row.price_realization.realization_comparisons[0]
+    value_name = str(row.perceived_user_value.get("name_cn") or "这项用户价值")
     if comparison.comparator_count == 1:
-        basis = f"同样主打这项价值但用户评价较弱的{comparison.comparator_names[0]}"
+        basis = f"同样主打“{value_name}”但用户评价较弱的{comparison.comparator_names[0]}"
     else:
-        basis = f"{comparison.comparator_count} 款同样主打这项价值但用户评价较弱的同类产品"
+        basis = (
+            f"{comparison.comparator_count} 款同样主打“{value_name}”但用户评价较弱"
+            "的同类产品"
+        )
     results = []
     if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None:
         if (
@@ -884,7 +893,7 @@ def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
             and comparison.sales_volume_gap_abs >= 0
         ):
             results.append(
-                f"{comparison.price_gap_abs:.0f} 元"
+                f"{comparison.price_gap_abs:.0f}元"
                 f"（{comparison.price_gap_pct * 100:.1f}%）的价格溢价"
             )
         else:
@@ -902,13 +911,13 @@ def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
     ):
         if comparison.sales_volume_gap_abs >= 0:
             results.append(
-                f"{comparison.sales_volume_gap_abs:.0f} 台"
+                f"{comparison.sales_volume_gap_abs:.0f}台"
                 f"（{comparison.sales_volume_gap_pct * 100:.1f}%）的销量优势"
             )
         else:
             results.append(
                 "销量未形成优势，较同类产品低 "
-                f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
+                f"{abs(comparison.sales_volume_gap_abs):.0f}台"
             )
     market_result = "、".join(results)
     return (
@@ -1249,7 +1258,7 @@ def _has_reportable_volume(rows: Sequence[ValueAccountRow]) -> bool:
 def _existing_summary(options, context):
     existing = [row for row in options if row.option_type == "strengthen_existing"]
     if not existing:
-        return "当前没有可用的已进入战场资料。"
+        return "当前没有足够信息判断本品覆盖了哪些用户价值。"
     path_priority = {
         "capability_completion": 0,
         "communication_activation": 1,
@@ -1269,21 +1278,21 @@ def _existing_summary(options, context):
         name = _battlefield_name(context, row.battlefield_code)
         clauses.append(
             {
-                "capability_completion": f"“{name}”已进入但能力仍有缺口",
-                "communication_activation": f"“{name}”已有用户价值、产品表达仍偏弱",
-                "market_activation": f"“{name}”已有价值证据、量价承接尚未确认",
-                "portfolio_priority": f"“{name}”属于组合优先级问题",
+                "capability_completion": f"用户重视“{name}”，但产品能力仍有缺口",
+                "communication_activation": f"“{name}”已得到用户认可，但卖点表达不够突出",
+                "market_activation": f"“{name}”已得到用户认可，但尚未带来明显价格或销量优势",
+                "portfolio_priority": f"需要判断是否继续把“{name}”作为产品组合重点",
             }[row.strengthen_path]
         )
     if clauses:
         detail = "；".join(clauses)
         return (
-            f"已进入 {len(existing)} 个可复核战场；{detail}。"
-            "其余战场没有证据支持继续加码，不自动下达增减配指令。"
+            f"本品已覆盖 {len(existing)} 类用户价值；{detail}。"
+            "其余用户价值暂未显示继续投入的必要性。"
         )
     return (
-        f"已进入 {len(existing)} 个可复核战场；当前没有证据支持继续加码，"
-        "先保持现有组合，不自动下达增减配指令。"
+        f"本品已覆盖 {len(existing)} 类用户价值；当前没有证据支持继续增加投入，"
+        "先保持现有产品组合。"
     )
 
 
@@ -1297,8 +1306,8 @@ def _expansion_summary(options, context):
     ]
     if eligible:
         names = "、".join(_battlefield_name(context, row.battlefield_code) for row in eligible[:3])
-        return f"识别出 {len(eligible)} 个真实可达的未进入战场候选：{names}；仅作为方案比较。"
-    return "当前未识别出同时通过市场门槛、任务相邻性、能力缺口和对照样本的新战场候选。"
+        return f"发现 {len(eligible)} 个本品可以拓展的新用户价值方向：{names}。"
+    return "当前没有明确的新用户价值方向，先聚焦已经产生商业价值的核心卖点。"
 
 
 def _counterfactual_summary_cn(
@@ -1506,8 +1515,14 @@ def _market_space_for(context, code, link):
 def _battlefield_name(context, code):
     for row in context.battlefield_taxonomy:
         if row.battlefield_code == code:
-            return row.battlefield_name_cn or ALL_BATTLEFIELD_CN.get(code) or "未命名价值战场"
-    return ALL_BATTLEFIELD_CN.get(code) or "未命名价值战场"
+            return _business_value_name(
+                row.battlefield_name_cn or ALL_BATTLEFIELD_CN.get(code) or "未命名用户价值"
+            )
+    return _business_value_name(ALL_BATTLEFIELD_CN.get(code) or "未命名用户价值")
+
+
+def _business_value_name(name: str) -> str:
+    return str(name).replace("价值战场", "").replace("战场", "").strip() or "未命名用户价值"
 
 
 def _is_battlefield_semantic(item: dict[str, Any]) -> bool:
@@ -1528,8 +1543,8 @@ def _option_summary(option):
         return f"{MEMBERSHIP_CN[option.current_membership]}；{STRENGTHEN_CN[option.strengthen_path]}"
     eligibility = option.expansion_eligibility
     if eligibility and eligibility.eligible:
-        return "当前进入条件和可比样本均满足，可作为拓展方案比较"
-    return option.evidence_boundary
+        return "现有用户需求、产品能力和同类产品表现都支持，可作为新产品方向比较"
+    return "现有信息不足，暂不作为新增用户价值方向。"
 
 
 def _market_number(context, *keys):
