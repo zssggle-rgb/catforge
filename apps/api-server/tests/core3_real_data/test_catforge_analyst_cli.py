@@ -5321,14 +5321,14 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 2.5 目标客群比较" in markdown
     assert "### 2.6 关键价值锚点可替代性比较" in markdown
     assert "### 2.7 替代压力比较" in markdown
-    assert "### 2.8 购买阻力比较" in markdown
-    assert "### 2.9 市场验证比较" in markdown
-    assert "### 2.10 候选池与未选原因附录" in markdown
+    assert "### 2.8 购买阻力比较" not in markdown
+    assert "### 2.8 市场验证比较" in markdown
+    assert "### 2.9 候选池与未选原因附录" in markdown
     assert markdown.index("### 2.1 综合评分总览") < markdown.index(
-        "### 2.10 候选池与未选原因附录"
+        "### 2.9 候选池与未选原因附录"
     )
-    assert markdown.index("### 2.9 市场验证比较") < markdown.index(
-        "### 2.10 候选池与未选原因附录"
+    assert markdown.index("### 2.8 市场验证比较") < markdown.index(
+        "### 2.9 候选池与未选原因附录"
     )
     assert "| 替代压力 | 10 | 是否会改变用户对目标 SKU 价值判断 |" in markdown
     assert "### 2.1 候选 SKU 综合评分" not in markdown
@@ -5506,7 +5506,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "创维 65A6F ULTRA",
     ]
     assert "创维 65A7H PRO" in card_json
-    assert "购买理由重合、替代压力与购买阻力" in card_json
+    assert "购买理由重合与替代压力" in card_json
+    assert "购买阻力待补充" not in card_json
     assert "锚点可替代性" in card_json
     assert "小米 L65MC-SP" not in card_json
     assert "多维评分雷达图" in card_json
@@ -5515,7 +5516,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert card["body"]["elements"][5]["content"].startswith("**价值战场重合结构**")
     assert "主战场：高端画质" in card["body"]["elements"][5]["content"]
     assert card["body"]["elements"][8]["content"].startswith(
-        "**购买理由重合、替代压力与购买阻力**"
+        "**购买理由重合与替代压力**"
     )
     assert "辅战场：" in card["body"]["elements"][5]["content"]
     assert "机会战场：" in card["body"]["elements"][5]["content"]
@@ -5674,7 +5675,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
     assert card["body"]["elements"][3]["tag"] == "chart"
     assert card["body"]["elements"][5]["content"].startswith(
-        "**购买理由重合、替代压力与购买阻力**"
+        "**购买理由重合与替代压力**"
     )
     radar_values = card["body"]["elements"][3]["chart_spec"]["data"]["values"]
     assert len(radar_values) == 6

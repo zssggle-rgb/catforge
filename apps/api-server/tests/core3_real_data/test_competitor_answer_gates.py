@@ -187,7 +187,70 @@ def test_low_pressure_report_does_not_call_weak_candidate_a_threat() -> None:
     markdown = answer["report_payload"]["markdown"]
     assert "替代压力较弱（3/10）" in markdown
     assert "的威胁来自" not in markdown
-    assert "购买阻力比较" in markdown
+    assert "购买阻力比较" not in markdown
+
+
+def test_purchase_pressure_only_appears_as_scoring_free_anchor_supplement() -> None:
+    competitor = _competitor(
+        sku_code="TV_PRESSURE_SUPPLEMENT",
+        model_name="阻力补充候选",
+        price_gap="0.04",
+        anchor_score=13,
+        replacement_score=8,
+        semantic_score=0.80,
+    )
+    competitor["purchase_pressure_comparison"] = {
+        "comparison_allowed": True,
+        "shared_anchor_comparisons": [
+            {
+                "anchor_cn": "画质配置解释加价",
+                "target_pressure_level": "medium",
+                "candidate_pressure_level": "low",
+                "target_pressure_level_cn": "中等阻力",
+                "candidate_pressure_level_cn": "较低阻力",
+            }
+        ],
+    }
+    answer = build_competitor_answer(
+        target=_target(),
+        target_fact_brief=_target_fact_brief(),
+        competitors=[competitor],
+        top_n=1,
+        with_report="markdown",
+    )
+
+    markdown = answer["report_payload"]["markdown"]
+    assert "### 2.8 购买阻力比较" not in markdown
+    assert "补充说明（不计分）" in markdown
+    assert "画质配置解释加价：本品中等阻力，竞品较低阻力" in markdown
+
+
+def test_unassessed_purchase_pressure_is_omitted_from_report() -> None:
+    competitor = _competitor(
+        sku_code="TV_PRESSURE_UNASSESSED",
+        model_name="阻力未评估候选",
+        price_gap="0.04",
+        anchor_score=13,
+        replacement_score=8,
+        semantic_score=0.80,
+    )
+    competitor["purchase_pressure_comparison"] = {
+        "comparison_allowed": True,
+        "shared_anchor_comparisons": [],
+        "summary_cn": "双方暂无共同成立的购买理由，不能比较。",
+    }
+    answer = build_competitor_answer(
+        target=_target(),
+        target_fact_brief=_target_fact_brief(),
+        competitors=[competitor],
+        top_n=1,
+        with_report="markdown",
+    )
+
+    markdown = answer["report_payload"]["markdown"]
+    assert "购买阻力比较" not in markdown
+    assert "补充说明（不计分）" not in markdown
+    assert "尚未评估" not in markdown
 
 
 def test_candidate_appendix_translates_gate_reasons_to_business_language() -> None:

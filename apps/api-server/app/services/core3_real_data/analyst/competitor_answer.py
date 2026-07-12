@@ -785,7 +785,7 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
             elements.append(_feishu_battlefield_overlap_chart(battlefield_chart_values))
         elements.append({"tag": "hr"})
         elements.append(
-            _feishu_markdown(_dashboard_anchor_pressure_markdown(competitors))
+            _feishu_markdown(_dashboard_anchor_replacement_markdown(competitors))
         )
         elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品市场验证**"))
@@ -848,9 +848,9 @@ def render_competitor_dashboard_markdown(
             "",
             *_dashboard_score_dimension_lines(competitors),
             "",
-            "### 购买理由重合、替代压力与购买阻力",
+            "### 购买理由重合与替代压力",
             "",
-            *_dashboard_anchor_pressure_lines(competitors),
+            *_dashboard_anchor_replacement_lines(competitors),
             "",
             "### 市场验证条形图",
             "",
@@ -1111,27 +1111,35 @@ def _analysis_process_lines(
     lines.extend(_semantic_analysis_section(products, profile_type="task"))
     lines.extend(_semantic_analysis_section(products, profile_type="group"))
     target_anchor_summary = _target_anchor_summary(top_competitors)
-    lines.extend(
-        _analysis_section_lines(
-            "### 2.6 关键价值锚点可替代性比较",
-            "关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖、强化或绕开；只看 SKU 级成交理由画像和 pair 级可替代性，不用参数标签直接拼结论。",
-            _comparison_table_lines(
-                products,
-                [
-                    "目标核心锚点",
-                    "候选覆盖情况",
-                    "候选更强锚点",
-                    "弱表达/复核",
-                    "维度得分",
-                    "排序含义",
-                ],
-                lambda product: _anchor_process_values(
-                    product, target_anchor_summary=target_anchor_summary
-                ),
+    anchor_section = _analysis_section_lines(
+        "### 2.6 关键价值锚点可替代性比较",
+        "关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖、强化或绕开；只看 SKU 级成交理由画像和 pair 级可替代性，不用参数标签直接拼结论。",
+        _comparison_table_lines(
+            products,
+            [
+                "目标核心锚点",
+                "候选覆盖情况",
+                "候选更强锚点",
+                "弱表达/复核",
+                "维度得分",
+                "排序含义",
+            ],
+            lambda product: _anchor_process_values(
+                product, target_anchor_summary=target_anchor_summary
             ),
-            "锚点可替代性不足的候选可以作为价格或场景参考，但不能成为首选直接竞品。",
-        )
+        ),
+        "锚点可替代性不足的候选可以作为价格或场景参考，但不能成为首选直接竞品。",
     )
+    pressure_supplement = _purchase_pressure_supplement_lines(top_competitors)
+    if pressure_supplement:
+        anchor_section.extend(
+            [
+                "",
+                "补充说明（不计分）：以下仅展示双方同一已成立购买理由上的实际顾虑，不属于竞品评分维度。",
+                *pressure_supplement,
+            ]
+        )
+    lines.extend(anchor_section)
     lines.extend(
         _analysis_section_lines(
             "### 2.7 替代压力比较",
@@ -1146,25 +1154,7 @@ def _analysis_process_lines(
     )
     lines.extend(
         _analysis_section_lines(
-            "### 2.8 购买阻力比较",
-            "购买阻力比较本品和竞品各自已经成立的购买理由上，用户还存在哪些顾虑。它与竞品能否替代本品是两个问题，不参与购买理由成立度。",
-            _comparison_table_lines(
-                products,
-                [
-                    "本品最高阻力",
-                    "竞品最高阻力",
-                    "共同成立理由",
-                    "同理由阻力比较",
-                    "业务含义",
-                ],
-                _purchase_pressure_process_values,
-            ),
-            "购买阻力可以与核心购买理由并存；压力更高表示成交解释需要面对更多顾虑，不表示该理由不存在。",
-        )
-    )
-    lines.extend(
-        _analysis_section_lines(
-            "### 2.9 市场验证比较",
+            "### 2.8 市场验证比较",
             "市场验证只回答候选是否具备真实线上成交和分流基础；它不直接进入主体综合分。",
             _comparison_table_lines(
                 products,
@@ -1174,7 +1164,7 @@ def _analysis_process_lines(
             "销量用于验证竞品有效性，不把销量高但购买池或成交理由偏离的 SKU 排成直接竞品。",
         )
     )
-    lines.extend(["", "### 2.10 候选池与未选原因附录", ""])
+    lines.extend(["", "### 2.9 候选池与未选原因附录", ""])
     lines.extend(_candidate_pool_appendix_lines(top_competitors, all_competitors))
     return lines
 
@@ -1239,18 +1229,12 @@ def _analysis_products(
     target_sections: dict[str, Any],
     top_competitors: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    target_pressure = (
-        (top_competitors[0].get("purchase_pressure_comparison") or {})
-        if top_competitors
-        else {}
-    )
     products = [
         {
             "name": target_name,
             "sku": target,
             "sections": target_sections,
             "competitor_item": None,
-            "purchase_pressure_comparison": target_pressure,
         }
     ]
     for item in top_competitors[:3]:
@@ -1551,43 +1535,33 @@ def _pressure_process_values(product: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _purchase_pressure_process_values(product: dict[str, Any]) -> dict[str, str]:
-    comparison = product.get("purchase_pressure_comparison") or {}
-    item = product.get("competitor_item")
-    if not item:
-        return {
-            "本品最高阻力": comparison.get("target_highest_pressure_level_cn")
-            or "尚未评估",
-            "竞品最高阻力": "本品基准",
-            "共同成立理由": "本品基准",
-            "同理由阻力比较": "作为比较目标",
-            "业务含义": "本品购买阻力不改变已经成立的购买理由",
-        }
-    shared_rows = [
-        row
-        for row in comparison.get("shared_anchor_comparisons") or []
-        if isinstance(row, dict)
-    ]
-    shared_names = _join_cn(
-        [str(row.get("anchor_cn") or "") for row in shared_rows[:5]]
-    )
-    detail = _join_cn(
-        [
-            f"{row.get('anchor_cn')}：本品{row.get('target_pressure_level_cn')}，竞品{row.get('candidate_pressure_level_cn')}"
-            for row in shared_rows[:3]
+def _purchase_pressure_supplement_lines(
+    top_competitors: list[dict[str, Any]],
+) -> list[str]:
+    lines: list[str] = []
+    for item in top_competitors[:3]:
+        comparison = item.get("purchase_pressure_comparison") or {}
+        if not comparison.get("comparison_allowed"):
+            continue
+        shared_rows = [
+            row
+            for row in comparison.get("shared_anchor_comparisons") or []
+            if isinstance(row, dict)
+            and row.get("anchor_cn")
+            and row.get("target_pressure_level") != "unassessed"
+            and row.get("candidate_pressure_level") != "unassessed"
         ]
-    )
-    return {
-        "本品最高阻力": comparison.get("target_highest_pressure_level_cn")
-        or "尚未评估",
-        "竞品最高阻力": comparison.get("candidate_highest_pressure_level_cn")
-        or "尚未评估",
-        "共同成立理由": shared_names or "暂无共同成立理由",
-        "同理由阻力比较": detail
-        or comparison.get("limitation_cn")
-        or "暂无可比较的同理由阻力",
-        "业务含义": comparison.get("summary_cn") or "当前购买阻力证据待补充",
-    }
+        if not shared_rows:
+            continue
+        details = _join_cn(
+            [
+                f"{row.get('anchor_cn')}：本品{row.get('target_pressure_level_cn')}，竞品{row.get('candidate_pressure_level_cn')}"
+                for row in shared_rows[:3]
+            ]
+        )
+        if details:
+            lines.append(f"- {_display_name(item.get('candidate') or {})}：{details}。")
+    return lines
 
 
 def _market_validation_process_values(product: dict[str, Any]) -> dict[str, str]:
@@ -6579,8 +6553,7 @@ def _dashboard_competitor_payload(
         "anchor_substitutability_cn": _dashboard_anchor_substitutability_cn(item),
         "pressure_breakdown_cn": _dashboard_pressure_breakdown_cn(item),
         "purchase_pressure_cn": str(
-            (item.get("purchase_pressure_comparison") or {}).get("summary_cn")
-            or "购买阻力待补充"
+            (item.get("purchase_pressure_comparison") or {}).get("summary_cn") or ""
         ),
         "anchor_substitutability": _dashboard_anchor_substitutability_payload(item),
         "pressure_breakdown": _dashboard_pressure_breakdown_payload(item),
@@ -7494,22 +7467,21 @@ def _dashboard_score_dimension_lines(competitors: list[dict[str, Any]]) -> list[
     return lines
 
 
-def _dashboard_anchor_pressure_markdown(competitors: list[dict[str, Any]]) -> str:
-    lines = ["**购买理由重合、替代压力与购买阻力**"]
+def _dashboard_anchor_replacement_markdown(competitors: list[dict[str, Any]]) -> str:
+    lines = ["**购买理由重合与替代压力**"]
     for item in competitors[:3]:
         lines.append(
             f"{item.get('rank') or '-'}\\. {_dashboard_competitor_alias(item)}："
             f"{item.get('anchor_substitutability_cn') or '锚点可替代性待复核'}；"
-            f"{item.get('pressure_breakdown_cn') or item.get('pressure_cn') or '替代压力待复核'}；"
-            f"{item.get('purchase_pressure_cn') or '购买阻力待补充'}"
+            f"{item.get('pressure_breakdown_cn') or item.get('pressure_cn') or '替代压力待复核'}"
         )
     return "\n".join(lines)
 
 
-def _dashboard_anchor_pressure_lines(competitors: list[dict[str, Any]]) -> list[str]:
+def _dashboard_anchor_replacement_lines(competitors: list[dict[str, Any]]) -> list[str]:
     lines = [
-        "| 排名 | 竞品 | 购买理由重合度 | 替代压力 | 双方购买阻力 |",
-        "| ---: | --- | --- | --- | --- |",
+        "| 排名 | 竞品 | 购买理由重合度 | 替代压力 |",
+        "| ---: | --- | --- | --- |",
     ]
     for item in competitors[:3]:
         lines.append(
@@ -7523,9 +7495,6 @@ def _dashboard_anchor_pressure_lines(competitors: list[dict[str, Any]]) -> list[
                     ),
                     _markdown_cell(
                         item.get("pressure_breakdown_cn") or "替代压力待复核"
-                    ),
-                    _markdown_cell(
-                        item.get("purchase_pressure_cn") or "购买阻力待补充"
                     ),
                 ]
             )
