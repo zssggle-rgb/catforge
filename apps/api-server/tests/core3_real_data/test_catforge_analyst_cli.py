@@ -5292,7 +5292,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert markdown.index("## 重点竞品看板") < markdown.index("## 一、分析结论")
     dashboard_section = markdown.split("## 一、分析结论", 1)[0]
     assert "### 重点竞品 Top 3" in dashboard_section
-    assert "| 排名 | 竞品 | 角色 | 压力 | 重合 |" in dashboard_section
+    assert "| 排名 | 竞品 | 角色 | 重合 |" in dashboard_section
+    assert "| 压力 |" not in dashboard_section
     assert "| 1 | 创维 65A7H PRO | 首选直接 |" in dashboard_section
     assert "### 多维评分雷达图数据" in dashboard_section
     assert (

@@ -7394,7 +7394,7 @@ def _feishu_competitor_ranking_table(
             {
                 "rank": str(item.get("rank") or ""),
                 "name": _dashboard_competitor_alias(item),
-                "position": f"{_dashboard_role_short(item)} / {_dashboard_pressure_short(item)}",
+                "position": _dashboard_role_short(item),
                 "strength": f"{_dashboard_strength_bar(str(item.get('strength_cn') or ''))} {_dashboard_strength_short(item)}",
             }
             for item in competitors[:3]
@@ -7403,7 +7403,7 @@ def _feishu_competitor_ranking_table(
 
 
 def _dashboard_competitor_ranking_lines(competitors: list[dict[str, Any]]) -> list[str]:
-    lines = ["| 排名 | 竞品 | 角色 | 压力 | 重合 |", "| ---: | --- | --- | --- | --- |"]
+    lines = ["| 排名 | 竞品 | 角色 | 重合 |", "| ---: | --- | --- | --- |"]
     for item in competitors[:3]:
         lines.append(
             "| "
@@ -7412,7 +7412,6 @@ def _dashboard_competitor_ranking_lines(competitors: list[dict[str, Any]]) -> li
                     _markdown_cell(item.get("rank")),
                     _markdown_cell(_dashboard_competitor_alias(item)),
                     _markdown_cell(_dashboard_role_short(item)),
-                    _markdown_cell(_dashboard_pressure_short(item)),
                     _markdown_cell(
                         f"{_dashboard_strength_bar(str(item.get('strength_cn') or ''))} {_dashboard_strength_short(item)}"
                     ),
