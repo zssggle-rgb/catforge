@@ -1,0 +1,70 @@
+{
+  "schema_version": "sellpoint_value_pm_v5_g10_ac_release_receipt_v1",
+  "goal": "V5-AC-G10",
+  "status": "complete",
+  "date": "2026-07-12",
+  "m12d_consumption": {
+    "mode": "read_only",
+    "category_code": "AC",
+    "profile_version": "m12d_ac_purchase_reason_profile_v0_4",
+    "profile_version_id": "m12d_ver_58797b2bb888a566216896d0",
+    "published_sku_count": 155,
+    "result_hash": "f4007c13877cc46d36bd16a77b5cec3c6b2f2c51df28b29dbecced723dce70cc",
+    "database_writes": 0,
+    "publish_switches": 0
+  },
+  "code_commits": [
+    "1802604",
+    "cdd767a",
+    "c06a0a4"
+  ],
+  "server_205": {
+    "runtime_revision": "c06a0a49ab087aa8a3d6335d5f3d15507b0e930f",
+    "health": "ready",
+    "database": "ok"
+  },
+  "validation": {
+    "v4_v5_tests_passed": 170,
+    "ac_extension_tests_passed": 4,
+    "representative_cohort_sku_count": 4,
+    "representative_cohort_double_run_hash_match": 4,
+    "representative_analysis_states": {
+      "ready": 4,
+      "partial": 0,
+      "blocked": 0
+    },
+    "diverse_cohort_sku_count": 12,
+    "diverse_analysis_states": {
+      "ready": 11,
+      "partial": 0,
+      "blocked": 1
+    },
+    "diverse_skus_with_highlights": 5,
+    "diverse_highlight_count": 8,
+    "strict_wtp_available": 0,
+    "synthetic_sales_available": 0
+  },
+  "sample_ac00032338": {
+    "analysis_state": "ready",
+    "result_hash": "f978f16568933cef5a3f032d26d2ac23c2564734406d4b49b0b91118545b5d4b",
+    "value_account_row_count": 7,
+    "highlight_titles": [
+      "操作维护省心"
+    ],
+    "whole_product_price_percentile": 0.75,
+    "whole_product_volume_percentile": 0.875,
+    "m12c_context_row_count": 189,
+    "strict_wtp_available": 0,
+    "synthetic_sales_available": 0,
+    "feishu_url": "https://my.feishu.cn/docx/HDicdEOyAorCplxnanec7mI1nke",
+    "feishu_revision": 3,
+    "feishu_readback": "passed"
+  },
+  "tv_regression": {
+    "sku_code": "TV00029112",
+    "result_hash": "3bf1668afd39eadd19814e3be40ee16a917deb3ae9c3dc9ec8e7a8f0ba5c2614",
+    "unchanged_from_g09": true
+  },
+  "release_state": "default_off_shadow",
+  "default_route_changed": false
+}
