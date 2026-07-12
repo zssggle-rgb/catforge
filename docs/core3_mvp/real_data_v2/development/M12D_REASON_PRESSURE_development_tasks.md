@@ -28,7 +28,7 @@
 | 6 | M12D-RP-G06 | completed | TV/AC 全量 shadow、业务抽检和发布门槛复算 | G05 |
 | 7 | M12D-RP-G07 | completed | 竞品智能体消费、Top 3 和报告业务语言回归 | G06 |
 | 8 | M12D-RP-G08 | completed | 跨品类集成验收、QF15 回填和上线前结论 | G07 |
-| 9 | M12D-RP-G09 | in_progress | 提交并部署代码/migration 到 205 | G08 |
+| 9 | M12D-RP-G09 | completed | 提交并部署代码/migration 到 205 | G08 |
 | 10 | M12D-RP-G10 | pending | 205 全量重跑、分品类发布和线上验收 | G09；需用户批准 |
 
 ## 4. 任务明细
@@ -305,3 +305,19 @@ PAUSED: M12D-RP-G09 提交部署需要用户明确批准。
   - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G08_integrated_acceptance_report.md`
 - 验证：集成回归 `378 passed`；G07 冻结输入确定性回放与既有收据逐字段一致；G08 脚本 ruff、Python 编译和 JSON 解析通过；G06 只读守卫保持不变。
 - Git/发布：未 stage、未 commit、未 deploy、未 publish；任务链停在 G09 审批门。
+
+## 15. M12D-RP-G09 执行记录
+
+- 完成时间：`2026-07-12`。
+- 提交：`67a11d6 feat(m12d): separate purchase reasons and pressure`；migration 修复：`adeab0a fix(m12d): index JSON fields through jsonb`；均已推送到 `new/base-publish-workbench-design`。
+- 提交前验证：集成回归 `378 passed`；静态清理后回归 `84 passed`；migration 修复回归 `32 passed`；ruff、compileall 和 Alembic 单 head 通过。
+- 回滚点：`/var/backups/catforge/m12d-rp-g09-20260712_084936`，`180M`；包含三张 M12D 表、全库 schema、运行环境、应用源码、远端 Git patch 和运行产物；SHA256 与 `pg_restore -l` 校验通过。
+- 部署过程：首次同步因远端脏工作树在构建前停止；备份并清理后，首次 migration 因 `json` GIN 缺少 operator class 事务回滚至 0042，旧服务未中断；改为 `json::jsonb` 表达式索引后重新部署成功。
+- 205 结果：Git revision `adeab0a`；Alembic `0044_core3_m12d_reason_pressure`；profile 字段 `5/5`、anchor 字段 `12/12`、索引 `5/5`。
+- 数据守卫：部署前后 `687 profiles / 7057 anchors / 3 versions` 和最大更新时间完全一致；未执行正式重跑，未切换 current/published。
+- 兼容读取：687 个历史 profile 的成立理由/产品主张为空，7057 个历史 anchor 的成立度/购买阻力为 `unassessed`；没有猜测新语义。
+- 运行验收：仓库与容器关键源码 hash 一致；新模块 import 通过；API 日志无错误；205 本机 `/healthz`、`/readyz` 通过。
+- 产物：
+  - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G09_deployment_receipt.json`
+  - `docs/core3_mvp/real_data_v2/current_implementation/M12D_RP_G09_deployment_report.md`
+- 下一任务：M12D-RP-G10 正式全量重跑和发布；需要明确发布批准。

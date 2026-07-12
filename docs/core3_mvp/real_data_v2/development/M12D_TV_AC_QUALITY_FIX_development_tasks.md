@@ -101,7 +101,7 @@ M12D-QF-01 已采集 AC 当前基线：155 SKU，50 `ready_degraded`、98 `revie
 | 15A | M12D-QF-15A | completed | TV 139 个无核心 SKU 证据缺口和门槛反事实审计 | M12D-QF-15 blocked 后单独批准审计 |
 | 16 | M12D-QF-16 | completed | TV/AC 竞品智能体消费和 Top 3 回归；由 RP-G07 承接 | M12D-QF-15 |
 | 17 | M12D-QF-17 | completed | 跨品类隔离和共享链路总回归；由 RP-G08 承接 | M12D-QF-16 |
-| 18 | M12D-QF-18 | in_progress | 提交并部署代码到 205 | M12D-QF-17 |
+| 18 | M12D-QF-18 | completed | 提交并部署代码到 205 | M12D-QF-17 |
 | 19 | M12D-QF-19 | pending | 205 全量重跑、发布切换和上线验收 | M12D-QF-18；需发布门槛通过 |
 
 ## 6. 任务明细
@@ -537,6 +537,8 @@ M12D-QF-01 已采集 AC 当前基线：155 SKU，50 `ready_degraded`、98 `revie
 - 部署代码和 migration，保留备份和回滚点。
 - 此任务不执行正式全量发布。
 - 验收：服务 healthy/ready，代码和 schema 版本一致。
+- 执行回填：提交 `67a11d6` 和 migration 修复 `adeab0a` 已推送并部署；205 Git revision `adeab0a`，Alembic `0044_core3_m12d_reason_pressure`，服务 healthy/ready，仓库与容器源码 hash 一致。回滚点为 `/var/backups/catforge/m12d-rp-g09-20260712_084936`。
+- 数据守卫：三张 M12D 表行数和最大更新时间不变，未执行正式重跑或切换 current/published。详细收据见 `M12D_RP_G09_deployment_receipt.json`。
 
 ### M12D-QF-19 205 全量重跑、发布和上线验收
 
@@ -573,5 +575,6 @@ M12D-QF-01 已采集 AC 当前基线：155 SKU，50 `ready_degraded`、98 `revie
 HISTORICAL: M12D-QF-15 旧口径全链路执行通过，但发布质量门槛未通过；该 blocked 事实保留。
 COMPLETED: RP-G06/G08 按新批准分层口径完成双品类全量影子与集成验收，QF15 记为 completed (superseded)。
 COMPLETED: M12D-QF-16 由 RP-G07 完成；M12D-QF-17 由 RP-G08 完成。
-PAUSED: M12D-QF-18 / M12D-RP-G09 提交部署需要用户明确批准。
+COMPLETED: M12D-QF-18 / M12D-RP-G09 已提交部署，205 revision 为 adeab0a，Alembic 为 0044。
+PAUSED: M12D-QF-19 / M12D-RP-G10 正式全量重跑和发布需要明确批准。
 ```

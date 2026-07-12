@@ -1,0 +1,88 @@
+{
+  "task_id": "M12D-RP-G09",
+  "completed_at": "2026-07-12T08:56:54+08:00",
+  "status": "completed",
+  "branch": "new/base-publish-workbench-design",
+  "commits": [
+    "67a11d6633a3de2373ee63fbddde084932f72b5e",
+    "adeab0a1c8b5b05b3abfd1a29d893b038a5d4a96"
+  ],
+  "deployed_commit": "adeab0a1c8b5b05b3abfd1a29d893b038a5d4a96",
+  "backup_dir": "/var/backups/catforge/m12d-rp-g09-20260712_084936",
+  "backup_size": "180M",
+  "backup_checks": {
+    "sha256": "passed",
+    "pg_restore_list": "passed",
+    "includes": [
+      "three_m12d_tables",
+      "database_schema",
+      "runtime_env",
+      "app_source",
+      "git_worktree_and_index_patches",
+      "remote_runtime_artifacts"
+    ]
+  },
+  "migration": {
+    "before": "0042_core3_m12d_purchase_reason",
+    "after": "0044_core3_m12d_reason_pressure",
+    "head_count": 1,
+    "profile_columns_added": 5,
+    "anchor_columns_added": 12,
+    "indexes_present": 5
+  },
+  "database_guard": {
+    "before": {
+      "profiles": 687,
+      "anchors": 7057,
+      "versions": 3
+    },
+    "after": {
+      "profiles": 687,
+      "anchors": 7057,
+      "versions": 3
+    },
+    "max_updated_at_unchanged": true,
+    "current_published_unchanged": true,
+    "formal_rerun_executed": false
+  },
+  "compatibility_defaults": {
+    "profiles_with_empty_established_anchors": 687,
+    "profiles_with_empty_proposition_anchors": 687,
+    "anchors_with_unassessed_establishment": 7057,
+    "anchors_with_unassessed_pressure": 7057
+  },
+  "verification": {
+    "predeploy_integration_tests": "378 passed",
+    "cleanup_regression_tests": "84 passed",
+    "migration_fix_tests": "32 passed",
+    "ruff": "passed",
+    "compileall": "passed",
+    "healthz": "ok",
+    "readyz": "ready_database_ok",
+    "api_error_log": "none",
+    "repository_clean": true,
+    "repository_container_hashes_match": true,
+    "new_module_import_smoke": "passed"
+  },
+  "deployment_attempts": [
+    {
+      "attempt": 1,
+      "result": "stopped_before_build",
+      "reason": "remote_dirty_worktree_refused_checkout"
+    },
+    {
+      "attempt": 2,
+      "result": "stopped_during_transactional_migration",
+      "reason": "json_gin_index_required_jsonb_cast",
+      "database_rolled_back_to": "0042_core3_m12d_purchase_reason",
+      "old_services_remained_running": true
+    },
+    {
+      "attempt": 3,
+      "result": "completed",
+      "migration": "0044_core3_m12d_reason_pressure"
+    }
+  ],
+  "next_task": "M12D-RP-G10",
+  "next_task_requires_publish_approval": true
+}

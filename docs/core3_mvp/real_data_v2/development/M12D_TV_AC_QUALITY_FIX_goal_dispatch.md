@@ -5,7 +5,7 @@
 - 调度状态：`paused`
 - 自动执行：heartbeat `catforge-m12d-tv-ac-quality` 已删除；QF15 发布门槛未通过，避免重复重跑
 - 每次执行上限：一个模块闭环任务
-- 当前任务：`M12D-RP-G09`（等价承接 M12D-QF-18）执行中；以后同类代码提交与部署无需单独审批
+- 当前任务：`M12D-RP-G09`（等价承接 M12D-QF-18）已完成；等待 M12D-RP-G10 / M12D-QF-19 正式发布批准
 - 启动条件：已满足，用户于 2026-07-11 明确批准开始实施
 
 当前按任务链逐个执行；每次触发只处理一个模块闭环。M12D-QF-18/M12D-QF-19 仍按任务门槛暂停确认提交、部署和正式发布。
@@ -76,5 +76,6 @@
 ```text
 HISTORICAL: M12D-QF-15 旧混合口径下 TV/AC 发布质量均为 limited；该 blocked 事实保留。
 COMPLETED: `M12D-RP-G01` 至 `M12D-RP-G08` 已完成；新口径下 TV/AC 全量影子均为 ready，QF16/QF17 已由 RP-G07/G08 完成。
-IN_PROGRESS: M12D-RP-G09 / M12D-QF-18 精确提交、部署 migration/代码到 205 并验证。
+COMPLETED: M12D-RP-G09 / M12D-QF-18 已提交部署，205 revision 为 adeab0a，Alembic 为 0044。
+PAUSED: M12D-RP-G10 / M12D-QF-19 正式全量重跑和发布需要明确批准。
 ```

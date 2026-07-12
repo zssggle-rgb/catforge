@@ -4,11 +4,11 @@
 
 ## 1. 当前状态
 
-- 调度状态：`active`
+- 调度状态：`paused_for_publish_approval`
 - 自动化：`catforge-m12d-10`
 - 周期：每 10 分钟一次 heartbeat
 - 单次上限：一个 goal、一个模块闭环任务
-- 当前任务：`M12D-RP-G09` 执行中；用户已于 `2026-07-12` 明确批准，并授权以后同类代码提交与部署无需单独审批
+- 当前任务：`M12D-RP-G09` 已完成；等待用户明确批准 `M12D-RP-G10` 正式全量重跑和发布
 - 旧链路：QF15 旧口径 blocked 结论保留为历史记录；当前阻塞已由 G06-G08 新口径验收解除，QF16/QF17 分别由 G07/G08 完成
 
 ## 2. 必读文档
@@ -66,5 +66,6 @@ COMPLETED: M12D-RP-G05 锚点角色、SKU 状态、版本质量和按 SKU 消费
 COMPLETED: M12D-RP-G06 TV/AC 全量 shadow、业务审计和发布门槛复算。
 COMPLETED: M12D-RP-G07 竞品智能体消费、Top 3 和报告业务语言回归。
 COMPLETED: M12D-RP-G08 跨品类集成验收、QF15/QF16 回填和上线前结论。
-IN_PROGRESS: M12D-RP-G09 精确提交、部署 migration/代码到 205 并验证。
+COMPLETED: M12D-RP-G09 已提交并部署到 205，migration 升至 0044，服务和数据守卫验证通过。
+PAUSED: M12D-RP-G10 正式全量重跑和切换 current/published 需要明确发布批准。
 ```
