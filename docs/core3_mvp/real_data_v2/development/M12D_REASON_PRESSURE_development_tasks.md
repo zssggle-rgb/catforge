@@ -117,7 +117,7 @@
 - TV/AC taxonomy、门槛或市场池串用。
 - 已有 ready SKU 出现无法解释的大规模核心理由变化。
 - 需要低于 7 分或白名单才能达到覆盖率。
-- G09/G10 到达时未取得用户明确批准。
+- G10 正式全量重跑和发布时未取得用户明确批准。
 
 ## 6. 当前指针
 
@@ -130,7 +130,8 @@ COMPLETED: M12D-RP-G05 锚点角色、SKU 状态、版本质量和按 SKU 消费
 COMPLETED: M12D-RP-G06 TV/AC 全量 shadow、业务审计和发布门槛复算。
 COMPLETED: M12D-RP-G07 竞品智能体消费、Top 3 和报告业务语言回归。
 COMPLETED: M12D-RP-G08 跨品类集成验收、QF15/QF16 回填和上线前结论。
-PAUSED: M12D-RP-G09 提交部署需要用户明确批准。
+COMPLETED: M12D-RP-G09 已提交部署，205 revision 和 migration 验收通过。
+PAUSED: M12D-RP-G10 正式全量重跑和切换 current/published 需要明确发布批准。
 ```
 
 ## 7. M12D-RP-G01 执行记录
