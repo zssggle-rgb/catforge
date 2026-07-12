@@ -8,6 +8,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     _market_fraction,
     _market_number,
     _parameter_dimension,
+    _parameter_value_is_valid,
     _parameter_value_conclusion,
     _realization_market_comparisons,
     _select_highlights,
@@ -189,6 +190,9 @@ def test_parameter_value_comparison_never_crosses_parameter_dimensions() -> None
     )
 
     assert _parameter_dimension("参数组合：backlight_subtype=Q-LED") == "backlight_subtype"
+    assert _parameter_value_is_valid("参数组合：backlight_subtype=Q-LED") is True
+    assert _parameter_value_is_valid("参数组合：color_gamut_ratio=0") is False
+    assert _parameter_value_is_valid("参数组合：local_dimming_zone_count=0") is True
     assert result is not None
     assert "背光类型=Q-LED" in result["conclusion_cn"]
     assert "分区数" not in result["conclusion_cn"]

@@ -1656,9 +1656,8 @@ def _weakness_comparison(
                 [names.get(code, code) for code in high.representative_sku_codes],
             )
         )
-    clauses = []
+    gap_contexts: dict[str, set[str]] = {}
     selected_products: set[str] = set()
-    seen_claims: set[str] = set()
     for label, sku_codes, product_names in groups:
         gaps = _supported_claim_gaps(
             snapshots,
@@ -1666,17 +1665,21 @@ def _weakness_comparison(
             sku_codes,
             claim_codes,
         )
-        gaps = [code for code in gaps if code not in seen_claims][:3]
         if not gaps:
             continue
-        seen_claims.update(gaps)
         selected_products.update(product_names)
-        clauses.append(
-            f"相较{label}，本品用户反馈尚未覆盖"
-            f"{'、'.join(CLAIM_LABELS_CN.get(code, code) for code in gaps)}"
-        )
-    if not clauses:
+        for claim_code in gaps[:3]:
+            gap_contexts.setdefault(claim_code, set()).add(label)
+    if not gap_contexts:
         return None
+    clauses = [
+        f"{CLAIM_LABELS_CN.get(claim_code, claim_code)}在"
+        f"{'、'.join(sorted(labels))}中更常得到用户正向反馈，本品尚未形成同等覆盖"
+        for claim_code, labels in sorted(
+            gap_contexts.items(),
+            key=lambda item: (-len(item[1]), CLAIM_LABELS_CN.get(item[0], item[0])),
+        )
+    ]
     return {
         "question_cn": "本品当前最明显的短板",
         "selected_products": sorted(selected_products),
@@ -1724,7 +1727,7 @@ def _parameter_value_conclusion(
         for comparison in entry.get("comparisons") or []
         if comparison.method == "parameter_configuration"
         and comparison.comparator_count >= 2
-        and "-1100" not in comparison.comparison_basis_cn
+        and _parameter_value_is_valid(comparison.comparison_basis_cn)
     ]
     by_dimension_and_products: dict[
         tuple[str, tuple[str, ...]], RealizationMarketComparison
@@ -1809,6 +1812,23 @@ def _parameter_business_priority(basis: str) -> int:
 
 def _parameter_dimension(basis: str) -> str:
     return basis.removeprefix("参数组合：").partition("=")[0].strip()
+
+
+def _parameter_value_is_valid(basis: str) -> bool:
+    dimension, separator, raw_value = basis.removeprefix("参数组合：").partition("=")
+    if not separator or not dimension.strip():
+        return False
+    value = raw_value.strip().lower()
+    if not value or value in {"-", "--", "unknown", "none", "null", "nan"}:
+        return False
+    if dimension.strip() != "local_dimming_zone_count" and value in {
+        "0",
+        "0.0",
+        "-1100",
+        "-1100.0",
+    }:
+        return False
+    return True
 
 
 def _parameter_basis_cn(basis: str) -> str:
