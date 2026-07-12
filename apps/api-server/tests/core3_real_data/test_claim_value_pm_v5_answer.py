@@ -4,6 +4,7 @@ import json
 
 from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     _dedupe_value_account_rows,
+    _select_highlights,
     adapt_v4_context_to_v5,
     build_perceived_value_market_report,
     build_v5_answer_artifacts,
@@ -85,6 +86,42 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert "无法识别销量承接" in summary.volume_summary_cn
     assert "已进入 4 个" in summary.existing_battlefield_summary_cn
     assert "未识别出" in summary.expansion_summary_cn
+
+
+def test_highlight_summary_keeps_one_specific_result_per_battlefield() -> None:
+    base = _report().value_account_rows[0]
+    concise = base.model_copy(
+        update={
+            "value_status": "partial",
+            "highlight_types": ["relative_value"],
+            "perceived_user_value": {
+                **base.perceived_user_value,
+                "name_cn": "画质升级感",
+                "outcome_cn": "用户购后反馈只部分支持：明暗层次更清楚。",
+            },
+            "sellpoint_bundle": base.sellpoint_bundle.model_copy(
+                update={"bundle_code": "bundle:picture-specific"}
+            ),
+        }
+    )
+    overlapping = concise.model_copy(
+        update={
+            "perceived_user_value": {
+                **concise.perceived_user_value,
+                "name_cn": "客厅沉浸感＋画质升级感",
+            },
+            "sellpoint_bundle": concise.sellpoint_bundle.model_copy(
+                update={"bundle_code": "bundle:picture-overlap"}
+            ),
+        }
+    )
+
+    highlights = _select_highlights([overlapping, concise])
+
+    assert len(highlights) == 1
+    assert highlights[0].title_cn == "画质升级感"
+    assert "用户购后反馈显示“明暗层次更清楚”" in highlights[0].reason_cn
+    assert "用户购后反馈只部分支持" not in highlights[0].reason_cn
 
 
 def test_value_account_separates_user_value_price_and_volume() -> None:

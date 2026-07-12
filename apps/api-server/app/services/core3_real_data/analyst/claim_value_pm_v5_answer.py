@@ -717,7 +717,7 @@ def _portfolio_inputs(
 
 
 def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
-    candidates: list[tuple[float, ValueHighlight]] = []
+    candidates: list[tuple[float, int, str, ValueHighlight]] = []
     for row in rows:
         types = row.highlight_types
         if not types:
@@ -726,25 +726,41 @@ def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
         outcome = str(row.perceived_user_value.get("outcome_cn") or "").strip()
         if not value_name or not outcome:
             continue
+        user_result = _highlight_user_result(outcome)
         if "relative_value" in types:
             highlight_type = "relative_value"
-            reason = f"用户实际获得“{outcome}”，且同类市场中存在同宣传但兑现较弱的可比产品。"
+            reason = (
+                f"用户购后反馈显示“{user_result}”；与同宣传但用户兑现较弱的可比产品相比，"
+                "这组卖点形成了可复核的相对优势。"
+            )
             score = 4.0
         elif "volume_realization" in types:
             highlight_type = "volume_realization"
-            reason = f"用户实际获得“{outcome}”，并在控制基础条件后的市场基线中表现出更强销量承接。"
+            reason = (
+                f"用户购后反馈显示“{user_result}”；在控制基础条件后的市场基线中，"
+                "这组卖点表现出更强销量承接。"
+            )
             score = 3.0
         elif "price_realization" in types:
             highlight_type = "price_realization"
-            reason = f"用户实际获得“{outcome}”，可比市场支持这组价值存在稳定价格承接。"
+            reason = (
+                f"用户购后反馈显示“{user_result}”；可比市场支持这组价值存在稳定价格承接。"
+            )
             score = 2.5
         else:
             highlight_type = "user_realization"
-            reason = f"用户实际获得“{outcome}”，不是仅由技术参数推演出的好处。"
+            reason = (
+                f"用户购后反馈显示“{user_result}”；这项好处来自实际体验，"
+                "不是仅由技术参数推演。"
+            )
             score = 2.0
+        battlefield_code = str(row.battlefield.get("code") or "").strip()
+        component_count = len([part for part in value_name.split("＋") if part.strip()])
         candidates.append(
             (
                 score,
+                component_count,
+                battlefield_code,
                 ValueHighlight(
                     highlight_type=highlight_type,
                     bundle_code=row.sellpoint_bundle.bundle_code,
@@ -758,18 +774,37 @@ def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
                 ),
             )
         )
-    candidates.sort(key=lambda item: (-item[0], item[1].bundle_code))
+    candidates.sort(key=lambda item: (-item[0], item[1], item[3].bundle_code))
     result = []
-    seen: set[str] = set()
-    for _, item in candidates:
-        key = "＋".join(sorted(part.strip() for part in item.title_cn.split("＋")))
-        if key in seen:
+    seen_titles: set[str] = set()
+    seen_battlefields: set[str] = set()
+    for _, _, battlefield_code, item in candidates:
+        title_key = "＋".join(
+            sorted(part.strip() for part in item.title_cn.split("＋"))
+        )
+        if title_key in seen_titles or (
+            battlefield_code and battlefield_code in seen_battlefields
+        ):
             continue
-        seen.add(key)
+        seen_titles.add(title_key)
+        if battlefield_code:
+            seen_battlefields.add(battlefield_code)
         result.append(item)
         if len(result) == 3:
             break
     return result
+
+
+def _highlight_user_result(outcome: str) -> str:
+    result = outcome.strip()
+    for prefix in (
+        "用户购后反馈已观察到：",
+        "用户购后反馈只部分支持：",
+    ):
+        if result.startswith(prefix):
+            result = result.removeprefix(prefix).strip()
+            break
+    return result.rstrip("。")
 
 
 def _no_highlight_reason_cn(context, analysis_state):
