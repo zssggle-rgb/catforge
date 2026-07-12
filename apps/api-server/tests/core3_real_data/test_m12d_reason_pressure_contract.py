@@ -260,6 +260,7 @@ def test_m12d_reason_pressure_columns_exist_on_profile_and_anchor_models() -> No
 
 def test_m12d_reason_pressure_migration_adds_compatibility_columns(monkeypatch) -> None:
     module = _load_migration()
+    statements: list[str] = []
     added: dict[str, list[str]] = {
         "core3_sku_purchase_reason_profile": [],
         "core3_sku_purchase_reason_anchor": [],
@@ -273,7 +274,8 @@ def test_m12d_reason_pressure_migration_adds_compatibility_columns(monkeypatch) 
             return []
 
     class Bind:
-        def execute(self, _statement):
+        def execute(self, statement):
+            statements.append(str(statement))
             return None
 
     monkeypatch.setattr(module.op, "get_bind", lambda: Bind())
@@ -306,6 +308,13 @@ def test_m12d_reason_pressure_migration_adds_compatibility_columns(monkeypatch) 
         "pressure_summary_cn",
         "comparison_limitations_json",
     }
+    profile_gin_statements = [
+        statement
+        for statement in statements
+        if "ix_core3_m12d_profile_" in statement
+    ]
+    assert len(profile_gin_statements) == 2
+    assert all("::jsonb" in statement for statement in profile_gin_statements)
 
 
 def _anchor_record(**updates) -> M12DPurchaseReasonAnchorRecord:

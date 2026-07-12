@@ -45,13 +45,15 @@ def upgrade() -> None:
         bind.execute(
             sa.text(
                 "CREATE INDEX IF NOT EXISTS ix_core3_m12d_profile_established_gin "
-                "ON core3_sku_purchase_reason_profile USING gin (established_anchors_json)"
+                "ON core3_sku_purchase_reason_profile "
+                "USING gin ((established_anchors_json::jsonb))"
             )
         )
         bind.execute(
             sa.text(
                 "CREATE INDEX IF NOT EXISTS ix_core3_m12d_profile_proposition_gin "
-                "ON core3_sku_purchase_reason_profile USING gin (proposition_anchors_json)"
+                "ON core3_sku_purchase_reason_profile "
+                "USING gin ((proposition_anchors_json::jsonb))"
             )
         )
 
