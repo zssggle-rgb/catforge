@@ -1200,6 +1200,7 @@ class AnalystRepository:
         analysis_population: str,
     ) -> tuple[list[ComparablePoolTierFact], dict[str, list[Any]], list[EvidenceRef], set[str]]:
         quant = entities.Core3SkuClaimValueQuantification
+        m12c_population = _m12c_population(analysis_population)
         quant_stmt = (
             select(
                 quant.sku_claim_value_id,
@@ -1224,7 +1225,7 @@ class AnalystRepository:
             .where(_batch_filter(quant.batch_id, batch_id))
             .where(quant.product_category == product_category)
             .where(quant.market_window == market_window)
-            .where(quant.analysis_population == analysis_population)
+            .where(quant.analysis_population == m12c_population)
             .where(quant.sku_code.in_(tuple(sku_codes)))
             .where(quant.rule_version == _m12c_rule_version(product_category))
             .where(quant.is_current.is_(True))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.services.core3_real_data.analyst.analyst_repository import (
     _m12c_rule_version,
+    _m12c_population,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_category_config import (
     AC_BATTLEFIELD_CN,
@@ -165,3 +166,5 @@ def test_ac_comparability_and_synthetic_feature_use_installation_horsepower_tier
 def test_m12c_rule_selection_is_category_specific() -> None:
     assert _m12c_rule_version("AC") == CORE3_M12C_AC_RULE_VERSION
     assert _m12c_rule_version("TV") == CORE3_M12C_TV_RULE_VERSION
+    assert _m12c_population("fact_complete_with_comment") == "claim_value_ready_with_comment"
+    assert _m12c_population("all_semantic_profiles") == "claim_value_ready"
