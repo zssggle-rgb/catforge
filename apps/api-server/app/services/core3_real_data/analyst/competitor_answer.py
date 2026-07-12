@@ -58,6 +58,36 @@ ROLE_SORT_PRIORITY = {
     "excluded": 0,
 }
 
+REPORT_HIDDEN_GATE_REASONS = {
+    "published_ready",
+    "normal_pair_scoring",
+}
+REPORT_GATE_REASON_CN = {
+    "anchor_substitutability_below_primary_threshold": "购买理由替代性未达到首选竞品门槛",
+    "block_target_or_drop_candidate": "成交理由证据不足，不能依靠该维度进入前三",
+    "candidate_m12d_blocks_top3": "候选成交理由画像不足以支持进入前三",
+    "candidate_m12d_degraded": "候选成交理由画像需降低置信度",
+    "core_payment_missing": "尚未形成可比较的核心购买理由",
+    "degraded_pair_scoring": "购买理由比较需要降低置信度",
+    "evidence_misalignment": "证据之间存在不一致，需降低置信度",
+    "fact_dimensions_only": "仅能依据参数、卖点和市场事实比较",
+    "low_profile_confidence": "成交理由画像置信度较低",
+    "market_weak_and_purchase_pool_deviated": "购买池偏离且市场分流证据较弱",
+    "missing_or_partial_inputs": "部分成交理由证据尚未形成",
+    "not_found": "成交理由画像尚未生成",
+    "not_primary_direct_eligible": "未达到首选直接竞品条件",
+    "profile_status_ready_degraded": "成交理由画像仅支持有限比较",
+    "profile_status_weak_expression_only": "仅形成较弱的购买理由表达",
+    "published_degraded": "成交理由画像仅支持有限比较",
+    "published_unusable": "成交理由画像暂不可用于强比较",
+    "release_quality_limited": "当前发布质量仅支持有限比较",
+    "replacement_pressure_below_strong_threshold": "替代压力未达到强替代门槛",
+    "review_required": "成交理由证据仍需复核",
+    "target_core_anchor_not_exactly_covered": "候选未完整覆盖本品核心购买理由",
+    "target_core_payment_missing": "本品尚未形成可比较的核心购买理由",
+    "target_m12d_degraded": "本品成交理由画像需降低置信度",
+}
+
 ROLE_WEIGHTS = {
     "primary": Decimal("1.00"),
     "primary_user_task": Decimal("1.00"),
@@ -1613,10 +1643,11 @@ def _candidate_pool_appendix_lines(
             if selected == "Top 3"
             else item.get("exclusion_reason_cn") or _candidate_sort_reason(item)
         )
-        if selected != "Top 3" and item.get("ranking_gate_reasons"):
-            reason = (
-                f"{reason}；门槛：{_join_cn(item.get('ranking_gate_reasons') or [])}"
-            )
+        business_gate_reasons = _report_gate_reasons(
+            item.get("ranking_gate_reasons") or []
+        )
+        if selected != "Top 3" and business_gate_reasons:
+            reason = f"{reason}；未满足条件：{_join_cn(business_gate_reasons)}"
         lines.append(
             "| "
             + " | ".join(
@@ -1639,6 +1670,25 @@ def _candidate_pool_appendix_lines(
             + " |"
         )
     return lines
+
+
+def _report_gate_reasons(values: list[Any]) -> list[str]:
+    reasons: list[str] = []
+    unknown_internal_reason = False
+    for value in values:
+        reason = str(value or "").strip()
+        if not reason or reason in REPORT_HIDDEN_GATE_REASONS:
+            continue
+        translated = REPORT_GATE_REASON_CN.get(reason)
+        if translated:
+            reasons.append(translated)
+        elif re.search(r"[\u4e00-\u9fff]", reason):
+            reasons.append(reason)
+        else:
+            unknown_internal_reason = True
+    if unknown_internal_reason:
+        reasons.append("存在尚未满足的入选条件")
+    return _unique_strings(reasons)
 
 
 def _scoring_method_lines(target: dict[str, Any]) -> list[str]:

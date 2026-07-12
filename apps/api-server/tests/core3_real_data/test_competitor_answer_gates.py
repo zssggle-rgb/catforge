@@ -190,6 +190,57 @@ def test_low_pressure_report_does_not_call_weak_candidate_a_threat() -> None:
     assert "购买阻力比较" in markdown
 
 
+def test_candidate_appendix_translates_gate_reasons_to_business_language() -> None:
+    limited = _competitor(
+        sku_code="TV_LIMITED_REPORT",
+        model_name="有限比较候选",
+        price_gap="0.04",
+        anchor_score=6,
+        replacement_score=3,
+        semantic_score=0.60,
+    )
+    limited["value_anchor"]["gate_reasons"] = [  # type: ignore[index]
+        "published_degraded",
+        "degraded_pair_scoring",
+        "low_profile_confidence",
+        "unknown_internal_gate",
+    ]
+    answer = build_competitor_answer(
+        target=_target(),
+        target_fact_brief=_target_fact_brief(),
+        competitors=[
+            _competitor(
+                sku_code="TV_STRONG_REPORT",
+                model_name="正常强候选",
+                price_gap="0.06",
+                anchor_score=13,
+                replacement_score=8,
+                semantic_score=0.80,
+            ),
+            limited,
+        ],
+        top_n=1,
+        with_report="markdown",
+    )
+
+    markdown = answer["report_payload"]["markdown"]
+    assert "成交理由画像仅支持有限比较" in markdown
+    assert "购买理由比较需要降低置信度" in markdown
+    assert "成交理由画像置信度较低" in markdown
+    assert "存在尚未满足的入选条件" in markdown
+    for internal_code in (
+        "published_ready",
+        "normal_pair_scoring",
+        "published_degraded",
+        "degraded_pair_scoring",
+        "low_profile_confidence",
+        "unknown_internal_gate",
+        "anchor_substitutability_below_primary_threshold",
+        "replacement_pressure_below_strong_threshold",
+    ):
+        assert internal_code not in markdown
+
+
 def _target() -> dict[str, object]:
     return {
         "sku_code": "TV_TARGET",
