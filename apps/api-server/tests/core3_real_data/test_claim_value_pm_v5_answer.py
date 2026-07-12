@@ -103,6 +103,21 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert "没有明确的新用户价值方向" in summary.expansion_summary_cn
 
 
+def test_report_uses_question_driven_comparisons_instead_of_pairwise_inventory() -> None:
+    report = build_perceived_value_market_report(_v5_context())
+    questions = report.market_reference["question_driven_comparisons"]
+    short = render_v5_short_answer(report, max_chat_chars=10_000)
+
+    assert "additional_comparisons" not in report.market_reference
+    assert questions
+    assert {row["question_cn"] for row in questions} == {
+        "卖得好和卖得差的产品有什么不同"
+    }
+    assert "更多比较" not in short
+    assert "逐一比较" not in short
+    assert "不同参数组合" not in short
+
+
 def test_highlight_summary_keeps_one_specific_result_per_battlefield() -> None:
     base = _report().value_account_rows[0]
     concise = base.model_copy(
