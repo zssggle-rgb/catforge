@@ -1,9 +1,47 @@
 from app.services.core3_real_data.analyst.competitor_answer import (
+    _select_top_competitors,
     build_competitor_answer,
 )
 
 
-def test_price_nearest_candidate_with_insufficient_anchor_cannot_rank_first() -> None:
+def test_selected_top3_is_ranked_by_business_score_after_role_coverage() -> None:
+    def selected_item(
+        sku_code: str, role: str, score: float, *, market_priority: int = 2
+    ) -> dict[str, object]:
+        return {
+            "candidate": {
+                "sku_code": sku_code,
+                "price_gap_pct_to_target": "0.05",
+            },
+            "role": role,
+            "business_score": score,
+            "top3_eligible": True,
+            "selection_gate": {
+                "primary_direct_eligible": True,
+                "strong_pressure_allowed": True,
+                "market_validation_priority": market_priority,
+            },
+            "purchase_pool": {"score": 1.0},
+        }
+
+    selected = _select_top_competitors(
+        [
+            selected_item("TV_DIRECT_92", "primary_direct", 0.92),
+            selected_item("TV_DIRECT_82", "strong_direct", 0.82),
+            selected_item("TV_DOWNTRADE_92", "downtrade_diversion", 0.92),
+        ],
+        target={"sku_code": "TV_TARGET"},
+        top_n=3,
+    )
+
+    assert [item["candidate"]["sku_code"] for item in selected] == [
+        "TV_DIRECT_92",
+        "TV_DOWNTRADE_92",
+        "TV_DIRECT_82",
+    ]
+
+
+def test_insufficient_anchor_blocks_role_upgrade_but_not_score_ranking() -> None:
     answer = build_competitor_answer(
         target=_target(),
         target_fact_brief=_target_fact_brief(),
@@ -29,8 +67,8 @@ def test_price_nearest_candidate_with_insufficient_anchor_cannot_rank_first() ->
     )
 
     top = answer["top_competitors"]
-    assert top[0]["candidate"]["sku_code"] == "TV_STRONG_ANCHOR"
-    assert top[0]["role"] == "primary_direct"
+    assert top[0]["candidate"]["sku_code"] == "TV_NEAREST_LOW_ANCHOR"
+    assert top[0]["role"] != "primary_direct"
 
     nearest = _candidate_by_code(answer, "TV_NEAREST_LOW_ANCHOR")
     assert nearest["role"] != "primary_direct"
@@ -130,7 +168,7 @@ def test_low_replacement_pressure_blocks_direct_role_upgrade() -> None:
         "replacement_pressure_below_strong_threshold"
         in low_pressure["ranking_gate_reasons"]
     )
-    assert answer["top_competitors"][0]["candidate"]["sku_code"] == "TV_STRONG_PRESSURE"
+    assert answer["top_competitors"][0]["candidate"]["sku_code"] == "TV_LOW_PRESSURE"
 
 
 def test_candidate_blocked_by_m12d_cannot_enter_top3() -> None:

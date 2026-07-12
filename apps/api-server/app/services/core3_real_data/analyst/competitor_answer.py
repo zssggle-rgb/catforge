@@ -6504,7 +6504,32 @@ def _select_top_competitors(
             break
         if item not in selected and item["role"] != "excluded":
             selected.append(item)
-    return selected[:top_n]
+    return sorted(selected[:top_n], key=_selected_top_rank_key, reverse=True)
+
+
+def _selected_top_rank_key(
+    item: dict[str, Any],
+) -> tuple[float, float, float, float, float]:
+    """Rank the selected role-diverse set by its displayed business score."""
+
+    role = str(item.get("role") or "")
+    direct_role_rank = 1.0 if role in {"primary_direct", "strong_direct"} else 0.0
+    gate = item.get("selection_gate") or {}
+    market_rank = float(gate.get("market_validation_priority") or 0)
+    purchase_pool_rank = float((item.get("purchase_pool") or {}).get("score") or 0)
+    gap = abs(
+        float(
+            _decimal((item.get("candidate") or {}).get("price_gap_pct_to_target"))
+            or Decimal("1")
+        )
+    )
+    return (
+        float(item.get("business_score") or 0),
+        direct_role_rank,
+        market_rank,
+        purchase_pool_rank,
+        -gap,
+    )
 
 
 def _dashboard_competitor_payload(

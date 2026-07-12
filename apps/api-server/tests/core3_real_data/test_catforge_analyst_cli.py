@@ -5279,13 +5279,11 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert result["status"] == "ok"
     answer = result["result"]["competitor_answer"]
     top_codes = [item["candidate"]["sku_code"] for item in answer["top_competitors"]]
-    assert top_codes[:3] == ["TV00040001", "TV00040003", "TV00040004"]
+    assert top_codes[:3] == ["TV00040001", "TV00040004", "TV00040003"]
     assert "TV00040002" not in top_codes[:2]
     assert answer["top_competitors"][0]["role"] == "primary_direct"
-    assert (
-        answer["top_competitors"][0]["weighted_overlap"]["target_group"]
-        >= answer["top_competitors"][1]["weighted_overlap"]["target_group"]
-    )
+    scores = [item["business_score"] for item in answer["top_competitors"]]
+    assert scores == sorted(scores, reverse=True)
     markdown = answer["report_payload"]["markdown"]
     assert markdown.startswith("# 海信 65E7Q 重点竞品识别与分析依据报告")
     assert "## 重点竞品看板" in markdown
@@ -5297,7 +5295,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 1 | 创维 65A7H PRO | 首选直接 |" in dashboard_section
     assert "### 多维评分雷达图数据" in dashboard_section
     assert (
-        "| 维度 | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |"
+        "| 维度 | 创维 65A7H PRO | 创维 65A6F ULTRA | TCL 65Q9L PRO |"
         in dashboard_section
     )
     assert "| 购买池 |" in dashboard_section
@@ -5343,7 +5341,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "## 三、四个产品详情链接" not in markdown
     assert "## 四、四个产品横向详细对比" in markdown
     assert (
-        "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | TCL 65Q9L PRO | 创维 65A6F ULTRA |"
+        "| 比较内容 | 海信 65E7Q | 创维 65A7H PRO | 创维 65A6F ULTRA | TCL 65Q9L PRO |"
         in markdown
     )
     assert "### 4.1 市场画像" in markdown
@@ -5354,21 +5352,21 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 4.6 参数画像" in markdown
     assert "### 4.7 卖点价值量化" not in markdown
     assert (
-        "| 主价值战场 | 高端画质升级 | 高端画质升级 | 游戏体育流畅 | 高配下探价值 |"
+        "| 主价值战场 | 高端画质升级 | 高端画质升级 | 高配下探价值 | 游戏体育流畅 |"
         in markdown
     )
     assert "| 命中的固定价值战场 |" in markdown
     assert "| 补充证据判断 |" in markdown
     assert (
-        "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 | 影院沉浸观影 |"
+        "| 主用户任务 | 影院沉浸观影 | 影院沉浸观影 | 影院沉浸观影 | 主机游戏娱乐 |"
         in markdown
     )
     assert (
-        "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 游戏体育娱乐用户 | 主流家庭观影用户 |"
+        "| 主目标客群 | 高端影音体验用户 | 高端影音体验用户 | 主流家庭观影用户 | 游戏体育娱乐用户 |"
         in markdown
     )
     assert (
-        "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 |"
+        "| 事实卖点 | 高刷新率和MiniLED 显示 | 贴墙安装、高刷新率和MiniLED 显示 | 护眼显示和MiniLED 显示 | HDMI 2.1 连接、高刷新率和MiniLED 显示 |"
         in markdown
     )
     assert "| 组合型增值卖点 |" not in markdown
@@ -5502,8 +5500,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert compare_query["model"] == [
         "海信 65E7Q",
         "创维 65A7H PRO",
-        "TCL 65Q9L PRO",
         "创维 65A6F ULTRA",
+        "TCL 65Q9L PRO",
     ]
     assert "创维 65A7H PRO" in card_json
     assert "购买理由重合与替代压力" not in card_json
