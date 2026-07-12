@@ -9,7 +9,9 @@ import json
 import os
 import sys
 from collections import Counter
+from collections.abc import Mapping
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any, Sequence
@@ -208,6 +210,7 @@ def generate_category(
         "updated_output_count": result.updated_output_count,
         "reused_output_count": result.reused_output_count,
         "result_digest": records_digest(result.profiles, result.anchors),
+        "business_digest": business_records_digest(result.profiles, result.anchors),
     }
 
 
@@ -384,6 +387,7 @@ def verify_version_rows(
             str(anchor.pressure_level) == "unassessed" for anchor in anchors
         ),
         "result_digest": records_digest(profiles, anchors),
+        "business_digest": business_records_digest(profiles, anchors),
         "category_isolated": all(
             str(profile.category_code) == category
             and str(profile.product_category).upper() == category
@@ -494,6 +498,98 @@ def records_digest(profiles: Sequence[Any], anchors: Sequence[Any]) -> str:
     ).hexdigest()
 
 
+def business_records_digest(
+    profiles: Sequence[Any], anchors: Sequence[Any]
+) -> str:
+    """Hash stable business outcomes without run-specific technical fingerprints."""
+
+    profile_fields = (
+        "sku_code",
+        "status",
+        "profile_confidence",
+        "confidence_level",
+        "core_reasons_json",
+        "core_payment_anchors_json",
+        "supporting_anchors_json",
+        "weak_expression_anchors_json",
+        "risk_drag_anchors_json",
+        "established_anchors_json",
+        "proposition_anchors_json",
+        "pressure_summary_json",
+        "comparison_limitations_json",
+        "input_status_json",
+        "missing_input_reasons_json",
+        "role_downgrade_reasons_json",
+        "risk_flags_json",
+        "processing_status",
+        "review_required",
+        "review_status",
+        "review_reason_json",
+    )
+    anchor_fields = (
+        "sku_code",
+        "anchor_code",
+        "anchor_rank",
+        "role",
+        "evidence_strength",
+        "confidence",
+        "establishment_status",
+        "establishment_score",
+        "establishment_domains_json",
+        "user_validation_status",
+        "core_eligible",
+        "core_ineligible_reasons_json",
+        "pressure_level",
+        "pressure_tags_json",
+        "pressure_summary_cn",
+        "comparison_limitations_json",
+        "evidence_domains_json",
+        "domain_scores_json",
+        "support_summary_cn",
+        "weakness_summary_cn",
+        "risk_flags_json",
+        "role_reason_json",
+        "downgrade_reason_code",
+    )
+    material = {
+        "profiles": sorted(
+            (_business_row(row, profile_fields) for row in profiles),
+            key=lambda row: row["sku_code"],
+        ),
+        "anchors": sorted(
+            (_business_row(row, anchor_fields) for row in anchors),
+            key=lambda row: (row["sku_code"], row["anchor_code"]),
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _business_row(row: Any, fields: Sequence[str]) -> dict[str, Any]:
+    return {field: _canonical_business_value(getattr(row, field, None)) for field in fields}
+
+
+def _canonical_business_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, bool) or value is None or isinstance(value, (str, int)):
+        return value
+    if isinstance(value, (Decimal, float)):
+        normalized = Decimal(str(value)).normalize()
+        return format(normalized, "f")
+    if isinstance(value, Mapping):
+        return {
+            str(key): _canonical_business_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_business_value(item) for item in value]
+    if hasattr(value, "model_dump"):
+        return _canonical_business_value(value.model_dump(mode="python"))
+    return str(value)
+
+
 def compact_result(result: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "failed":
         return result
@@ -508,6 +604,8 @@ def compact_result(result: dict[str, Any]) -> dict[str, Any]:
         "release_quality_status": post.get("release_quality_status")
         or (result.get("release_quality") or {}).get("release_quality_status"),
         "result_digest": post.get("result_digest") or result.get("result_digest"),
+        "business_digest": post.get("business_digest")
+        or result.get("business_digest"),
     }
 
 
