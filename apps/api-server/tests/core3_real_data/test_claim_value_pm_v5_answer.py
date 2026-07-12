@@ -212,7 +212,7 @@ def test_same_claim_different_realization_quantifies_price_and_sales() -> None:
     assert comparison.evidence_strength == "confirmed"
     assert comparison.price_gap_abs == 500
     assert comparison.price_gap_pct == 0.090909
-    assert comparison.sales_volume_gap_abs == 1000
+    assert comparison.sales_volume_gap_abs == 41.666666
     assert comparison.sales_volume_gap_pct == 1.0
 
 
@@ -251,7 +251,7 @@ def test_market_realization_highlight_answers_sales_contribution() -> None:
 
     assert highlight.highlight_type == "market_realization"
     assert "500元（9.1%）的价格溢价" in highlight.reason_cn
-    assert "1000台（100.0%）的销量优势" in highlight.reason_cn
+    assert "1000.0台/周（100.0%）的销量优势" in highlight.reason_cn
     assert "应继续保留并强化" in highlight.reason_cn
 
 

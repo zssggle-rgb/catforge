@@ -140,9 +140,9 @@ def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValu
         "market_universe": ordered,
         "battlefield_taxonomy": taxonomy,
         "method_configs": MethodConfigManifest(
-            recall_version="sellpoint_value_pm_v5_counterfactual_recall_v1",
-            synthetic_version="sellpoint_value_pm_v5_synthetic_control_v1",
-            archetype_version="sellpoint_value_pm_v5_performance_archetype_v1",
+            recall_version="sellpoint_value_pm_v5_counterfactual_recall_v2",
+            synthetic_version="sellpoint_value_pm_v5_synthetic_control_v2",
+            archetype_version="sellpoint_value_pm_v5_performance_archetype_v2",
             expansion_version="sellpoint_value_pm_v5_expansion_gate_v1",
             amount_version="sellpoint_value_pm_v4_matched_wtp_config_v2",
         ),
@@ -309,7 +309,9 @@ def build_perceived_value_market_report(
         existing_battlefield_summary_cn=_existing_summary(options, context),
         expansion_summary_cn=_expansion_summary(options, context),
     )
-    market_reference = _market_reference_cn(rows, synthetic_by_bundle, archetypes)
+    market_reference = _market_reference_cn(
+        context, rows, synthetic_by_bundle, archetypes
+    )
     payload: dict[str, Any] = {
         "schema_version": "sellpoint_value_pm_v5_report_v1",
         "target": context.v4_context.target,
@@ -392,6 +394,12 @@ def render_v5_short_answer(
         lines.append(f"卖贵多少｜{report.decision_summary.price_summary_cn}")
     if _has_reportable_volume(report.value_account_rows):
         lines.append(f"多卖多少｜{report.decision_summary.volume_summary_cn}")
+    additional_summary = _additional_comparison_summary(report.market_reference)
+    if additional_summary:
+        lines.append(f"更多比较｜{additional_summary}")
+    performance_summary = _performance_comparison_summary(report.market_reference)
+    if performance_summary:
+        lines.append(f"卖得好与卖得差｜{performance_summary}")
     lines.extend(
         [
             f"产品取舍｜{report.decision_summary.existing_battlefield_summary_cn}",
@@ -540,7 +548,80 @@ def _market_reference_markdown_lines(market_reference: dict[str, Any]) -> list[s
                 f"- **低表现组合**：{_md(low)}",
             ]
         )
+    differences = market_reference.get("performance_value_differences") or []
+    if differences:
+        high_values = [
+            f"{item['value_name_cn']}（高销量组{item['high_rate'] * 100:.0f}% / "
+            f"低销量组{item['low_rate'] * 100:.0f}%）"
+            for item in differences
+            if item.get("direction") == "high"
+        ]
+        low_values = [
+            f"{item['value_name_cn']}（高销量组{item['high_rate'] * 100:.0f}% / "
+            f"低销量组{item['low_rate'] * 100:.0f}%）"
+            for item in differences
+            if item.get("direction") == "low"
+        ]
+        if high_values:
+            lines.append(f"- **高销量产品更常具备**：{_md('、'.join(high_values))}")
+        if low_values:
+            lines.append(f"- **低销量产品更常具备**：{_md('、'.join(low_values))}")
+    for item in market_reference.get("additional_comparisons", []):
+        lines.append(
+            f"- **{_md(str(item.get('value_name_cn') or '用户价值'))}｜"
+            f"{_md(str(item.get('comparison_basis_cn') or '同类产品'))}**："
+            f"{_md(str(item.get('summary_cn') or ''))}"
+        )
     return lines
+
+
+def _additional_comparison_summary(market_reference: dict[str, Any]) -> str:
+    rows = market_reference.get("additional_comparisons") or []
+    counts: dict[str, set[tuple[str, ...]]] = {}
+    for item in rows:
+        method = str(item.get("method") or "")
+        codes = tuple(sorted(str(code) for code in item.get("comparator_sku_codes") or []))
+        if method and codes:
+            counts.setdefault(method, set()).add(codes)
+    clauses = []
+    labels = {
+        "direct_comparable": "同类产品逐一比较",
+        "same_budget_pool": "同预算产品组",
+        "same_brand_size_ladder": "同品牌产品组",
+        "parameter_configuration": "不同参数组合",
+    }
+    for method in (
+        "direct_comparable",
+        "same_budget_pool",
+        "same_brand_size_ladder",
+        "parameter_configuration",
+    ):
+        groups = counts.get(method) or set()
+        if groups:
+            if method == "direct_comparable":
+                clauses.append(f"{sum(len(group) for group in groups)}款{labels[method]}")
+            else:
+                clauses.append(f"{len(groups)}组{labels[method]}")
+    return "、".join(clauses)
+
+
+def _performance_comparison_summary(market_reference: dict[str, Any]) -> str:
+    high = str((market_reference.get("high_performance") or {}).get("summary_cn") or "")
+    low = str((market_reference.get("low_performance") or {}).get("summary_cn") or "")
+    if not high or not low or high.startswith("当前样本不足"):
+        return ""
+    differences = market_reference.get("performance_value_differences") or []
+    high_values = [
+        str(item.get("value_name_cn") or "")
+        for item in differences
+        if item.get("direction") == "high"
+    ]
+    suffix = (
+        f"；高销量组更常具备{'、'.join(high_values[:3])}"
+        if high_values
+        else ""
+    )
+    return f"{high}；{low}{suffix}"
 
 
 def render_v5_feishu_card(
@@ -909,15 +990,16 @@ def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
         comparison.sales_volume_gap_abs is not None
         and comparison.sales_volume_gap_pct is not None
     ):
+        volume_unit = "台/周" if comparison.sales_volume_unit == "weekly_units" else "台"
         if comparison.sales_volume_gap_abs >= 0:
             results.append(
-                f"{comparison.sales_volume_gap_abs:.0f}台"
+                f"{comparison.sales_volume_gap_abs:.1f}{volume_unit}"
                 f"（{comparison.sales_volume_gap_pct * 100:.1f}%）的销量优势"
             )
         else:
             results.append(
                 "销量未形成优势，较同类产品低 "
-                f"{abs(comparison.sales_volume_gap_abs):.0f}台"
+                f"{abs(comparison.sales_volume_gap_abs):.1f}{volume_unit}"
             )
     market_result = "、".join(results)
     return (
@@ -992,32 +1074,142 @@ def _realization_market_comparisons(
     context: SellpointValueV5Context,
     sets: Sequence[CounterfactualSet],
 ) -> list[RealizationMarketComparison]:
-    user_set = next(
-        (row for row in sets if row.question == "user_realization"),
-        None,
-    )
-    if user_set is None:
-        return []
-    candidates = [
-        row
-        for row in user_set.candidates
-        if row.method == "same_claim_realization" and row.stage == "eligible"
-    ]
-    if not candidates:
-        return []
-
     snapshots = {row.identity.sku_code: row for row in context.market_universe}
     target = snapshots.get(context.v4_context.target.sku_code)
     if target is None:
         return []
+    user_set = next(
+        (row for row in sets if row.question == "user_realization"),
+        None,
+    )
+    relative_set = next(
+        (row for row in sets if row.question == "relative_highlight"),
+        None,
+    )
+    result: list[RealizationMarketComparison] = []
+    same_claim_candidates = [
+        row
+        for row in (user_set.candidates if user_set is not None else [])
+        if row.method == "same_claim_realization" and row.stage == "eligible"
+    ]
+    if same_claim_candidates:
+        shared_claims = sorted(
+            {
+                str(code)
+                for candidate in same_claim_candidates
+                for code in candidate.control_dimensions.get(
+                    "same_advertised_claim_codes", []
+                )
+                if str(code)
+            }
+        )
+        confirmed = any(
+            candidate.control_dimensions.get("peer_contradicted_claim_codes")
+            for candidate in same_claim_candidates
+        )
+        comparison = _build_market_comparison(
+            target,
+            snapshots,
+            same_claim_candidates,
+            method="same_claim_different_realization",
+            comparison_basis_cn="同样主打该卖点但用户评价较弱的产品",
+            shared_claim_codes=shared_claims,
+            evidence_strength="confirmed" if confirmed else "candidate",
+        )
+        if comparison is not None:
+            result.append(comparison)
+
+    relative_candidates = relative_set.candidates if relative_set is not None else []
+    direct_candidates = [
+        row
+        for row in relative_candidates
+        if row.method == "direct_sku" and row.stage == "eligible"
+    ]
+    for candidate in direct_candidates:
+        comparison = _build_market_comparison(
+            target,
+            snapshots,
+            [candidate],
+            method="direct_comparable",
+            comparison_basis_cn="系统识别的同类产品",
+        )
+        if comparison is not None:
+            result.append(comparison)
+
+    for candidate_method, output_method, basis in (
+        ("same_budget_pool", "same_budget_pool", "同尺寸、同预算产品"),
+        (
+            "same_brand_size_ladder",
+            "same_brand_size_ladder",
+            "同品牌、同尺寸产品",
+        ),
+    ):
+        candidates = [
+            row
+            for row in relative_candidates
+            if row.method == candidate_method and row.stage == "eligible"
+        ]
+        comparison = _build_market_comparison(
+            target,
+            snapshots,
+            candidates,
+            method=output_method,
+            comparison_basis_cn=basis,
+        )
+        if comparison is not None:
+            result.append(comparison)
+
+    parameter_candidates = [
+        row
+        for row in relative_candidates
+        if row.method == "param_tier_pool" and row.stage == "eligible"
+    ]
+    parameter_groups: dict[str, list[Any]] = {}
+    for candidate in parameter_candidates:
+        configuration = candidate.control_dimensions.get(
+            "peer_parameter_configuration"
+        ) or {}
+        key = canonical_v4_hash(configuration)
+        parameter_groups.setdefault(key, []).append(candidate)
+    for key in sorted(parameter_groups):
+        candidates = parameter_groups[key]
+        configuration = candidates[0].control_dimensions.get(
+            "peer_parameter_configuration"
+        ) or {}
+        summary = "、".join(
+            f"{str(code).split('.')[-1]}={value}"
+            for code, value in list(sorted(configuration.items()))[:4]
+        )
+        comparison = _build_market_comparison(
+            target,
+            snapshots,
+            candidates,
+            method="parameter_configuration",
+            comparison_basis_cn=f"参数组合：{summary}" if summary else "不同参数组合",
+        )
+        if comparison is not None:
+            result.append(comparison)
+    return result
+
+
+def _build_market_comparison(
+    target: SkuEvidenceSnapshot,
+    snapshots: dict[str, SkuEvidenceSnapshot],
+    candidates: Sequence[Any],
+    *,
+    method: str,
+    comparison_basis_cn: str,
+    shared_claim_codes: Sequence[str] = (),
+    evidence_strength: str = "candidate",
+) -> RealizationMarketComparison | None:
     candidate_by_code = {
         code: candidate
         for candidate in candidates
         for code in candidate.candidate_sku_codes
-        if code in snapshots
+        if code in snapshots and code != target.identity.sku_code
     }
     if not candidate_by_code:
-        return []
+        return None
     codes = sorted(candidate_by_code)
     peers = [snapshots[code] for code in codes]
     target_price = _snapshot_market_number(
@@ -1037,65 +1229,42 @@ def _realization_market_comparisons(
         )
         is not None
     ]
-    target_volume = _snapshot_market_number(
-        target, "sales_volume_total", "sales_volume", "volume_total"
-    )
+    target_volume = _snapshot_weekly_sales(target)
     peer_volumes = [
         value
         for peer in peers
-        if (
-            value := _snapshot_market_number(
-                peer, "sales_volume_total", "sales_volume", "volume_total"
-            )
-        )
-        is not None
+        if (value := _snapshot_weekly_sales(peer)) is not None
     ]
     price_values = _comparison_values(target_price, peer_prices)
     volume_values = _comparison_values(target_volume, peer_volumes)
     if price_values is None and volume_values is None:
-        return []
+        return None
 
-    shared_claims = sorted(
-        {
-            str(code)
-            for candidate in candidate_by_code.values()
-            for code in candidate.control_dimensions.get(
-                "same_advertised_claim_codes", []
-            )
-            if str(code)
-        }
-    )
-    if not shared_claims:
-        return []
-    confirmed = any(
-        candidate.control_dimensions.get("peer_contradicted_claim_codes")
-        for candidate in candidate_by_code.values()
-    )
     limitations = []
     if len(codes) == 1:
         limitations.append("single_comparator_sensitive")
-    return [
-        RealizationMarketComparison(
-            method="same_claim_different_realization",
-            comparator_sku_codes=codes,
-            comparator_names=[
-                snapshots[code].identity.model_name or code for code in codes
-            ],
-            comparator_count=len(codes),
-            shared_claim_codes=shared_claims,
-            evidence_strength="confirmed" if confirmed else "candidate",
-            target_price=price_values[0] if price_values else None,
-            comparator_price_median=price_values[1] if price_values else None,
-            price_gap_abs=price_values[2] if price_values else None,
-            price_gap_pct=price_values[3] if price_values else None,
-            target_sales_volume=volume_values[0] if volume_values else None,
-            comparator_sales_volume_median=volume_values[1] if volume_values else None,
-            sales_volume_gap_abs=volume_values[2] if volume_values else None,
-            sales_volume_gap_pct=volume_values[3] if volume_values else None,
-            causal_claim=False,
-            limitations=limitations,
-        )
-    ]
+    return RealizationMarketComparison(
+        method=method,
+        comparison_basis_cn=comparison_basis_cn,
+        comparator_sku_codes=codes,
+        comparator_names=[
+            snapshots[code].identity.model_name or code for code in codes
+        ],
+        comparator_count=len(codes),
+        shared_claim_codes=sorted(set(shared_claim_codes)),
+        evidence_strength=evidence_strength,
+        target_price=price_values[0] if price_values else None,
+        comparator_price_median=price_values[1] if price_values else None,
+        price_gap_abs=price_values[2] if price_values else None,
+        price_gap_pct=price_values[3] if price_values else None,
+        target_sales_volume=volume_values[0] if volume_values else None,
+        comparator_sales_volume_median=volume_values[1] if volume_values else None,
+        sales_volume_gap_abs=volume_values[2] if volume_values else None,
+        sales_volume_gap_pct=volume_values[3] if volume_values else None,
+        sales_volume_unit="weekly_units",
+        causal_claim=False,
+        limitations=limitations,
+    )
 
 
 def _comparison_values(
@@ -1116,7 +1285,7 @@ def _comparison_values(
     )
 
 
-def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
+def _market_reference_cn(context, rows, synthetic_by_bundle, archetypes):
     baselines = []
     names = {row.sellpoint_bundle.bundle_code: row.sellpoint_bundle.bundle_name_cn for row in rows}
     active_codes = set(names)
@@ -1141,7 +1310,135 @@ def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
         "synthetic_baselines": baselines,
         "high_performance": _archetype_cn(high, "高表现"),
         "low_performance": _archetype_cn(low, "低表现"),
+        "performance_value_differences": _performance_value_differences(
+            context, rows, high, low
+        ),
+        "additional_comparisons": _additional_comparison_rows(rows),
     }
+
+
+def _additional_comparison_rows(rows: Sequence[ValueAccountRow]) -> list[dict[str, Any]]:
+    result = []
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    for row in rows:
+        value_name = str(row.perceived_user_value.get("name_cn") or "用户价值")
+        for comparison in row.price_realization.realization_comparisons:
+            if comparison.method == "same_claim_different_realization":
+                continue
+            key = (
+                value_name,
+                comparison.method,
+                tuple(comparison.comparator_sku_codes),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            parts = []
+            if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None:
+                parts.append(
+                    _market_gap_cn(
+                        comparison.price_gap_abs,
+                        comparison.price_gap_pct,
+                        metric="本品均价",
+                        unit="元",
+                    )
+                )
+            if (
+                comparison.sales_volume_gap_abs is not None
+                and comparison.sales_volume_gap_pct is not None
+            ):
+                direction = "高" if comparison.sales_volume_gap_abs >= 0 else "低"
+                parts.append(
+                    f"本品周均销量{direction} "
+                    f"{abs(comparison.sales_volume_gap_abs):.1f}台/周"
+                    f"（{abs(comparison.sales_volume_gap_pct) * 100:.1f}%）"
+                )
+            result.append(
+                {
+                    "value_name_cn": value_name,
+                    "method": comparison.method,
+                    "comparison_basis_cn": comparison.comparison_basis_cn,
+                    "comparator_sku_codes": comparison.comparator_sku_codes,
+                    "summary_cn": "、".join(parts),
+                }
+            )
+    return result
+
+
+def _performance_value_differences(
+    context: SellpointValueV5Context,
+    rows: Sequence[ValueAccountRow],
+    high: PerformanceArchetype | None,
+    low: PerformanceArchetype | None,
+) -> list[dict[str, Any]]:
+    if high is None or low is None or not high.sku_count or not low.sku_count:
+        return []
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    definitions = _value_unit_by_code(context.category_code)
+    result = []
+    seen_names: set[str] = set()
+    for row in rows:
+        name = str(row.perceived_user_value.get("name_cn") or "").strip()
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        claims = {
+            claim_code
+            for member in row.sellpoint_bundle.members
+            if (definition := definitions.get(member.capability_code)) is not None
+            for claim_code in definition.claim_codes
+        }
+        if not claims:
+            continue
+        high_rate = _group_value_rate(
+            snapshots, high.representative_sku_codes, claims
+        )
+        low_rate = _group_value_rate(
+            snapshots, low.representative_sku_codes, claims
+        )
+        if high_rate is None or low_rate is None or abs(high_rate - low_rate) < 0.25:
+            continue
+        result.append(
+            {
+                "value_name_cn": name,
+                "high_rate": high_rate,
+                "low_rate": low_rate,
+                "gap": round(high_rate - low_rate, 6),
+                "direction": "high" if high_rate > low_rate else "low",
+            }
+        )
+    return sorted(result, key=lambda item: (-abs(item["gap"]), item["value_name_cn"]))
+
+
+def _group_value_rate(
+    snapshots: dict[str, SkuEvidenceSnapshot],
+    sku_codes: Sequence[str],
+    claim_codes: set[str],
+) -> float | None:
+    observed = []
+    for sku_code in sku_codes:
+        snapshot = snapshots.get(sku_code)
+        if snapshot is None:
+            continue
+        supported = _snapshot_code_set(snapshot, "supported_claim_codes")
+        observed.append(bool(supported & claim_codes))
+    return round(sum(observed) / len(observed), 6) if observed else None
+
+
+def _snapshot_code_set(snapshot: SkuEvidenceSnapshot, key: str) -> set[str]:
+    result: set[str] = set()
+    queue: list[Any] = [snapshot.facts, snapshot.comment_outcomes]
+    while queue:
+        value = queue.pop(0)
+        if isinstance(value, dict):
+            for item_key, item in value.items():
+                if item_key == key and isinstance(item, list):
+                    result.update(str(code) for code in item if str(code))
+                elif isinstance(item, (dict, list)):
+                    queue.append(item)
+        elif isinstance(value, list):
+            queue.extend(item for item in value if isinstance(item, (dict, list)))
+    return result
 
 
 def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any]:
@@ -1149,8 +1446,9 @@ def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any
         return {"summary_cn": f"当前样本不足以形成稳定的{label}价值组合原型。"}
     return {
         "summary_cn": (
-            f"{label}组包含 {row.sku_count} 个稳定样本，可用于识别哪些用户价值组合"
-            "更容易获得更好的价格和销量。"
+            f"{label}组包含 {row.sku_count} 款产品，周均销量中位数约 "
+            f"{row.volume_interval.estimate:.1f} 台/周，均价中位数约 "
+            f"{row.price_interval.estimate:.0f} 元。"
         ),
         "sku_count": row.sku_count,
     }
@@ -1161,6 +1459,7 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
         (len(row.sellpoint_bundle.members), row.sellpoint_bundle.bundle_code, comparison)
         for row in rows
         for comparison in row.price_realization.realization_comparisons
+        if comparison.method == "same_claim_different_realization"
         if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None
     ]
     if comparison_rows:
@@ -1206,6 +1505,7 @@ def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
         (len(row.sellpoint_bundle.members), row.sellpoint_bundle.bundle_code, comparison)
         for row in rows
         for comparison in row.volume_realization.realization_comparisons
+        if comparison.method == "same_claim_different_realization"
         if comparison.sales_volume_gap_abs is not None
         and comparison.sales_volume_gap_pct is not None
         and comparison.sales_volume_gap_abs > 0
@@ -1221,7 +1521,7 @@ def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
         )
         return (
             f"{len(comparison_rows)} 组用户价值带来销量优势；最具体一组约 "
-            f"{representative.sales_volume_gap_abs:.0f} 台"
+            f"{representative.sales_volume_gap_abs:.1f} 台/周"
             f"（高 {representative.sales_volume_gap_pct * 100:.1f}%）。"
         )
     positive = [
@@ -1315,8 +1615,20 @@ def _counterfactual_summary_cn(
     comparisons: Sequence[RealizationMarketComparison] = (),
 ) -> str:
     if comparisons:
-        count = sum(item.comparator_count for item in comparisons)
-        return f"{count} 款同尺寸、同样主打该卖点但用户评价较弱的同类产品"
+        same_claim = [
+            item
+            for item in comparisons
+            if item.method == "same_claim_different_realization"
+        ]
+        if same_claim:
+            count = sum(item.comparator_count for item in same_claim)
+            return f"{count} 款同尺寸、同样主打该卖点但用户评价较弱的同类产品"
+        methods = []
+        for item in comparisons:
+            if item.comparison_basis_cn and item.comparison_basis_cn not in methods:
+                methods.append(item.comparison_basis_cn)
+        if methods:
+            return "已比较：" + "、".join(methods[:3])
     methods = []
     for row in sets:
         if row.highest_available_method is not None:
@@ -1383,14 +1695,15 @@ def _volume_cn(volume: VolumeRealization) -> str:
         None,
     )
     if comparison is not None:
+        unit = "台/周" if comparison.sales_volume_unit == "weekly_units" else "台"
         if comparison.sales_volume_gap_abs >= 0:
             return (
-                f"这项价值带来约 {comparison.sales_volume_gap_abs:.0f} 台销量优势"
+                f"这项价值带来约 {comparison.sales_volume_gap_abs:.1f} {unit}销量优势"
                 f"（高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
             )
         return (
             f"这项价值未形成销量优势，较同类产品低 "
-            f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
+            f"{abs(comparison.sales_volume_gap_abs):.1f} {unit}"
         )
     if volume.synthetic_difference is not None:
         return f"与同类产品组合相比，销量优势约 {_interval_text(volume.synthetic_difference)}"
@@ -1572,6 +1885,26 @@ def _snapshot_market_number(snapshot: SkuEvidenceSnapshot, *keys: str) -> float 
         elif isinstance(value, list):
             queue.extend(item for item in value if isinstance(item, (dict, list)))
     return None
+
+
+def _snapshot_weekly_sales(snapshot: SkuEvidenceSnapshot) -> float | None:
+    weekly = _snapshot_market_number(
+        snapshot,
+        "avg_weekly_sales_volume",
+        "average_weekly_sales_volume",
+    )
+    if weekly is not None:
+        return weekly
+    total = _snapshot_market_number(
+        snapshot,
+        "sales_volume_total",
+        "sales_volume",
+        "volume_total",
+    )
+    active_weeks = _snapshot_market_number(snapshot, "active_week_count")
+    if total is None or active_weeks is None or active_weeks <= 0:
+        return None
+    return round(total / active_weeks, 6)
 
 
 def _market_fraction(context, *keys):

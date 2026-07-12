@@ -155,6 +155,36 @@ def test_synthetic_result_is_independent_of_cell_order() -> None:
     assert first.model_dump(mode="json") == second.model_dump(mode="json")
 
 
+def test_production_market_baseline_uses_full_window_weekly_averages() -> None:
+    context = _v5_context()
+    donors = [f"DONOR-{index}" for index in range(5)]
+
+    result = build_market_synthetic_control(
+        context,
+        _synthetic_candidate(donors),
+        bundle_code="picture",
+    )
+
+    assert result.status == "available"
+    assert result.sales_difference is not None
+    assert result.sales_difference.unit == "units_per_week"
+    assert result.sales_difference.estimate == 41.666667
+    assert result.diagnostics.common_week_count == 0
+    assert result.diagnostics.common_platform_count == 0
+
+
+def test_production_archetypes_split_small_pool_into_top_and_bottom_groups() -> None:
+    result = build_performance_archetypes(
+        _v5_context(),
+        bundle_codes=["picture"],
+    )
+
+    assert [row.role for row in result] == ["high_performance", "low_performance"]
+    assert [row.sku_count for row in result] == [3, 3]
+    assert all(row.metric == "avg_weekly_sales_volume" for row in result)
+    assert all(row.volume_interval is not None for row in result)
+
+
 def _archetype_context_and_cells() -> tuple[SellpointValueV5Context, list[MarketCellRow]]:
     context = _v5_context()
     base = context.market_universe[0]

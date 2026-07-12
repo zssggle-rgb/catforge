@@ -57,8 +57,15 @@ _QUESTION_METHOD_PRIORITY: dict[str, tuple[str, ...]] = {
         "own_price_curve",
         "same_budget_pool",
         "same_brand_size_ladder",
+        "param_tier_pool",
     ),
-    "volume_realization": ("direct_sku", "same_budget_pool", "market_synthetic"),
+    "volume_realization": (
+        "direct_sku",
+        "same_budget_pool",
+        "same_brand_size_ladder",
+        "param_tier_pool",
+        "market_synthetic",
+    ),
 }
 
 
@@ -96,7 +103,7 @@ def build_v5_counterfactual_sets(
             and bool(target.identity.brand_name)
             and target.identity.brand_name == peer.identity.brand_name
         )
-        tier_relation, tier_dimensions = _tier_relation(target, peer, dimensions)
+        tier_relation, _ = _tier_relation(target, peer, dimensions)
 
         if peer_code in direct_codes:
             relative = _direct_candidate(
@@ -169,7 +176,16 @@ def build_v5_counterfactual_sets(
                 )
             )
 
-        if same_budget and tier_dimensions:
+        target_parameter_configuration = _parameter_configuration(target, dimensions)
+        peer_parameter_configuration = _parameter_configuration(peer, dimensions)
+        parameter_comparable = (
+            exact_size
+            and battlefield_overlap > 0
+            and target_parameter_configuration
+            and peer_parameter_configuration
+            and target_parameter_configuration != peer_parameter_configuration
+        )
+        if parameter_comparable:
             tier_candidate = _descriptive_candidate(
                 target,
                 peer,
@@ -179,16 +195,19 @@ def build_v5_counterfactual_sets(
                 tier_relation=tier_relation,
                 price_ratio=price_ratio,
                 battlefield_overlap=battlefield_overlap,
-                eligible_measure="parameter_tier_contrast",
-                controls={"tier_dimensions": tier_dimensions},
+                eligible_measure="parameter_configuration_comparison",
+                controls={
+                    "target_parameter_configuration": target_parameter_configuration,
+                    "peer_parameter_configuration": peer_parameter_configuration,
+                },
             )
             candidates_by_question["relative_highlight"].append(tier_candidate)
-            if tier_relation == "lower":
-                candidates_by_question["without_value_baseline"].append(
+            for question in ("price_realization", "volume_realization"):
+                candidates_by_question[question].append(
                     tier_candidate.model_copy(
                         update={
-                            "question": "without_value_baseline",
-                            "candidate_key": f"param_tier_pool:without_value_baseline:{peer_code}",
+                            "question": question,
+                            "candidate_key": f"param_tier_pool:{question}:{peer_code}",
                         }
                     )
                 )
@@ -263,14 +282,12 @@ def _direct_candidate(
     if battlefield_overlap <= 0:
         reasons.append("battlefield_mismatch")
     authority_eligible = _direct_authority_eligible(peer)
-    if not authority_eligible:
-        reasons.append("direct_authority_not_eligible")
     common_weeks, common_platforms = _common_market_scope(
         context, target.identity.sku_code, peer.identity.sku_code
     )
     hard_reject = any(reason in {"size_mismatch", "battlefield_mismatch"} for reason in reasons)
-    stage = "rejected" if hard_reject else "eligible" if authority_eligible else "screened"
-    grade = "unusable" if hard_reject else "A" if authority_eligible else "C"
+    stage = "rejected" if hard_reject else "eligible"
+    grade = "unusable" if hard_reject else "A" if authority_eligible else "B"
     eligible_measures = ["direct_relative_comparison"] if stage == "eligible" else []
     source = _candidate_source(peer)
     return _candidate(
@@ -341,17 +358,7 @@ def _retarget_direct_candidate(
     measures = list(candidate.eligible_measures)
     reasons = list(candidate.reject_reasons)
     if candidate.stage == "eligible" and question in {"price_realization", "volume_realization"}:
-        market_ready = (
-            candidate.common_week_count >= OWN_CURVE_MIN_WEEKS
-            and candidate.common_platform_count >= OWN_CURVE_MIN_PLATFORMS
-            and candidate.observed_price_overlap is not None
-        )
-        if market_ready:
-            measures = ["direct_market_comparison"]
-        else:
-            stage = "screened"
-            measures = []
-            reasons.append("direct_market_scope_insufficient")
+        measures = ["direct_weekly_average_comparison"]
     elif candidate.stage == "eligible" and question == "without_value_baseline":
         measures = ["direct_value_tier_contrast"]
     return candidate.model_copy(
@@ -651,6 +658,58 @@ def _dimension_tiers(snapshot: SkuEvidenceSnapshot) -> dict[str, int]:
         elif isinstance(raw, str) and raw.lower() in rank_map and raw.lower() != "unknown":
             result[str(code)] = rank_map[raw.lower()]
     return result
+
+
+def _parameter_configuration(
+    snapshot: SkuEvidenceSnapshot,
+    focus_dimension_codes: Sequence[str],
+) -> dict[str, str]:
+    parameter_fact = snapshot.facts.get("parameter_fact") or {}
+    core_params = parameter_fact.get("core_params") or {}
+    if not isinstance(core_params, dict):
+        return {}
+    sections: set[str] = set()
+    for raw_code in focus_dimension_codes:
+        code = str(raw_code).lower()
+        if any(token in code for token in ("gaming", "motion", "fluency")):
+            sections.add("gaming")
+        elif any(token in code for token in ("system", "smart", "interaction")):
+            sections.add("system")
+        elif any(token in code for token in ("eye", "comfort")):
+            sections.add("eye_care")
+        elif code.startswith("tv_"):
+            sections.add("picture")
+    if not sections:
+        sections = {str(key) for key, value in core_params.items() if value}
+    result: dict[str, str] = {}
+    for section in sorted(sections):
+        payload = core_params.get(section)
+        if isinstance(payload, dict):
+            _flatten_parameter_configuration(
+                payload,
+                prefix=section,
+                output=result,
+            )
+    return result
+
+
+def _flatten_parameter_configuration(
+    payload: dict[str, Any],
+    *,
+    prefix: str,
+    output: dict[str, str],
+) -> None:
+    for key in sorted(payload):
+        value = payload[key]
+        path = f"{prefix}.{key}"
+        if isinstance(value, dict):
+            _flatten_parameter_configuration(value, prefix=path, output=output)
+        elif isinstance(value, list):
+            normalized = [str(item).strip() for item in value if str(item).strip()]
+            if normalized:
+                output[path] = "/".join(sorted(set(normalized)))
+        elif value not in {None, "", "unknown", "-"}:
+            output[path] = str(value).strip()
 
 
 def _same_claim_contrast(

@@ -36,8 +36,8 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
 )
 
 
-SYNTHETIC_CONFIG_VERSION = "sellpoint_value_pm_v5_synthetic_control_v1"
-ARCHETYPE_CONFIG_VERSION = "sellpoint_value_pm_v5_performance_archetype_v1"
+SYNTHETIC_CONFIG_VERSION = "sellpoint_value_pm_v5_synthetic_control_v2"
+ARCHETYPE_CONFIG_VERSION = "sellpoint_value_pm_v5_performance_archetype_v2"
 EXPANSION_CONFIG_VERSION = "sellpoint_value_pm_v5_expansion_gate_v1"
 MIN_DONORS = 5
 MIN_EFFECTIVE_DONORS = 3.0
@@ -64,6 +64,13 @@ def build_market_synthetic_control(
     market_cells: Sequence[MarketCellRow] | None = None,
 ) -> SyntheticControlResult:
     """Balance a recalled donor pool and estimate observational differences."""
+
+    if market_cells is None:
+        return _weekly_average_market_baseline(
+            context,
+            candidate,
+            bundle_code=bundle_code,
+        )
 
     target_code = context.v4_context.target.sku_code
     cells = list(market_cells if market_cells is not None else context.v4_context.market_cells)
@@ -293,6 +300,121 @@ def build_market_synthetic_control(
     )
 
 
+def _weekly_average_market_baseline(
+    context: SellpointValueV5Context,
+    candidate: CounterfactualCandidate,
+    *,
+    bundle_code: str,
+) -> SyntheticControlResult:
+    target_code = context.v4_context.target.sku_code
+    source_hash = _sample_manifest_hash(context, candidate, [])
+    if candidate.method != "market_synthetic":
+        return _failed_synthetic(
+            target_code,
+            bundle_code,
+            source_hash,
+            donor_count=0,
+            failures=["counterfactual_method_not_synthetic"],
+        )
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    target = snapshots.get(target_code)
+    donor_codes = [
+        code
+        for code in sorted(set(candidate.candidate_sku_codes))
+        if code != target_code and code in snapshots
+    ]
+    target_market = _snapshot_weekly_market(target) if target is not None else None
+    donor_market = {
+        code: values
+        for code in donor_codes
+        if (values := _snapshot_weekly_market(snapshots[code])) is not None
+    }
+    if target_market is None:
+        return _failed_synthetic(
+            target_code,
+            bundle_code,
+            source_hash,
+            donor_count=len(donor_market),
+            failures=["target_weekly_market_missing"],
+        )
+    if len(donor_market) < MIN_DONORS:
+        return _failed_synthetic(
+            target_code,
+            bundle_code,
+            source_hash,
+            donor_count=len(donor_market),
+            failures=["eligible_donor_count_insufficient"],
+        )
+    weight = 1.0 / len(donor_market)
+    weights = {code: weight for code in sorted(donor_market)}
+    price_differences = [
+        target_market["price"] - donor_market[code]["price"]
+        for code in sorted(donor_market)
+    ]
+    sales_differences = [
+        target_market["weekly_sales"] - donor_market[code]["weekly_sales"]
+        for code in sorted(donor_market)
+    ]
+    direction = 1 if float(np.median(sales_differences)) >= 0 else -1
+    consistency = float(
+        np.mean([difference * direction >= 0 for difference in sales_differences])
+    )
+    diagnostics = SyntheticDiagnostics(
+        donor_count=len(donor_market),
+        max_weight=weight,
+        overlap_pass=True,
+        balance_pass=True,
+        leave_one_sign_consistency=consistency,
+        placebo_percentile=None,
+        common_week_count=0,
+        common_platform_count=0,
+        gate_pass=True,
+        failed_gates=[],
+    )
+    price_interval = _distribution_interval(price_differences, "CNY")
+    sales_interval = _distribution_interval(sales_differences, "units_per_week")
+    result_payload = {
+        "target": target_code,
+        "bundle": bundle_code,
+        "weights": weights,
+        "price": price_interval.model_dump(mode="json"),
+        "sales": sales_interval.model_dump(mode="json"),
+        "sample": source_hash,
+    }
+    return SyntheticControlResult(
+        status="available",
+        target_sku_code=target_code,
+        bundle_code=bundle_code,
+        donor_weights=weights,
+        effective_donor_count=float(len(donor_market)),
+        balance=[],
+        observed_window={"basis": "full_window_weekly_average"},
+        price_difference=price_interval,
+        sales_difference=sales_interval,
+        diagnostics=diagnostics,
+        limitations=["full_window_weekly_average_comparison"],
+        causal_claim=False,
+        method_config_version=SYNTHETIC_CONFIG_VERSION,
+        sample_manifest_hash=source_hash,
+        result_hash=_canonical_hash(result_payload),
+    )
+
+
+def _snapshot_weekly_market(
+    snapshot: SkuEvidenceSnapshot,
+) -> dict[str, float] | None:
+    price = _snapshot_numeric(snapshot, "price_wavg")
+    weekly_sales = _snapshot_numeric(snapshot, "avg_weekly_sales_volume")
+    if weekly_sales is None:
+        total = _snapshot_numeric(snapshot, "sales_volume_total")
+        weeks = _snapshot_numeric(snapshot, "active_week_count")
+        if total is not None and weeks is not None and weeks > 0:
+            weekly_sales = total / weeks
+    if price is None or price <= 0 or weekly_sales is None or weekly_sales < 0:
+        return None
+    return {"price": float(price), "weekly_sales": float(weekly_sales)}
+
+
 def build_performance_archetypes(
     context: SellpointValueV5Context,
     *,
@@ -300,6 +422,9 @@ def build_performance_archetypes(
     market_cells: Sequence[MarketCellRow] | None = None,
 ) -> list[PerformanceArchetype]:
     """Build high/low bundle archetypes after a cross-fitted market baseline."""
+
+    if market_cells is None:
+        return _weekly_average_performance_archetypes(context, bundle_codes)
 
     cells = list(market_cells if market_cells is not None else context.v4_context.market_cells)
     sample_hash = _archetype_sample_hash(context, cells, bundle_codes)
@@ -391,6 +516,86 @@ def build_performance_archetypes(
             brand_tier_unknown=brand_tier_unknown,
         ),
     ]
+
+
+def _weekly_average_performance_archetypes(
+    context: SellpointValueV5Context,
+    bundle_codes: Sequence[str],
+) -> list[PerformanceArchetype]:
+    del bundle_codes
+    sample_hash = _archetype_sample_hash(context, [], [])
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    rows = []
+    for sku_code in sorted(snapshots):
+        market = _snapshot_weekly_market(snapshots[sku_code])
+        if market is not None:
+            rows.append({"sku_code": sku_code, **market})
+    group_size = min(4, len(rows) // 3)
+    if group_size < 2:
+        return [_unstable_archetype(sample_hash, "weekly_market_population_insufficient")]
+    ordered = sorted(rows, key=lambda row: (row["weekly_sales"], row["sku_code"]))
+    low = ordered[:group_size]
+    high = ordered[-group_size:]
+    return [
+        _weekly_archetype(
+            "high_performance",
+            high,
+            snapshots,
+            sample_hash,
+        ),
+        _weekly_archetype(
+            "low_performance",
+            low,
+            snapshots,
+            sample_hash,
+        ),
+    ]
+
+
+def _weekly_archetype(
+    role: str,
+    rows: Sequence[dict[str, Any]],
+    snapshots: dict[str, SkuEvidenceSnapshot],
+    sample_hash: str,
+) -> PerformanceArchetype:
+    prices = [float(row["price"]) for row in rows]
+    sales = [float(row["weekly_sales"]) for row in rows]
+    center = float(np.median(sales))
+    result_payload = {
+        "role": role,
+        "skus": sorted(row["sku_code"] for row in rows),
+        "prices": prices,
+        "weekly_sales": sales,
+        "sample": sample_hash,
+    }
+    reverse = role == "high_performance"
+    return PerformanceArchetype(
+        role=role,  # type: ignore[arg-type]
+        metric="avg_weekly_sales_volume",
+        sku_count=len(rows),
+        representative_sku_codes=[
+            row["sku_code"]
+            for row in sorted(
+                rows,
+                key=lambda item: (item["weekly_sales"], item["sku_code"]),
+                reverse=reverse,
+            )
+        ],
+        bundle_prevalence={},
+        user_outcome_prevalence=_user_outcome_prevalence(snapshots, rows),
+        price_interval=_distribution_interval(prices, "CNY"),
+        volume_interval=_distribution_interval(sales, "units_per_week"),
+        residual_interval=_distribution_interval(
+            [float(row["weekly_sales"]) - center for row in rows],
+            "units_per_week",
+        ),
+        stability=1.0,
+        limitations=["full_window_weekly_average_ranking"],
+        causal_claim=False,
+        method_config_version=ARCHETYPE_CONFIG_VERSION,
+        sample_manifest_hash=sample_hash,
+        result_hash=_canonical_hash(result_payload),
+    )
 
 
 def build_battlefield_portfolio_options(

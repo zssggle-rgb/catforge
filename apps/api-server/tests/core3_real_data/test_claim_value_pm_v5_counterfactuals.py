@@ -203,7 +203,7 @@ def _sets(context: SellpointValueV5Context):
     )
 
 
-def test_m14_ineligible_still_has_multi_layer_fallbacks() -> None:
+def test_system_identified_comparables_are_not_blocked_by_authority_label() -> None:
     by_question = {row.question: row for row in _sets(_v5_context())}
 
     direct = next(
@@ -211,12 +211,12 @@ def test_m14_ineligible_still_has_multi_layer_fallbacks() -> None:
         for row in by_question["relative_highlight"].candidates
         if row.method == "direct_sku"
     )
-    assert direct.stage == "screened"
-    assert "direct_authority_not_eligible" in direct.reject_reasons
-    assert by_question["relative_highlight"].highest_available_method == "same_budget_pool"
+    assert direct.stage == "eligible"
+    assert direct.reject_reasons == []
+    assert by_question["relative_highlight"].highest_available_method == "direct_sku"
     assert by_question["user_realization"].highest_available_method == "same_claim_realization"
-    assert by_question["price_realization"].highest_available_method == "own_price_curve"
-    assert by_question["volume_realization"].highest_available_method == "same_budget_pool"
+    assert by_question["price_realization"].highest_available_method == "direct_sku"
+    assert by_question["volume_realization"].highest_available_method == "direct_sku"
 
     synthetic = next(
         row
@@ -320,6 +320,51 @@ def test_user_realization_window_is_wider_than_same_budget_price_pool() -> None:
         row.method == "same_budget_pool"
         and row.candidate_sku_codes == ["SAME-CLAIM"]
         for row in by_question["relative_highlight"].candidates
+    )
+
+
+def test_parameter_comparison_uses_actual_configurations_without_tier_labels() -> None:
+    context = _v5_context()
+    universe = []
+    for row in context.market_universe:
+        facts = deepcopy(row.facts)
+        parameter_fact = deepcopy(facts.get("parameter_fact") or {})
+        core_params = deepcopy(parameter_fact.get("core_params") or {})
+        core_params["picture"] = {
+            "backlight": "MiniLED" if row.identity.sku_code == "TARGET" else "LED",
+            "peak_brightness": 1600 if row.identity.sku_code == "TARGET" else 1000,
+        }
+        parameter_fact["core_params"] = core_params
+        facts["parameter_fact"] = parameter_fact
+        universe.append(row.model_copy(update={"facts": facts}))
+    updated = context.model_copy(update={"market_universe": universe})
+
+    sets = build_v5_counterfactual_sets(
+        updated,
+        bundle_code="picture_bundle",
+        focus_dimension_codes=["tv_bright_room_dark_detail"],
+        focus_claim_codes=["CLAIM-PICTURE"],
+    )
+    by_question = {row.question: row for row in sets}
+
+    parameter_rows = [
+        row
+        for row in by_question["relative_highlight"].candidates
+        if row.method == "param_tier_pool"
+    ]
+    assert parameter_rows
+    assert all(row.stage == "eligible" for row in parameter_rows)
+    assert all(
+        row.control_dimensions["peer_parameter_configuration"]
+        for row in parameter_rows
+    )
+    assert any(
+        row.method == "param_tier_pool"
+        for row in by_question["price_realization"].candidates
+    )
+    assert any(
+        row.method == "param_tier_pool"
+        for row in by_question["volume_realization"].candidates
     )
 
 

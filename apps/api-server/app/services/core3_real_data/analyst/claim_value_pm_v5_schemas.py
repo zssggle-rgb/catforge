@@ -282,7 +282,11 @@ class SyntheticControlResult(SellpointValueV5BaseModel):
 
 class PerformanceArchetype(SellpointValueV5BaseModel):
     role: ArchetypeRole
-    metric: Literal["log1p_sales_residual", "choice_share_residual"]
+    metric: Literal[
+        "log1p_sales_residual",
+        "choice_share_residual",
+        "avg_weekly_sales_volume",
+    ]
     sku_count: int = Field(ge=0)
     representative_sku_codes: list[str] = Field(default_factory=list)
     bundle_prevalence: dict[str, float]
@@ -326,11 +330,18 @@ class BundlePriceInterval(SellpointValueV5BaseModel):
 
 
 class RealizationMarketComparison(SellpointValueV5BaseModel):
-    method: Literal["same_claim_different_realization"]
+    method: Literal[
+        "same_claim_different_realization",
+        "direct_comparable",
+        "same_budget_pool",
+        "same_brand_size_ladder",
+        "parameter_configuration",
+    ]
+    comparison_basis_cn: str = ""
     comparator_sku_codes: list[str] = Field(min_length=1)
     comparator_names: list[str] = Field(min_length=1)
     comparator_count: int = Field(ge=1)
-    shared_claim_codes: list[str] = Field(min_length=1)
+    shared_claim_codes: list[str] = Field(default_factory=list)
     evidence_strength: Literal["confirmed", "candidate"]
     target_price: float | None = None
     comparator_price_median: float | None = None
@@ -340,6 +351,7 @@ class RealizationMarketComparison(SellpointValueV5BaseModel):
     comparator_sales_volume_median: float | None = None
     sales_volume_gap_abs: float | None = None
     sales_volume_gap_pct: float | None = None
+    sales_volume_unit: Literal["weekly_units", "total_units"] = "weekly_units"
     causal_claim: Literal[False]
     limitations: list[str] = Field(default_factory=list)
 
