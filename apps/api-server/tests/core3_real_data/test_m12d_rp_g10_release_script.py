@@ -1,10 +1,26 @@
+import importlib.util
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.m12d_rp_g10_publish_tv_ac import business_records_digest
+
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "scripts"
+    / "m12d_rp_g10_publish_tv_ac.py"
+)
+
+
+def load_release_module():
+    spec = importlib.util.spec_from_file_location("m12d_rp_g10_release", SCRIPT_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_business_digest_ignores_technical_hashes_and_decimal_storage_shape() -> None:
+    business_records_digest = load_release_module().business_records_digest
     profile_fields = {
         "sku_code": "TV001",
         "status": "ready",
@@ -49,6 +65,7 @@ def test_business_digest_ignores_technical_hashes_and_decimal_storage_shape() ->
 
 
 def test_business_digest_changes_when_purchase_reason_outcome_changes() -> None:
+    business_records_digest = load_release_module().business_records_digest
     profile = SimpleNamespace(
         sku_code="AC001",
         status="ready",
@@ -68,3 +85,45 @@ def test_business_digest_changes_when_purchase_reason_outcome_changes() -> None:
     anchor.pressure_level = "high"
 
     assert business_records_digest([profile], [anchor]) != baseline
+
+
+def test_business_diff_reports_the_sku_anchor_and_changed_field() -> None:
+    business_records_diff = load_release_module().business_records_diff
+    expected_profile = SimpleNamespace(
+        sku_code="TV001",
+        status="ready",
+        core_payment_anchors_json=["picture_upgrade"],
+    )
+    actual_profile = SimpleNamespace(
+        sku_code="TV001",
+        status="ready_limited",
+        core_payment_anchors_json=[],
+    )
+    expected_anchor = SimpleNamespace(
+        sku_code="TV001",
+        anchor_code="picture_upgrade",
+        role="core_payment",
+        pressure_level="low",
+    )
+    actual_anchor = SimpleNamespace(
+        sku_code="TV001",
+        anchor_code="picture_upgrade",
+        role="supporting",
+        pressure_level="low",
+    )
+
+    result = business_records_diff(
+        expected_profiles=[expected_profile],
+        expected_anchors=[expected_anchor],
+        actual_profiles=[actual_profile],
+        actual_anchors=[actual_anchor],
+    )
+
+    assert result["difference_count"] == 2
+    assert result["profile_difference_count"] == 1
+    assert result["anchor_difference_count"] == 1
+    assert result["difference_samples"][0]["key"] == ["TV001"]
+    assert result["difference_samples"][0]["changed_fields"] == [
+        "core_payment_anchors_json",
+        "status",
+    ]

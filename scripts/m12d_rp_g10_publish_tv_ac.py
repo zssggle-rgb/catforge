@@ -62,6 +62,54 @@ EXPECTED_STATUS_COUNTS = {
     "AC": {"ready": 143, "ready_limited": 1, "weak_expression_only": 11},
 }
 EXPECTED_SKU_COUNTS = {"TV": 377, "AC": 155}
+PROFILE_BUSINESS_FIELDS = (
+    "sku_code",
+    "status",
+    "profile_confidence",
+    "confidence_level",
+    "core_reasons_json",
+    "core_payment_anchors_json",
+    "supporting_anchors_json",
+    "weak_expression_anchors_json",
+    "risk_drag_anchors_json",
+    "established_anchors_json",
+    "proposition_anchors_json",
+    "pressure_summary_json",
+    "comparison_limitations_json",
+    "input_status_json",
+    "missing_input_reasons_json",
+    "role_downgrade_reasons_json",
+    "risk_flags_json",
+    "processing_status",
+    "review_required",
+    "review_status",
+    "review_reason_json",
+)
+ANCHOR_BUSINESS_FIELDS = (
+    "sku_code",
+    "anchor_code",
+    "anchor_rank",
+    "role",
+    "evidence_strength",
+    "confidence",
+    "establishment_status",
+    "establishment_score",
+    "establishment_domains_json",
+    "user_validation_status",
+    "core_eligible",
+    "core_ineligible_reasons_json",
+    "pressure_level",
+    "pressure_tags_json",
+    "pressure_summary_cn",
+    "comparison_limitations_json",
+    "evidence_domains_json",
+    "domain_scores_json",
+    "support_summary_cn",
+    "weakness_summary_cn",
+    "risk_flags_json",
+    "role_reason_json",
+    "downgrade_reason_code",
+)
 
 
 class G10ReleaseError(RuntimeError):
@@ -102,6 +150,18 @@ def main() -> int:
                     categories[category]["post_commit"] = verify_category(
                         db, category=category
                     )
+                elif args.phase == "compare-draft":
+                    categories[category] = compare_draft_category(
+                        db,
+                        category=category,
+                        focus_skus=focus_skus[category],
+                        detail_limit=args.detail_limit,
+                    )
+                    db.rollback()
+                    if categories[category]["difference_count"]:
+                        failures.append(
+                            f"{category}: draft business result is not reproducible"
+                        )
                 else:
                     categories[category] = verify_category(db, category=category)
         except Exception as exc:  # noqa: BLE001 - preserve per-category release isolation.
@@ -279,6 +339,86 @@ def publish_category(db: Session, *, category: str) -> dict[str, Any]:
     }
 
 
+def compare_draft_category(
+    db: Session,
+    *,
+    category: str,
+    focus_skus: Sequence[str],
+    detail_limit: int,
+) -> dict[str, Any]:
+    current = current_published_version(db, category)
+    sku_codes = current_sku_codes(db, current)
+    source_batch_ids = [
+        str(value) for value in current.source_batch_ids_json or [] if str(value)
+    ]
+    read_scope = f"serving-scope:{category}:{','.join(source_batch_ids)}"
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=PROJECT_ID,
+        category_code=Core3CategoryCode(category),
+    )
+    result = PurchaseReasonProfileBatchGenerator(context).generate(
+        batch_id=read_scope,
+        storage_batch_id=current.batch_id,
+        sku_codes=sku_codes,
+        product_category=category,
+        taxonomy_version=TAXONOMY_VERSIONS[category],
+        m12d_profile_version=PROFILE_VERSIONS[category],
+        write=False,
+        generated_by="scripts/m12d_rp_g10_publish_tv_ac.py",
+        detail_limit=detail_limit,
+        focus_sku_codes=focus_skus,
+    )
+    evaluation = result.summary["release_quality_evaluation"]
+    status_counts = normalized_status_counts(
+        evaluation["metrics_json"]["status_counts"]
+    )
+    assert_release_ready(
+        category=category,
+        release_quality_status=evaluation["release_quality_status"],
+        failure_reason_codes=evaluation["failure_reason_codes"],
+        sku_count=result.output_count,
+        status_counts=status_counts,
+    )
+    draft = db.execute(
+        select(entities.Core3PurchaseReasonProfileVersion)
+        .where(entities.Core3PurchaseReasonProfileVersion.project_id == PROJECT_ID)
+        .where(entities.Core3PurchaseReasonProfileVersion.category_code == category)
+        .where(
+            entities.Core3PurchaseReasonProfileVersion.m12d_profile_version
+            == PROFILE_VERSIONS[category]
+        )
+        .where(
+            entities.Core3PurchaseReasonProfileVersion.rule_version
+            == CORE3_M12D_RULE_VERSION
+        )
+    ).scalar_one_or_none()
+    if draft is None:
+        raise G10ReleaseError(f"draft version not found: {PROFILE_VERSIONS[category]}")
+    draft_profiles, draft_anchors = version_records(db, draft)
+    differences = business_records_diff(
+        expected_profiles=draft_profiles,
+        expected_anchors=draft_anchors,
+        actual_profiles=result.profiles,
+        actual_anchors=result.anchors,
+    )
+    return {
+        "status": "ready" if not differences["difference_count"] else "drift",
+        "profile_version": PROFILE_VERSIONS[category],
+        "sku_count": result.output_count,
+        "anchor_count": len(result.anchors),
+        "status_counts": status_counts,
+        "release_quality_status": evaluation["release_quality_status"],
+        "draft_business_digest": business_records_digest(
+            draft_profiles, draft_anchors
+        ),
+        "regenerated_business_digest": business_records_digest(
+            result.profiles, result.anchors
+        ),
+        **differences,
+    }
+
+
 def verify_category(db: Session, *, category: str) -> dict[str, Any]:
     current = current_published_version(db, category)
     expected_version = PROFILE_VERSIONS[category]
@@ -357,22 +497,7 @@ def verify_version_rows(
     category: str,
     version: entities.Core3PurchaseReasonProfileVersion,
 ) -> dict[str, Any]:
-    profiles = list(
-        db.execute(
-            select(entities.Core3SkuPurchaseReasonProfile).where(
-                entities.Core3SkuPurchaseReasonProfile.purchase_reason_version_id
-                == version.purchase_reason_version_id
-            )
-        ).scalars()
-    )
-    anchors = list(
-        db.execute(
-            select(entities.Core3SkuPurchaseReasonAnchor).where(
-                entities.Core3SkuPurchaseReasonAnchor.purchase_reason_version_id
-                == version.purchase_reason_version_id
-            )
-        ).scalars()
-    )
+    profiles, anchors = version_records(db, version)
     status_counts = normalized_status_counts(
         Counter(str(profile.status) for profile in profiles)
     )
@@ -399,6 +524,29 @@ def verify_version_rows(
             for anchor in anchors
         ),
     }
+
+
+def version_records(
+    db: Session,
+    version: entities.Core3PurchaseReasonProfileVersion,
+) -> tuple[list[Any], list[Any]]:
+    profiles = list(
+        db.execute(
+            select(entities.Core3SkuPurchaseReasonProfile).where(
+                entities.Core3SkuPurchaseReasonProfile.purchase_reason_version_id
+                == version.purchase_reason_version_id
+            )
+        ).scalars()
+    )
+    anchors = list(
+        db.execute(
+            select(entities.Core3SkuPurchaseReasonAnchor).where(
+                entities.Core3SkuPurchaseReasonAnchor.purchase_reason_version_id
+                == version.purchase_reason_version_id
+            )
+        ).scalars()
+    )
+    return profiles, anchors
 
 
 def current_published_version(
@@ -503,67 +651,91 @@ def business_records_digest(
 ) -> str:
     """Hash stable business outcomes without run-specific technical fingerprints."""
 
-    profile_fields = (
-        "sku_code",
-        "status",
-        "profile_confidence",
-        "confidence_level",
-        "core_reasons_json",
-        "core_payment_anchors_json",
-        "supporting_anchors_json",
-        "weak_expression_anchors_json",
-        "risk_drag_anchors_json",
-        "established_anchors_json",
-        "proposition_anchors_json",
-        "pressure_summary_json",
-        "comparison_limitations_json",
-        "input_status_json",
-        "missing_input_reasons_json",
-        "role_downgrade_reasons_json",
-        "risk_flags_json",
-        "processing_status",
-        "review_required",
-        "review_status",
-        "review_reason_json",
-    )
-    anchor_fields = (
-        "sku_code",
-        "anchor_code",
-        "anchor_rank",
-        "role",
-        "evidence_strength",
-        "confidence",
-        "establishment_status",
-        "establishment_score",
-        "establishment_domains_json",
-        "user_validation_status",
-        "core_eligible",
-        "core_ineligible_reasons_json",
-        "pressure_level",
-        "pressure_tags_json",
-        "pressure_summary_cn",
-        "comparison_limitations_json",
-        "evidence_domains_json",
-        "domain_scores_json",
-        "support_summary_cn",
-        "weakness_summary_cn",
-        "risk_flags_json",
-        "role_reason_json",
-        "downgrade_reason_code",
-    )
-    material = {
+    material = business_records_material(profiles, anchors)
+    return hashlib.sha256(
+        json.dumps(
+            material,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+
+
+def business_records_material(
+    profiles: Sequence[Any], anchors: Sequence[Any]
+) -> dict[str, list[dict[str, Any]]]:
+    return {
         "profiles": sorted(
-            (_business_row(row, profile_fields) for row in profiles),
+            (_business_row(row, PROFILE_BUSINESS_FIELDS) for row in profiles),
             key=lambda row: row["sku_code"],
         ),
         "anchors": sorted(
-            (_business_row(row, anchor_fields) for row in anchors),
+            (_business_row(row, ANCHOR_BUSINESS_FIELDS) for row in anchors),
             key=lambda row: (row["sku_code"], row["anchor_code"]),
         ),
     }
-    return hashlib.sha256(
-        json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+
+
+def business_records_diff(
+    *,
+    expected_profiles: Sequence[Any],
+    expected_anchors: Sequence[Any],
+    actual_profiles: Sequence[Any],
+    actual_anchors: Sequence[Any],
+    sample_limit: int = 50,
+) -> dict[str, Any]:
+    expected = business_records_material(expected_profiles, expected_anchors)
+    actual = business_records_material(actual_profiles, actual_anchors)
+    samples: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+    for record_type, key_fields in (
+        ("profiles", ("sku_code",)),
+        ("anchors", ("sku_code", "anchor_code")),
+    ):
+        expected_by_key = {
+            tuple(row[field] for field in key_fields): row
+            for row in expected[record_type]
+        }
+        actual_by_key = {
+            tuple(row[field] for field in key_fields): row
+            for row in actual[record_type]
+        }
+        difference_count = 0
+        for key in sorted(set(expected_by_key) | set(actual_by_key)):
+            expected_row = expected_by_key.get(key)
+            actual_row = actual_by_key.get(key)
+            if expected_row == actual_row:
+                continue
+            difference_count += 1
+            if len(samples) < sample_limit:
+                changed_fields = sorted(
+                    field
+                    for field in set(expected_row or {}) | set(actual_row or {})
+                    if (expected_row or {}).get(field)
+                    != (actual_row or {}).get(field)
+                )
+                samples.append(
+                    {
+                        "record_type": record_type[:-1],
+                        "key": list(key),
+                        "changed_fields": changed_fields,
+                        "expected_values": {
+                            field: _short_value((expected_row or {}).get(field))
+                            for field in changed_fields
+                        },
+                        "actual_values": {
+                            field: _short_value((actual_row or {}).get(field))
+                            for field in changed_fields
+                        },
+                    }
+                )
+        counts[f"{record_type[:-1]}_difference_count"] = difference_count
+    return {
+        **counts,
+        "difference_count": sum(counts.values()),
+        "difference_samples": samples,
+    }
 
 
 def _business_row(row: Any, fields: Sequence[str]) -> dict[str, Any]:
@@ -590,6 +762,13 @@ def _canonical_business_value(value: Any) -> Any:
     return str(value)
 
 
+def _short_value(value: Any, *, limit: int = 800) -> Any:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if len(encoded) <= limit:
+        return value
+    return encoded[: limit - 3] + "..."
+
+
 def compact_result(result: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "failed":
         return result
@@ -606,6 +785,11 @@ def compact_result(result: dict[str, Any]) -> dict[str, Any]:
         "result_digest": post.get("result_digest") or result.get("result_digest"),
         "business_digest": post.get("business_digest")
         or result.get("business_digest"),
+        "difference_count": (
+            post.get("difference_count")
+            if "difference_count" in post
+            else result.get("difference_count")
+        ),
     }
 
 
@@ -619,7 +803,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--phase",
-        choices=("dry-run", "write-draft", "publish", "verify"),
+        choices=("dry-run", "write-draft", "compare-draft", "publish", "verify"),
         required=True,
     )
     parser.add_argument("--database-url", default="")
