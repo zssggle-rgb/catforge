@@ -233,7 +233,7 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 相对市场是什么位置 | 价格承接 | 销量承接 | 当前结论边界 |"
         in markdown
     )
-    assert "高表现组合" in markdown
+    assert "高/低表现组合" in markdown
     assert "已有战场增强" in markdown
     assert "家庭护眼舒适" in markdown
     assert pm_v5_business_output_issue(markdown) is None
@@ -247,6 +247,32 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         "建议减配",
     ):
         assert forbidden not in markdown
+
+
+def test_markdown_collapses_repeated_unavailable_market_references() -> None:
+    report = _report()
+    repeated = "当前合成池未通过共同市场、平衡或样本门槛，不能输出销量差。"
+    market_reference = {
+        **report.market_reference,
+        "synthetic_baselines": [
+            {
+                "bundle_name_cn": f"价值组合 {index}",
+                "summary_cn": repeated,
+                "donor_count": 0,
+            }
+            for index in range(5)
+        ],
+        "high_performance": {"summary_cn": "当前样本不足以形成稳定的高表现价值组合原型。"},
+        "low_performance": {"summary_cn": "当前样本不足以形成稳定的低表现价值组合原型。"},
+    }
+
+    markdown = render_v5_markdown(
+        report.model_copy(update={"market_reference": market_reference})
+    )
+
+    assert markdown.count(repeated) == 1
+    assert "合成市场对照（覆盖 5 组用户价值）" in markdown
+    assert "高/低表现组合" in markdown
 
 
 def test_short_markdown_and_card_consume_same_report_and_dual_links() -> None:

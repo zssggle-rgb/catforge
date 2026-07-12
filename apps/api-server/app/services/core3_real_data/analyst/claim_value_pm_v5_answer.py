@@ -443,12 +443,9 @@ def render_v5_markdown(
     if not report.value_account_rows:
         lines.append("| 当前没有可用价值关系 | — | — | — | — | — | 当前证据不足 |")
     lines.extend(["", "## 三、市场参照", ""])
-    for item in report.market_reference.get("synthetic_baselines", []):
-        lines.append(f"- **{_md(item['bundle_name_cn'])}**：{_md(item['summary_cn'])}")
+    lines.extend(_market_reference_markdown_lines(report.market_reference))
     lines.extend(
         [
-            f"- **高表现组合**：{_md(report.market_reference['high_performance']['summary_cn'])}",
-            f"- **低表现组合**：{_md(report.market_reference['low_performance']['summary_cn'])}",
             "",
             "## 四、价值战场组合",
             "",
@@ -493,6 +490,38 @@ def render_v5_markdown(
         if item.get("url", "").startswith("http"):
             lines.append(f"- [{_md(item['label'])}]({item['url']})")
     return "\n".join(lines).strip() + "\n"
+
+
+def _market_reference_markdown_lines(market_reference: dict[str, Any]) -> list[str]:
+    baselines = market_reference.get("synthetic_baselines", [])
+    by_summary: dict[str, list[str]] = {}
+    for item in baselines:
+        summary = str(item.get("summary_cn") or "").strip()
+        name = str(item.get("bundle_name_cn") or "").strip()
+        if summary:
+            by_summary.setdefault(summary, []).append(name)
+    lines = []
+    for summary, names in by_summary.items():
+        if len(names) == 1:
+            label = names[0] or "合成市场对照"
+        else:
+            label = f"合成市场对照（覆盖 {len(names)} 组用户价值）"
+        lines.append(f"- **{_md(label)}**：{_md(summary)}")
+
+    high = str((market_reference.get("high_performance") or {}).get("summary_cn") or "")
+    low = str((market_reference.get("low_performance") or {}).get("summary_cn") or "")
+    if high.startswith("当前样本不足") and low.startswith("当前样本不足"):
+        lines.append(
+            "- **高/低表现组合**：当前样本不足以形成稳定的高/低表现价值组合原型。"
+        )
+    else:
+        lines.extend(
+            [
+                f"- **高表现组合**：{_md(high)}",
+                f"- **低表现组合**：{_md(low)}",
+            ]
+        )
+    return lines
 
 
 def render_v5_feishu_card(
