@@ -17,6 +17,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
     build_reason_value_bundle_links,
     quantify_sellpoint_value,
 )
+from app.services.core3_real_data.analyst.claim_value_pm_category_config import AC_BATTLEFIELD_CN
 from app.services.core3_real_data.analyst.claim_value_pm_v5_counterfactuals import (
     build_v5_counterfactual_sets,
 )
@@ -97,6 +98,7 @@ TV_BATTLEFIELD_CN = {
     "BF_GIANT_SCREEN_VALUE_DOWNTRADE": "巨幕价值下探",
     "BF_GIANT_HOME_THEATER_FLAGSHIP": "巨幕家庭影院旗舰",
 }
+ALL_BATTLEFIELD_CN = {**TV_BATTLEFIELD_CN, **AC_BATTLEFIELD_CN}
 
 
 def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValueV5Context:
@@ -105,19 +107,19 @@ def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValu
     universe = [v4_context.target_snapshot, *v4_context.candidate_snapshots]
     by_code = {row.identity.sku_code: row for row in universe}
     ordered = [by_code[code] for code in sorted(by_code)]
-    battlefield_names: dict[str, str] = (
-        dict(TV_BATTLEFIELD_CN) if v4_context.category_code == "TV" else {}
+    battlefield_names: dict[str, str] = dict(
+        AC_BATTLEFIELD_CN if v4_context.category_code == "AC" else TV_BATTLEFIELD_CN
     )
     for snapshot in ordered:
         for item in snapshot.semantic_market:
             code = str(item.get("dimension_code") or "").strip()
             if code and _is_battlefield_semantic(item):
                 battlefield_names.setdefault(
-                    code, str(item.get("dimension_name") or TV_BATTLEFIELD_CN.get(code) or "")
+                    code, str(item.get("dimension_name") or ALL_BATTLEFIELD_CN.get(code) or "")
                 )
         for item in snapshot.battlefields:
             for code in _entered_codes(item):
-                battlefield_names.setdefault(code, TV_BATTLEFIELD_CN.get(code, ""))
+                battlefield_names.setdefault(code, ALL_BATTLEFIELD_CN.get(code, ""))
     taxonomy = [
         BattlefieldDefinitionSnapshot(
             battlefield_code=code,
@@ -223,7 +225,7 @@ def build_perceived_value_market_report(
                 battlefield={
                     "code": link.battlefield_code,
                     "name_cn": link.battlefield_name_cn
-                    or TV_BATTLEFIELD_CN.get(link.battlefield_code)
+                    or ALL_BATTLEFIELD_CN.get(link.battlefield_code)
                     or "未命名价值战场",
                     "membership_cn": _membership_cn(context, link.battlefield_code),
                     "market_space": link.battlefield_market_space or {},
@@ -395,7 +397,7 @@ def render_v5_markdown(
     links: Sequence[dict[str, str]] = (),
 ) -> str:
     title = title or f"{_display_name(report)} 用户感知价值与市场兑现"
-    lines = [f"# {_md(title)}", "", "## 一、产品经理现在能用的结论", ""]
+    lines = [f"# {_md(title)}", "", "## 一、核心结论", ""]
     if report.decision_summary.highlights:
         for index, item in enumerate(report.decision_summary.highlights, start=1):
             lines.extend(
@@ -417,7 +419,7 @@ def render_v5_markdown(
             f"- **已有战场**：{_md(report.decision_summary.existing_battlefield_summary_cn)}",
             f"- **新战场**：{_md(report.decision_summary.expansion_summary_cn)}",
             "",
-            "## 二、用户价值账",
+            "## 二、用户价值与市场表现",
             "",
             "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 相对市场是什么位置 | 价格承接 | 销量承接 | 当前结论边界 |",
             "| --- | --- | --- | --- | --- | --- | --- |",
@@ -709,7 +711,7 @@ def _portfolio_inputs(
         rows.append(
             BattlefieldPortfolioInput(
                 battlefield_code=code,
-                battlefield_name_cn=names.get(code) or TV_BATTLEFIELD_CN.get(code) or "未命名价值战场",
+                battlefield_name_cn=names.get(code) or ALL_BATTLEFIELD_CN.get(code) or "未命名价值战场",
                 source_membership=membership,
                 user_value_status=_v5_value_status(link) if link else "unknown",
                 claim_support=(
@@ -1167,8 +1169,8 @@ def _market_space_for(context, code, link):
 def _battlefield_name(context, code):
     for row in context.battlefield_taxonomy:
         if row.battlefield_code == code:
-            return row.battlefield_name_cn or TV_BATTLEFIELD_CN.get(code) or "未命名价值战场"
-    return TV_BATTLEFIELD_CN.get(code) or "未命名价值战场"
+            return row.battlefield_name_cn or ALL_BATTLEFIELD_CN.get(code) or "未命名价值战场"
+    return ALL_BATTLEFIELD_CN.get(code) or "未命名价值战场"
 
 
 def _is_battlefield_semantic(item: dict[str, Any]) -> bool:
@@ -1181,7 +1183,7 @@ def _option_name(option, report):
     for row in report.value_account_rows:
         if row.battlefield.get("code") == option.battlefield_code:
             return str(row.battlefield.get("name_cn") or "未命名价值战场")
-    return TV_BATTLEFIELD_CN.get(option.battlefield_code) or "未命名价值战场"
+    return ALL_BATTLEFIELD_CN.get(option.battlefield_code) or "未命名价值战场"
 
 
 def _option_summary(option):

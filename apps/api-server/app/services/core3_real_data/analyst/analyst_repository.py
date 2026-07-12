@@ -10,7 +10,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from itertools import groupby
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.orm import Session
@@ -39,24 +39,31 @@ from app.services.core3_real_data.analyst.purchase_reason_profile_reader import 
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_RULE_VERSION,
+    CORE3_M04C_AC_TAXONOMY_VERSION,
     CORE3_M04C_TV_TAXONOMY_VERSION,
     CORE3_M04C_AC_RULE_VERSION,
     CORE3_M04C_TV_RULE_VERSION,
     CORE3_M05C_AC_RULE_VERSION,
+    CORE3_M05C_AC_TAXONOMY_VERSION,
     CORE3_M05C_TV_RULE_VERSION,
     CORE3_M05C_TV_TAXONOMY_VERSION,
     CORE3_M07_RULE_VERSION,
     CORE3_M09C_AC_RULE_VERSION,
+    CORE3_M09C_AC_TAXONOMY_VERSION,
     CORE3_M09C_TV_RULE_VERSION,
     CORE3_M09C_TV_TAXONOMY_VERSION,
     CORE3_M10C_AC_RULE_VERSION,
+    CORE3_M10C_AC_TAXONOMY_VERSION,
     CORE3_M10C_TV_RULE_VERSION,
     CORE3_M10C_TV_TAXONOMY_VERSION,
     CORE3_M11C_AC_RULE_VERSION,
+    CORE3_M11C_AC_TAXONOMY_VERSION,
     CORE3_M11C_TV_RULE_VERSION,
     CORE3_M11C_TV_TAXONOMY_VERSION,
     CORE3_M11D_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
+    CORE3_M12C_AC_RULE_VERSION,
+    CORE3_M12C_TV_RULE_VERSION,
     CORE3_M14_RULE_VERSION,
 )
 from app.services.core3_real_data.purchase_reason_context_builder import (
@@ -780,8 +787,8 @@ class AnalystRepository:
         """
 
         normalized_category = product_category.upper()
-        if normalized_category != "TV":
-            raise ValueError("sellpoint value V4 currently supports TV only")
+        if normalized_category not in {"TV", "AC"}:
+            raise ValueError("sellpoint value V4 supports TV and AC only")
         serving_batch_ids = tuple(batch_ids_from_scope(batch_id)) or (batch_id,)
 
         selection_rows = self._sellpoint_competitor_selections(
@@ -799,7 +806,7 @@ class AnalystRepository:
             "M03B": {
                 "model": entities.Core3SkuParamProfile,
                 "table_name": "core3_sku_param_profile",
-                "rule_version": CORE3_M03B_RULE_VERSION,
+                "rule_version": CORE3_M03B_AC_RULE_VERSION if normalized_category == "AC" else CORE3_M03B_RULE_VERSION,
                 "record_id_attr": "sku_param_profile_id",
                 "result_hash_attr": "profile_hash",
                 "requires_current": False,
@@ -807,16 +814,16 @@ class AnalystRepository:
             "M04C": {
                 "model": entities.Core3SkuClaimFactProfile,
                 "table_name": "core3_sku_claim_fact_profile",
-                "rule_version": CORE3_M04C_TV_RULE_VERSION,
-                "taxonomy_version": CORE3_M04C_TV_TAXONOMY_VERSION,
+                "rule_version": _claim_rule_version(normalized_category),
+                "taxonomy_version": CORE3_M04C_AC_TAXONOMY_VERSION if normalized_category == "AC" else CORE3_M04C_TV_TAXONOMY_VERSION,
                 "record_id_attr": "claim_profile_id",
                 "result_hash_attr": "profile_hash",
             },
             "M05C": {
                 "model": entities.Core3SkuCommentFactProfile,
                 "table_name": "core3_sku_comment_fact_profile",
-                "rule_version": CORE3_M05C_TV_RULE_VERSION,
-                "taxonomy_version": CORE3_M05C_TV_TAXONOMY_VERSION,
+                "rule_version": _comment_rule_version(normalized_category),
+                "taxonomy_version": CORE3_M05C_AC_TAXONOMY_VERSION if normalized_category == "AC" else CORE3_M05C_TV_TAXONOMY_VERSION,
                 "record_id_attr": "comment_profile_id",
                 "result_hash_attr": "profile_hash",
             },
@@ -831,24 +838,24 @@ class AnalystRepository:
             "M09C": {
                 "model": entities.Core3M09cSkuUserTaskProfile,
                 "table_name": "core3_m09c_sku_user_task_profile",
-                "rule_version": CORE3_M09C_TV_RULE_VERSION,
-                "taxonomy_version": CORE3_M09C_TV_TAXONOMY_VERSION,
+                "rule_version": _user_task_rule_version(normalized_category),
+                "taxonomy_version": CORE3_M09C_AC_TAXONOMY_VERSION if normalized_category == "AC" else CORE3_M09C_TV_TAXONOMY_VERSION,
                 "record_id_attr": "profile_id",
                 "result_hash_attr": "profile_hash",
             },
             "M10C": {
                 "model": entities.Core3M10cSkuTargetGroupProfile,
                 "table_name": "core3_m10c_sku_target_group_profile",
-                "rule_version": CORE3_M10C_TV_RULE_VERSION,
-                "taxonomy_version": CORE3_M10C_TV_TAXONOMY_VERSION,
+                "rule_version": _target_group_rule_version(normalized_category),
+                "taxonomy_version": CORE3_M10C_AC_TAXONOMY_VERSION if normalized_category == "AC" else CORE3_M10C_TV_TAXONOMY_VERSION,
                 "record_id_attr": "profile_id",
                 "result_hash_attr": "profile_hash",
             },
             "M11C": {
                 "model": entities.Core3SkuValueBattlefieldProfile,
                 "table_name": "core3_sku_value_battlefield_profile",
-                "rule_version": CORE3_M11C_TV_RULE_VERSION,
-                "taxonomy_version": CORE3_M11C_TV_TAXONOMY_VERSION,
+                "rule_version": _battlefield_rule_version(normalized_category),
+                "taxonomy_version": CORE3_M11C_AC_TAXONOMY_VERSION if normalized_category == "AC" else CORE3_M11C_TV_TAXONOMY_VERSION,
                 "record_id_attr": "profile_id",
                 "result_hash_attr": "profile_hash",
             },
@@ -947,7 +954,7 @@ class AnalystRepository:
             _v4_multirow_authority(
                 module_code="M12C",
                 table_name="core3_sku_claim_value_quantification+core3_claim_value_context_pool",
-                rule_version=CORE3_M12C_RULE_VERSION,
+                rule_version=_m12c_rule_version(normalized_category),
                 rows=m12c_refs,
                 refs=m12c_refs,
                 ambiguous_keys=m12c_ambiguous,
@@ -1045,6 +1052,7 @@ class AnalystRepository:
                 m12c_present=bool(m12c_rows_by_sku.get(sku_code)),
                 m12c_ambiguous=m12c_ambiguous,
                 comment_atoms=atoms_by_sku.get(sku_code, []),
+                product_category=normalized_category,
             )
 
         candidate_snapshots = [
@@ -1218,7 +1226,7 @@ class AnalystRepository:
             .where(quant.market_window == market_window)
             .where(quant.analysis_population == analysis_population)
             .where(quant.sku_code.in_(tuple(sku_codes)))
-            .where(quant.rule_version == CORE3_M12C_RULE_VERSION)
+            .where(quant.rule_version == _m12c_rule_version(product_category))
             .where(quant.is_current.is_(True))
         )
         quant_candidates = list(self.db.execute(quant_stmt).all())
@@ -1244,7 +1252,7 @@ class AnalystRepository:
                 .where(pool.project_id == self.project_id)
                 .where(pool.category_code == self.category_code)
                 .where(pool.pool_id.in_(tuple(pool_ids)))
-                .where(pool.rule_version == CORE3_M12C_RULE_VERSION)
+                .where(pool.rule_version == _m12c_rule_version(product_category))
                 .where(pool.is_current.is_(True))
             )
             pools = list(self.db.execute(pool_stmt).scalars())
@@ -1325,8 +1333,11 @@ class AnalystRepository:
             .where(entities.Core3CommentFactAtom.batch_id.in_(tuple(set(profile_batches.values()))))
             .where(entities.Core3CommentFactAtom.product_category == product_category)
             .where(entities.Core3CommentFactAtom.sku_code.in_(tuple(profile_batches)))
-            .where(entities.Core3CommentFactAtom.taxonomy_version == CORE3_M05C_TV_TAXONOMY_VERSION)
-            .where(entities.Core3CommentFactAtom.rule_version == CORE3_M05C_TV_RULE_VERSION)
+            .where(
+                entities.Core3CommentFactAtom.taxonomy_version
+                == (CORE3_M05C_AC_TAXONOMY_VERSION if product_category == "AC" else CORE3_M05C_TV_TAXONOMY_VERSION)
+            )
+            .where(entities.Core3CommentFactAtom.rule_version == _comment_rule_version(product_category))
             .where(entities.Core3CommentFactAtom.is_current.is_(True))
             .order_by(
                 entities.Core3CommentFactAtom.sku_code,
@@ -2171,7 +2182,6 @@ class AnalystRepository:
             role=role,
             limit=0,
         )
-        quant_rows = quant_rows_all[: max(limit, 0)] if limit else quant_rows_all
         attr_rows = self._m12c_attribution_rows(
             batch_id=batch_id,
             product_category=product_category,
@@ -3745,6 +3755,7 @@ def _v4_sku_snapshot(
     m12c_present: bool,
     m12c_ambiguous: set[str],
     comment_atoms: Sequence[entities.Core3CommentFactAtom],
+    product_category: str,
 ) -> SkuEvidenceSnapshot:
     rows = {module: selected.get(sku_code) for module, selected in selected_by_module.items()}
     identity = _v4_sku_identity(
@@ -3753,6 +3764,7 @@ def _v4_sku_snapshot(
         param=rows.get("M03B"),
         target_fallback=target_fallback,
         candidate_ref=candidate_ref,
+        product_category=product_category,
     )
     source_status: dict[str, SourceStatus] = {}
     for module_code in ("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C"):
@@ -3885,6 +3897,7 @@ def _v4_sku_identity(
     param: Any | None,
     target_fallback: ResolvedSku | None,
     candidate_ref: dict[str, Any] | None,
+    product_category: str,
 ) -> SkuIdentity:
     param_values = (param.param_values_json or {}) if param is not None else {}
     screen_size = _number(market.screen_size_inch) if market is not None else None
@@ -3896,7 +3909,7 @@ def _v4_sku_identity(
         sku_code=sku_code,
         brand_name=(market.brand_name or market.brand) if market is not None else (candidate_ref or {}).get("brand_name") or (target_fallback.brand_name if target_fallback else None),
         model_name=(market.model_name if market is not None else None) or (param.model_name if param is not None else None) or (candidate_ref or {}).get("model_name") or (target_fallback.model_name if target_fallback else None),
-        product_category="TV",
+        product_category=product_category,
         screen_size_inch=screen_size,
         size_tier=(market.size_segment if market is not None else None) or _param_size_tier(param) or (target_fallback.size_tier if target_fallback else None),
         price_band=(market.price_band_size if market is not None else None) or (target_fallback.price_band_in_size_tier if target_fallback else None),
@@ -4075,6 +4088,10 @@ def _target_group_rule_version(product_category: str) -> str:
 
 def _battlefield_rule_version(product_category: str) -> str:
     return CORE3_M11C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M11C_TV_RULE_VERSION
+
+
+def _m12c_rule_version(product_category: str) -> str:
+    return CORE3_M12C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M12C_TV_RULE_VERSION
 
 
 def _m11c_comparable_market_context(row: entities.Core3SkuValueBattlefieldScore | None) -> dict[str, Any]:

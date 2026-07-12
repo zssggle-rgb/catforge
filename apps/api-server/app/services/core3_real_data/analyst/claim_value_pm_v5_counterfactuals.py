@@ -15,6 +15,7 @@ from typing import Any
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     SkuEvidenceSnapshot,
 )
+from app.services.core3_real_data.analyst.claim_value_pm_category_config import same_product_form
 from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
     CounterfactualCandidate,
     CounterfactualMethod,
@@ -541,6 +542,8 @@ def _candidate_source(snapshot: SkuEvidenceSnapshot) -> str:
 
 
 def _same_size(target: SkuEvidenceSnapshot, peer: SkuEvidenceSnapshot) -> bool:
+    if target.identity.product_category.upper() == "AC":
+        return same_product_form(target, peer)
     left = target.identity.screen_size_inch
     right = peer.identity.screen_size_inch
     return left is not None and right is not None and abs(left - right) <= 0.01

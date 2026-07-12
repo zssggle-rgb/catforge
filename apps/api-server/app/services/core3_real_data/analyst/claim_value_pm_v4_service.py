@@ -12,6 +12,16 @@ from app.services.core3_real_data.analyst.analyst_repository import canonical_v4
 from app.services.core3_real_data.analyst.claim_value_pm_schemas import (
     ClaimValuePmCommentAtom,
 )
+from app.services.core3_real_data.analyst.claim_value_pm_category_config import (
+    AC_FAMILY_BATTLEFIELD_TOKENS,
+    AC_FAMILY_TIER_KEYS,
+    AC_THEME_TIER_KEYS,
+    AC_VALUE_SCENARIOS,
+    AC_VALUE_THEME_UNIT_CODES,
+    AC_VALUE_UNITS,
+    purchase_reason_taxonomy,
+    same_product_form,
+)
 from app.services.core3_real_data.analyst.claim_value_pm_service import (
     TV_VALUE_UNITS,
     TvValueUnitDefinition,
@@ -38,11 +48,6 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     SellpointValueV4Context,
     SkuEvidenceSnapshot,
 )
-from app.services.core3_real_data.purchase_reason_anchor_taxonomy import (
-    tv_purchase_reason_anchor_taxonomy_v0_1,
-)
-
-
 ACTIVE_REASON_ROLES = {"core_payment", "supporting"}
 VALUE_THEME_UNIT_CODES: dict[str, tuple[str, ...]] = {
     "picture_upgrade_perception": (
@@ -193,6 +198,11 @@ VALUE_UNIT_BY_CODE = {
     definition.code: definition
     for definition in (*TV_VALUE_UNITS, *V4_EXTRA_VALUE_UNITS)
 }
+AC_VALUE_UNIT_BY_CODE = {definition.code: definition for definition in AC_VALUE_UNITS}
+
+
+def _value_unit_by_code(product_category: str) -> dict[str, TvValueUnitDefinition]:
+    return AC_VALUE_UNIT_BY_CODE if str(product_category).upper() == "AC" else VALUE_UNIT_BY_CODE
 
 
 def build_reason_value_bundle_links(
@@ -202,7 +212,10 @@ def build_reason_value_bundle_links(
 
     if not context.purchase_reason_profile.found:
         return []
-    taxonomy = tv_purchase_reason_anchor_taxonomy_v0_1()
+    taxonomy = purchase_reason_taxonomy(context.category_code)
+    value_theme_unit_codes = AC_VALUE_THEME_UNIT_CODES if context.category_code == "AC" else VALUE_THEME_UNIT_CODES
+    value_scenarios = AC_VALUE_SCENARIOS if context.category_code == "AC" else VALUE_SCENARIOS
+    value_unit_by_code = _value_unit_by_code(context.category_code)
     reasons_by_code = taxonomy.purchase_reasons_by_code()
     themes_by_code = taxonomy.value_themes_by_code()
     anchors = _active_reason_anchors(
@@ -224,10 +237,10 @@ def build_reason_value_bundle_links(
         ]
         definitions = _dedupe_definitions(
             [
-                VALUE_UNIT_BY_CODE[code]
+                value_unit_by_code[code]
                 for theme in themes
-                for code in VALUE_THEME_UNIT_CODES.get(theme.value_theme_code, ())
-                if code in VALUE_UNIT_BY_CODE
+                for code in value_theme_unit_codes.get(theme.value_theme_code, ())
+                if code in value_unit_by_code
             ]
         )
         if not themes or not definitions:
@@ -259,10 +272,10 @@ def build_reason_value_bundle_links(
             understandings=understandings,
         )
         scenarios = _dedupe_texts(
-            [VALUE_SCENARIOS[theme.value_theme_code][0] for theme in themes]
+            [value_scenarios[theme.value_theme_code][0] for theme in themes]
         )
         expected_outcomes = _dedupe_texts(
-            [VALUE_SCENARIOS[theme.value_theme_code][1] for theme in themes]
+            [value_scenarios[theme.value_theme_code][1] for theme in themes]
         )
         outcome_cn = _observed_outcome_cn(
             value_status,
@@ -323,9 +336,8 @@ def build_counterfactual_assessments(
 
     target = context.target_snapshot
     focus_codes = {member.capability_code for member in link.bundle.members}
-    focus_definitions = [
-        VALUE_UNIT_BY_CODE[code] for code in focus_codes if code in VALUE_UNIT_BY_CODE
-    ]
+    value_unit_by_code = _value_unit_by_code(context.category_code)
+    focus_definitions = [value_unit_by_code[code] for code in focus_codes if code in value_unit_by_code]
     assessments: list[ComparabilityAssessment] = []
     for candidate in context.candidate_snapshots:
         provenance, slot_code = _candidate_source(candidate)
@@ -721,7 +733,8 @@ def _battlefield_for_reason(
             *(profile.get("opportunity_battlefield_codes") or []),
         ]
     )
-    tokens = FAMILY_BATTLEFIELD_TOKENS.get(reason_family, ())
+    family_tokens = AC_FAMILY_BATTLEFIELD_TOKENS if snapshot.identity.product_category.upper() == "AC" else FAMILY_BATTLEFIELD_TOKENS
+    tokens = family_tokens.get(reason_family, ())
     selected = next(
         (code for code in candidates if any(token in code.upper() for token in tokens)),
         candidates[0] if candidates else "unknown",
@@ -745,7 +758,8 @@ def _theme_business_tier(snapshot: SkuEvidenceSnapshot, theme_code: str) -> str:
     tiers = (snapshot.facts.get("parameter_fact") or {}).get(
         "dimension_tier_profile"
     ) or {}
-    tokens = THEME_TIER_KEYS.get(theme_code, ())
+    theme_tier_keys = AC_THEME_TIER_KEYS if snapshot.identity.product_category.upper() == "AC" else THEME_TIER_KEYS
+    tokens = theme_tier_keys.get(theme_code, ())
     values: list[Any] = []
     for key, value in tiers.items() if isinstance(tiers, dict) else ():
         if any(token.lower() in str(key).lower() for token in tokens):
@@ -768,9 +782,7 @@ def _candidate_source(snapshot: SkuEvidenceSnapshot) -> tuple[str, str]:
 
 
 def _exact_size(target: SkuEvidenceSnapshot, candidate: SkuEvidenceSnapshot) -> bool:
-    left = target.identity.screen_size_inch
-    right = candidate.identity.screen_size_inch
-    return left is not None and right is not None and abs(left - right) <= 0.5
+    return same_product_form(target, candidate)
 
 
 def _battlefield_codes(snapshot: SkuEvidenceSnapshot) -> set[str]:
@@ -826,7 +838,8 @@ def _snapshot_family_tier(snapshot: SkuEvidenceSnapshot, family: str) -> str:
     tiers = (snapshot.facts.get("parameter_fact") or {}).get(
         "dimension_tier_profile"
     ) or {}
-    tokens = FAMILY_TIER_KEYS.get(family, ())
+    family_tier_keys = AC_FAMILY_TIER_KEYS if snapshot.identity.product_category.upper() == "AC" else FAMILY_TIER_KEYS
+    tokens = family_tier_keys.get(family, ())
     values = (
         [
             _normalize_tier(value)
@@ -954,7 +967,7 @@ def _other_bundle_differences(
     target_brief = _fact_brief(target)
     candidate_brief = _fact_brief(candidate)
     relations = []
-    for code, definition in VALUE_UNIT_BY_CODE.items():
+    for code, definition in _value_unit_by_code(target.identity.product_category).items():
         target_facts = _unit_product_facts(definition, target_brief)
         if code in focus_codes or not target_facts:
             continue

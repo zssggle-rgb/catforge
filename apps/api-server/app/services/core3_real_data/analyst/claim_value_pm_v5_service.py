@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 
+from app.services.core3_real_data.analyst.claim_value_pm_category_config import product_form_feature
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     MarketCellRow,
     SkuEvidenceSnapshot,
@@ -613,7 +614,7 @@ def _covariate_summaries(
         prices = [float(row.avg_price) for row in rows if row.avg_price is not None]
         summary = {
             "log_price": float(math.log(max(np.mean(prices), 1e-9))),
-            "screen_size": float(snapshot.identity.screen_size_inch or 0),
+            "screen_size": product_form_feature(snapshot),
             "brand_tier": float(_snapshot_numeric(snapshot, "brand_tier_rank") or 0),
             "active_weeks": float(len({row.period_week_index for row in rows})),
         }
@@ -838,7 +839,7 @@ def _cross_fitted_residuals(
                     "platform": key[1],
                     "y": log_sales[index] - float(np.mean(peer_sales)),
                     "log_price_relative": log_prices[index] - float(np.mean(peer_prices)),
-                    "size": float(snapshot.identity.screen_size_inch or 0),
+                    "size": product_form_feature(snapshot),
                     "brand_tier": float(_snapshot_numeric(snapshot, "brand_tier_rank") or 0),
                     "active_week": float(_snapshot_numeric(snapshot, "active_week_count") or 0),
                     "price": float(row.avg_price or 0),
