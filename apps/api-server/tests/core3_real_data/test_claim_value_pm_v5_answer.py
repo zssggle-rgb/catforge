@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 
 from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
+    _bundle_claim_codes,
     _dedupe_value_account_rows,
     _market_fraction,
     _market_number,
+    _realization_market_comparisons,
     _select_highlights,
     adapt_v4_context_to_v5,
     build_perceived_value_market_report,
@@ -15,8 +17,17 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     render_v5_markdown,
     render_v5_short_answer,
 )
+from app.services.core3_real_data.analyst.claim_value_pm_v5_counterfactuals import (
+    build_v5_counterfactual_sets,
+)
+from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
+    RealizationMarketComparison,
+)
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     LineageIssue,
+)
+from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
+    build_reason_value_bundle_links,
 )
 from tests.core3_real_data.test_claim_value_pm_v4_quantification import (
     _synthetic_context,
@@ -85,7 +96,7 @@ def test_report_first_screen_answers_four_pm_questions() -> None:
     assert summary.highlights[0].title_cn == "画质升级感"
     assert "稳定价格承接" in summary.highlights[0].reason_cn
     assert "1 组价值" in summary.price_summary_cn
-    assert "无法识别销量承接" in summary.volume_summary_cn
+    assert "当前没有形成可展示" in summary.volume_summary_cn
     assert "已进入 4 个" in summary.existing_battlefield_summary_cn
     assert "组合优先级问题" in summary.existing_battlefield_summary_cn
     assert "优先比较" not in summary.existing_battlefield_summary_cn
@@ -176,6 +187,73 @@ def test_nested_m07_market_payload_reaches_realization_accounting() -> None:
     ) == 0.68
 
 
+def test_bundle_capabilities_expand_to_value_specific_claim_codes() -> None:
+    context = _synthetic_context()
+    link = build_reason_value_bundle_links(context)[0]
+
+    claims = _bundle_claim_codes(link, context.category_code)
+
+    assert claims
+    assert all(code.startswith("tv_claim_") for code in claims)
+
+
+def test_same_claim_different_realization_quantifies_price_and_sales() -> None:
+    context = _v5_context()
+    sets = build_v5_counterfactual_sets(
+        context,
+        bundle_code="picture_bundle",
+        focus_dimension_codes=["picture"],
+        focus_claim_codes=["CLAIM-PICTURE"],
+    )
+
+    comparison = _realization_market_comparisons(context, sets)[0]
+
+    assert comparison.comparator_sku_codes == ["SAME-CLAIM"]
+    assert comparison.evidence_strength == "confirmed"
+    assert comparison.price_gap_abs == 500
+    assert comparison.price_gap_pct == 0.090909
+    assert comparison.sales_volume_gap_abs == 1000
+    assert comparison.sales_volume_gap_pct == 1.0
+
+
+def test_market_realization_highlight_answers_sales_contribution() -> None:
+    row = _report().value_account_rows[0]
+    comparison = RealizationMarketComparison(
+        method="same_claim_different_realization",
+        comparator_sku_codes=["PEER"],
+        comparator_names=["可比机型"],
+        comparator_count=1,
+        shared_claim_codes=["tv_claim_picture"],
+        evidence_strength="confirmed",
+        target_price=6000,
+        comparator_price_median=5500,
+        price_gap_abs=500,
+        price_gap_pct=0.090909,
+        target_sales_volume=2000,
+        comparator_sales_volume_median=1000,
+        sales_volume_gap_abs=1000,
+        sales_volume_gap_pct=1.0,
+        causal_claim=False,
+    )
+    row = row.model_copy(
+        update={
+            "highlight_types": ["market_realization"],
+            "price_realization": row.price_realization.model_copy(
+                update={"realization_comparisons": [comparison]}
+            ),
+            "volume_realization": row.volume_realization.model_copy(
+                update={"realization_comparisons": [comparison]}
+            ),
+        }
+    )
+
+    highlight = _select_highlights([row])[0]
+
+    assert highlight.highlight_type == "market_realization"
+    assert "销量贡献约 1000 台" in highlight.reason_cn
+    assert "应保留并强化" in highlight.reason_cn
+
+
 def test_no_evidence_does_not_force_a_highlight() -> None:
     report = build_perceived_value_market_report(_v5_context())
 
@@ -233,7 +311,7 @@ def test_markdown_is_pm_value_account_without_internal_or_causal_language() -> N
         "| 用户价值 | 用户实际怎么感知 | 哪些卖点共同形成 | 相对市场是什么位置 | 价格承接 | 销量承接 | 当前结论边界 |"
         in markdown
     )
-    assert "高/低表现组合" in markdown
+    assert "高/低表现组合" not in markdown
     assert "已有战场增强" in markdown
     assert "家庭护眼舒适" in markdown
     assert pm_v5_business_output_issue(markdown) is None
@@ -270,9 +348,9 @@ def test_markdown_collapses_repeated_unavailable_market_references() -> None:
         report.model_copy(update={"market_reference": market_reference})
     )
 
-    assert markdown.count(repeated) == 1
-    assert "合成市场对照（覆盖 5 组用户价值）" in markdown
-    assert "高/低表现组合" in markdown
+    assert markdown.count(repeated) == 0
+    assert "合成市场对照（覆盖 5 组用户价值）" not in markdown
+    assert "高/低表现组合" not in markdown
 
 
 def test_short_markdown_and_card_consume_same_report_and_dual_links() -> None:

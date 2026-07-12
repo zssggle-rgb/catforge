@@ -147,7 +147,7 @@ def test_live_market_fallback_keeps_full_evidence_snapshots_bounded() -> None:
     )
 
     assert result["status"] == "ok"
-    assert handlers.candidate_limit == 3
+    assert handlers.candidate_limit == 12
 
 
 def test_natural_language_route_remains_on_v2() -> None:

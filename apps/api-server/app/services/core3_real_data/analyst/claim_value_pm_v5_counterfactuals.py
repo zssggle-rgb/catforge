@@ -26,6 +26,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
 
 
 SAME_BUDGET_RATIO = 0.15
+USER_REALIZATION_RATIO = 0.25
 SYNTHETIC_RECALL_RATIO = 0.30
 MIN_SYNTHETIC_DONORS = 5
 OWN_CURVE_MIN_WEEKS = 8
@@ -193,7 +194,13 @@ def build_v5_counterfactual_sets(
                 )
 
         claim_contrast = _same_claim_contrast(target, peer, claims)
-        if same_budget and claim_contrast:
+        user_realization_comparable = (
+            exact_size
+            and battlefield_overlap > 0
+            and price_ratio is not None
+            and price_ratio <= USER_REALIZATION_RATIO
+        )
+        if user_realization_comparable and claim_contrast:
             candidates_by_question["user_realization"].append(
                 _descriptive_candidate(
                     target,
@@ -651,14 +658,15 @@ def _same_claim_contrast(
     peer: SkuEvidenceSnapshot,
     focus_claims: Sequence[str],
 ) -> dict[str, Any]:
+    if not focus_claims:
+        return {}
     target_advertised = _fact_code_set(target, "advertised_claim_codes", "claim_codes")
     target_supported = _fact_code_set(target, "supported_claim_codes")
     peer_advertised = _fact_code_set(peer, "advertised_claim_codes", "claim_codes")
     peer_supported = _fact_code_set(peer, "supported_claim_codes")
     peer_contradicted = _fact_code_set(peer, "contradicted_claim_codes")
     relevant = target_advertised & target_supported & peer_advertised
-    if focus_claims:
-        relevant &= set(focus_claims)
+    relevant &= set(focus_claims)
     not_realized = sorted(relevant - peer_supported)
     contradicted = sorted(relevant & peer_contradicted)
     if not not_realized and not contradicted:
@@ -667,6 +675,9 @@ def _same_claim_contrast(
         "same_advertised_claim_codes": sorted(relevant),
         "peer_not_realized_claim_codes": not_realized,
         "peer_contradicted_claim_codes": contradicted,
+        "contrast_strength": (
+            "explicit_contradiction" if contradicted else "not_realized"
+        ),
     }
 
 

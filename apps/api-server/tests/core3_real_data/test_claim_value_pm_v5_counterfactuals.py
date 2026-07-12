@@ -11,6 +11,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     SkuEvidenceSnapshot,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v5_counterfactuals import (
+    _same_claim_contrast,
     build_v5_counterfactual_sets,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
@@ -36,6 +37,7 @@ def _snapshot(
     advertised: list[str] | None = None,
     authority_eligible: bool | None = None,
     platforms: int = 2,
+    sales_volume: float = 1000,
 ) -> SkuEvidenceSnapshot:
     payload = base.model_dump(mode="python")
     payload["identity"].update(
@@ -54,6 +56,7 @@ def _snapshot(
     payload["facts"] = facts
     payload["market"] = {
         "price_wavg": price,
+        "sales_volume_total": sales_volume,
         "active_week_count": 24,
         "platform_count": platforms,
         "price_volatility": 0.1,
@@ -88,6 +91,7 @@ def _v5_context(
         advertised=["CLAIM-PICTURE"],
         supported=["CLAIM-PICTURE"],
         platforms=1 if weak_own_curve else 2,
+        sales_volume=2000,
     )
     direct = _snapshot(
         target,
@@ -274,6 +278,49 @@ def test_weak_own_price_curve_is_rejected_without_guessing() -> None:
     assert own.stage == "rejected"
     assert own.eligible_measures == []
     assert own.reject_reasons == ["platform_count_insufficient"]
+
+
+def test_same_claim_contrast_fails_closed_without_bundle_claims() -> None:
+    context = _v5_context()
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+
+    assert _same_claim_contrast(snapshots["TARGET"], snapshots["SAME-CLAIM"], []) == {}
+
+
+def test_unrelated_claim_contradiction_is_not_a_value_counterfactual() -> None:
+    context = _v5_context()
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+
+    assert (
+        _same_claim_contrast(
+            snapshots["TARGET"], snapshots["SAME-CLAIM"], ["CLAIM-GAMING"]
+        )
+        == {}
+    )
+
+
+def test_user_realization_window_is_wider_than_same_budget_price_pool() -> None:
+    context = _v5_context()
+    universe = [
+        row.model_copy(update={"market": {**row.market, "price_wavg": 4800}})
+        if row.identity.sku_code == "SAME-CLAIM"
+        else row
+        for row in context.market_universe
+    ]
+    sets = _sets(context.model_copy(update={"market_universe": universe}))
+    by_question = {row.question: row for row in sets}
+
+    assert any(
+        row.method == "same_claim_realization"
+        and row.candidate_sku_codes == ["SAME-CLAIM"]
+        and row.stage == "eligible"
+        for row in by_question["user_realization"].candidates
+    )
+    assert not any(
+        row.method == "same_budget_pool"
+        and row.candidate_sku_codes == ["SAME-CLAIM"]
+        for row in by_question["relative_highlight"].candidates
+    )
 
 
 def test_g01_cohorts_and_65e7q_coverage_are_frozen(repo_root: Path) -> None:

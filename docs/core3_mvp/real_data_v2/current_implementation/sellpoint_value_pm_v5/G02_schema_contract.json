@@ -163,6 +163,7 @@
         "direct_and_pool_gaps": "list[dict]",
         "own_price_curve": "dict|null",
         "strict_bundle_interval": "BundlePriceInterval|null",
+        "realization_comparisons": "list[RealizationMarketComparison]",
         "limitations": "list[str]"
       }
     },
@@ -174,6 +175,7 @@
         "controlled_residual": "IntervalEstimate|null",
         "synthetic_difference": "IntervalEstimate|null",
         "choice_association": "dict|null",
+        "realization_comparisons": "list[RealizationMarketComparison]",
         "limitations": "list[str]"
       }
     },

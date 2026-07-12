@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from statistics import median
 import tempfile
 from pathlib import Path
 from typing import Any, Sequence
@@ -11,8 +12,10 @@ from app.services.core3_real_data.analyst.analyst_repository import canonical_v4
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     ReasonValueBundleLink,
     SellpointValueV4Context,
+    SkuEvidenceSnapshot,
 )
 from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
+    _value_unit_by_code,
     build_counterfactual_assessments,
     build_reason_value_bundle_links,
     quantify_sellpoint_value,
@@ -33,6 +36,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
     PerformanceArchetype,
     PmDecisionSummary,
     PriceRealization,
+    RealizationMarketComparison,
     RealizationAccountingInput,
     SellpointValueV5Context,
     SkuPerceivedValueMarketRealizationReport,
@@ -169,7 +173,7 @@ def build_perceived_value_market_report(
     allocations = _battlefield_allocations(context)
     for link in links:
         focus_dimensions = [member.capability_code for member in link.bundle.members]
-        focus_claims = _bundle_claim_codes(link)
+        focus_claims = _bundle_claim_codes(link, context.category_code)
         sets = build_v5_counterfactual_sets(
             context,
             bundle_code=link.bundle.bundle_code,
@@ -178,6 +182,7 @@ def build_perceived_value_market_report(
         )
         synthetic = _synthetic_for_bundle(context, link.bundle.bundle_code, sets)
         synthetic_by_bundle[link.bundle.bundle_code] = synthetic
+        realization_comparisons = _realization_market_comparisons(context, sets)
         v4_assessments = build_counterfactual_assessments(context.v4_context, link)
         quantification = quantify_sellpoint_value(
             context.v4_context,
@@ -199,7 +204,9 @@ def build_perceived_value_market_report(
                 amount_percentile=_market_fraction(
                     context, "same_pool_amount_percentile", "amount_percentile"
                 ),
-                direct_and_pool_gaps=[],
+                direct_and_pool_gaps=[
+                    item.model_dump(mode="json") for item in realization_comparisons
+                ],
                 own_price_curve=None,
                 controlled_residual=None,
                 choice_association=(
@@ -212,6 +219,7 @@ def build_perceived_value_market_report(
                 cannibalization=None,
                 overlap_risk="unknown",
                 strict_market_wtp=quantification.wtp,
+                realization_comparisons=realization_comparisons,
                 limitations=[],
             )
         )
@@ -242,7 +250,9 @@ def build_perceived_value_market_report(
                     value_status, sets, accounting, synthetic
                 ),
                 counterfactual_sets=_pm_counterfactual_sets(sets),
-                counterfactual_summary_cn=_counterfactual_summary_cn(sets),
+                counterfactual_summary_cn=_counterfactual_summary_cn(
+                    sets, realization_comparisons
+                ),
                 price_realization=accounting.price,
                 volume_realization=accounting.volume,
                 battlefield_allocation=row_allocation,
@@ -303,8 +313,8 @@ def build_perceived_value_market_report(
         "market_reference": market_reference,
         "battlefield_options": options,
         "overall_boundary_cn": (
-            "本报告只说明用户购后感知、可比市场中的选择与量价承接；"
-            "观察性差异不是因果增量，无法识别时不补数字。"
+            "本报告从用户购后兑现出发，通过同卖点、不同兑现产品的量价差判断"
+            "哪些用户价值正在形成市场承接；无法形成有效比较的项目不进入主结论。"
         ),
         "data_scope_cn": (
             "使用已发布采购理由、产品事实、用户购后体验、周度市场量价和当前战场分配；"
@@ -372,10 +382,12 @@ def render_v5_short_answer(
             lines.append(f"亮点{index}｜{item.title_cn}：{item.reason_cn}")
     else:
         lines.append(report.decision_summary.no_highlight_reason_cn or "")
+    if _has_reportable_price(report.value_account_rows):
+        lines.append(f"价格承接｜{report.decision_summary.price_summary_cn}")
+    if _has_reportable_volume(report.value_account_rows):
+        lines.append(f"销量承接｜{report.decision_summary.volume_summary_cn}")
     lines.extend(
         [
-            f"价格承接｜{report.decision_summary.price_summary_cn}",
-            f"销量承接｜{report.decision_summary.volume_summary_cn}",
             f"已有战场｜{report.decision_summary.existing_battlefield_summary_cn}",
             f"新战场｜{report.decision_summary.expansion_summary_cn}",
         ]
@@ -412,10 +424,12 @@ def render_v5_markdown(
             )
     else:
         lines.extend([report.decision_summary.no_highlight_reason_cn or "", ""])
+    if _has_reportable_price(report.value_account_rows):
+        lines.append(f"- **价格承接**：{_md(report.decision_summary.price_summary_cn)}")
+    if _has_reportable_volume(report.value_account_rows):
+        lines.append(f"- **销量承接**：{_md(report.decision_summary.volume_summary_cn)}")
     lines.extend(
         [
-            f"- **价格承接**：{_md(report.decision_summary.price_summary_cn)}",
-            f"- **销量承接**：{_md(report.decision_summary.volume_summary_cn)}",
             f"- **已有战场**：{_md(report.decision_summary.existing_battlefield_summary_cn)}",
             f"- **新战场**：{_md(report.decision_summary.expansion_summary_cn)}",
             "",
@@ -444,8 +458,9 @@ def render_v5_markdown(
         )
     if not report.value_account_rows:
         lines.append("| 当前没有可用价值关系 | — | — | — | — | — | 当前证据不足 |")
-    lines.extend(["", "## 三、市场参照", ""])
-    lines.extend(_market_reference_markdown_lines(report.market_reference))
+    market_reference_lines = _market_reference_markdown_lines(report.market_reference)
+    if market_reference_lines:
+        lines.extend(["", "## 三、市场参照", "", *market_reference_lines])
     lines.extend(
         [
             "",
@@ -500,7 +515,7 @@ def _market_reference_markdown_lines(market_reference: dict[str, Any]) -> list[s
     for item in baselines:
         summary = str(item.get("summary_cn") or "").strip()
         name = str(item.get("bundle_name_cn") or "").strip()
-        if summary:
+        if summary and not summary.startswith("当前"):
             by_summary.setdefault(summary, []).append(name)
     lines = []
     for summary, names in by_summary.items():
@@ -512,11 +527,7 @@ def _market_reference_markdown_lines(market_reference: dict[str, Any]) -> list[s
 
     high = str((market_reference.get("high_performance") or {}).get("summary_cn") or "")
     low = str((market_reference.get("low_performance") or {}).get("summary_cn") or "")
-    if high.startswith("当前样本不足") and low.startswith("当前样本不足"):
-        lines.append(
-            "- **高/低表现组合**：当前样本不足以形成稳定的高/低表现价值组合原型。"
-        )
-    else:
+    if not (high.startswith("当前样本不足") and low.startswith("当前样本不足")):
         lines.extend(
             [
                 f"- **高表现组合**：{_md(high)}",
@@ -758,13 +769,24 @@ def _select_highlights(rows: Sequence[ValueAccountRow]) -> list[ValueHighlight]:
         if not value_name or not outcome:
             continue
         user_result = _highlight_user_result(outcome)
-        if "relative_value" in types:
+        if "market_realization" in types:
+            highlight_type = "market_realization"
+            reason = _market_realization_reason(row, user_result)
+            score = 5.0
+        elif "relative_value" in types:
             highlight_type = "relative_value"
             reason = (
                 f"用户购后反馈显示“{user_result}”；与同宣传但用户兑现较弱的可比产品相比，"
                 "这组卖点形成了可复核的相对优势。"
             )
             score = 4.0
+        elif "candidate_relative_value" in types:
+            highlight_type = "candidate_relative_value"
+            reason = (
+                f"用户购后反馈显示“{user_result}”；在同宣传产品中观察到相关好处的"
+                "兑现差异，可作为候选差异点继续比较。"
+            )
+            score = 2.25
         elif "volume_realization" in types:
             highlight_type = "volume_realization"
             reason = (
@@ -838,6 +860,50 @@ def _highlight_user_result(outcome: str) -> str:
     return result.rstrip("。")
 
 
+def _market_realization_reason(row: ValueAccountRow, user_result: str) -> str:
+    comparison = row.price_realization.realization_comparisons[0]
+    if comparison.comparator_count == 1:
+        basis = f"可比产品{comparison.comparator_names[0]}"
+    else:
+        basis = f"{comparison.comparator_count} 款同宣传、兑现较弱的可比产品中位数"
+    results = []
+    if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None:
+        price_text = _market_gap_cn(
+            comparison.price_gap_abs,
+            comparison.price_gap_pct,
+            metric="均价",
+            unit="元",
+        )
+        results.append(f"价格承接表现为{price_text}")
+    if (
+        comparison.sales_volume_gap_abs is not None
+        and comparison.sales_volume_gap_pct is not None
+    ):
+        if comparison.sales_volume_gap_abs >= 0:
+            results.append(
+                "按该反事实估算，销量贡献约 "
+                f"{comparison.sales_volume_gap_abs:.0f} 台"
+                f"（相对基线高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
+            )
+        else:
+            results.append(
+                "按该反事实估算，销量未形成正贡献，较基线低 "
+                f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
+            )
+    market_result = "、".join(results)
+    return (
+        f"用户购后反馈显示“{user_result}”；以{basis}作为价值未兑现反事实，{market_result}。"
+        "用户兑现优势已经形成更强市场承接，是应保留并强化的有效差异化价值。"
+    )
+
+
+def _market_gap_cn(gap_abs: float, gap_pct: float, *, metric: str, unit: str) -> str:
+    direction = "高" if gap_abs >= 0 else "低"
+    amount = abs(gap_abs)
+    amount_text = f"{amount:.0f}" if amount >= 10 else f"{amount:.1f}"
+    return f"{metric}{direction} {amount_text}{unit}（{abs(gap_pct) * 100:.1f}%）"
+
+
 def _no_highlight_reason_cn(context, analysis_state):
     if analysis_state == "blocked" and context.v4_context.lineage_gate.status == "stale_conflict":
         return "当前来源版本存在冲突，亮点判断已暂停；不能把尚未对齐的用户价值与市场参照合并成结论。"
@@ -849,8 +915,26 @@ def _eligible_highlight_types(value_status, sets, accounting, synthetic_control)
         return []
     result = ["user_realization"] if value_status == "observed_positive" else []
     user_set = next(row for row in sets if row.question == "user_realization")
-    if user_set.highest_available_method == "same_claim_realization":
+    realization_candidates = [
+        row
+        for row in user_set.candidates
+        if row.method == "same_claim_realization" and row.stage == "eligible"
+    ]
+    confirmed = any(
+        row.control_dimensions.get("peer_contradicted_claim_codes")
+        for row in realization_candidates
+    )
+    if confirmed:
         result.append("relative_value")
+    elif realization_candidates:
+        result.append("candidate_relative_value")
+    comparisons = accounting.price.realization_comparisons
+    if confirmed and any(
+        (item.price_gap_pct is not None and item.price_gap_pct > 0)
+        or (item.sales_volume_gap_pct is not None and item.sales_volume_gap_pct > 0)
+        for item in comparisons
+    ):
+        result.append("market_realization")
     interval = accounting.price.strict_bundle_interval
     if interval is not None and interval.status == "available":
         result.append("price_realization")
@@ -875,6 +959,134 @@ def _eligible_highlight_types(value_status, sets, accounting, synthetic_control)
     return result
 
 
+def _realization_market_comparisons(
+    context: SellpointValueV5Context,
+    sets: Sequence[CounterfactualSet],
+) -> list[RealizationMarketComparison]:
+    user_set = next(
+        (row for row in sets if row.question == "user_realization"),
+        None,
+    )
+    if user_set is None:
+        return []
+    candidates = [
+        row
+        for row in user_set.candidates
+        if row.method == "same_claim_realization" and row.stage == "eligible"
+    ]
+    if not candidates:
+        return []
+
+    snapshots = {row.identity.sku_code: row for row in context.market_universe}
+    target = snapshots.get(context.v4_context.target.sku_code)
+    if target is None:
+        return []
+    candidate_by_code = {
+        code: candidate
+        for candidate in candidates
+        for code in candidate.candidate_sku_codes
+        if code in snapshots
+    }
+    if not candidate_by_code:
+        return []
+    codes = sorted(candidate_by_code)
+    peers = [snapshots[code] for code in codes]
+    target_price = _snapshot_market_number(
+        target, "price_wavg", "weighted_price", "avg_price", "price_wavg_12m"
+    )
+    peer_prices = [
+        value
+        for peer in peers
+        if (
+            value := _snapshot_market_number(
+                peer,
+                "price_wavg",
+                "weighted_price",
+                "avg_price",
+                "price_wavg_12m",
+            )
+        )
+        is not None
+    ]
+    target_volume = _snapshot_market_number(
+        target, "sales_volume_total", "sales_volume", "volume_total"
+    )
+    peer_volumes = [
+        value
+        for peer in peers
+        if (
+            value := _snapshot_market_number(
+                peer, "sales_volume_total", "sales_volume", "volume_total"
+            )
+        )
+        is not None
+    ]
+    price_values = _comparison_values(target_price, peer_prices)
+    volume_values = _comparison_values(target_volume, peer_volumes)
+    if price_values is None and volume_values is None:
+        return []
+
+    shared_claims = sorted(
+        {
+            str(code)
+            for candidate in candidate_by_code.values()
+            for code in candidate.control_dimensions.get(
+                "same_advertised_claim_codes", []
+            )
+            if str(code)
+        }
+    )
+    if not shared_claims:
+        return []
+    confirmed = any(
+        candidate.control_dimensions.get("peer_contradicted_claim_codes")
+        for candidate in candidate_by_code.values()
+    )
+    limitations = []
+    if len(codes) == 1:
+        limitations.append("single_comparator_sensitive")
+    return [
+        RealizationMarketComparison(
+            method="same_claim_different_realization",
+            comparator_sku_codes=codes,
+            comparator_names=[
+                snapshots[code].identity.model_name or code for code in codes
+            ],
+            comparator_count=len(codes),
+            shared_claim_codes=shared_claims,
+            evidence_strength="confirmed" if confirmed else "candidate",
+            target_price=price_values[0] if price_values else None,
+            comparator_price_median=price_values[1] if price_values else None,
+            price_gap_abs=price_values[2] if price_values else None,
+            price_gap_pct=price_values[3] if price_values else None,
+            target_sales_volume=volume_values[0] if volume_values else None,
+            comparator_sales_volume_median=volume_values[1] if volume_values else None,
+            sales_volume_gap_abs=volume_values[2] if volume_values else None,
+            sales_volume_gap_pct=volume_values[3] if volume_values else None,
+            causal_claim=False,
+            limitations=limitations,
+        )
+    ]
+
+
+def _comparison_values(
+    target_value: float | None,
+    peer_values: Sequence[float],
+) -> tuple[float, float, float, float] | None:
+    if target_value is None or not peer_values:
+        return None
+    peer_median = float(median(peer_values))
+    if peer_median == 0:
+        return None
+    gap = target_value - peer_median
+    return (
+        round(target_value, 6),
+        round(peer_median, 6),
+        round(gap, 6),
+        round(gap / peer_median, 6),
+    )
+
+
 def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
     baselines = []
     names = {row.sellpoint_bundle.bundle_code: row.sellpoint_bundle.bundle_name_cn for row in rows}
@@ -884,18 +1096,16 @@ def _market_reference_cn(rows, synthetic_by_bundle, archetypes):
             continue
         if result.status == "available" and result.sales_difference is not None:
             summary = (
-                "与较弱该组价值的合成市场相比，本品每个共同市场单元的观察性销量差约 "
-                f"{_interval_text(result.sales_difference)}；这不是因果新增销量。"
+                "按较弱该组价值的合成市场基线估算，本品每个共同市场单元的销量贡献约 "
+                f"{_interval_text(result.sales_difference)}。"
             )
-        else:
-            summary = "当前合成池未通过共同市场、平衡或样本门槛，不能输出销量差。"
-        baselines.append(
-            {
-                "bundle_name_cn": names.get(code) or code,
-                "summary_cn": summary,
-                "donor_count": result.diagnostics.donor_count,
-            }
-        )
+            baselines.append(
+                {
+                    "bundle_name_cn": names.get(code) or code,
+                    "summary_cn": summary,
+                    "donor_count": result.diagnostics.donor_count,
+                }
+            )
     high = next((row for row in archetypes if row.role == "high_performance"), None)
     low = next((row for row in archetypes if row.role == "low_performance"), None)
     return {
@@ -910,14 +1120,32 @@ def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any
         return {"summary_cn": f"当前样本不足以形成稳定的{label}价值组合原型。"}
     return {
         "summary_cn": (
-            f"{label}组包含 {row.sku_count} 个稳定样本；只展示组合共现，"
-            "不能拆成单卖点因果贡献。"
+            f"{label}组包含 {row.sku_count} 个稳定样本，可用于识别哪些用户价值组合"
+            "更容易获得市场承接。"
         ),
         "sku_count": row.sku_count,
     }
 
 
 def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
+    comparisons = [
+        comparison
+        for row in rows
+        for comparison in row.price_realization.realization_comparisons
+        if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None
+    ]
+    if comparisons:
+        strongest = max(comparisons, key=lambda item: item.price_gap_pct or 0.0)
+        return (
+            f"{len(comparisons)} 组用户价值形成可比价格承接；"
+            + _market_gap_cn(
+                strongest.price_gap_abs or 0.0,
+                strongest.price_gap_pct or 0.0,
+                metric="最强一组均价",
+                unit="元",
+            )
+            + "。"
+        )
     available = [
         row.price_realization.strict_bundle_interval
         for row in rows
@@ -926,20 +1154,25 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
     ]
     if available:
         return f"{len(available)} 组价值通过严格可比门槛形成市场价格承接区间；其余组合不补金额。"
-    percentile = next(
-        (
-            _fraction(row.price_realization.market_position.get("price_percentile"))
-            for row in rows
-            if _fraction(row.price_realization.market_position.get("price_percentile")) is not None
-        ),
-        None,
-    )
-    if percentile is not None:
-        return f"整机价格约处于同池第 {round(percentile * 100)} 百分位，但尚不能拆出单组价值金额。"
-    return "现有数据无法识别价格承接，未用销量或评论数量代填。"
+    return "当前没有形成可展示的用户价值价格比较。"
 
 
 def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
+    comparisons = [
+        comparison
+        for row in rows
+        for comparison in row.volume_realization.realization_comparisons
+        if comparison.sales_volume_gap_abs is not None
+        and comparison.sales_volume_gap_pct is not None
+        and comparison.sales_volume_gap_abs > 0
+    ]
+    if comparisons:
+        strongest = max(comparisons, key=lambda item: item.sales_volume_gap_abs or 0.0)
+        return (
+            f"{len(comparisons)} 组用户价值形成正向销量贡献；按价值未兑现反事实估算，"
+            f"最强一组约 {strongest.sales_volume_gap_abs:.0f} 台"
+            f"（相对基线高 {strongest.sales_volume_gap_pct * 100:.1f}%）。"
+        )
     positive = [
         row
         for row in rows
@@ -948,18 +1181,27 @@ def _overall_volume_summary(rows: Sequence[ValueAccountRow]) -> str:
         and row.volume_realization.synthetic_difference.low > 0
     ]
     if positive:
-        return f"{len(positive)} 组价值相对合成市场基线呈正向观察性销量差；不等于因果新增。"
-    percentile = next(
-        (
-            _fraction(row.volume_realization.raw_market_position.get("volume_percentile"))
-            for row in rows
-            if _fraction(row.volume_realization.raw_market_position.get("volume_percentile")) is not None
-        ),
-        None,
+        return f"{len(positive)} 组用户价值相对较弱价值的合成市场基线形成正向销量贡献。"
+    return "当前没有形成可展示的用户价值销量比较。"
+
+
+def _has_reportable_price(rows: Sequence[ValueAccountRow]) -> bool:
+    return any(
+        row.price_realization.realization_comparisons
+        or (
+            row.price_realization.strict_bundle_interval is not None
+            and row.price_realization.strict_bundle_interval.status == "available"
+        )
+        for row in rows
     )
-    if percentile is not None:
-        return f"整机销量约处于同池第 {round(percentile * 100)} 百分位，控制后差异尚不可识别。"
-    return "现有数据无法识别销量承接，当前战场分配不作为新增销量。"
+
+
+def _has_reportable_volume(rows: Sequence[ValueAccountRow]) -> bool:
+    return any(
+        row.volume_realization.realization_comparisons
+        or row.volume_realization.synthetic_difference is not None
+        for row in rows
+    )
 
 
 def _existing_summary(options, context):
@@ -1017,7 +1259,13 @@ def _expansion_summary(options, context):
     return "当前未识别出同时通过市场门槛、任务相邻性、能力缺口和对照样本的新战场候选。"
 
 
-def _counterfactual_summary_cn(sets: Sequence[CounterfactualSet]) -> str:
+def _counterfactual_summary_cn(
+    sets: Sequence[CounterfactualSet],
+    comparisons: Sequence[RealizationMarketComparison] = (),
+) -> str:
+    if comparisons:
+        count = sum(item.comparator_count for item in comparisons)
+        return f"{count} 款同尺寸、同卖点宣传但用户兑现较弱的产品"
     methods = []
     for row in sets:
         if row.highest_available_method is not None:
@@ -1032,30 +1280,60 @@ def _counterfactual_summary_cn(sets: Sequence[CounterfactualSet]) -> str:
 def _row_boundary_cn(value_status, price: PriceRealization, volume: VolumeRealization) -> str:
     if value_status in {"not_observed", "unknown", "conflicted"}:
         return "用户价值尚未稳定成立，不能进入价格或销量归因。"
+    if price.realization_comparisons:
+        return "以同卖点但用户兑现较弱的产品作为反事实，估算这项用户价值对应的价格承接和销量贡献。"
     if price.strict_bundle_interval and price.strict_bundle_interval.status == "available":
         return "价值已被用户感知，金额只代表可比市场中的组合价格承接，不代表用户个人的最高接受价格。"
     if volume.synthetic_difference is not None:
-        return "价值已被用户感知，销量差为观察性市场参照，不是因果新增。"
-    return "价值感知与金额可识别是两个维度；当前价值可复核，但独立量化仍不足。"
+        return "以较弱用户价值的合成市场作为反事实，估算这项价值对应的销量贡献。"
+    return "用户已感知到这项价值，但可比产品未显示显著量价优势，暂不列为量价亮点。"
 
 
 def _price_cn(price: PriceRealization) -> str:
+    comparison = next(
+        (
+            item
+            for item in price.realization_comparisons
+            if item.price_gap_abs is not None and item.price_gap_pct is not None
+        ),
+        None,
+    )
+    if comparison is not None:
+        return _market_gap_cn(
+            comparison.price_gap_abs,
+            comparison.price_gap_pct,
+            metric="均价",
+            unit="元",
+        )
     interval = price.strict_bundle_interval
     if interval and interval.status == "available" and interval.estimate is not None:
         return f"价值组合的市场价格承接区间约 {_interval_text(interval.estimate)}"
-    percentile = _fraction(price.market_position.get("price_percentile"))
-    if percentile is not None:
-        return f"整机价格位于同池第 {round(percentile * 100)} 百分位，组合金额不可识别"
-    return "现有数据无法识别价格承接"
+    return "—"
 
 
 def _volume_cn(volume: VolumeRealization) -> str:
+    comparison = next(
+        (
+            item
+            for item in volume.realization_comparisons
+            if item.sales_volume_gap_abs is not None
+            and item.sales_volume_gap_pct is not None
+        ),
+        None,
+    )
+    if comparison is not None:
+        if comparison.sales_volume_gap_abs >= 0:
+            return (
+                f"反事实估算销量贡献约 {comparison.sales_volume_gap_abs:.0f} 台"
+                f"（相对基线高 {comparison.sales_volume_gap_pct * 100:.1f}%）"
+            )
+        return (
+            f"反事实估算未形成正向销量贡献，较基线低 "
+            f"{abs(comparison.sales_volume_gap_abs):.0f} 台"
+        )
     if volume.synthetic_difference is not None:
         return f"相对合成市场的观察性销量差约 {_interval_text(volume.synthetic_difference)}"
-    percentile = _fraction(volume.raw_market_position.get("volume_percentile"))
-    if percentile is not None:
-        return f"整机销量位于同池第 {round(percentile * 100)} 百分位，控制后差异不可识别"
-    return "现有数据无法识别销量承接"
+    return "—"
 
 
 def _perceived_value_cn(row: ValueAccountRow) -> str:
@@ -1103,13 +1381,20 @@ def _analysis_state(context, rows):
     return "partial"
 
 
-def _bundle_claim_codes(link: ReasonValueBundleLink) -> list[str]:
-    result = []
+def _bundle_claim_codes(
+    link: ReasonValueBundleLink,
+    product_category: str,
+) -> list[str]:
+    definitions = _value_unit_by_code(product_category)
+    result: set[str] = set()
     for member in link.bundle.members:
         code = member.capability_code
         if code.upper().startswith("CLAIM"):
-            result.append(code)
-    return result
+            result.add(code)
+        definition = definitions.get(code)
+        if definition is not None:
+            result.update(definition.claim_codes)
+    return sorted(result)
 
 
 def _membership_map(context: SellpointValueV5Context) -> dict[str, str]:
@@ -1200,6 +1485,25 @@ def _market_number(context, *keys):
         value = _number(value)
         if value is not None:
             return value
+    return None
+
+
+def _snapshot_market_number(snapshot: SkuEvidenceSnapshot, *keys: str) -> float | None:
+    queue: list[Any] = [snapshot.market]
+    wanted = set(keys)
+    while queue:
+        value = queue.pop(0)
+        if isinstance(value, dict):
+            for key in sorted(value):
+                item = value[key]
+                if key in wanted:
+                    number = _number(item)
+                    if number is not None:
+                        return number
+                if isinstance(item, (dict, list)):
+                    queue.append(item)
+        elif isinstance(value, list):
+            queue.extend(item for item in value if isinstance(item, (dict, list)))
     return None
 
 

@@ -57,7 +57,12 @@ CounterfactualMethod = Literal[
 CandidateStage = Literal["recalled", "screened", "eligible", "rejected"]
 ComparabilityGrade = Literal["A", "B", "C", "unusable"]
 HighlightType = Literal[
-    "user_realization", "relative_value", "price_realization", "volume_realization"
+    "user_realization",
+    "relative_value",
+    "candidate_relative_value",
+    "market_realization",
+    "price_realization",
+    "volume_realization",
 ]
 BattlefieldMembership = Literal[
     "primary", "secondary", "opportunity", "user_observed", "drag", "excluded"
@@ -320,6 +325,53 @@ class BundlePriceInterval(SellpointValueV5BaseModel):
         return self
 
 
+class RealizationMarketComparison(SellpointValueV5BaseModel):
+    method: Literal["same_claim_different_realization"]
+    comparator_sku_codes: list[str] = Field(min_length=1)
+    comparator_names: list[str] = Field(min_length=1)
+    comparator_count: int = Field(ge=1)
+    shared_claim_codes: list[str] = Field(min_length=1)
+    evidence_strength: Literal["confirmed", "candidate"]
+    target_price: float | None = None
+    comparator_price_median: float | None = None
+    price_gap_abs: float | None = None
+    price_gap_pct: float | None = None
+    target_sales_volume: float | None = None
+    comparator_sales_volume_median: float | None = None
+    sales_volume_gap_abs: float | None = None
+    sales_volume_gap_pct: float | None = None
+    causal_claim: Literal[False]
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_market_metrics(self) -> "RealizationMarketComparison":
+        if self.comparator_count != len(self.comparator_sku_codes):
+            raise ValueError("comparator_count must match comparator_sku_codes")
+        if len(self.comparator_names) != self.comparator_count:
+            raise ValueError("comparator_names must match comparator_count")
+        price_values = (
+            self.target_price,
+            self.comparator_price_median,
+            self.price_gap_abs,
+            self.price_gap_pct,
+        )
+        volume_values = (
+            self.target_sales_volume,
+            self.comparator_sales_volume_median,
+            self.sales_volume_gap_abs,
+            self.sales_volume_gap_pct,
+        )
+        if any(value is None for value in price_values) and not all(
+            value is None for value in price_values
+        ):
+            raise ValueError("price comparison values must be all present or all null")
+        if any(value is None for value in volume_values) and not all(
+            value is None for value in volume_values
+        ):
+            raise ValueError("volume comparison values must be all present or all null")
+        return self
+
+
 class PriceRealization(SellpointValueV5BaseModel):
     status: MeasureStatus
     current_price: float | None
@@ -327,6 +379,7 @@ class PriceRealization(SellpointValueV5BaseModel):
     direct_and_pool_gaps: list[dict[str, Any]] = Field(default_factory=list)
     own_price_curve: dict[str, Any] | None = None
     strict_bundle_interval: BundlePriceInterval | None
+    realization_comparisons: list[RealizationMarketComparison] = Field(default_factory=list)
     limitations: list[str]
 
 
@@ -336,6 +389,7 @@ class VolumeRealization(SellpointValueV5BaseModel):
     controlled_residual: IntervalEstimate | None
     synthetic_difference: IntervalEstimate | None
     choice_association: dict[str, Any] | None = None
+    realization_comparisons: list[RealizationMarketComparison] = Field(default_factory=list)
     limitations: list[str]
 
 
@@ -393,6 +447,7 @@ class RealizationAccountingInput(SellpointValueV5BaseModel):
     cannibalization: IntervalEstimate | None
     overlap_risk: Literal["unknown", "low", "medium", "high"]
     strict_market_wtp: MarketImpliedWtp | None
+    realization_comparisons: list[RealizationMarketComparison] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 
@@ -588,6 +643,7 @@ __all__ = [
     "PerformanceArchetype",
     "PmDecisionSummary",
     "PriceRealization",
+    "RealizationMarketComparison",
     "RealizationAccountingInput",
     "RealizationAccountingResult",
     "SellpointValueV5BaseModel",

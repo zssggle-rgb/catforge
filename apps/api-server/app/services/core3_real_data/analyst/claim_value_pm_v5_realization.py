@@ -39,6 +39,7 @@ def build_realization_accounting(
         direct_and_pool_gaps=accounting.direct_and_pool_gaps,
         own_price_curve=accounting.own_price_curve,
         strict_bundle_interval=strict_interval,
+        realization_comparisons=accounting.realization_comparisons,
         limitations=sorted(set(price_limitations)),
     )
 
@@ -69,6 +70,7 @@ def build_realization_accounting(
         controlled_residual=accounting.controlled_residual,
         synthetic_difference=synthetic_sales,
         choice_association=accounting.choice_association,
+        realization_comparisons=accounting.realization_comparisons,
         limitations=sorted(set(volume_limitations)),
     )
 
