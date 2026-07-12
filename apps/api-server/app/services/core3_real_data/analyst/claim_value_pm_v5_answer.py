@@ -582,7 +582,12 @@ def _additional_comparison_summary(market_reference: dict[str, Any]) -> str:
         method = str(item.get("method") or "")
         codes = tuple(sorted(str(code) for code in item.get("comparator_sku_codes") or []))
         if method and codes:
-            counts.setdefault(method, set()).add(codes)
+            key = (
+                (str(item.get("comparison_basis_cn") or ""), *codes)
+                if method == "parameter_configuration"
+                else codes
+            )
+            counts.setdefault(method, set()).add(key)
     clauses = []
     labels = {
         "direct_comparable": "同类产品逐一比较",
@@ -1169,22 +1174,18 @@ def _realization_market_comparisons(
         for row in relative_candidates
         if row.method == "param_tier_pool" and row.stage == "eligible"
     ]
-    parameter_groups: dict[str, list[Any]] = {}
+    parameter_groups: dict[tuple[str, str], list[Any]] = {}
     for candidate in parameter_candidates:
         configuration = candidate.control_dimensions.get(
             "peer_parameter_configuration"
         ) or {}
-        key = canonical_v4_hash(configuration)
-        parameter_groups.setdefault(key, []).append(candidate)
+        for parameter_code, parameter_value in sorted(configuration.items()):
+            key = (str(parameter_code), str(parameter_value))
+            parameter_groups.setdefault(key, []).append(candidate)
     for key in sorted(parameter_groups):
         candidates = parameter_groups[key]
-        configuration = candidates[0].control_dimensions.get(
-            "peer_parameter_configuration"
-        ) or {}
-        summary = "、".join(
-            f"{str(code).split('.')[-1]}={value}"
-            for code, value in list(sorted(configuration.items()))[:4]
-        )
+        parameter_code, parameter_value = key
+        summary = f"{parameter_code.split('.')[-1]}={parameter_value}"
         comparison = _build_market_comparison(
             target,
             snapshots,
