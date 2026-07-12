@@ -63,6 +63,7 @@ from app.services.core3_real_data.purchase_reason_anchor_taxonomy import (
 )
 from app.services.core3_real_data.purchase_reason_context_builder import (
     SkuPurchaseReasonContextBuilder,
+    _deterministic_order_columns,
 )
 from app.services.core3_real_data.purchase_reason_profile_contract import (
     get_downstream_read_contract,
@@ -741,6 +742,19 @@ def test_m12d_context_builder_assembles_65e7q_input_snapshots(client) -> None:
         }
     finally:
         session.close()
+
+
+def test_m12d_context_detail_queries_use_primary_key_tie_breaker() -> None:
+    columns = _deterministic_order_columns(
+        entities.Core3CommentFactAtom,
+        ("dimension_code", "subdimension_code"),
+    )
+
+    assert [column.key for column in columns] == [
+        "dimension_code",
+        "subdimension_code",
+        "comment_fact_id",
+    ]
 
 
 def test_m12d_context_builder_reads_serving_scope_batch_ids(client) -> None:

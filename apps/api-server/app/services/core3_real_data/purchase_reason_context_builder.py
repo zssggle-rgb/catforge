@@ -385,9 +385,7 @@ class SkuPurchaseReasonContextBuilder(Core3BaseRepository):
         stmt = _filter_if_present(stmt, model_cls, "taxonomy_version", taxonomy_version)
         stmt = _filter_if_present(stmt, model_cls, "rule_version", rule_version)
         stmt = _filter_if_present(stmt, model_cls, "is_current", True)
-        for field_name in order_fields:
-            if hasattr(model_cls, field_name):
-                stmt = stmt.order_by(getattr(model_cls, field_name))
+        stmt = stmt.order_by(*_deterministic_order_columns(model_cls, order_fields))
         if limit > 0:
             stmt = stmt.limit(limit)
         return list(self.db.execute(stmt).scalars())
@@ -748,6 +746,24 @@ def _claim_value_role_evidence(
             }
         )
     return result
+
+
+def _deterministic_order_columns(
+    model_cls: Any,
+    order_fields: Sequence[str],
+) -> tuple[Any, ...]:
+    field_names = [
+        *order_fields,
+        *(column.name for column in model_cls.__table__.primary_key.columns),
+    ]
+    result: list[Any] = []
+    seen: set[str] = set()
+    for field_name in field_names:
+        if field_name in seen or not hasattr(model_cls, field_name):
+            continue
+        seen.add(field_name)
+        result.append(getattr(model_cls, field_name))
+    return tuple(result)
 
 
 def _filter_if_present(stmt: Select[Any], model_cls: Any, field_name: str, value: Any | None) -> Select[Any]:
