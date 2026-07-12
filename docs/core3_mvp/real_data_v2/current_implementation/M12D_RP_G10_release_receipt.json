@@ -10,7 +10,8 @@
     "note": "用户已明确授权提交、部署、正式全量重跑和 current/published 切换均不再单独审批。"
   },
   "runtime": {
-    "git_revision": "54090b6",
+    "git_revision": "4bc68be",
+    "score_ranking_revision": "4da2279",
     "alembic_revision": "0044_core3_m12d_reason_pressure",
     "healthz": "ok",
     "readyz": "ready",
@@ -52,8 +53,9 @@
   },
   "online_acceptance": {
     "tv_target": "TV00029112",
-    "tv_top3": ["TV00027801", "TV00029936", "TV00028909"],
-    "tv_report_url": "https://my.feishu.cn/docx/UtJOdRDXzo8szOxuFKucg7iIn8b",
+    "tv_top3": ["TV00027801", "TV00028909", "TV00029936"],
+    "tv_top3_display_scores": [92, 92, 82],
+    "tv_report_url": "https://my.feishu.cn/docx/Fni2dXd9loQ4cnx2W8DcBsJYnTH",
     "ac_target": "AC00038063",
     "ac_top3": ["AC00030362", "AC00037563", "AC00030929"],
     "ac_report_url": "https://my.feishu.cn/docx/K60Hd8l5woJNzrxupvocn3Ctnlh",
@@ -83,6 +85,7 @@
     "report_semantics_tests": "16 passed",
     "dashboard_targeted_tests": "3 passed",
     "pressure_column_targeted_tests": "2 passed",
+    "score_ranked_competitor_tests": "53 passed",
     "ruff": "passed",
     "compileall": "passed",
     "api_log_error_or_traceback": 0
