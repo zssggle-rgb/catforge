@@ -12,6 +12,7 @@ from app.models import entities
 from app.services.core3_real_data.analyst.analyst_repository import (
     AnalystRepository,
     _v4_multirow_authority,
+    _v4_current_m12d_input_lineage,
     _v4_pick_rows_by_key,
     _v4_published_lineage,
     _v4_select_snapshot_candidates,
@@ -33,6 +34,7 @@ from app.services.core3_real_data.constants import (
     CORE3_M07_RULE_VERSION,
     CORE3_M12C_RULE_VERSION,
 )
+from app.services.core3_real_data.purchase_reason_profile_schemas import M12DSourceRef
 
 
 PROJECT_ID = "d8d2245b-358b-4a64-95cc-9d7f2341bd26"
@@ -130,8 +132,8 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
     sql_verbs = [
         statement.split(None, 1)[0].upper() for statement in statements if statement
     ]
-    assert single_candidate_query_count <= 20
-    assert multi_candidate_query_count <= 20
+    assert single_candidate_query_count <= 30
+    assert multi_candidate_query_count <= 30
     assert multi_candidate_query_count == single_candidate_query_count
     assert set(sql_verbs) <= {"SELECT", "PRAGMA"}
     assert not {"INSERT", "UPDATE", "DELETE"} & set(sql_verbs)
@@ -152,6 +154,40 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
     assert context.m12c_pool_tiers == []
     assert context.input_hash
     assert len(multi_candidate_context.candidate_snapshots) == 3
+
+
+def test_target_only_m12d_lineage_keeps_composite_semantic_scope() -> None:
+    context = SimpleNamespace(
+        source_refs_json=[
+            M12DSourceRef(
+                module_code="M09C_M10C_M11C",
+                table_name="core3_m09c_sku_user_task_profile",
+                record_id="task-1",
+                result_hash="task-hash",
+                extra={"rule_version": "m09-v1", "taxonomy_version": "task-v1"},
+            ),
+            M12DSourceRef(
+                module_code="M09C_M10C_M11C",
+                table_name="core3_m11c_sku_value_battlefield_profile",
+                record_id="battlefield-1",
+                result_hash="battlefield-hash",
+                extra={"rule_version": "m11-v1", "taxonomy_version": "battlefield-v1"},
+            ),
+        ]
+    )
+
+    lineage = _v4_current_m12d_input_lineage(
+        context,
+        requested_batch_id="serving-scope:TV:batch-current,batch-fallback",
+    )
+    by_module = {item.module_code: item for item in lineage}
+
+    semantic = by_module["M09C_M10C_M11C"]
+    assert semantic.row_count == 2
+    assert semantic.source_hash
+    assert semantic.selected_batch_ids == ["batch-current", "batch-fallback"]
+    assert "multiple_current_rule_versions" in semantic.warnings
+    assert by_module["M12C"].availability == "missing"
 
 
 def test_65e7q_fixture_detects_published_vs_current_lineage_conflict(

@@ -59,6 +59,10 @@ from app.services.core3_real_data.constants import (
     CORE3_M12C_RULE_VERSION,
     CORE3_M14_RULE_VERSION,
 )
+from app.services.core3_real_data.purchase_reason_context_builder import (
+    SkuPurchaseReasonContextBuilder,
+)
+from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 
 SKU_CODE_RE = re.compile(r"\b(?:TV|AC)\d{6,}\b", re.IGNORECASE)
@@ -997,9 +1001,24 @@ class AnalystRepository:
             )
         )
         published_lineage = _v4_published_lineage(purchase_contract)
+        current_m12d_context = SkuPurchaseReasonContextBuilder(
+            Core3RepositoryContext(
+                db=self.db,
+                project_id=self.project_id,
+                category_code=self.category_code,
+            )
+        ).build_context(
+            batch_id=batch_id,
+            sku_code=sku.sku_code,
+            product_category=normalized_category,
+        )
+        current_m12d_lineage = _v4_current_m12d_input_lineage(
+            current_m12d_context,
+            requested_batch_id=batch_id,
+        )
         lineage_gate = build_sellpoint_value_v4_lineage_gate(
             published_lineage=published_lineage,
-            current_validation_lineage=current_authorities,
+            current_validation_lineage=current_m12d_lineage,
         )
         purchase_snapshot, m12d_authority = _v4_purchase_reason_snapshot(
             purchase_contract,
@@ -3030,7 +3049,36 @@ def build_sellpoint_value_v4_lineage_gate(
 
     current_by_module = {item.module_code: item for item in current_validation_lineage}
     published_by_module = {item.module_code: item for item in published_lineage}
-    required_modules = ("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C")
+    if not published_by_module:
+        issue = LineageIssue(
+            code="published_lineage_missing",
+            severity="warning",
+            scope="source",
+            message_cn="没有可用的已发布采购理由画像线谱，不能执行来源对齐校验。",
+            affected_module_codes=[],
+        )
+        return LineageGate(
+            status="unresolved",
+            published_lineage=list(published_lineage),
+            current_validation_lineage=list(current_validation_lineage),
+            issues=[issue],
+            blocked_reason_codes=[],
+        )
+    semantic_modules = (
+        ("M09C_M10C_M11C",)
+        if "M09C_M10C_M11C" in published_by_module
+        or "M09C_M10C_M11C" in current_by_module
+        else ("M09C", "M10C", "M11C")
+    )
+    required_modules = (
+        "M03B",
+        "M04C",
+        "M05C",
+        "M07",
+        *semantic_modules,
+        "M11D",
+        "M12C",
+    )
     issues: list[LineageIssue] = []
     stale_revalidated = False
     conflict = False
@@ -3038,7 +3086,11 @@ def build_sellpoint_value_v4_lineage_gate(
     for module_code in required_modules:
         published = published_by_module.get(module_code)
         current = current_by_module.get(module_code)
-        if published is None:
+        published_missing = published is None or published.availability == "missing"
+        current_missing = current is None or current.availability == "missing"
+        if published_missing and current_missing:
+            continue
+        if published_missing:
             unresolved = True
             issues.append(
                 LineageIssue(
@@ -3050,7 +3102,7 @@ def build_sellpoint_value_v4_lineage_gate(
                 )
             )
             continue
-        if current is None or current.availability == "missing":
+        if current_missing:
             unresolved = True
             issues.append(
                 LineageIssue(
@@ -3061,6 +3113,18 @@ def build_sellpoint_value_v4_lineage_gate(
                     affected_module_codes=[module_code],
                 )
             )
+            continue
+        published_batches = set(published.selected_batch_ids)
+        current_batches = set(current.selected_batch_ids)
+        batch_overlap = bool(published_batches & current_batches)
+        if (
+            published.source_hash
+            and current.source_hash
+            and published.source_hash == current.source_hash
+            and batch_overlap
+        ):
+            if published.rule_version != current.rule_version:
+                stale_revalidated = True
             continue
         if not published.rule_version or not current.rule_version:
             unresolved = True
@@ -3074,9 +3138,6 @@ def build_sellpoint_value_v4_lineage_gate(
                 )
             )
             continue
-        published_batches = set(published.selected_batch_ids)
-        current_batches = set(current.selected_batch_ids)
-        batch_overlap = bool(published_batches & current_batches)
         if published.rule_version == current.rule_version and batch_overlap:
             if not published.source_hash or not current.source_hash:
                 unresolved = True
@@ -3500,6 +3561,94 @@ def _v4_published_lineage(contract: Any) -> list[SourceAuthority]:
                 usability="limited" if warnings else "usable",
                 source_hash=canonical_v4_hash([ref.model_dump(mode="json") for ref in refs]),
                 selected_reason="source refs frozen inside the published M12D profile",
+                warnings=warnings,
+            )
+        )
+    return result
+
+
+def _v4_current_m12d_input_lineage(
+    context: Any,
+    *,
+    requested_batch_id: str,
+) -> list[SourceAuthority]:
+    """Rebuild the target-only lineage using M12D's own input contract.
+
+    The analyst authority manifest covers the target and its comparison SKUs,
+    while a published M12D profile freezes only the target SKU inputs.  Those
+    two scopes must remain separate: this helper intentionally compares the
+    published profile with a fresh, read-only M12D context for the same target.
+    """
+
+    grouped: dict[str, list[tuple[dict[str, Any], EvidenceRef]]] = defaultdict(list)
+    for source_ref in context.source_refs_json:
+        raw = source_ref.model_dump(mode="json")
+        grouped[str(raw["module_code"])].append((raw, _v4_external_ref(raw)))
+
+    expected_modules = (
+        "M03B",
+        "M04C",
+        "M05C",
+        "M07",
+        "M09C_M10C_M11C",
+        "M11D",
+        "M12C",
+    )
+    selected_batch_ids = list(batch_ids_from_scope(requested_batch_id)) or [
+        requested_batch_id
+    ]
+    result: list[SourceAuthority] = []
+    for module_code in expected_modules:
+        pairs = grouped.get(module_code, [])
+        if not pairs:
+            result.append(
+                SourceAuthority(
+                    module_code=module_code,
+                    table_name="m12d_input_context",
+                    authority_mode="configured_rule",
+                    rule_version=None,
+                    selected_batch_ids=[],
+                    row_count=0,
+                    availability="missing",
+                    usability="unusable",
+                    source_hash=None,
+                    selected_reason="current target-only M12D input is missing",
+                    warnings=["current_m12d_input_missing"],
+                )
+            )
+            continue
+        refs = _v4_dedupe_evidence_refs([ref for _, ref in pairs])
+        rule_versions = sorted(
+            {
+                str((raw.get("extra") or {}).get("rule_version"))
+                for raw, _ in pairs
+                if (raw.get("extra") or {}).get("rule_version")
+            }
+        )
+        taxonomies = sorted(
+            {
+                str((raw.get("extra") or {}).get("taxonomy_version"))
+                for raw, _ in pairs
+                if (raw.get("extra") or {}).get("taxonomy_version")
+            }
+        )
+        tables = sorted({ref.record_type for ref in refs})
+        warnings = [] if len(rule_versions) <= 1 else ["multiple_current_rule_versions"]
+        result.append(
+            SourceAuthority(
+                module_code=module_code,
+                table_name="+".join(tables),
+                authority_mode="configured_rule",
+                rule_version=rule_versions[0] if len(rule_versions) == 1 else None,
+                taxonomy_version=taxonomies[0] if len(taxonomies) == 1 else None,
+                selected_batch_ids=selected_batch_ids,
+                row_count=len(refs),
+                availability="present",
+                usability="limited" if warnings else "usable",
+                source_hash=canonical_v4_hash(
+                    [ref.model_dump(mode="json") for ref in refs]
+                ),
+                selected_reason="fresh target-only M12D input context",
                 warnings=warnings,
             )
         )

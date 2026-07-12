@@ -202,6 +202,28 @@ def test_missing_published_lineage_is_unknown_not_false() -> None:
     assert any(issue.code == "published_lineage_missing" for issue in result.issues)
 
 
+def test_source_missing_on_both_sides_does_not_create_false_conflict() -> None:
+    published = [_authority(module) for module in MODULES]
+    current = deepcopy(published)
+    missing = {
+        "selected_batch_ids": [],
+        "row_count": 0,
+        "availability": "missing",
+        "usability": "unusable",
+        "source_hash": None,
+    }
+    published[-1] = published[-1].model_copy(update=missing)
+    current[-1] = current[-1].model_copy(update=missing)
+
+    result = build_sellpoint_value_v4_lineage_gate(
+        published_lineage=published,
+        current_validation_lineage=current,
+    )
+
+    assert result.status == "aligned"
+    assert result.issues == []
+
+
 def test_stale_conflict_contract_requires_explicit_issue() -> None:
     with pytest.raises(ValidationError, match="stale_conflict requires"):
         LineageGate(
