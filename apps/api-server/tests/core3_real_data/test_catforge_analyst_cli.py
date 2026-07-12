@@ -5306,7 +5306,8 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "| 价值锚点 |" in dashboard_section
     assert "| 市场验证 |" in dashboard_section
     assert "### 市场验证条形图" in dashboard_section
-    assert "| 竞品 | 周均销量 | 重叠周 | 量级 |" in dashboard_section
+    assert "| 竞品 | 均价 | 周均销量 | 销量量级 |" in dashboard_section
+    assert "重叠周" not in dashboard_section
     assert "■■" in dashboard_section
     assert "业务拆解" not in dashboard_section
     assert "### 看板 1" not in dashboard_section
@@ -5486,8 +5487,6 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "chart",
         "hr",
         "markdown",
-        "hr",
-        "markdown",
         "table",
         "hr",
         "button",
@@ -5506,18 +5505,15 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         "创维 65A6F ULTRA",
     ]
     assert "创维 65A7H PRO" in card_json
-    assert "购买理由重合与替代压力" in card_json
+    assert "购买理由重合与替代压力" not in card_json
     assert "购买阻力待补充" not in card_json
-    assert "锚点可替代性" in card_json
     assert "小米 L65MC-SP" not in card_json
     assert "多维评分雷达图" in card_json
     assert '"tag": "chart"' in card_json
     assert '"type": "radar"' in card_json
     assert card["body"]["elements"][5]["content"].startswith("**价值战场重合结构**")
     assert "主战场：高端画质" in card["body"]["elements"][5]["content"]
-    assert card["body"]["elements"][8]["content"].startswith(
-        "**购买理由重合与替代压力**"
-    )
+    assert card["body"]["elements"][8]["content"] == "**竞品市场验证**"
     assert "辅战场：" in card["body"]["elements"][5]["content"]
     assert "机会战场：" in card["body"]["elements"][5]["content"]
     assert "错位/缺口：" not in card["body"]["elements"][5]["content"]
@@ -5543,7 +5539,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     )
     assert "竞品市场验证" in card_json
     assert '"tag": "table"' in card_json
-    market_table = card["body"]["elements"][11]
+    market_table = card["body"]["elements"][9]
     assert market_table["element_id"] == "competitor_market_table"
     assert [column["display_name"] for column in market_table["columns"]] == [
         "序号",
@@ -5664,8 +5660,6 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "chart",
         "hr",
         "markdown",
-        "hr",
-        "markdown",
         "table",
         "hr",
         "button",
@@ -5674,9 +5668,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
     assert card["body"]["elements"][3]["tag"] == "chart"
-    assert card["body"]["elements"][5]["content"].startswith(
-        "**购买理由重合与替代压力**"
-    )
+    assert card["body"]["elements"][5]["content"] == "**竞品市场验证**"
     radar_values = card["body"]["elements"][3]["chart_spec"]["data"]["values"]
     assert len(radar_values) == 6
     assert {row["dimension"] for row in radar_values} == {
@@ -5688,9 +5680,8 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "市场验证",
     }
     assert {row["competitor"] for row in radar_values} == {"创维 65A7H PRO"}
-    assert card["body"]["elements"][7]["content"] == "**竞品市场验证**"
-    assert card["body"]["elements"][8]["tag"] == "table"
-    market_table = card["body"]["elements"][8]
+    assert card["body"]["elements"][6]["tag"] == "table"
+    market_table = card["body"]["elements"][6]
     assert [column["display_name"] for column in market_table["columns"]] == [
         "序号",
         "竞品/目标",

@@ -784,10 +784,6 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
             )
             elements.append(_feishu_battlefield_overlap_chart(battlefield_chart_values))
         elements.append({"tag": "hr"})
-        elements.append(
-            _feishu_markdown(_dashboard_anchor_replacement_markdown(competitors))
-        )
-        elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品市场验证**"))
         elements.append(_feishu_competitor_market_table(target, competitors))
     evidence_action = _feishu_report_action(dashboard_payload)
@@ -847,10 +843,6 @@ def render_competitor_dashboard_markdown(
             "### 多维评分雷达图数据",
             "",
             *_dashboard_score_dimension_lines(competitors),
-            "",
-            "### 购买理由重合与替代压力",
-            "",
-            *_dashboard_anchor_replacement_lines(competitors),
             "",
             "### 市场验证条形图",
             "",
@@ -7467,42 +7459,6 @@ def _dashboard_score_dimension_lines(competitors: list[dict[str, Any]]) -> list[
     return lines
 
 
-def _dashboard_anchor_replacement_markdown(competitors: list[dict[str, Any]]) -> str:
-    lines = ["**购买理由重合与替代压力**"]
-    for item in competitors[:3]:
-        lines.append(
-            f"{item.get('rank') or '-'}\\. {_dashboard_competitor_alias(item)}："
-            f"{item.get('anchor_substitutability_cn') or '锚点可替代性待复核'}；"
-            f"{item.get('pressure_breakdown_cn') or item.get('pressure_cn') or '替代压力待复核'}"
-        )
-    return "\n".join(lines)
-
-
-def _dashboard_anchor_replacement_lines(competitors: list[dict[str, Any]]) -> list[str]:
-    lines = [
-        "| 排名 | 竞品 | 购买理由重合度 | 替代压力 |",
-        "| ---: | --- | --- | --- |",
-    ]
-    for item in competitors[:3]:
-        lines.append(
-            "| "
-            + " | ".join(
-                [
-                    _markdown_cell(item.get("rank")),
-                    _markdown_cell(_dashboard_competitor_alias(item)),
-                    _markdown_cell(
-                        item.get("anchor_substitutability_cn") or "锚点可替代性待复核"
-                    ),
-                    _markdown_cell(
-                        item.get("pressure_breakdown_cn") or "替代压力待复核"
-                    ),
-                ]
-            )
-            + " |"
-        )
-    return lines
-
-
 def _feishu_market_chart_table(competitors: list[dict[str, Any]]) -> dict[str, Any]:
     metrics = [_dashboard_market_metric(item) for item in competitors[:3]]
     max_sales = max((metric["sales"] or 0 for metric in metrics), default=0)
@@ -7510,17 +7466,15 @@ def _feishu_market_chart_table(competitors: list[dict[str, Any]]) -> dict[str, A
         element_id="market_chart",
         columns=[
             _feishu_text_column("name", "竞品"),
-            _feishu_text_column("sales", "周均"),
-            _feishu_text_column("weeks", "周期"),
-            _feishu_text_column("bar", "量级"),
+            _feishu_text_column("price", "均价"),
+            _feishu_text_column("sales", "周均销量"),
+            _feishu_text_column("bar", "销量量级"),
         ],
         rows=[
             {
                 "name": metric["name"],
-                "sales": f"{_format_market_number(metric['sales'])}台",
-                "weeks": f"{_format_market_number(metric['weeks'])}周"
-                if metric["weeks"] is not None
-                else "待复核",
+                "price": _format_dashboard_market_price(metric["price"]),
+                "sales": _format_dashboard_market_sales(metric["sales"]),
                 "bar": _dashboard_market_bar(metric["sales"], max_sales),
             }
             for metric in metrics
@@ -7531,36 +7485,22 @@ def _feishu_market_chart_table(competitors: list[dict[str, Any]]) -> dict[str, A
 def _dashboard_market_chart_lines(competitors: list[dict[str, Any]]) -> list[str]:
     metrics = [_dashboard_market_metric(item) for item in competitors[:3]]
     max_sales = max((metric["sales"] or 0 for metric in metrics), default=0)
-    lines = ["| 竞品 | 周均销量 | 重叠周 | 量级 |", "| --- | ---: | ---: | --- |"]
+    lines = ["| 竞品 | 均价 | 周均销量 | 销量量级 |", "| --- | ---: | ---: | --- |"]
     for metric in metrics:
         sales = metric["sales"]
-        weeks = metric["weeks"]
         lines.append(
             "| "
             + " | ".join(
                 [
                     _markdown_cell(metric["name"]),
-                    _markdown_cell(f"{_format_market_number(sales)}台"),
-                    _markdown_cell(
-                        f"{_format_market_number(weeks)}周"
-                        if weeks is not None
-                        else "待复核"
-                    ),
+                    _markdown_cell(_format_dashboard_market_price(metric["price"])),
+                    _markdown_cell(_format_dashboard_market_sales(sales)),
                     _markdown_cell(_dashboard_market_bar(sales, max_sales)),
                 ]
             )
             + " |"
         )
     return lines
-
-
-def _compact_market_validation(value: str) -> str:
-    match = re.search(
-        r"重叠在售周(?P<weeks>[\d.]+)周.*?周均销量约(?P<sales>[\d.]+)台", value
-    )
-    if match:
-        return f"重叠{match.group('weeks')}周，周均{match.group('sales')}台"
-    return value.strip()
 
 
 def _dashboard_competitor_alias(competitor: dict[str, Any]) -> str:
@@ -7600,33 +7540,26 @@ def _dashboard_strength_bar(strength: str) -> str:
 
 
 def _dashboard_market_metric(competitor: dict[str, Any]) -> dict[str, Any]:
-    value = _compact_market_validation(
-        str(competitor.get("market_validation_cn") or "")
-    )
-    weeks_match = re.search(r"重叠(?:在售周)?(?P<weeks>[\d.]+)周", value)
-    sales_match = re.search(r"(?:周均销量约|周均)(?P<sales>[\d.]+)台", value)
+    market = competitor.get("market") or {}
+    sales = _to_float_or_none(market.get("avg_weekly_sales_volume"))
+    if sales is None:
+        value = str(competitor.get("market_validation_cn") or "")
+        sales_match = re.search(r"(?:周均销量约|周均)(?P<sales>[\d.]+)台", value)
+        sales = _to_float_or_none(sales_match.group("sales") if sales_match else None)
     return {
         "name": _dashboard_competitor_alias(competitor),
-        "weeks": _to_float_or_none(weeks_match.group("weeks") if weeks_match else None),
-        "sales": _to_float_or_none(sales_match.group("sales") if sales_match else None),
+        "price": _to_float_or_none(market.get("price")),
+        "sales": sales,
     }
 
 
-def _to_float_or_none(value: str | None) -> float | None:
+def _to_float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     try:
         return float(value)
     except ValueError:
         return None
-
-
-def _format_market_number(value: float | None) -> str:
-    if value is None:
-        return "待复核"
-    if value.is_integer():
-        return str(int(value))
-    return f"{value:.1f}"
 
 
 def _dashboard_market_bar(sales: float | None, max_sales: float) -> str:
