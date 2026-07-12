@@ -1321,8 +1321,8 @@ def _market_reference_cn(context, rows, synthetic_by_bundle, archetypes):
     low = next((row for row in archetypes if row.role == "low_performance"), None)
     return {
         "synthetic_baselines": baselines,
-        "high_performance": _archetype_cn(high, "高表现"),
-        "low_performance": _archetype_cn(low, "低表现"),
+        "high_performance": _archetype_cn(high, "高销量", context),
+        "low_performance": _archetype_cn(low, "低销量", context),
         "performance_value_differences": _performance_value_differences(
             context, rows, high, low
         ),
@@ -1454,16 +1454,30 @@ def _snapshot_code_set(snapshot: SkuEvidenceSnapshot, key: str) -> set[str]:
     return result
 
 
-def _archetype_cn(row: PerformanceArchetype | None, label: str) -> dict[str, Any]:
+def _archetype_cn(
+    row: PerformanceArchetype | None,
+    label: str,
+    context: SellpointValueV5Context,
+) -> dict[str, Any]:
     if row is None or row.role == "unstable":
         return {"summary_cn": f"当前样本不足以形成稳定的{label}价值组合原型。"}
+    names = {
+        snapshot.identity.sku_code: snapshot.identity.model_name
+        or snapshot.identity.sku_code
+        for snapshot in context.market_universe
+    }
+    product_names = [
+        names.get(code, code) for code in row.representative_sku_codes
+    ]
     return {
         "summary_cn": (
-            f"{label}组包含 {row.sku_count} 款产品，周均销量中位数约 "
+            f"{label}组 {row.sku_count} 款产品（{'、'.join(product_names)}），周均销量中位数约 "
             f"{row.volume_interval.estimate:.1f} 台/周，均价中位数约 "
             f"{row.price_interval.estimate:.0f} 元。"
         ),
         "sku_count": row.sku_count,
+        "sku_codes": row.representative_sku_codes,
+        "product_names": product_names,
     }
 
 
