@@ -1200,7 +1200,9 @@ class AnalystRepository:
         analysis_population: str,
     ) -> tuple[list[ComparablePoolTierFact], dict[str, list[Any]], list[EvidenceRef], set[str]]:
         quant = entities.Core3SkuClaimValueQuantification
-        m12c_population = _m12c_population(analysis_population)
+        m12c_population = _sellpoint_m12c_population(
+            product_category, analysis_population
+        )
         quant_stmt = (
             select(
                 quant.sku_claim_value_id,
@@ -4093,6 +4095,12 @@ def _battlefield_rule_version(product_category: str) -> str:
 
 def _m12c_rule_version(product_category: str) -> str:
     return CORE3_M12C_AC_RULE_VERSION if str(product_category).upper() == "AC" else CORE3_M12C_TV_RULE_VERSION
+
+
+def _sellpoint_m12c_population(product_category: str, analysis_population: str) -> str:
+    if str(product_category).upper() == "AC":
+        return _m12c_population(analysis_population)
+    return analysis_population
 
 
 def _m11c_comparable_market_context(row: entities.Core3SkuValueBattlefieldScore | None) -> dict[str, Any]:
