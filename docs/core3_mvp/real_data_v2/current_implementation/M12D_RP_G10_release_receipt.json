@@ -10,7 +10,7 @@
     "note": "用户已明确授权提交、部署、正式全量重跑和 current/published 切换均不再单独审批。"
   },
   "runtime": {
-    "git_revision": "7b61cbd81805297198a7dcdce00aa7cc88ae388c",
+    "git_revision": "b68d426877c9ee1c4d8b6fab5e97f351a804dffb",
     "alembic_revision": "0044_core3_m12d_reason_pressure",
     "healthz": "ok",
     "readyz": "ready",
@@ -53,18 +53,28 @@
   "online_acceptance": {
     "tv_target": "TV00029112",
     "tv_top3": ["TV00027801", "TV00029936", "TV00028909"],
-    "tv_report_url": "https://my.feishu.cn/docx/BsnsdA6hrotHLYx1PF2cfy9anQb",
+    "tv_report_url": "https://my.feishu.cn/docx/LvzIdqw7Noqpnsx2UHgcQlL6nke",
     "ac_target": "AC00038063",
     "ac_top3": ["AC00030362", "AC00037563", "AC00030929"],
     "ac_report_url": "https://my.feishu.cn/docx/K60Hd8l5woJNzrxupvocn3Ctnlh",
     "top3_m12d_consumption_state": "published_ready",
     "report_internal_code_hits": 0,
+    "purchase_pressure_dashboard_hits": 0,
+    "purchase_pressure_section_hits": 0,
+    "market_dashboard_columns": [
+      "均价",
+      "周均销量",
+      "销量量级"
+    ],
+    "market_dashboard_overlap_week_hits": 0,
     "card_buttons": ["查看分析依据", "查看详细对比结果"],
     "pm_comparison_card_link_present": false
   },
   "verification": {
     "m12d_reader_competitor_tests": "106 passed",
     "cli_report_test": "1 passed",
+    "report_semantics_tests": "16 passed",
+    "dashboard_targeted_tests": "3 passed",
     "ruff": "passed",
     "compileall": "passed",
     "api_log_error_or_traceback": 0

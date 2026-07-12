@@ -21,16 +21,16 @@ M12D-RP-G10 / M12D-QF-19 已完成。TV 和 AC 使用各自 taxonomy、业务边
 
 最终飞书报告：
 
-- TV：[海信 65E7Q 重点竞品识别与分析依据报告](https://my.feishu.cn/docx/BsnsdA6hrotHLYx1PF2cfy9anQb)
+- TV：[海信 65E7Q 重点竞品识别与分析依据报告](https://my.feishu.cn/docx/LvzIdqw7Noqpnsx2UHgcQlL6nke)
 - AC：[美的 KFR-88LW/N8KS1-1U 重点竞品识别与分析依据报告](https://my.feishu.cn/docx/K60Hd8l5woJNzrxupvocn3Ctnlh)
 
-两份文档均已从飞书端回读，目录包含购买池、价值战场、用户任务、目标客群、关键价值锚点、替代压力、购买阻力、市场验证及候选池附录。候选附录不再输出内部英文码；卡片只保留“查看分析依据”和“查看详细对比结果”，没有“用户选择对比”链接。
+两份文档均已从飞书端回读。TV 修正版不再把购买阻力作为竞品评分维度、独立分析章节或顶部看板模块；顶部市场验证固定展示均价、周均销量和销量量级，不展示重合周数。分析过程目录包含购买池、价值战场、用户任务、目标客群、关键价值锚点、替代压力、市场验证及候选池附录。候选附录不再输出内部英文码；卡片只保留“查看分析依据”和“查看详细对比结果”，没有“用户选择对比”链接。
 
 ## 3. 修复和验证
 
 G10 增加了发布结果持久化、不可变发布版本、canonical 业务摘要、重复 draft 比较、证据读取稳定排序和购买阻力证据稳定排序。线上飞书验收发现候选附录仍泄漏内部门槛码后，补充 `7b61cbd`：原始门槛保留在 JSON 追溯层，报告层统一转为中文业务条件，正常状态不展示，未知内部码不原样输出。
 
-最终验证包括 M12D/reader/竞品相关回归 `106 passed`、完整 CLI 报告回归 `1 passed`、Ruff、compileall、飞书文档回读、API 健康和日志检查。205 当前 Git revision 为 `7b61cbd81805297198a7dcdce00aa7cc88ae388c`，Alembic 为 `0044_core3_m12d_reason_pressure`。
+最终验证包括 M12D/reader/竞品相关回归 `106 passed`、完整 CLI 报告回归 `1 passed`，以及报告口径修正回归 `16 passed`、顶部看板定向回归 `3 passed`、Ruff、compileall、飞书文档回读、API 健康和日志检查。205 当前 Git revision 为 `b68d426877c9ee1c4d8b6fab5e97f351a804dffb`，Alembic 为 `0044_core3_m12d_reason_pressure`。
 
 ## 4. 回滚点与事件
 
