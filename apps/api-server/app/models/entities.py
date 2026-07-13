@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -6711,6 +6712,567 @@ class Core3SkuPurchaseReasonAnchor(Base, AuditMixin):
     input_fingerprint: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     result_hash: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+
+class Core3SellpointValueProfileVersion(Base, AuditMixin):
+    __tablename__ = "core3_sellpoint_value_profile_version"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "profile_version",
+            "rule_version",
+            name="uq_core3_spv_version_key",
+        ),
+        CheckConstraint("sku_count >= 0", name="ck_core3_spv_version_sku_count"),
+        CheckConstraint("ready_count >= 0", name="ck_core3_spv_version_ready_count"),
+        CheckConstraint(
+            "review_required_count >= 0",
+            name="ck_core3_spv_version_review_count",
+        ),
+        CheckConstraint("blocked_count >= 0", name="ck_core3_spv_version_blocked_count"),
+        CheckConstraint("failed_count >= 0", name="ck_core3_spv_version_failed_count"),
+        CheckConstraint(
+            "release_status in ('draft','reviewed','published','deprecated')",
+            name="ck_core3_spv_version_release_status",
+        ),
+        CheckConstraint(
+            "release_quality_status in ('unassessed','ready','limited','blocked')",
+            name="ck_core3_spv_version_quality_status",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_spv_version_current_release",
+        ),
+        Index(
+            "ix_core3_spv_version_scope",
+            "project_id",
+            "category_code",
+            "batch_id",
+        ),
+        Index(
+            "ix_core3_spv_version_release",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "release_status",
+            "is_current",
+        ),
+        Index(
+            "ix_core3_spv_version_candidate_fp",
+            "candidate_universe_fingerprint",
+        ),
+        Index(
+            "uq_core3_spv_current_published",
+            "project_id",
+            "category_code",
+            "batch_id",
+            unique=True,
+            postgresql_where=text(
+                "release_status = 'published' AND is_current = true"
+            ),
+            sqlite_where=text("release_status = 'published' AND is_current = 1"),
+        ),
+        Index(
+            "ix_core3_spv_version_source_gin",
+            "source_scope_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_version_quality_gin",
+            "quality_summary_json",
+            postgresql_using="gin",
+        ),
+    )
+
+    sellpoint_value_profile_version_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("category_project.project_id"), index=True
+    )
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_source_batch.batch_id"), index=True
+    )
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    method_versions_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    release_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", index=True
+    )
+    release_quality_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unassessed", index=True
+    )
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, nullable=False, index=True
+    )
+    generated_by: Mapped[str] = mapped_column(
+        String(160), nullable=False, default="system"
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(160))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    published_by: Mapped[str | None] = mapped_column(String(160))
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    deprecated_by: Mapped[str | None] = mapped_column(String(160))
+    release_note_cn: Mapped[str | None] = mapped_column(Text)
+    source_batch_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    source_scope_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    quality_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    validation_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ready_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_fingerprint: Mapped[str] = mapped_column(
+        String(200), nullable=False, index=True
+    )
+    candidate_universe_fingerprint: Mapped[str] = mapped_column(
+        String(200), nullable=False
+    )
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="success", index=True
+    )
+    review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="auto_pass", index=True
+    )
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SkuSellpointValueProfile(Base, AuditMixin):
+    __tablename__ = "core3_sku_sellpoint_value_profile"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "batch_id",
+            "profile_version",
+            "sku_code",
+            "rule_version",
+            name="uq_core3_spv_profile_key",
+        ),
+        CheckConstraint(
+            "profile_confidence >= 0 and profile_confidence <= 1",
+            name="ck_core3_spv_profile_confidence",
+        ),
+        CheckConstraint(
+            "analysis_state in ('ready','partial','blocked')",
+            name="ck_core3_spv_profile_analysis_state",
+        ),
+        CheckConstraint(
+            "release_status in ('draft','reviewed','published','deprecated')",
+            name="ck_core3_spv_profile_release_status",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_spv_profile_current_release",
+        ),
+        Index(
+            "ix_core3_spv_profile_scope",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "profile_version",
+        ),
+        Index(
+            "ix_core3_spv_profile_version_id",
+            "sellpoint_value_profile_version_id",
+        ),
+        Index(
+            "ix_core3_spv_profile_sku",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "sku_code",
+        ),
+        Index(
+            "ix_core3_spv_profile_status",
+            "project_id",
+            "category_code",
+            "analysis_state",
+            "review_required",
+        ),
+        Index(
+            "ix_core3_spv_profile_current",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "release_status",
+            "is_current",
+        ),
+        Index(
+            "ix_core3_spv_profile_questions_gin",
+            "question_analyses_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_profile_investment_gin",
+            "investment_decisions_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_profile_evidence_gin",
+            "evidence_refs_json",
+            postgresql_using="gin",
+        ),
+    )
+
+    sku_sellpoint_value_profile_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sellpoint_value_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_sellpoint_value_profile_version.sellpoint_value_profile_version_id"
+        ),
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("category_project.project_id"), index=True
+    )
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_source_batch.batch_id"), index=True
+    )
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    model_code: Mapped[str | None] = mapped_column(String(160))
+    model_name: Mapped[str | None] = mapped_column(String(240))
+    brand_name: Mapped[str | None] = mapped_column(String(160))
+    display_name_cn: Mapped[str] = mapped_column(String(320), nullable=False)
+    analysis_state: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="blocked", index=True
+    )
+    freshness_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unknown", index=True
+    )
+    profile_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), nullable=False, default=Decimal("0.0000")
+    )
+    target_market_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_lineage_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    candidate_universe_summary_json: Mapped[dict] = mapped_column(
+        JSONBCompat, default=dict
+    )
+    threshold_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    question_analyses_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    investment_decisions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    price_role_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    battlefield_options_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    pm_decisions_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    qa_index_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    evidence_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    release_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, nullable=False, index=True
+    )
+    input_fingerprint: Mapped[str] = mapped_column(
+        String(200), nullable=False, index=True
+    )
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    processing_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="success", index=True
+    )
+    review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="auto_pass", index=True
+    )
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SkuSellpointValueCandidate(Base, AuditMixin):
+    __tablename__ = "core3_sku_sellpoint_value_candidate"
+    __table_args__ = (
+        UniqueConstraint(
+            "sku_sellpoint_value_profile_id",
+            "candidate_sku_code",
+            "pool_type",
+            name="uq_core3_spv_candidate_key",
+        ),
+        CheckConstraint(
+            "confidence >= 0 and confidence <= 1",
+            name="ck_core3_spv_candidate_confidence",
+        ),
+        CheckConstraint(
+            "pool_type in ('competitor','reference')",
+            name="ck_core3_spv_candidate_pool_type",
+        ),
+        CheckConstraint(
+            "eligibility_status in ('eligible','limited','review_required','blocked','recalled_only')",
+            name="ck_core3_spv_candidate_eligibility",
+        ),
+        CheckConstraint(
+            "release_status in ('draft','reviewed','published','deprecated')",
+            name="ck_core3_spv_candidate_release_status",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_spv_candidate_current_release",
+        ),
+        Index(
+            "ix_core3_spv_candidate_profile",
+            "sku_sellpoint_value_profile_id",
+            "pool_type",
+            "eligibility_status",
+        ),
+        Index(
+            "ix_core3_spv_candidate_profile_id",
+            "sku_sellpoint_value_profile_id",
+        ),
+        Index(
+            "ix_core3_spv_candidate_version_id",
+            "sellpoint_value_profile_version_id",
+        ),
+        Index(
+            "ix_core3_spv_candidate_sku",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "target_sku_code",
+            "candidate_sku_code",
+        ),
+        Index(
+            "ix_core3_spv_candidate_questions_gin",
+            "eligible_questions_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_candidate_evidence_gin",
+            "evidence_refs_json",
+            postgresql_using="gin",
+        ),
+    )
+
+    sku_sellpoint_value_candidate_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sku_sellpoint_value_profile_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_sku_sellpoint_value_profile.sku_sellpoint_value_profile_id"
+        ),
+    )
+    sellpoint_value_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_sellpoint_value_profile_version.sellpoint_value_profile_version_id"
+        ),
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("category_project.project_id"), index=True
+    )
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_source_batch.batch_id"), index=True
+    )
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    target_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_brand_name: Mapped[str | None] = mapped_column(String(160))
+    candidate_model_name: Mapped[str | None] = mapped_column(String(240))
+    pool_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    primary_relation_type: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="unknown", index=True
+    )
+    relation_types_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    eligibility_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="limited", index=True
+    )
+    m12_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    m13_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    m14_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    eligible_questions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    data_availability_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    market_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    selected_questions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    selection_reasons_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), nullable=False, default=Decimal("0.0000")
+    )
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    risk_flags_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    release_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", index=True
+    )
+    input_fingerprint: Mapped[str] = mapped_column(
+        String(200), nullable=False, index=True
+    )
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    processing_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="success", index=True
+    )
+    review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="auto_pass", index=True
+    )
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SkuSellpointValueItem(Base, AuditMixin):
+    __tablename__ = "core3_sku_sellpoint_value_item"
+    __table_args__ = (
+        UniqueConstraint(
+            "sku_sellpoint_value_profile_id",
+            "battlefield_code",
+            "normalized_bundle_code",
+            name="uq_core3_spv_item_key",
+        ),
+        CheckConstraint(
+            "confidence >= 0 and confidence <= 1",
+            name="ck_core3_spv_item_confidence",
+        ),
+        CheckConstraint(
+            "release_status in ('draft','reviewed','published','deprecated')",
+            name="ck_core3_spv_item_release_status",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_spv_item_current_release",
+        ),
+        Index(
+            "ix_core3_spv_item_profile",
+            "sku_sellpoint_value_profile_id",
+            "battlefield_code",
+            "perceived_value_status",
+        ),
+        Index(
+            "ix_core3_spv_item_profile_id",
+            "sku_sellpoint_value_profile_id",
+        ),
+        Index(
+            "ix_core3_spv_item_version_id",
+            "sellpoint_value_profile_version_id",
+        ),
+        Index(
+            "ix_core3_spv_item_sku",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "sku_code",
+        ),
+        Index(
+            "ix_core3_spv_item_questions_gin",
+            "question_codes_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_item_investment_gin",
+            "investment_classifications_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_spv_item_evidence_gin",
+            "evidence_refs_json",
+            postgresql_using="gin",
+        ),
+    )
+
+    sku_sellpoint_value_item_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sku_sellpoint_value_profile_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_sku_sellpoint_value_profile.sku_sellpoint_value_profile_id"
+        ),
+    )
+    sellpoint_value_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_sellpoint_value_profile_version.sellpoint_value_profile_version_id"
+        ),
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("category_project.project_id"), index=True
+    )
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    batch_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_source_batch.batch_id"), index=True
+    )
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    battlefield_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    battlefield_name_cn: Mapped[str | None] = mapped_column(String(240))
+    purchase_reason_code: Mapped[str | None] = mapped_column(String(160), index=True)
+    purchase_reason_name_cn: Mapped[str | None] = mapped_column(String(240))
+    value_bundle_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    value_bundle_name_cn: Mapped[str] = mapped_column(String(240), nullable=False)
+    normalized_bundle_code: Mapped[str] = mapped_column(
+        String(160), nullable=False, index=True
+    )
+    perceived_outcome_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    perceived_value_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="unknown", index=True
+    )
+    capability_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    investment_decisions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    investment_classifications_json: Mapped[list] = mapped_column(
+        JSONBCompat, default=list
+    )
+    question_result_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    question_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    price_realization_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    volume_realization_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    evidence_boundary_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    confidence: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), nullable=False, default=Decimal("0.0000")
+    )
+    release_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="draft", index=True
+    )
+    input_fingerprint: Mapped[str] = mapped_column(
+        String(200), nullable=False, index=True
+    )
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    processing_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="success", index=True
+    )
+    review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="auto_pass", index=True
+    )
+    review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
 
 
 class Core3SkuBattlefieldClaimCandidate(Base, AuditMixin):
