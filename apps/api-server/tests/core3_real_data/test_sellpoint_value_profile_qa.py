@@ -16,7 +16,11 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
 from app.services.core3_real_data.analyst.sellpoint_value_profile_qa import (
     ProfileQaTargetAmbiguousError,
     SellpointValueProfileQaService,
+    _evidence_refs,
     route_profile_question,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    SellpointValueEvidenceRef,
 )
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
 from tests.core3_real_data.test_sellpoint_value_profile_persistence import (
@@ -313,6 +317,40 @@ def test_profile_qa_ability_is_explicit_and_reads_no_upstream_modules() -> None:
     assert ability is not None
     assert ability.status == "implemented"
     assert ability.source_modules == ()
+
+
+def test_qa_compacts_full_lineage_to_one_summary_anchor_per_module() -> None:
+    bundle = _rich_bundle("version-id", profile_version="spv-current")
+    lineage = [
+        SellpointValueEvidenceRef(
+            module_code="M03B",
+            record_type="profile_source_lineage",
+            record_id="M03B:2",
+            result_hash="m03b-summary",
+        ),
+        SellpointValueEvidenceRef(
+            module_code="M03B",
+            record_type="profile_source_lineage",
+            record_id="m03b-row-1",
+            result_hash="m03b-row-hash-1",
+        ),
+        SellpointValueEvidenceRef(
+            module_code="M05C",
+            record_type="profile_source_lineage",
+            record_id="M05C:1",
+            result_hash="m05c-summary",
+        ),
+    ]
+    profile = bundle.profile.model_copy(update={"evidence_refs_json": lineage})
+
+    refs = _evidence_refs(
+        bundle.model_copy(update={"profile": profile}),
+        bundle.candidates,
+        bundle.value_items,
+    )
+
+    record_ids = {row["record_id"] for row in refs}
+    assert record_ids == {"M03B:2", "M05C:1", "param-1"}
 
 
 def test_profile_qa_answers_ten_business_topics_from_one_published_profile(

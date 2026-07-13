@@ -903,7 +903,7 @@ def _evidence_refs(
     items: Sequence[Any],
 ) -> list[dict[str, Any]]:
     rows = [
-        *bundle.profile.evidence_refs_json,
+        *_profile_evidence_summary_refs(bundle.profile.evidence_refs_json),
         *(ref for row in candidates for ref in row.evidence_refs_json),
         *(ref for row in items for ref in row.evidence_refs_json),
     ]
@@ -915,6 +915,32 @@ def _evidence_refs(
         deduped[key].model_dump(mode="json")
         for key in sorted(deduped)
     ]
+
+
+def _profile_evidence_summary_refs(rows: Sequence[Any]) -> list[Any]:
+    """Keep one audit anchor per upstream module in the PM-facing answer."""
+
+    direct_refs = [
+        row for row in rows if row.record_type != "profile_source_lineage"
+    ]
+    lineage_by_module: dict[str, list[Any]] = {}
+    for row in rows:
+        if row.record_type != "profile_source_lineage":
+            continue
+        lineage_by_module.setdefault(row.module_code, []).append(row)
+    summaries = []
+    for module_code, module_rows in sorted(lineage_by_module.items()):
+        summaries.append(
+            min(
+                module_rows,
+                key=lambda row: (
+                    not row.record_id.startswith(f"{module_code}:"),
+                    row.record_id,
+                    row.result_hash,
+                ),
+            )
+        )
+    return [*direct_refs, *summaries]
 
 
 def _market_payload_cn(payload: dict[str, Any], label: str) -> str:
