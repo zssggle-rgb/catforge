@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from app.models import entities
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
@@ -222,6 +222,105 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         if profile is None:
             return None
         return self._read_bundle(version, profile)
+
+    def get_current_published_profile(
+        self,
+        *,
+        batch_id: str,
+        sku_code: str,
+    ) -> SellpointValueProfileReadBundle | None:
+        version = self._find_current_published_version(batch_id=batch_id)
+        if version is None:
+            return None
+        stmt = (
+            select(entities.Core3SkuSellpointValueProfile)
+            .where(
+                entities.Core3SkuSellpointValueProfile.project_id
+                == self.project_id
+            )
+            .where(
+                entities.Core3SkuSellpointValueProfile.category_code
+                == self.category_code.value
+            )
+            .where(entities.Core3SkuSellpointValueProfile.batch_id == batch_id)
+            .where(
+                entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
+                == version.sellpoint_value_profile_version_id
+            )
+            .where(entities.Core3SkuSellpointValueProfile.sku_code == sku_code)
+            .where(
+                entities.Core3SkuSellpointValueProfile.release_status
+                == "published"
+            )
+            .where(entities.Core3SkuSellpointValueProfile.is_current.is_(True))
+        )
+        profile = self.db.execute(stmt).scalars().first()
+        return self._read_bundle(version, profile) if profile else None
+
+    def resolve_profile_targets(
+        self,
+        *,
+        batch_id: str,
+        profile_version: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        query: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, str | None]]:
+        normalized_limit, _ = self.pagination(limit, 0, max_limit=50)
+        profile = entities.Core3SkuSellpointValueProfile
+        version = entities.Core3SellpointValueProfileVersion
+        stmt = (
+            select(profile)
+            .join(
+                version,
+                version.sellpoint_value_profile_version_id
+                == profile.sellpoint_value_profile_version_id,
+            )
+            .where(profile.project_id == self.project_id)
+            .where(profile.category_code == self.category_code.value)
+            .where(profile.batch_id == batch_id)
+        )
+        if profile_version is None:
+            stmt = (
+                stmt.where(version.release_status == "published")
+                .where(version.is_current.is_(True))
+                .where(profile.release_status == "published")
+                .where(profile.is_current.is_(True))
+            )
+        else:
+            stmt = stmt.where(version.profile_version == profile_version)
+        if sku_code:
+            stmt = stmt.where(profile.sku_code == sku_code)
+        elif model_name:
+            stmt = stmt.where(profile.model_name.ilike(f"%{model_name.strip()}%"))
+        elif query:
+            text_query = f"%{query.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    profile.sku_code.ilike(text_query),
+                    profile.model_name.ilike(text_query),
+                    profile.display_name_cn.ilike(text_query),
+                )
+            )
+        else:
+            return []
+        rows = list(
+            self.db.execute(
+                stmt.order_by(profile.sku_code).limit(normalized_limit)
+            ).scalars()
+        )
+        return [
+            {
+                "sku_code": row.sku_code,
+                "brand_name": row.brand_name,
+                "model_name": row.model_name,
+                "product_category": row.product_category,
+                "profile_version": row.profile_version,
+                "rule_version": row.rule_version,
+            }
+            for row in rows
+        ]
 
     def list_profiles(
         self,
@@ -544,6 +643,35 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             .where(
                 entities.Core3SellpointValueProfileVersion.rule_version
                 == rule_version
+            )
+        )
+        return self.db.execute(stmt).scalars().first()
+
+    def _find_current_published_version(
+        self,
+        *,
+        batch_id: str,
+    ) -> entities.Core3SellpointValueProfileVersion | None:
+        stmt = (
+            select(entities.Core3SellpointValueProfileVersion)
+            .where(
+                entities.Core3SellpointValueProfileVersion.project_id
+                == self.project_id
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.category_code
+                == self.category_code.value
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.batch_id == batch_id
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.release_status
+                == "published"
+            )
+            .where(entities.Core3SellpointValueProfileVersion.is_current.is_(True))
+            .order_by(
+                entities.Core3SellpointValueProfileVersion.published_at.desc()
             )
         )
         return self.db.execute(stmt).scalars().first()

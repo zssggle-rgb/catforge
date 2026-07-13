@@ -149,6 +149,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     enable_v4=getattr(args, "enable_v4", False),
                     selection_compare_url=getattr(args, "selection_compare_url", None),
                     evidence_report_url=getattr(args, "evidence_report_url", None),
+                    preview_profile_version=getattr(
+                        args, "preview_profile_version", None
+                    ),
                 )
                 attach_feishu_card_delivery(result, args)
     except (CatForgeAnalystError, M12DSkuPurchaseReasonPreviewError) as exc:
@@ -217,6 +220,13 @@ def build_parser() -> argparse.ArgumentParser:
             )
             command_parser.add_argument("--selection-compare-url")
             command_parser.add_argument("--evidence-report-url")
+            command_parser.add_argument(
+                "--preview-profile-version",
+                help=(
+                    "Explicitly preview one saved profile version. Without this "
+                    "flag V5 only reads the current published profile."
+                ),
+            )
         if command == "sellpoint-value-pm-v4":
             command_parser.add_argument(
                 "--enable-v4",

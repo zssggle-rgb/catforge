@@ -35,11 +35,6 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_answer import (
 from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
     SellpointValueV4Context,
 )
-from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
-    adapt_v4_context_to_v5,
-    build_perceived_value_market_report,
-    build_v5_answer_artifacts,
-)
 from app.services.core3_real_data.analyst.competitor_answer import (
     build_competitor_answer,
 )
@@ -55,11 +50,12 @@ from app.services.core3_real_data.analyst.replacement_pressure import (
     ReplacementPressureClassifier,
     ReplacementPressureInput,
 )
-from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
-    candidate_manifest_as_v4_fallback,
+from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
+    build_stored_profile_answer_artifacts,
+    build_stored_profile_pm_report,
 )
-from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
-    CandidateUniverseManifest,
+from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
+    SellpointValueProfileRepository,
 )
 
 
@@ -71,12 +67,7 @@ NOT_WEAK_AMOUNT_RATIO_THRESHOLD = Decimal("1.00")
 MIN_OVERLAP_WEEKS = 4
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
     "sellpoint-value-pm-v5": (
-        "resolve-sku",
-        "sellpoint-value-candidate-universe",
-        "sellpoint-value-v4-context",
-        "v5-multilayer-counterfactual",
-        "v5-market-reference",
-        "v5-realization-accounting",
+        "sellpoint-value-profile-read",
         "v5-product-manager-report",
     ),
     "sellpoint-value-pm-v4": (
@@ -147,8 +138,15 @@ SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
 
 
 class SopOrchestrators:
-    def __init__(self, atomic_handlers: AtomicAnalystHandlers) -> None:
+    def __init__(
+        self,
+        atomic_handlers: AtomicAnalystHandlers,
+        *,
+        sellpoint_value_profile_repository: SellpointValueProfileRepository
+        | None = None,
+    ) -> None:
         self.atomic_handlers = atomic_handlers
+        self.sellpoint_value_profile_repository = sellpoint_value_profile_repository
 
     def dispatch(
         self, command: str, context: AnalystContext, **kwargs: Any
@@ -183,8 +181,7 @@ class SopOrchestrators:
         enable_v5: bool = False,
         selection_compare_url: str | None = None,
         evidence_report_url: str | None = None,
-        m12d_profile_version: str | None = None,
-        fallback_candidates: list[dict[str, Any]] | None = None,
+        preview_profile_version: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         if not enable_v5:
@@ -195,57 +192,68 @@ class SopOrchestrators:
                 limitations=["V5 默认关闭，必须由显式命令参数启用。"],
                 message_cn="用户卖点价值 V5 默认关闭；请使用显式 enable_v5 参数。",
             )
-        atom_results: list[dict[str, Any]] = []
-        candidate_universe: CandidateUniverseManifest | None = None
-        candidate_handler = getattr(
-            self.atomic_handlers, "sellpoint_value_candidate_universe", None
-        )
-        if callable(candidate_handler):
-            candidate_result = candidate_handler(
-                context,
-                query=query,
-                sku_code=sku_code,
-                model_name=model_name,
+        repository = self.sellpoint_value_profile_repository
+        if repository is None:
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                limitations=["当前运行环境尚未接入用户卖点价值画像存储。"],
+                message_cn="当前没有可读取的用户卖点价值画像。",
             )
-            atom_results.append(candidate_result)
-            if not _ok(candidate_result):
-                return _sop_error(
-                    command="sellpoint-value-pm-v5",
-                    context=context,
-                    atom_results=atom_results,
-                    message_cn="用户卖点价值分析前未能加载竞品候选宇宙。",
-                )
-            candidate_universe = CandidateUniverseManifest.model_validate(
-                (candidate_result.get("result") or {}).get("candidate_universe")
-            )
-            fallback_candidates = candidate_manifest_as_v4_fallback(
-                candidate_universe
-            )
-        context_atom = self.atomic_handlers.sellpoint_value_v4_context(
-            context,
+        targets = repository.resolve_profile_targets(
+            batch_id=context.batch_id,
+            profile_version=preview_profile_version,
             query=query,
             sku_code=sku_code,
             model_name=model_name,
-            fallback_candidates=fallback_candidates,
-            m12d_profile_version=m12d_profile_version,
         )
-        atom_results.append(context_atom)
-        if not _ok(context_atom):
-            return _sop_error(
+        if not targets:
+            scope_cn = (
+                f"指定预览版本 {preview_profile_version}"
+                if preview_profile_version
+                else "当前已发布版本"
+            )
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
                 command="sellpoint-value-pm-v5",
                 context=context,
-                atom_results=atom_results,
-                message_cn="用户卖点价值分析前未能唯一解析目标或加载只读上下文。",
+                limitations=[f"{scope_cn}中没有匹配的 SKU 画像，且不会临时重算。"],
+                message_cn=f"{scope_cn}中没有找到该 SKU 的用户卖点价值画像。",
             )
-        v4_context = SellpointValueV4Context.model_validate(
-            ((context_atom.get("result") or {}).get("sellpoint_value_v4_context"))
-        )
-        v5_context = adapt_v4_context_to_v5(
-            v4_context,
-            candidate_universe=candidate_universe,
-        )
-        report = build_perceived_value_market_report(v5_context)
-        answer = build_v5_answer_artifacts(
+        if len(targets) > 1:
+            return base_result(
+                status=AnalystStatus.AMBIGUOUS,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                result={"candidates": targets},
+                limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
+                message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
+            )
+        target = targets[0]
+        if preview_profile_version:
+            bundle = repository.get_profile(
+                batch_id=context.batch_id,
+                profile_version=preview_profile_version,
+                sku_code=str(target["sku_code"]),
+                rule_version=str(target["rule_version"]),
+            )
+        else:
+            bundle = repository.get_current_published_profile(
+                batch_id=context.batch_id,
+                sku_code=str(target["sku_code"]),
+            )
+        if bundle is None:
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                target=target,
+                limitations=["画像索引与画像明细不一致，需要修复后再读取。"],
+                message_cn="找到了画像索引，但没有找到对应画像明细。",
+            )
+        report = build_stored_profile_pm_report(bundle)
+        answer = build_stored_profile_answer_artifacts(
             report,
             with_report=with_report,
             max_chat_chars=max_chat_chars,
@@ -257,23 +265,25 @@ class SopOrchestrators:
             status=AnalystStatus.OK,
             command="sellpoint-value-pm-v5",
             context=context,
-            target=context_atom.get("target"),
+            target=report.target,
             result={
                 "sellpoint_value_pm_v5": report.model_dump(mode="json"),
                 "sellpoint_value_pm_v5_answer": answer,
-                "candidate_universe": (
-                    candidate_universe.model_dump(mode="json")
-                    if candidate_universe is not None
-                    else None
-                ),
             },
             sop_steps=[
                 {"step_code": code, "status": "ok", "run_count": 1}
                 for code in SOP_STEP_MAP["sellpoint-value-pm-v5"]
             ],
-            atoms_used=_atoms_used(atom_results),
-            evidence=_evidence(atom_results),
-            limitations=_limitations(atom_results),
+            atoms_used=[],
+            evidence=[
+                {
+                    "source": "sku_sellpoint_value_profile",
+                    "profile_version": report.profile_version,
+                    "release_status": report.release_status,
+                    "result_hash": report.profile_result_hash,
+                }
+            ],
+            limitations=report.limitations,
             answer_outline=[answer["short_answer"]],
         )
 

@@ -633,6 +633,61 @@ def test_review_publish_switches_only_explicit_reviewed_version(
     assert new_profile is not None and new_profile.is_current is True
 
 
+def test_default_profile_read_only_returns_current_published(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    draft = repository.create_version(_version_payload("spv-draft"))
+    repository.write_draft(
+        _bundle(
+            draft.sellpoint_value_profile_version_id,
+            profile_version="spv-draft",
+        )
+    )
+
+    assert repository.get_current_published_profile(
+        batch_id="batch-tv", sku_code="TV001"
+    ) is None
+    assert repository.resolve_profile_targets(
+        batch_id="batch-tv", sku_code="TV001"
+    ) == []
+    preview_targets = repository.resolve_profile_targets(
+        batch_id="batch-tv",
+        profile_version="spv-draft",
+        model_name="65E7Q",
+    )
+    assert preview_targets == [
+        {
+            "sku_code": "TV001",
+            "brand_name": "海信",
+            "model_name": "65E7Q",
+            "product_category": "TV",
+            "profile_version": "spv-draft",
+            "rule_version": SELLPOINT_VALUE_PROFILE_RULE_VERSION,
+        }
+    ]
+
+    repository.review_version(
+        sellpoint_value_profile_version_id=draft.sellpoint_value_profile_version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.READY,
+    )
+    repository.publish_version(
+        sellpoint_value_profile_version_id=draft.sellpoint_value_profile_version_id,
+        published_by="approver",
+    )
+    current = repository.get_current_published_profile(
+        batch_id="batch-tv", sku_code="TV001"
+    )
+
+    assert current is not None
+    assert current.profile.profile_version == "spv-draft"
+    assert current.profile.release_status == "published"
+    assert repository.resolve_profile_targets(
+        batch_id="batch-tv", query="海信 65E7Q"
+    )[0]["profile_version"] == "spv-draft"
+
+
 def test_publish_quality_and_approver_gates(session: Session) -> None:
     repository = _repository(session)
     version = repository.create_version(_version_payload())

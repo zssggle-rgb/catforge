@@ -13,6 +13,11 @@ from app.services.core3_real_data.analyst.analyst_repository import AnalystRepos
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
+from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
+    SellpointValueProfileRepository,
+)
+from app.services.core3_real_data.constants import Core3CategoryCode
+from app.services.core3_real_data.repositories import Core3RepositoryContext
 
 
 LATEST_BATCH = "latest"
@@ -68,7 +73,17 @@ class CatForgeAnalystService:
     def __init__(self, db: Session, *, project_id: str, category_code: str) -> None:
         self.repository = AnalystRepository(db, project_id=project_id, category_code=category_code)
         self.atomic_handlers = AtomicAnalystHandlers(self.repository)
-        self.sop_orchestrators = SopOrchestrators(self.atomic_handlers)
+        self.sellpoint_value_profile_repository = SellpointValueProfileRepository(
+            Core3RepositoryContext(
+                db=db,
+                project_id=project_id,
+                category_code=Core3CategoryCode(category_code),
+            )
+        )
+        self.sop_orchestrators = SopOrchestrators(
+            self.atomic_handlers,
+            sellpoint_value_profile_repository=self.sellpoint_value_profile_repository,
+        )
         self.project_id = project_id
         self.category_code = category_code
 
