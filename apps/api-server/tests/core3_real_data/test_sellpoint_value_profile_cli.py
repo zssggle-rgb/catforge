@@ -27,12 +27,15 @@ def test_profile_generation_commands_require_explicit_write_gate() -> None:
             "--enable-profile-write",
             "--page-size",
             "25",
+            "--max-new-skus",
+            "10",
         ]
     )
 
     assert single.enable_profile_write is False
     assert batch.enable_profile_write is True
     assert batch.page_size == 25
+    assert batch.max_new_skus == 10
     assert batch.regenerate_existing is False
 
 

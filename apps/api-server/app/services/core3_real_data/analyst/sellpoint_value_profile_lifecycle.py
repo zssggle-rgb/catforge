@@ -183,9 +183,16 @@ class SellpointValueProfileLifecycleService:
         *,
         resume_unfinished_only: bool = True,
         page_size: int = 50,
+        max_new_skus: int | None = None,
     ) -> SellpointValueBatchGenerationResult:
         if page_size < 1 or page_size > 500:
             raise ValueError("page_size must be between 1 and 500")
+        if max_new_skus is not None and max_new_skus < 1:
+            raise ValueError("max_new_skus must be greater than zero")
+        if max_new_skus is not None and not resume_unfinished_only:
+            raise ValueError(
+                "max_new_skus requires resume_unfinished_only to preserve page progress"
+            )
         version = self.ensure_version(request)
         key = _lock_key(request)
         with self.generation_lock.acquire(key) as acquired:
@@ -196,15 +203,30 @@ class SellpointValueProfileLifecycleService:
             sku_codes = _unique_codes(
                 self.input_provider.list_authoritative_sku_codes(request)
             )
+            authoritative_sku_set = set(sku_codes)
             completed = {
                 row.sku_code
                 for row in self._all_profile_progress(
                     version.sellpoint_value_profile_version_id
                 )
             }
-            statuses: list[SkuGenerationStatus] = []
+            statuses = [
+                SkuGenerationStatus(sku_code=sku_code, status="skipped")
+                for sku_code in sku_codes
+                if resume_unfinished_only and sku_code in completed
+            ]
             status_updates: dict[str, str] = {}
             checkpoint: str | None = None
+            pending_sku_codes = [
+                sku_code
+                for sku_code in sku_codes
+                if not (resume_unfinished_only and sku_code in completed)
+            ]
+            scheduled_sku_codes = (
+                pending_sku_codes[:max_new_skus]
+                if max_new_skus is not None
+                else pending_sku_codes
+            )
             self._update_progress(
                 request=request,
                 version_id=version.sellpoint_value_profile_version_id,
@@ -215,27 +237,11 @@ class SellpointValueProfileLifecycleService:
             )
             self._commit_batch_checkpoint()
 
-            for page_start in range(0, len(sku_codes), page_size):
-                for sku_code in sku_codes[page_start : page_start + page_size]:
+            for page_start in range(0, len(scheduled_sku_codes), page_size):
+                for sku_code in scheduled_sku_codes[
+                    page_start : page_start + page_size
+                ]:
                     checkpoint = sku_code
-                    if resume_unfinished_only and sku_code in completed:
-                        statuses.append(
-                            SkuGenerationStatus(
-                                sku_code=sku_code,
-                                status="skipped",
-                            )
-                        )
-                        status_updates[sku_code] = "skipped"
-                        self._update_progress(
-                            request=request,
-                            version_id=version.sellpoint_value_profile_version_id,
-                            authoritative_sku_codes=sku_codes,
-                            status_updates=status_updates,
-                            checkpoint_sku_code=checkpoint,
-                            processing_status="running",
-                        )
-                        self._commit_batch_checkpoint()
-                        continue
                     try:
                         self._update_progress(
                             request=request,
@@ -299,11 +305,30 @@ class SellpointValueProfileLifecycleService:
                         )
                         self._commit_batch_checkpoint()
 
-            final_processing = (
-                "completed_with_errors"
-                if any(row.status == "failed" for row in statuses)
-                else "completed"
+            remaining_sku_count = len(sku_codes) - len(
+                {
+                    row.sku_code
+                    for row in self._all_profile_progress(
+                        version.sellpoint_value_profile_version_id
+                    )
+                    if row.sku_code in authoritative_sku_set
+                }
             )
+            progress = self.repository.get_version(
+                batch_id=request.batch_id,
+                profile_version=request.profile_version,
+                rule_version=SELLPOINT_VALUE_PROFILE_RULE_VERSION,
+            )
+            if progress is None:
+                raise ValueError(
+                    "profile version disappeared before final checkpoint"
+                )
+            if progress.failed_count:
+                final_processing = "completed_with_errors"
+            elif remaining_sku_count:
+                final_processing = "running"
+            else:
+                final_processing = "completed"
             final_version = self._update_progress(
                 request=request,
                 version_id=version.sellpoint_value_profile_version_id,
@@ -316,6 +341,7 @@ class SellpointValueProfileLifecycleService:
             return SellpointValueBatchGenerationResult(
                 version=final_version,
                 requested_sku_count=len(sku_codes),
+                remaining_sku_count=remaining_sku_count,
                 generated_count=sum(row.status == "generated" for row in statuses),
                 reused_count=sum(row.status == "reused" for row in statuses),
                 skipped_count=sum(row.status == "skipped" for row in statuses),

@@ -674,6 +674,51 @@ def test_batch_progress_never_hydrates_full_profile_rows(
     assert provider.calls == ["TV001", "TV002"]
 
 
+def test_bounded_batch_pages_resume_until_complete(session: Session) -> None:
+    provider = FixtureProvider(
+        ["TV005", "TV001", "TV004", "TV002", "TV003"]
+    )
+    service = _service(session, provider)
+    request = _request()
+
+    first = service.batch_generate(request, page_size=2, max_new_skus=2)
+
+    assert first.generated_count == 2
+    assert first.skipped_count == 0
+    assert first.remaining_sku_count == 3
+    assert first.version.processing_status == "running"
+    assert provider.calls == ["TV001", "TV002"]
+
+    provider.calls.clear()
+    second = service.batch_generate(request, page_size=2, max_new_skus=2)
+
+    assert second.generated_count == 2
+    assert second.skipped_count == 2
+    assert second.remaining_sku_count == 1
+    assert second.version.processing_status == "running"
+    assert provider.calls == ["TV003", "TV004"]
+
+    provider.calls.clear()
+    final = service.batch_generate(request, page_size=2, max_new_skus=2)
+
+    assert final.generated_count == 1
+    assert final.skipped_count == 4
+    assert final.remaining_sku_count == 0
+    assert final.version.processing_status == "completed"
+    assert provider.calls == ["TV005"]
+
+
+def test_bounded_batch_requires_resume_mode(session: Session) -> None:
+    service = _service(session, FixtureProvider(["TV001"]))
+
+    with pytest.raises(ValueError, match="requires resume_unfinished_only"):
+        service.batch_generate(
+            _request(),
+            resume_unfinished_only=False,
+            max_new_skus=1,
+        )
+
+
 def test_changed_input_cannot_overwrite_same_profile_version(
     session: Session,
 ) -> None:

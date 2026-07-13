@@ -359,6 +359,14 @@ def add_profile_generation_args(
     if batch:
         parser.add_argument("--page-size", type=int, default=50)
         parser.add_argument(
+            "--max-new-skus",
+            type=int,
+            help=(
+                "Bound unfinished SKU generation in this process. Relaunch with "
+                "the default resume mode to continue from the next checkpoint."
+            ),
+        )
+        parser.add_argument(
             "--regenerate-existing",
             action="store_true",
             help="Re-read existing immutable drafts instead of resuming unfinished SKUs only.",
@@ -480,6 +488,7 @@ def run_sellpoint_value_profile_generation(
         request,
         resume_unfinished_only=not bool(args.regenerate_existing),
         page_size=args.page_size,
+        max_new_skus=args.max_new_skus,
     )
     return {
         "status": AnalystStatus.OK.value,

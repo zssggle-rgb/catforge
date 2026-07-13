@@ -270,6 +270,7 @@ class SkuGenerationStatus(SellpointValueProfileBaseModel):
 class SellpointValueBatchGenerationResult(SellpointValueProfileBaseModel):
     version: SellpointValueVersionRecord
     requested_sku_count: int = Field(ge=0)
+    remaining_sku_count: int = Field(ge=0)
     generated_count: int = Field(ge=0)
     reused_count: int = Field(ge=0)
     skipped_count: int = Field(ge=0)
@@ -279,6 +280,10 @@ class SellpointValueBatchGenerationResult(SellpointValueProfileBaseModel):
 
     @model_validator(mode="after")
     def validate_batch_counts(self) -> "SellpointValueBatchGenerationResult":
+        if self.remaining_sku_count > self.requested_sku_count:
+            raise ValueError(
+                "remaining SKU count cannot exceed requested SKU count"
+            )
         if (
             self.generated_count
             + self.reused_count
@@ -287,6 +292,11 @@ class SellpointValueBatchGenerationResult(SellpointValueProfileBaseModel):
             != len(self.statuses)
         ):
             raise ValueError("batch counts must match status rows")
+        if (
+            self.version.processing_status == "completed"
+            and self.remaining_sku_count
+        ):
+            raise ValueError("completed batches cannot retain unfinished SKUs")
         return self
 
 
