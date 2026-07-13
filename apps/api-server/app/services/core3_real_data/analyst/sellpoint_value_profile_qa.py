@@ -1125,13 +1125,15 @@ def _business_text(value: Any) -> str:
         "合成控制": "市场基线比较",
         "门禁": "可用条件",
         "门槛功能": "基础竞争能力",
+        "门槛判断": "配置普及判断",
+        "门槛暂按": "配置普及度暂按",
         "门槛": "普及判断",
         "counterfactual": "comparison",
         "synthetic control": "market baseline",
     }
     for internal, business in replacements.items():
         text = text.replace(internal, business)
-    return text
+    return text.replace("普及判断判断", "普及判断")
 
 
 __all__ = [

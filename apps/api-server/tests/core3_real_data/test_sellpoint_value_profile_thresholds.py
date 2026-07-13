@@ -246,6 +246,10 @@ def test_partial_bundle_signal_does_not_retain_unknown_component_investment() ->
     assert "present_capability_decision_evidence_insufficient" in (
         decision.review_reasons
     )
+    assert "该能力缺少独立的用户价值或市场表现证据" in (
+        decision.boundary_cn
+    )
+    assert "comparison_scope_incomplete" not in decision.boundary_cn
 
 
 def test_high_zone_count_without_user_realization_is_unconverted() -> None:

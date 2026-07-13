@@ -24,6 +24,20 @@ from app.services.core3_real_data.hash_utils import stable_hash
 THRESHOLD_HASH_VERSION = "sellpoint_value_capability_threshold_v1"
 DECISION_HASH_VERSION = "sellpoint_value_investment_decision_v1"
 
+REVIEW_REASON_CN = {
+    "absent_capability_competitive_effect_unknown": "缺少该配置对当前竞争表现影响的可靠比较",
+    "candidate_fact_contradiction": "对照产品的能力事实存在冲突",
+    "comparison_scope_incomplete": "当前没有可用于配置普及判断的直接竞品范围",
+    "decision_not_identified": "当前不能形成明确的产品取舍",
+    "decision_signal_conflicted": "用户体验或市场表现信号存在冲突",
+    "present_capability_decision_evidence_insufficient": (
+        "该能力缺少独立的用户价值或市场表现证据"
+    ),
+    "target_fact_contradicted": "本品是否具备该能力存在事实冲突",
+    "target_fact_missing": "本品是否具备该能力尚无可靠事实",
+    "threshold_known_sample_insufficient": "已知配置样本不足",
+}
+
 
 def compute_capability_prevalence(
     *,
@@ -359,13 +373,19 @@ def _boundary_cn(
         f"{prevalence.missing_count} 个缺失、"
         f"{prevalence.contradicted_count} 个冲突；"
         f"已知样本具备率为 {prevalence_text}。",
-        f"门槛暂按 {config.minimum_known_count} 个已知样本、"
+        f"配置普及度暂按 {config.minimum_known_count} 个已知样本、"
         f"{config.prevalence_threshold:.0%} 普及率判断。",
     ]
     if item.capability_kind == "capability":
-        parts.append("门槛判断只作用于配置能力，关联的用户体验结果仍需单独比较。")
+        parts.append("配置普及判断只作用于配置能力，关联的用户体验结果仍需单独比较。")
     if review_reasons:
-        parts.append(f"当前仍需复核：{', '.join(review_reasons)}。")
+        business_reasons = sorted(
+            {
+                REVIEW_REASON_CN.get(reason, "存在尚未完成的证据复核项")
+                for reason in review_reasons
+            }
+        )
+        parts.append(f"当前仍需复核：{'；'.join(business_reasons)}。")
     return "".join(parts)
 
 
