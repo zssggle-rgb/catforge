@@ -202,6 +202,32 @@ def test_experience_outcome_can_be_retained_even_when_parent_is_table_stake() ->
     assert decision.review_status == "auto_pass"
 
 
+def test_partial_feedback_with_relative_and_market_advantage_is_retained() -> None:
+    decision = classify_capability_investment(
+        _input(
+            capability_code="picture_experience_bundle",
+            facts=_facts(
+                [
+                    "known_present",
+                    "known_absent",
+                    "known_absent",
+                    "known_absent",
+                    "known_absent",
+                ]
+            ),
+            investment_level="high",
+            user_feedback_status="partial",
+            relative_experience_status="advantage",
+            price_support="positive",
+            volume_support="positive",
+            current_competitive_performance="stronger",
+        )
+    )
+
+    assert decision.classification == "retain"
+    assert "用户可感知优势" in decision.business_reason_cn
+
+
 def test_high_zone_count_without_user_realization_is_unconverted() -> None:
     facts = _facts(
         [
