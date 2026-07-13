@@ -7,6 +7,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_answer import (
     _dedupe_value_account_rows,
     _market_fraction,
     _market_number,
+    _overall_price_summary,
     _parameter_dimension,
     _parameter_value_is_valid,
     _parameter_value_conclusion,
@@ -348,6 +349,40 @@ def test_market_realization_highlight_answers_sales_contribution() -> None:
     assert "500元（9.1%）的价格溢价" in highlight.reason_cn
     assert "1000.0台/周（100.0%）的销量优势" in highlight.reason_cn
     assert "应继续保留并强化" in highlight.reason_cn
+
+
+def test_overall_price_summary_does_not_call_a_negative_gap_premium() -> None:
+    row = _report().value_account_rows[0]
+    comparison = RealizationMarketComparison(
+        method="same_claim_different_realization",
+        comparator_sku_codes=["PEER"],
+        comparator_names=["可比机型"],
+        comparator_count=1,
+        shared_claim_codes=["tv_claim_picture"],
+        evidence_strength="confirmed",
+        target_price=1790,
+        comparator_price_median=1821,
+        price_gap_abs=-31,
+        price_gap_pct=-0.017,
+        target_sales_volume=100,
+        comparator_sales_volume_median=120,
+        sales_volume_gap_abs=-20,
+        sales_volume_gap_pct=-0.166667,
+        causal_claim=False,
+    )
+    row = row.model_copy(
+        update={
+            "price_realization": row.price_realization.model_copy(
+                update={"realization_comparisons": [comparison]}
+            )
+        }
+    )
+
+    summary = _overall_price_summary([row])
+
+    assert "没有形成“均价更高且销量不弱”的价格支撑" in summary
+    assert "最具体一组均价低 31元（1.7%）" in summary
+    assert "带来价格溢价" not in summary
 
 
 def test_no_evidence_does_not_force_a_highlight() -> None:

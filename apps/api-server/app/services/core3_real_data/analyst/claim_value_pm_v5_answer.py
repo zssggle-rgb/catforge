@@ -2082,6 +2082,24 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
         if comparison.price_gap_abs is not None and comparison.price_gap_pct is not None
     ]
     if comparison_rows:
+        premium_rows = [
+            item
+            for item in comparison_rows
+            if item[2].price_gap_abs is not None
+            and item[2].price_gap_abs > 0
+            and item[2].sales_volume_gap_abs is not None
+            and item[2].sales_volume_gap_abs >= 0
+        ]
+        if premium_rows:
+            _, _, representative = min(
+                premium_rows,
+                key=lambda item: (item[0], -(item[2].price_gap_pct or 0.0), item[1]),
+            )
+            return (
+                f"{len(premium_rows)} 组用户价值带来价格溢价；"
+                f"最具体一组带来 {representative.price_gap_abs:.0f} 元"
+                f"（{representative.price_gap_pct * 100:.1f}%）的价格溢价。"
+            )
         _, _, representative = min(
             comparison_rows,
             key=lambda item: (item[0], -(item[2].price_gap_pct or 0.0), item[1]),
@@ -2092,21 +2110,10 @@ def _overall_price_summary(rows: Sequence[ValueAccountRow]) -> str:
             metric="均价",
             unit="元",
         )
-        if (
-            representative.price_gap_abs is not None
-            and representative.price_gap_abs > 0
-            and representative.sales_volume_gap_abs is not None
-            and representative.sales_volume_gap_abs >= 0
-        ):
-            strongest_text = (
-                f"最具体一组带来 {representative.price_gap_abs:.0f} 元"
-                f"（{representative.price_gap_pct * 100:.1f}%）的价格溢价"
-            )
-        else:
-            strongest_text = f"最具体一组{strongest_text}"
         return (
-            f"{len(comparison_rows)} 组用户价值带来价格溢价；"
-            f"{strongest_text}。"
+            f"{len(comparison_rows)} 组用户价值已有市场量价比较，但没有形成"
+            "“均价更高且销量不弱”的价格支撑；"
+            f"最具体一组{strongest_text}。"
         )
     available = [
         row.price_realization.strict_bundle_interval
