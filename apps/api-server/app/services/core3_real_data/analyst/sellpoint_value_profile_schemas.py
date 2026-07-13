@@ -30,6 +30,59 @@ ReferencePurpose = Literal[
     "battlefield_benchmark",
     "synthetic_donor",
 ]
+CapabilityFactStatus = Literal[
+    "known_present",
+    "known_absent",
+    "missing",
+    "contradicted",
+]
+CapabilityKind = Literal["capability", "experience_outcome"]
+InvestmentClassification = Literal[
+    "retain",
+    "unconverted",
+    "do_not_follow",
+    "table_stake",
+    "missing_competitive_gap",
+    "unknown",
+]
+UserFeedbackStatus = Literal[
+    "realized_advantage",
+    "realized",
+    "partial",
+    "not_observed",
+    "weaker",
+    "negative",
+    "unknown",
+    "conflicted",
+]
+RelativeExperienceStatus = Literal[
+    "advantage",
+    "parity",
+    "weaker",
+    "unknown",
+    "conflicted",
+]
+MarketEvidenceStatus = Literal[
+    "positive",
+    "not_weaker",
+    "negative",
+    "unknown",
+    "not_applicable",
+]
+CompetitivePerformanceStatus = Literal[
+    "stronger",
+    "not_weaker",
+    "weaker",
+    "unknown",
+    "conflicted",
+]
+InvestmentLevel = Literal["high", "standard", "low", "unknown"]
+ThresholdStatus = Literal[
+    "meets_table_stake",
+    "below_table_stake",
+    "insufficient_known_sample",
+    "incomplete_scope",
+]
 
 
 class SellpointValueProfileBaseModel(BaseModel):
@@ -151,14 +204,215 @@ class CandidateUniverseManifest(SellpointValueProfileBaseModel):
         return self
 
 
+class SellpointValueEvidenceRef(SellpointValueProfileBaseModel):
+    module_code: str = Field(min_length=1)
+    record_type: str = Field(min_length=1)
+    record_id: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
+    batch_id: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    source_file_ids: list[str] = Field(default_factory=list)
+    raw_row_ids: list[str] = Field(default_factory=list)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class CapabilityThresholdConfig(SellpointValueProfileBaseModel):
+    config_version: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    minimum_known_count: int = Field(ge=1)
+    prevalence_threshold: float = Field(gt=0.0, le=1.0)
+    required_scope_dimensions: list[
+        Literal[
+            "category_code",
+            "price_band",
+            "product_form",
+            "size_relation",
+        ]
+    ] = Field(min_length=1)
+    missing_value_policy: Literal["exclude_from_known"] = "exclude_from_known"
+    validation_status: Literal["provisional", "validated"] = "provisional"
+
+    @model_validator(mode="after")
+    def validate_scope_dimensions(self) -> "CapabilityThresholdConfig":
+        if len(self.required_scope_dimensions) != len(
+            set(self.required_scope_dimensions)
+        ):
+            raise ValueError("required scope dimensions must be unique")
+        return self
+
+
+class CapabilityComparisonScope(SellpointValueProfileBaseModel):
+    category_code: Literal["TV", "AC"]
+    price_band: str | None = None
+    product_form: str | None = None
+    size_relation: str | None = None
+    battlefield_codes: list[str] = Field(default_factory=list)
+    competitor_roles: list[str] = Field(default_factory=list)
+    candidate_scope_ids: list[str] = Field(default_factory=list)
+    scope_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_scope_ids(self) -> "CapabilityComparisonScope":
+        if len(self.candidate_scope_ids) != len(set(self.candidate_scope_ids)):
+            raise ValueError("candidate scope ids must be unique")
+        return self
+
+
+class CapabilityCandidateFact(SellpointValueProfileBaseModel):
+    candidate_sku_code: str = Field(min_length=1)
+    fact_status: CapabilityFactStatus
+    normalized_value: Any | None = None
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+
+
+class CapabilityPrevalenceSummary(SellpointValueProfileBaseModel):
+    config_version: str = Field(min_length=1)
+    config_validation_status: Literal["provisional", "validated"]
+    total_candidate_count: int = Field(ge=0)
+    known_count: int = Field(ge=0)
+    present_count: int = Field(ge=0)
+    absent_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    contradicted_count: int = Field(ge=0)
+    prevalence: float | None = Field(default=None, ge=0.0, le=1.0)
+    threshold_status: ThresholdStatus
+    minimum_known_count: int = Field(ge=1)
+    prevalence_threshold: float = Field(gt=0.0, le=1.0)
+    comparison_scope: CapabilityComparisonScope
+    candidate_fact_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> "CapabilityPrevalenceSummary":
+        if self.known_count != self.present_count + self.absent_count:
+            raise ValueError("known count must equal present plus absent")
+        if self.total_candidate_count != (
+            self.known_count + self.missing_count + self.contradicted_count
+        ):
+            raise ValueError("candidate fact counts must cover the total")
+        if self.known_count == 0 and self.prevalence is not None:
+            raise ValueError("prevalence requires at least one known fact")
+        if self.known_count:
+            expected = self.present_count / self.known_count
+            if self.prevalence is None or abs(self.prevalence - expected) > 1e-9:
+                raise ValueError("prevalence must equal present divided by known")
+        if (
+            self.threshold_status == "meets_table_stake"
+            and (
+                self.known_count < self.minimum_known_count
+                or self.prevalence is None
+                or self.prevalence < self.prevalence_threshold
+            )
+        ):
+            raise ValueError("table-stake threshold status conflicts with counts")
+        return self
+
+
+class CapabilityInvestmentInput(SellpointValueProfileBaseModel):
+    capability_code: str = Field(min_length=1)
+    capability_name_cn: str = Field(min_length=1)
+    capability_kind: CapabilityKind = "capability"
+    parent_capability_code: str | None = None
+    target_fact_status: CapabilityFactStatus
+    target_value: Any | None = None
+    investment_level: InvestmentLevel = "unknown"
+    candidate_facts: list[CapabilityCandidateFact] = Field(default_factory=list)
+    comparison_scope: CapabilityComparisonScope
+    user_feedback_status: UserFeedbackStatus = "unknown"
+    relative_experience_status: RelativeExperienceStatus = "unknown"
+    competitor_experience_stronger: bool | None = None
+    price_support: MarketEvidenceStatus = "unknown"
+    volume_support: MarketEvidenceStatus = "unknown"
+    choice_support: MarketEvidenceStatus = "unknown"
+    current_competitive_performance: CompetitivePerformanceStatus = "unknown"
+    experience_outcomes: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_candidate_scope(self) -> "CapabilityInvestmentInput":
+        codes = [row.candidate_sku_code for row in self.candidate_facts]
+        if len(codes) != len(set(codes)):
+            raise ValueError("candidate facts must be unique by sku_code")
+        if not set(codes).issubset(set(self.comparison_scope.candidate_scope_ids)):
+            raise ValueError("candidate facts must belong to the comparison scope")
+        if self.capability_kind == "experience_outcome" and not self.parent_capability_code:
+            raise ValueError("experience outcomes require a parent capability")
+        return self
+
+
+class CapabilityInvestmentDecision(SellpointValueProfileBaseModel):
+    capability_code: str = Field(min_length=1)
+    capability_name_cn: str = Field(min_length=1)
+    capability_kind: CapabilityKind
+    parent_capability_code: str | None = None
+    classification: InvestmentClassification
+    target_fact_status: CapabilityFactStatus
+    target_value: Any | None = None
+    investment_level: InvestmentLevel
+    prevalence_summary: CapabilityPrevalenceSummary
+    user_feedback_status: UserFeedbackStatus
+    relative_experience_status: RelativeExperienceStatus
+    competitor_experience_stronger: bool | None = None
+    price_support: MarketEvidenceStatus
+    volume_support: MarketEvidenceStatus
+    choice_support: MarketEvidenceStatus
+    current_competitive_performance: CompetitivePerformanceStatus
+    experience_outcomes: list[str] = Field(default_factory=list)
+    candidate_scope_ids: list[str] = Field(default_factory=list)
+    business_reason_cn: str = Field(min_length=1)
+    boundary_cn: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
+    review_status: Literal["auto_pass", "review_required"]
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    decision_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_decision_state(self) -> "CapabilityInvestmentDecision":
+        if self.classification == "table_stake" and (
+            self.capability_kind != "capability"
+            or self.target_fact_status != "known_present"
+        ):
+            raise ValueError("table stake requires a present capability fact")
+        if self.classification in {"retain", "unconverted"} and (
+            self.target_fact_status != "known_present"
+        ):
+            raise ValueError("retain and unconverted require a present target fact")
+        if self.classification in {"do_not_follow", "missing_competitive_gap"} and (
+            self.target_fact_status != "known_absent"
+        ):
+            raise ValueError("absent-capability decisions require a known absent fact")
+        if self.classification == "unknown" and self.review_status != "review_required":
+            raise ValueError("unknown decisions require review")
+        if self.review_status == "auto_pass" and self.review_reasons:
+            raise ValueError("auto-pass decisions cannot contain review reasons")
+        return self
+
+
 __all__ = [
+    "CapabilityCandidateFact",
+    "CapabilityComparisonScope",
+    "CapabilityFactStatus",
+    "CapabilityInvestmentDecision",
+    "CapabilityInvestmentInput",
+    "CapabilityKind",
+    "CapabilityPrevalenceSummary",
+    "CapabilityThresholdConfig",
     "CandidateDataAvailability",
     "CandidateEligibilityStatus",
     "CandidatePoolType",
     "CandidateQuestion",
     "CandidateRoleScore",
     "CandidateUniverseManifest",
+    "CompetitivePerformanceStatus",
+    "InvestmentClassification",
+    "InvestmentLevel",
+    "MarketEvidenceStatus",
     "ReferencePurpose",
+    "RelativeExperienceStatus",
+    "SellpointValueEvidenceRef",
     "SellpointValueCandidateManifestItem",
     "SellpointValueReferenceManifestItem",
+    "ThresholdStatus",
+    "UserFeedbackStatus",
 ]
