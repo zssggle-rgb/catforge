@@ -86,6 +86,8 @@ class SellpointValueProfileRepository(Core3BaseRepository):
     def write_draft(
         self,
         bundle: SellpointValueDraftBundle,
+        *,
+        use_savepoint: bool = True,
     ) -> SellpointValueProfileReadBundle:
         profile = bundle.profile
         self._assert_context_scope(profile.project_id, profile.category_code)
@@ -112,28 +114,38 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             self._assert_existing_children_match(existing, bundle)
             return self._read_bundle(version, existing)
 
-        with self.db.begin_nested():
-            profile_row = entities.Core3SkuSellpointValueProfile(
-                **_entity_payload(profile)
-            )
-            self.db.add(profile_row)
-            self.db.flush()
-            for candidate in bundle.candidates:
-                candidate_payload = _entity_payload(candidate)
-                candidate_payload["sku_sellpoint_value_profile_id"] = (
-                    profile_row.sku_sellpoint_value_profile_id
-                )
-                self.db.add(
-                    entities.Core3SkuSellpointValueCandidate(**candidate_payload)
-                )
-            for item in bundle.value_items:
-                item_payload = _entity_payload(item)
-                item_payload["sku_sellpoint_value_profile_id"] = (
-                    profile_row.sku_sellpoint_value_profile_id
-                )
-                self.db.add(entities.Core3SkuSellpointValueItem(**item_payload))
-            self.db.flush()
+        if use_savepoint:
+            with self.db.begin_nested():
+                profile_row = self._insert_draft_rows(bundle)
+        else:
+            profile_row = self._insert_draft_rows(bundle)
         return self._read_bundle(version, profile_row)
+
+    def _insert_draft_rows(
+        self,
+        bundle: SellpointValueDraftBundle,
+    ) -> entities.Core3SkuSellpointValueProfile:
+        profile_row = entities.Core3SkuSellpointValueProfile(
+            **_entity_payload(bundle.profile)
+        )
+        self.db.add(profile_row)
+        self.db.flush()
+        for candidate in bundle.candidates:
+            candidate_payload = _entity_payload(candidate)
+            candidate_payload["sku_sellpoint_value_profile_id"] = (
+                profile_row.sku_sellpoint_value_profile_id
+            )
+            self.db.add(
+                entities.Core3SkuSellpointValueCandidate(**candidate_payload)
+            )
+        for item in bundle.value_items:
+            item_payload = _entity_payload(item)
+            item_payload["sku_sellpoint_value_profile_id"] = (
+                profile_row.sku_sellpoint_value_profile_id
+            )
+            self.db.add(entities.Core3SkuSellpointValueItem(**item_payload))
+        self.db.flush()
+        return profile_row
 
     def get_version(
         self,
@@ -391,6 +403,51 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             release_status="reviewed",
             is_current=False,
         )
+        self.db.flush()
+        return SellpointValueVersionRecord.model_validate(version)
+
+    def update_version_progress(
+        self,
+        *,
+        sellpoint_value_profile_version_id: str,
+        sku_count: int,
+        ready_count: int,
+        review_required_count: int,
+        blocked_count: int,
+        failed_count: int,
+        quality_summary_json: Mapping[str, Any],
+        validation_summary_json: Mapping[str, Any],
+        release_quality_status: SellpointValueReleaseQualityStatus,
+        processing_status: str,
+        review_required: bool,
+        review_status: str,
+        review_reason_json: Mapping[str, Any] | None = None,
+    ) -> SellpointValueVersionRecord:
+        version = self._version_by_id(
+            sellpoint_value_profile_version_id,
+            for_update=True,
+        )
+        self._assert_draft_version(version)
+        counts = {
+            "sku_count": sku_count,
+            "ready_count": ready_count,
+            "review_required_count": review_required_count,
+            "blocked_count": blocked_count,
+            "failed_count": failed_count,
+        }
+        if any(value < 0 for value in counts.values()):
+            raise ValueError("version progress counts cannot be negative")
+        if ready_count + review_required_count + blocked_count + failed_count > sku_count:
+            raise ValueError("version progress status counts cannot exceed sku_count")
+        for field_name, value in counts.items():
+            setattr(version, field_name, value)
+        version.quality_summary_json = dict(quality_summary_json)
+        version.validation_summary_json = dict(validation_summary_json)
+        version.release_quality_status = _enum_value(release_quality_status)
+        version.processing_status = processing_status
+        version.review_required = review_required
+        version.review_status = review_status
+        version.review_reason_json = dict(review_reason_json or {})
         self.db.flush()
         return SellpointValueVersionRecord.model_validate(version)
 

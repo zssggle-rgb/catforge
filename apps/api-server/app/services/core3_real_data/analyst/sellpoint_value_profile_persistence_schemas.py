@@ -260,7 +260,7 @@ class SkuSellpointValueItemDraft(SellpointValuePersistedScope):
         default_factory=list
     )
     question_result_refs_json: list[dict[str, Any]] = Field(default_factory=list)
-    question_codes_json: list[CandidateQuestion] = Field(default_factory=list)
+    question_codes_json: list[str] = Field(default_factory=list)
     price_realization_json: dict[str, Any] = Field(default_factory=dict)
     volume_realization_json: dict[str, Any] = Field(default_factory=dict)
     evidence_refs_json: list[SellpointValueEvidenceRef] = Field(default_factory=list)
