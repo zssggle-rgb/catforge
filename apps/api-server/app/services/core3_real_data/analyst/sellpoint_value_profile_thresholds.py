@@ -252,8 +252,13 @@ def _classify(
         )
         supports_value = "positive" in market_supports and "negative" not in market_supports
         realized_advantage = (
-            item.user_feedback_status
-            in {"realized_advantage", "realized", "partial"}
+            (
+                item.user_feedback_status in {"realized_advantage", "realized"}
+                or (
+                    item.user_feedback_status == "partial"
+                    and item.investment_level == "high"
+                )
+            )
             and item.relative_experience_status == "advantage"
         )
         if realized_advantage and supports_value:

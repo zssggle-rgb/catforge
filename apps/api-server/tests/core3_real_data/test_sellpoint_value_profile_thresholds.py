@@ -228,6 +228,26 @@ def test_partial_feedback_with_relative_and_market_advantage_is_retained() -> No
     assert "用户可感知优势" in decision.business_reason_cn
 
 
+def test_partial_bundle_signal_does_not_retain_unknown_component_investment() -> None:
+    decision = classify_capability_investment(
+        _input(
+            capability_code="hdmi_2_1",
+            facts=_facts(["known_present"]),
+            investment_level="unknown",
+            user_feedback_status="partial",
+            relative_experience_status="advantage",
+            price_support="positive",
+            volume_support="positive",
+            current_competitive_performance="stronger",
+        )
+    )
+
+    assert decision.classification == "unknown"
+    assert "present_capability_decision_evidence_insufficient" in (
+        decision.review_reasons
+    )
+
+
 def test_high_zone_count_without_user_realization_is_unconverted() -> None:
     facts = _facts(
         [
