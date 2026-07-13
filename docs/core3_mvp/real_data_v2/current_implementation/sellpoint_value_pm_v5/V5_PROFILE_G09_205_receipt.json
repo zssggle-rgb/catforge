@@ -1,0 +1,107 @@
+{
+  "schema_version": "sellpoint_value_profile_g09_205_receipt_v1",
+  "accepted_at": "2026-07-13T15:10:00+08:00",
+  "environment": "205",
+  "branch": "new/base-publish-workbench-design",
+  "deployed_commit": "a23f8758b2f8844e73c37b58a75c25012a210db4",
+  "api_image": "sha256:a34486eed66f7bb80bc68650c51892b07364ad5aba0e89570e241e7ba9f7ad67",
+  "migration_head": "0045_core3_sellpoint_value_profile",
+  "health": {
+    "healthz": "ok",
+    "readyz": "ready",
+    "database": "ok",
+    "remote_worktree": "clean"
+  },
+  "target": {
+    "sku_code": "TV00029112",
+    "brand_name": "海信",
+    "model_name": "65E7Q",
+    "product_category": "TV"
+  },
+  "accepted_profile": {
+    "profile_version": "spv_profile_v5_65e7q_g09_20260713_r5",
+    "version_id": "d0956a12-b615-4cd0-ae48-50f078a00994",
+    "profile_id": "a759ff2a-4ed6-46ee-bdd2-7601519eb8f5",
+    "version_result_hash": "sha256:sellpoint_value_profile_version_result_v1:80c203c6c22c4ddbb5414e4459cf052dab63bb3efc04ec7dddcf15dcb26000b6",
+    "profile_result_hash": "sha256:sellpoint_value_profile_result_v1:593e06483db7fec7bce1d6264515c19b6dafbbf8c505358e792491f20f690c32",
+    "candidate_manifest_hash": "f39497c1aea809ab17fbcca73e2b9a19930b0358a8d30a12d48c0289b1620cba",
+    "row_id_digest": "a73a69157f305cd1c54c987f8d0ff3bbb79a045bcd742caa81a34db5ce85cb2e",
+    "release_status": "draft",
+    "release_quality_status": "limited",
+    "is_current": false,
+    "processing_status": "completed",
+    "analysis_state": "partial",
+    "freshness_status": "current",
+    "profile_confidence": 0.5971,
+    "authoritative_sku_count": 377,
+    "persisted_profile_count": 1,
+    "competitor_count": 0,
+    "reference_count": 51,
+    "value_item_count": 5,
+    "question_count": 25,
+    "retain_count": 6,
+    "unknown_count": 10,
+    "unconverted_count": 0
+  },
+  "business_results": {
+    "price_supported_value_group_count": 4,
+    "best_price_gap_abs_cny": 427.4241,
+    "best_price_gap_pct": 0.077404,
+    "paired_weekly_sales_gap": 56.958333,
+    "paired_weekly_sales_gap_pct": 0.2936,
+    "direct_sku_evaluation_count": 765,
+    "direct_sku_selected_count": 0,
+    "direct_sku_reject_reason": "not_competitor_authority",
+    "qa_evidence_ref_count": 11
+  },
+  "source_scope": {
+    "persistence_batch_id": "m00_20260623014631_c8630747",
+    "source_batch_scope_id": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+    "m12_target_count": 0,
+    "m13_target_count": 0,
+    "m12c_target_current_count": 179,
+    "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_3",
+    "m12d_release_status": "published",
+    "m12d_is_current": true
+  },
+  "immutability": {
+    "rerun_profile_id_unchanged": true,
+    "rerun_child_row_ids_unchanged": true,
+    "rerun_profile_hash_unchanged": true,
+    "upstream_counts_timestamps_hashes_unchanged_after_report_and_qa": true
+  },
+  "publish_gate": {
+    "checked_read_only": true,
+    "passed": false,
+    "violations": [
+      "profile_count_mismatch",
+      "status_count_mismatch",
+      "limited_release_counts_invalid"
+    ],
+    "review_attempted": false,
+    "publish_attempted": false,
+    "current_switch_attempted": false
+  },
+  "database_totals_after_g09": {
+    "versions": 5,
+    "profiles": 5,
+    "candidates": 255,
+    "value_items": 25,
+    "published_versions": 0,
+    "current_versions": 0
+  },
+  "quality": {
+    "related_tests_passed": 296,
+    "full_tests_collected": 1223,
+    "full_tests_passed": 1216,
+    "baseline_failures": 7,
+    "new_failures": 0
+  },
+  "rollback": {
+    "application_commit": "3bb4684320456b3eb631d33223a7a293c65d83f4",
+    "database_migration_action": "keep_0045",
+    "draft_data_action": "retain_for_audit",
+    "requires_explicit_authorization_for_delete_or_publish": true
+  },
+  "next_gate": "G10_TV_AC_all_sku_draft_generation_no_publish"
+}
