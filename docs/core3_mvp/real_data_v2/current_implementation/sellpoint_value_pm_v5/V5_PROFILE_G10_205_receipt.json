@@ -1,0 +1,129 @@
+{
+  "schema_version": "sellpoint_value_profile_g10_205_receipt_v1",
+  "accepted_at": "2026-07-13T22:05:49+08:00",
+  "environment": "205",
+  "branch": "new/base-publish-workbench-design",
+  "status": "passed",
+  "scope": "TV_AC_authoritative_sku_full_draft_generation",
+  "runtime": {
+    "deployed_commit": "79e50bfe0bbddb13926517e195a2c0ad19b0d959",
+    "api_image": "sha256:22e58eab9b4482ec53a44e14bfe48e3d94b91d21a2901bbeca6ee7ad03f27d91",
+    "migration_head": "0045_core3_sellpoint_value_profile",
+    "api_status": "running_healthy",
+    "api_restart_count": 0
+  },
+  "implementation_commits": [
+    {
+      "commit": "385d648",
+      "purpose": "bound_batch_memory"
+    },
+    {
+      "commit": "0407c61",
+      "purpose": "isolate_worker_pages"
+    },
+    {
+      "commit": "79e50bf",
+      "purpose": "preserve_price_comparison_direction"
+    }
+  ],
+  "release_boundary": {
+    "release_status": "draft",
+    "is_current": false,
+    "review_attempted": false,
+    "publish_attempted": false,
+    "current_switch_attempted": false,
+    "historical_drafts_deleted": false
+  },
+  "tv": {
+    "profile_version": "spv_profile_v5_65e7q_g09_20260713_r5",
+    "version_id": "d0956a12-b615-4cd0-ae48-50f078a00994",
+    "persistence_batch_id": "m00_20260623014631_c8630747",
+    "source_batch_scope_id": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+    "authoritative_scope_hash": "sha256:sellpoint_value_authoritative_sku_scope_v1:98d32efef28c2f400c0951c5eea5709816cea3c5b332d7fca0fc0ebcaab3a6fa",
+    "authoritative_sku_count": 377,
+    "profile_count": 377,
+    "ready_count": 67,
+    "partial_count": 281,
+    "blocked_count": 29,
+    "candidate_count": 29402,
+    "value_item_count": 1231,
+    "profile_with_value_item_count": 348,
+    "missing_sku_count": 0,
+    "extra_sku_count": 0,
+    "duplicate_sku_count": 0,
+    "duplicate_result_hash_count": 0,
+    "failed_count": 0
+  },
+  "ac": {
+    "profile_version": "spv_profile_v5_ac_g10_20260713_r2",
+    "version_id": "823e398d-087b-469e-bdbd-0ddfd47181eb",
+    "version_result_hash": "sha256:sellpoint_value_profile_version_result_v1:ee8348f703a743c5c1e5124b97666c7d5efe032d48022503cafcb3e8f54e2e76",
+    "persistence_batch_id": "m00_20260624000202_1150a669",
+    "authoritative_scope_hash": "sha256:sellpoint_value_authoritative_sku_scope_v1:d02ac1c25032fdc66180c64a53731026fe09a15055cbcc8e13d9a5d96199fa63",
+    "candidate_universe_hash": "sha256:sellpoint_value_candidate_universe_scope_v1:1af0af59c596533693294b441e1ad9b492f4a588eaf47e6d5c70f5c44a17b788",
+    "authoritative_sku_count": 155,
+    "profile_count": 155,
+    "ready_count": 0,
+    "partial_count": 144,
+    "blocked_count": 11,
+    "candidate_count": 7732,
+    "value_item_count": 936,
+    "profile_with_value_item_count": 144,
+    "missing_sku_count": 0,
+    "extra_sku_count": 0,
+    "duplicate_sku_count": 0,
+    "duplicate_result_hash_count": 0,
+    "failed_count": 0
+  },
+  "hisense_65e7q_regression": {
+    "sku_code": "TV00029112",
+    "profile_id": "a759ff2a-4ed6-46ee-bdd2-7601519eb8f5",
+    "profile_result_hash": "sha256:sellpoint_value_profile_result_v1:593e06483db7fec7bce1d6264515c19b6dafbbf8c505358e792491f20f690c32",
+    "updated_at_utc": "2026-07-13T07:00:52.095024Z",
+    "price_supported_value_group_count": 4,
+    "best_price_gap_abs_cny": 427,
+    "best_price_gap_pct": 0.077,
+    "best_weekly_sales_gap": 57,
+    "best_weekly_sales_gap_pct": 0.294,
+    "id_hash_and_timestamp_unchanged": true
+  },
+  "price_direction_gate": {
+    "contradictory_premium_and_lower_price_count": 0,
+    "ac_supported_premium_sku_count": 36,
+    "ac_comparable_but_not_supported_sku_count": 51,
+    "ac_no_displayable_comparison_sku_count": 68,
+    "positive_sample_sku": "AC00032338",
+    "negative_sample_sku": "AC00026378",
+    "blocked_sample_sku": "AC00034959"
+  },
+  "read_only_acceptance": {
+    "pm_report_passed": true,
+    "qa_passed": true,
+    "report_hash_matches_profile_hash": true,
+    "dual_links_present": true,
+    "internal_analysis_terms_absent": true,
+    "sellpoint_table_fingerprint_unchanged": true,
+    "upstream_table_fingerprint_unchanged": true
+  },
+  "upstream_protection": {
+    "checked_table_count": 22,
+    "check_interval_minutes": 10,
+    "final_changed_table_count": 0,
+    "m12_m13_m14_m12c_m12d_recomputed": false
+  },
+  "quality": {
+    "related_tests_passed": 70,
+    "ruff_passed": true,
+    "full_tests_collected": 1223,
+    "full_tests_passed": 1216,
+    "baseline_failures": 7,
+    "new_failures": 0
+  },
+  "rollback": {
+    "application_commit": "0407c61",
+    "database_action": "none",
+    "profile_action": "stop_previewing_unreferenced_r2_and_retain_audit_drafts",
+    "publish_switch_action": "none",
+    "requires_explicit_authorization_for_delete_publish_or_current_switch": true
+  }
+}
