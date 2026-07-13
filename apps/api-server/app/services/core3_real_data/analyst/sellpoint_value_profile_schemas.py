@@ -134,6 +134,8 @@ class SellpointValueCandidateManifestItem(SellpointValueProfileBaseModel):
     review_required: bool = False
     review_reasons: list[str] = Field(default_factory=list)
     source_hashes: dict[str, str] = Field(default_factory=dict)
+    source_record_ids: dict[str, str] = Field(default_factory=dict)
+    source_evidence_ids: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_question_partition(self) -> "SellpointValueCandidateManifestItem":

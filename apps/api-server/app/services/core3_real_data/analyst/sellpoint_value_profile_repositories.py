@@ -8,9 +8,13 @@ from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.models import entities
+from app.services.core3_real_data.analyst.analyst_repository import (
+    batch_ids_from_scope,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
     SellpointValueDraftBundle,
     SellpointValueProfileReadBundle,
@@ -76,12 +80,32 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                     "profile version already exists with different immutable inputs"
                 )
             return SellpointValueVersionRecord.model_validate(existing)
-        row = entities.Core3SellpointValueProfileVersion(
-            **_entity_payload(payload)
-        )
-        self.db.add(row)
-        self.db.flush()
-        return SellpointValueVersionRecord.model_validate(row)
+        try:
+            with self.db.begin_nested():
+                row = entities.Core3SellpointValueProfileVersion(
+                    **_entity_payload(payload)
+                )
+                self.db.add(row)
+                self.db.flush()
+            return SellpointValueVersionRecord.model_validate(row)
+        except IntegrityError:
+            concurrent = self._find_version(
+                batch_id=payload.batch_id,
+                profile_version=payload.profile_version,
+                rule_version=payload.rule_version,
+            )
+            if concurrent is None:
+                raise
+            if (
+                concurrent.input_fingerprint != payload.input_fingerprint
+                or concurrent.candidate_universe_fingerprint
+                != payload.candidate_universe_fingerprint
+                or concurrent.result_hash != payload.result_hash
+            ):
+                raise SellpointValueImmutableVersionError(
+                    "concurrent profile version has different immutable inputs"
+                )
+            return SellpointValueVersionRecord.model_validate(concurrent)
 
     def write_draft(
         self,
@@ -115,8 +139,27 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             return self._read_bundle(version, existing)
 
         if use_savepoint:
-            with self.db.begin_nested():
-                profile_row = self._insert_draft_rows(bundle)
+            try:
+                with self.db.begin_nested():
+                    profile_row = self._insert_draft_rows(bundle)
+            except IntegrityError:
+                concurrent = self._find_profile(
+                    batch_id=profile.batch_id,
+                    profile_version=profile.profile_version,
+                    sku_code=profile.sku_code,
+                    rule_version=profile.rule_version,
+                )
+                if concurrent is None:
+                    raise
+                if (
+                    concurrent.input_fingerprint != profile.input_fingerprint
+                    or concurrent.result_hash != profile.result_hash
+                ):
+                    raise SellpointValueImmutableVersionError(
+                        "concurrent draft SKU has different immutable inputs"
+                    )
+                self._assert_existing_children_match(concurrent, bundle)
+                return self._read_bundle(version, concurrent)
         else:
             profile_row = self._insert_draft_rows(bundle)
         return self._read_bundle(version, profile_row)
@@ -181,7 +224,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == self.category_code.value
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.batch_id == batch_id
+                _batch_scope_filter(
+                    entities.Core3SellpointValueProfileVersion.batch_id,
+                    batch_id,
+                )
             )
         )
         if release_status is not None:
@@ -214,7 +260,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         if version is None:
             return None
         profile = self._find_profile(
-            batch_id=batch_id,
+            batch_id=version.batch_id,
             profile_version=profile_version,
             sku_code=sku_code,
             rule_version=rule_version,
@@ -242,7 +288,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 entities.Core3SkuSellpointValueProfile.category_code
                 == self.category_code.value
             )
-            .where(entities.Core3SkuSellpointValueProfile.batch_id == batch_id)
+            .where(
+                entities.Core3SkuSellpointValueProfile.batch_id
+                == version.batch_id
+            )
             .where(
                 entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
                 == version.sellpoint_value_profile_version_id
@@ -279,7 +328,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             )
             .where(profile.project_id == self.project_id)
             .where(profile.category_code == self.category_code.value)
-            .where(profile.batch_id == batch_id)
+            .where(_batch_scope_filter(profile.batch_id, batch_id))
         )
         if profile_version is None:
             stmt = (
@@ -307,7 +356,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             return []
         rows = list(
             self.db.execute(
-                stmt.order_by(profile.sku_code).limit(normalized_limit)
+                stmt.order_by(
+                    _batch_scope_order(profile.batch_id, batch_id),
+                    profile.sku_code,
+                ).limit(normalized_limit)
             ).scalars()
         )
         return [
@@ -505,6 +557,23 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         self.db.flush()
         return SellpointValueVersionRecord.model_validate(version)
 
+    def _lock_batch_release_scope(self, batch_id: str) -> None:
+        """Serialize review/publish transitions that share one current slot."""
+
+        stmt = (
+            select(entities.Core3SourceBatch.batch_id)
+            .where(entities.Core3SourceBatch.project_id == self.project_id)
+            .where(
+                entities.Core3SourceBatch.category_code == self.category_code.value
+            )
+            .where(entities.Core3SourceBatch.batch_id == batch_id)
+            .with_for_update()
+        )
+        if self.db.execute(stmt).scalar_one_or_none() is None:
+            raise SellpointValueVersionNotFoundError(
+                f"sellpoint value source batch not found: {batch_id}"
+            )
+
     def update_version_progress(
         self,
         *,
@@ -562,6 +631,11 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             raise SellpointValuePublishNotAllowedError(
                 "publishing requires an explicit non-system approver"
             )
+        initial = self._version_by_id(
+            sellpoint_value_profile_version_id,
+            for_update=False,
+        )
+        self._lock_batch_release_scope(initial.batch_id)
         version = self._version_by_id(
             sellpoint_value_profile_version_id,
             for_update=True,
@@ -579,6 +653,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             raise SellpointValuePublishNotAllowedError(
                 "limited release requires explicit allow_limited approval"
             )
+        self._assert_publish_completeness(version)
 
         scope_filter = (
             entities.Core3SellpointValueProfileVersion.project_id
@@ -616,6 +691,62 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         self.db.flush()
         return SellpointValueVersionRecord.model_validate(version)
 
+    def _assert_publish_completeness(
+        self,
+        version: entities.Core3SellpointValueProfileVersion,
+    ) -> None:
+        actual_profile_count = int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(entities.Core3SkuSellpointValueProfile)
+                .where(
+                    entities.Core3SkuSellpointValueProfile.project_id
+                    == self.project_id
+                )
+                .where(
+                    entities.Core3SkuSellpointValueProfile.category_code
+                    == self.category_code.value
+                )
+                .where(
+                    entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
+                    == version.sellpoint_value_profile_version_id
+                )
+            )
+            or 0
+        )
+        counted = (
+            version.ready_count
+            + version.review_required_count
+            + version.blocked_count
+            + version.failed_count
+        )
+        violations = []
+        if version.processing_status != "completed":
+            violations.append("generation_not_completed")
+        if version.sku_count <= 0:
+            violations.append("authoritative_sku_count_empty")
+        if actual_profile_count != version.sku_count:
+            violations.append("profile_count_mismatch")
+        if counted != version.sku_count:
+            violations.append("status_count_mismatch")
+        if version.failed_count or version.blocked_count:
+            violations.append("failed_or_blocked_profiles_present")
+        if version.release_quality_status == "ready" and (
+            version.ready_count != version.sku_count
+            or version.review_required_count
+        ):
+            violations.append("ready_release_not_fully_ready")
+        if version.release_quality_status == "limited" and (
+            version.review_required_count <= 0
+            or version.ready_count + version.review_required_count
+            != version.sku_count
+        ):
+            violations.append("limited_release_counts_invalid")
+        if violations:
+            raise SellpointValuePublishNotAllowedError(
+                "profile version is incomplete: " + ",".join(violations)
+            )
+
     def _find_version(
         self,
         *,
@@ -634,7 +765,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == self.category_code.value
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.batch_id == batch_id
+                _batch_scope_filter(
+                    entities.Core3SellpointValueProfileVersion.batch_id,
+                    batch_id,
+                )
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.profile_version
@@ -645,7 +779,14 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == rule_version
             )
         )
-        return self.db.execute(stmt).scalars().first()
+        return self.db.execute(
+            stmt.order_by(
+                _batch_scope_order(
+                    entities.Core3SellpointValueProfileVersion.batch_id,
+                    batch_id,
+                )
+            )
+        ).scalars().first()
 
     def _find_current_published_version(
         self,
@@ -663,7 +804,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == self.category_code.value
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.batch_id == batch_id
+                _batch_scope_filter(
+                    entities.Core3SellpointValueProfileVersion.batch_id,
+                    batch_id,
+                )
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.release_status
@@ -671,6 +815,10 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             )
             .where(entities.Core3SellpointValueProfileVersion.is_current.is_(True))
             .order_by(
+                _batch_scope_order(
+                    entities.Core3SellpointValueProfileVersion.batch_id,
+                    batch_id,
+                ),
                 entities.Core3SellpointValueProfileVersion.published_at.desc()
             )
         )
@@ -936,6 +1084,21 @@ def _jsonable(value: Any) -> Any:
 
 def _enum_value(value: Enum | str) -> str:
     return str(value.value if isinstance(value, Enum) else value)
+
+
+def _batch_scope_filter(column: Any, batch_id: str) -> Any:
+    batch_ids = batch_ids_from_scope(batch_id)
+    anchor_batch_id = batch_ids[0] if batch_ids else batch_id
+    return column == anchor_batch_id
+
+
+def _batch_scope_order(column: Any, batch_id: str) -> Any:
+    batch_ids = batch_ids_from_scope(batch_id)
+    return case(
+        {scope_batch_id: index for index, scope_batch_id in enumerate(batch_ids)},
+        value=column,
+        else_=len(batch_ids),
+    )
 
 
 __all__ = [

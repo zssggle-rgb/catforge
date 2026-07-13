@@ -19,6 +19,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.services.core3_real_data.analyst import competitor_answer as competitor_answer_renderer
+from app.services.core3_real_data.analyst.analyst_repository import (
+    batch_ids_from_scope,
+)
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.analyst_service import (
     ATOM_COMMANDS,
@@ -26,6 +29,18 @@ from app.services.core3_real_data.analyst.analyst_service import (
     SOP_COMMANDS,
     CatForgeAnalystError,
     CatForgeAnalystService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_input_provider import (
+    AnalystSellpointValueMaterializationInputProvider,
+    SellpointValueProfileInputError,
+    build_production_version_request,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_lifecycle import (
+    SellpointValueGenerationAlreadyRunningError,
+    SellpointValueProfileLifecycleService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
+    SellpointValueProfileRepositoryError,
 )
 from app.services.core3_real_data.constants import (
     CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
@@ -76,6 +91,11 @@ SOP_COMMAND_ORDER = (
     "sku-business-brief",
 )
 
+PROFILE_WRITE_COMMANDS = (
+    "sellpoint-value-profile-generate",
+    "sellpoint-value-profile-batch-generate",
+)
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
@@ -96,9 +116,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         emit_result(result, args.format)
         return 1
+    if args.command in PROFILE_WRITE_COMMANDS and not getattr(
+        args, "enable_profile_write", False
+    ):
+        result = {
+            "status": AnalystStatus.ERROR.value,
+            "command": args.command,
+            "message_cn": "画像草稿写入默认关闭；请显式传入 --enable-profile-write。",
+        }
+        emit_result(result, args.format)
+        return 1
     try:
         with SessionLocal() as db:
-            if args.command == "sku-purchase-reason":
+            if args.command in PROFILE_WRITE_COMMANDS:
+                result = run_sellpoint_value_profile_generation(db, args)
+            elif args.command == "sku-purchase-reason":
                 result = sku_purchase_reason(
                     db,
                     project_id=args.project_id,
@@ -166,7 +198,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                 )
                 attach_feishu_card_delivery(result, args)
-    except (CatForgeAnalystError, M12DSkuPurchaseReasonPreviewError) as exc:
+    except (
+        CatForgeAnalystError,
+        M12DSkuPurchaseReasonPreviewError,
+        SellpointValueGenerationAlreadyRunningError,
+        SellpointValueProfileInputError,
+        SellpointValueProfileRepositoryError,
+        ValueError,
+    ) as exc:
         result = {
             "status": AnalystStatus.ERROR.value,
             "command": getattr(args, "command", None),
@@ -204,6 +243,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     purchase_reason.add_argument("--max-anchors", type=int, default=8)
     purchase_reason.add_argument("--format", choices=("json", "markdown"), default="json")
+
+    profile_generate = subparsers.add_parser(
+        "sellpoint-value-profile-generate",
+        help="Generate and persist one immutable sellpoint-value profile draft.",
+    )
+    add_profile_generation_args(profile_generate, batch=False)
+
+    profile_batch = subparsers.add_parser(
+        "sellpoint-value-profile-batch-generate",
+        help="Generate drafts for the complete authoritative SKU scope.",
+    )
+    add_profile_generation_args(profile_batch, batch=True)
 
     for command in ATOM_COMMAND_ORDER:
         command_parser = subparsers.add_parser(command, help=f"Run analyst atom: {command}.")
@@ -285,6 +336,36 @@ def add_context_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_profile_generation_args(
+    parser: argparse.ArgumentParser,
+    *,
+    batch: bool,
+) -> None:
+    add_context_args(parser)
+    if not batch:
+        parser.add_argument(
+            "--sku-code",
+            required=True,
+            help="Exact authoritative SKU code to materialize.",
+        )
+    parser.add_argument("--profile-version", required=True)
+    parser.add_argument("--m12d-profile-version")
+    parser.add_argument("--generated-by", required=True)
+    parser.add_argument(
+        "--enable-profile-write",
+        action="store_true",
+        help="Explicitly allow draft-only profile writes for this invocation.",
+    )
+    if batch:
+        parser.add_argument("--page-size", type=int, default=50)
+        parser.add_argument(
+            "--regenerate-existing",
+            action="store_true",
+            help="Re-read existing immutable drafts instead of resuming unfinished SKUs only.",
+        )
+    add_format_arg(parser)
+
+
 def add_sku_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--query", help="Natural SKU/model query.")
     parser.add_argument("--sku-code", help="Exact SKU code, such as TV00029112.")
@@ -324,6 +405,93 @@ def add_answer_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--feishu-reply-in-thread", action="store_true", help="Send the Feishu card as a thread reply.")
     parser.add_argument("--feishu-card-idempotency-key", help="Optional idempotency key for Feishu card reply.")
     parser.add_argument("--feishu-card-only", action="store_true", help="For text output, print only Feishu card delivery status.")
+
+
+def run_sellpoint_value_profile_generation(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    explicit = {
+        "sku_code": getattr(args, "sku_code", None),
+        "model_name": None,
+        "query": None,
+    }
+    product_category = _infer_product_category(args.product_category, explicit)
+    category_code = _infer_category_code(
+        args.category_code,
+        product_category,
+        explicit,
+    )
+    service = CatForgeAnalystService(
+        db,
+        project_id=args.project_id,
+        category_code=category_code,
+    )
+    context = service.build_context(
+        batch_id=args.batch_id,
+        product_category=product_category,
+        market_window=args.market_window,
+        analysis_population=args.analysis_population,
+        resolve_latest=True,
+    )
+    provider = AnalystSellpointValueMaterializationInputProvider(
+        repository=service.repository,
+        atomic_handlers=service.atomic_handlers,
+    )
+    source_batch_ids = batch_ids_from_scope(context.batch_id)
+    if not source_batch_ids:
+        raise ValueError("用户卖点价值画像没有可用的来源批次。")
+    persistence_batch_id = source_batch_ids[0]
+    request = build_production_version_request(
+        provider=provider,
+        project_id=context.project_id,
+        category_code=context.category_code,
+        batch_id=persistence_batch_id,
+        profile_version=args.profile_version,
+        product_category=context.product_category,
+        market_window=context.market_window,
+        analysis_population=context.analysis_population,
+        generated_by=args.generated_by,
+        m12d_profile_version=getattr(args, "m12d_profile_version", None),
+        source_batch_scope_id=context.batch_id,
+    )
+    lifecycle = SellpointValueProfileLifecycleService(
+        repository=service.sellpoint_value_profile_repository,
+        input_provider=provider,
+    )
+    if args.command == "sellpoint-value-profile-generate":
+        readback = lifecycle.generate_draft(
+            request,
+            sku_code=str(args.sku_code).upper(),
+        )
+        return {
+            "status": AnalystStatus.OK.value,
+            "command": args.command,
+            "project_id": context.project_id,
+            "category_code": context.category_code,
+            "batch_id": persistence_batch_id,
+            "source_batch_scope_id": context.batch_id,
+            "profile_version": request.profile_version,
+            "version_result_hash": request.version_result_hash,
+            "profile": readback.profile.model_dump(mode="json"),
+            "persisted": readback.persisted.model_dump(mode="json"),
+        }
+    batch_result = lifecycle.batch_generate(
+        request,
+        resume_unfinished_only=not bool(args.regenerate_existing),
+        page_size=args.page_size,
+    )
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "project_id": context.project_id,
+        "category_code": context.category_code,
+        "batch_id": persistence_batch_id,
+        "source_batch_scope_id": context.batch_id,
+        "profile_version": request.profile_version,
+        "version_result_hash": request.version_result_hash,
+        "batch_generation": batch_result.model_dump(mode="json"),
+    }
 
 
 def list_analyst_abilities(

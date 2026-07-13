@@ -158,6 +158,35 @@ def _repository(
     )
 
 
+def _mark_version_ready(
+    repository: SellpointValueProfileRepository,
+    version_id: str,
+    *,
+    limited: bool = False,
+    sku_code: str = "TV001",
+) -> None:
+    repository.update_version_progress(
+        sellpoint_value_profile_version_id=version_id,
+        sku_count=1,
+        ready_count=0 if limited else 1,
+        review_required_count=1 if limited else 0,
+        blocked_count=0,
+        failed_count=0,
+        quality_summary_json={
+            "release_quality_status": "limited" if limited else "ready"
+        },
+        validation_summary_json={"sku_statuses": {sku_code: "generated"}},
+        release_quality_status=(
+            SellpointValueReleaseQualityStatus.LIMITED
+            if limited
+            else SellpointValueReleaseQualityStatus.READY
+        ),
+        processing_status="completed",
+        review_required=limited,
+        review_status="review_required" if limited else "auto_pass",
+    )
+
+
 def _version_payload(
     profile_version: str = "spv-v1",
     *,
@@ -497,6 +526,51 @@ def test_immutable_version_profile_and_children_cannot_be_overwritten(
         )
 
 
+def test_concurrent_same_version_and_profile_insert_reuse_existing_rows(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _repository(session)
+    payload = _version_payload()
+    version = repository.create_version(payload)
+    bundle = _bundle(version.sellpoint_value_profile_version_id)
+    existing = repository.write_draft(bundle)
+    original_find_version = repository._find_version
+    original_find_profile = repository._find_profile
+    version_calls = 0
+    profile_calls = 0
+
+    def stale_version_precheck(**kwargs):
+        nonlocal version_calls
+        version_calls += 1
+        if version_calls == 1:
+            return None
+        return original_find_version(**kwargs)
+
+    def stale_profile_precheck(**kwargs):
+        nonlocal profile_calls
+        profile_calls += 1
+        if profile_calls == 1:
+            return None
+        return original_find_profile(**kwargs)
+
+    monkeypatch.setattr(repository, "_find_version", stale_version_precheck)
+    reused_version = repository.create_version(payload)
+    monkeypatch.setattr(repository, "_find_profile", stale_profile_precheck)
+    reused_profile = repository.write_draft(bundle)
+
+    assert reused_version.sellpoint_value_profile_version_id == (
+        version.sellpoint_value_profile_version_id
+    )
+    assert reused_profile.model_dump(mode="json") == existing.model_dump(mode="json")
+    assert session.scalar(
+        select(func.count()).select_from(entities.Core3SellpointValueProfileVersion)
+    ) == 1
+    assert session.scalar(
+        select(func.count()).select_from(entities.Core3SkuSellpointValueProfile)
+    ) == 1
+
+
 def test_candidate_and_value_item_filters_paginate_after_filtering(
     session: Session,
 ) -> None:
@@ -569,6 +643,7 @@ def test_review_publish_switches_only_explicit_reviewed_version(
     p1 = repository.write_draft(
         _bundle(v1.sellpoint_value_profile_version_id, profile_version="spv-v1")
     )
+    _mark_version_ready(repository, v1.sellpoint_value_profile_version_id)
     repository.review_version(
         sellpoint_value_profile_version_id=v1.sellpoint_value_profile_version_id,
         reviewed_by="reviewer-1",
@@ -599,6 +674,11 @@ def test_review_publish_switches_only_explicit_reviewed_version(
             profile_version="spv-v2",
             sku_code="TV002",
         )
+    )
+    _mark_version_ready(
+        repository,
+        v2.sellpoint_value_profile_version_id,
+        sku_code="TV002",
     )
     repository.review_version(
         sellpoint_value_profile_version_id=v2.sellpoint_value_profile_version_id,
@@ -644,6 +724,7 @@ def test_default_profile_read_only_returns_current_published(
             profile_version="spv-draft",
         )
     )
+    _mark_version_ready(repository, draft.sellpoint_value_profile_version_id)
 
     assert repository.get_current_published_profile(
         batch_id="batch-tv", sku_code="TV001"
@@ -666,6 +747,14 @@ def test_default_profile_read_only_returns_current_published(
             "rule_version": SELLPOINT_VALUE_PROFILE_RULE_VERSION,
         }
     ]
+    composite_preview = repository.get_profile(
+        batch_id="serving-scope:TV:batch-tv,batch-older",
+        profile_version="spv-draft",
+        sku_code="TV001",
+        rule_version=SELLPOINT_VALUE_PROFILE_RULE_VERSION,
+    )
+    assert composite_preview is not None
+    assert composite_preview.profile.batch_id == "batch-tv"
 
     repository.review_version(
         sellpoint_value_profile_version_id=draft.sellpoint_value_profile_version_id,
@@ -679,10 +768,16 @@ def test_default_profile_read_only_returns_current_published(
     current = repository.get_current_published_profile(
         batch_id="batch-tv", sku_code="TV001"
     )
+    composite_current = repository.get_current_published_profile(
+        batch_id="serving-scope:TV:batch-tv,batch-older",
+        sku_code="TV001",
+    )
 
     assert current is not None
     assert current.profile.profile_version == "spv-draft"
     assert current.profile.release_status == "published"
+    assert composite_current is not None
+    assert composite_current.profile.result_hash == current.profile.result_hash
     assert repository.resolve_profile_targets(
         batch_id="batch-tv", query="海信 65E7Q"
     )[0]["profile_version"] == "spv-draft"
@@ -692,6 +787,11 @@ def test_publish_quality_and_approver_gates(session: Session) -> None:
     repository = _repository(session)
     version = repository.create_version(_version_payload())
     repository.write_draft(_bundle(version.sellpoint_value_profile_version_id))
+    _mark_version_ready(
+        repository,
+        version.sellpoint_value_profile_version_id,
+        limited=True,
+    )
     repository.review_version(
         sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
         reviewed_by="reviewer",
@@ -714,6 +814,24 @@ def test_publish_quality_and_approver_gates(session: Session) -> None:
         published_by="approver",
         allow_limited=True,
     ).is_current is True
+
+
+def test_publish_rejects_empty_or_incomplete_profile_version(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    empty = repository.create_version(_version_payload("spv-empty"))
+    repository.review_version(
+        sellpoint_value_profile_version_id=empty.sellpoint_value_profile_version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.READY,
+    )
+
+    with pytest.raises(SellpointValuePublishNotAllowedError, match="incomplete"):
+        repository.publish_version(
+            sellpoint_value_profile_version_id=empty.sellpoint_value_profile_version_id,
+            published_by="approver",
+        )
 
 
 def test_blocked_quality_cannot_publish_and_context_mismatch_cannot_write(

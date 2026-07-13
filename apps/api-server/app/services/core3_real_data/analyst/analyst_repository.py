@@ -183,6 +183,34 @@ class AnalystRepository:
         )
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def list_authoritative_sku_codes(
+        self,
+        *,
+        batch_id: str,
+        product_category: str,
+        market_window: str,
+    ) -> list[str]:
+        """Return the complete current M07 SKU scope for one product category."""
+
+        normalized_category = product_category.upper()
+        stmt = (
+            select(entities.Core3SkuMarketProfile.sku_code)
+            .where(entities.Core3SkuMarketProfile.project_id == self.project_id)
+            .where(entities.Core3SkuMarketProfile.category_code == self.category_code)
+            .where(_batch_filter(entities.Core3SkuMarketProfile.batch_id, batch_id))
+            .where(entities.Core3SkuMarketProfile.analysis_window == market_window)
+            .where(entities.Core3SkuMarketProfile.rule_version == CORE3_M07_RULE_VERSION)
+            .where(entities.Core3SkuMarketProfile.is_current.is_(True))
+            .where(
+                entities.Core3SkuMarketProfile.sku_code.like(
+                    f"{self._sku_prefix(normalized_category)}%"
+                )
+            )
+            .distinct()
+            .order_by(entities.Core3SkuMarketProfile.sku_code)
+        )
+        return [str(sku_code) for sku_code in self.db.execute(stmt).scalars()]
+
     def latest_serving_scope_batch_ids(self, *, product_category: str) -> tuple[str, ...]:
         normalized_category = product_category.upper()
         sku_prefix = self._sku_prefix(normalized_category)

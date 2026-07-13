@@ -489,6 +489,11 @@ def test_context_replays_selected_profiles_and_market_cells_deterministically(
             market_window="full_observed_window",
             model_name="65E7Q",
         )
+        authoritative_sku_codes = repository.list_authoritative_sku_codes(
+            batch_id=BATCH_ID,
+            product_category="TV",
+            market_window="full_observed_window",
+        )
 
         first = repository.sellpoint_value_v4_context(
             batch_id=BATCH_ID,
@@ -529,6 +534,7 @@ def test_context_replays_selected_profiles_and_market_cells_deterministically(
     assert first.target_snapshot.snapshot_hash == second.target_snapshot.snapshot_hash
     assert [item.sku_code for item in by_sku] == ["TV00029112"]
     assert [item.sku_code for item in by_model] == ["TV00029112"]
+    assert authoritative_sku_codes == ["TV00029112"]
 
 
 def test_m12c_adapter_reads_pool_and_numeric_tier_but_not_legacy_amounts(

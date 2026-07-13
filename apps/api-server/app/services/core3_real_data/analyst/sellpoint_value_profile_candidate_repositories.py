@@ -221,6 +221,8 @@ def _candidate_record(
         "processing_status": pool.processing_status,
         "review_required": pool.review_required,
         "review_reasons": list((pool.review_reason_json or {}).get("reasons") or []),
+        "pool_record_id": pool.candidate_pool_id,
+        "pool_evidence_ids": list(getattr(pool, "evidence_ids", None) or []),
         "pool_result_hash": pool.result_hash,
         "component": (
             {
@@ -231,6 +233,12 @@ def _candidate_record(
                 "review_reasons": [component.review_reason]
                 if component.review_reason
                 else [],
+                "record_id": getattr(
+                    component, "candidate_component_score_id", None
+                ),
+                "evidence_ids": list(
+                    getattr(component, "evidence_ids", None) or []
+                ),
                 "result_hash": component.result_hash,
             }
             if component
@@ -255,6 +263,10 @@ def _candidate_record(
                 "battlefield_overlap": dict(feature.battlefield_overlap_json or {}),
                 "task_overlap": dict(feature.task_overlap_json or {}),
                 "audience_overlap": dict(feature.audience_overlap_json or {}),
+                "record_id": getattr(
+                    feature, "candidate_feature_snapshot_id", None
+                ),
+                "evidence_ids": list(getattr(feature, "evidence_ids", None) or []),
                 "feature_snapshot_hash": feature.feature_snapshot_hash,
             }
             if feature
@@ -265,6 +277,10 @@ def _candidate_record(
                 "slot_code": selection.slot_code,
                 "slot_name_cn": selection.slot_name_cn,
                 "selection_rank": selection.selection_rank,
+                "record_id": getattr(selection, "competitor_selection_id", None),
+                "evidence_ids": list(
+                    getattr(selection, "evidence_ids", None) or []
+                ),
                 "result_hash": selection.result_hash,
             }
             if selection

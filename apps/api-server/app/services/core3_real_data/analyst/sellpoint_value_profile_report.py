@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Sequence
+from zoneinfo import ZoneInfo
 
 from pydantic import Field
 
@@ -658,7 +659,8 @@ def _number_or_dash(value: float | None) -> str:
 
 
 def _datetime_cn(value: datetime) -> str:
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
 
 
 def _release_time_cn(report: StoredSellpointValuePmReport) -> str:

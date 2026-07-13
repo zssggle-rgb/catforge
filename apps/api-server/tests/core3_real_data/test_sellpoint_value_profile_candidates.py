@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from types import SimpleNamespace
 from typing import Any
 
@@ -44,6 +45,8 @@ def _record(
         "processing_status": processing_status,
         "review_required": review_required,
         "review_reasons": ["pool_review"] if review_required else [],
+        "pool_record_id": f"pool-record-{index}",
+        "pool_evidence_ids": [f"pool-evidence-{index}"],
         "pool_result_hash": f"pool-{index}",
         "component": (
             {
@@ -52,6 +55,8 @@ def _record(
                 "processing_status": "success",
                 "review_required": False,
                 "review_reasons": [],
+                "record_id": f"component-record-{index}",
+                "evidence_ids": [f"component-evidence-{index}"],
                 "result_hash": f"component-{index}",
             }
             if component
@@ -76,6 +81,8 @@ def _record(
             "battlefield_overlap": {"BF_PICTURE": 0.7},
             "task_overlap": {"movie": 0.6},
             "audience_overlap": {"family": 0.6},
+            "record_id": f"feature-record-{index}",
+            "evidence_ids": [f"feature-evidence-{index}"],
             "feature_snapshot_hash": f"feature-{index}",
         },
         "selection": (
@@ -83,6 +90,8 @@ def _record(
                 "slot_code": "same_value",
                 "slot_name_cn": "重点直接竞品",
                 "selection_rank": selection_rank,
+                "record_id": f"selection-record-{index}",
+                "evidence_ids": [f"selection-evidence-{index}"],
                 "result_hash": f"selection-{index}",
             }
             if selection_rank is not None
@@ -117,6 +126,18 @@ def test_manifest_has_no_business_count_cap(candidate_count: int) -> None:
     assert len(candidate_manifest_as_v4_fallback(manifest)) == candidate_count
 
 
+def test_large_candidate_manifest_keeps_every_row_within_rc_budget() -> None:
+    records = [_record(index, selection_rank=index + 1 if index < 3 else None) for index in range(1_000)]
+
+    started = perf_counter()
+    manifest = _manifest(records)
+    elapsed_seconds = perf_counter() - started
+
+    assert len(manifest.competitor_candidates) == 1_000
+    assert sum(row.m14_selected for row in manifest.competitor_candidates) == 3
+    assert elapsed_seconds < 5.0
+
+
 @pytest.mark.parametrize("selected_count", [0, 1, 3])
 def test_m14_only_labels_candidates_without_changing_universe(
     selected_count: int,
@@ -130,6 +151,20 @@ def test_m14_only_labels_candidates_without_changing_universe(
 
     assert len(manifest.competitor_candidates) == 35
     assert sum(row.m14_selected for row in manifest.competitor_candidates) == selected_count
+
+
+def test_manifest_preserves_real_source_record_and_evidence_ids() -> None:
+    manifest = _manifest([_record(1, selection_rank=1)])
+
+    item = manifest.competitor_candidates[0]
+    assert item.source_record_ids == {
+        "M12": "pool-record-1",
+        "M12_FEATURE": "feature-record-1",
+        "M13": "component-record-1",
+        "M14": "selection-record-1",
+    }
+    assert item.source_evidence_ids["M12"] == ["pool-evidence-1"]
+    assert item.source_evidence_ids["M14"] == ["selection-evidence-1"]
 
 
 def test_manifest_sorting_and_hash_are_input_order_independent() -> None:
@@ -209,6 +244,7 @@ def test_reference_pool_stays_separate_and_merges_reference_purposes() -> None:
         "same_size_market",
     ]
     assert by_code["TV-REFERENCE-ONLY"].also_competitor is False
+    assert by_code["TV-REFERENCE-ONLY"].source_hashes == {}
 
 
 def test_without_m12_or_m13_market_rows_remain_reference_only() -> None:
@@ -275,7 +311,7 @@ def _pool(index: int) -> SimpleNamespace:
 
 def test_repository_query_count_is_constant_above_one_candidate() -> None:
     query_counts = []
-    for count in (1, 12, 35):
+    for count in (1, 12, 35, 1_000):
         session = _CountingSession([_pool(index) for index in range(count)])
         repository = SellpointValueCandidateUniverseRepository(
             session,  # type: ignore[arg-type]
@@ -291,7 +327,7 @@ def test_repository_query_count_is_constant_above_one_candidate() -> None:
         assert len(records) == count
         query_counts.append(session.query_count)
 
-    assert query_counts == [5, 5, 5]
+    assert query_counts == [5, 5, 5, 5]
 
 
 def test_repository_without_m12_returns_empty_without_m13_queries() -> None:

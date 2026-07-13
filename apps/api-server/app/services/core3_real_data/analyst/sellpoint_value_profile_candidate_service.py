@@ -196,7 +196,27 @@ def _candidate_item(record: dict[str, Any]) -> SellpointValueCandidateManifestIt
                 "M12": record.get("pool_result_hash"),
                 "M13": (component or {}).get("result_hash"),
                 "M14": (selection or {}).get("result_hash"),
-                "feature": feature.get("feature_snapshot_hash"),
+                "M12_FEATURE": feature.get("feature_snapshot_hash"),
+            }.items()
+            if value
+        },
+        source_record_ids={
+            key: str(value)
+            for key, value in {
+                "M12": record.get("pool_record_id"),
+                "M12_FEATURE": feature.get("record_id"),
+                "M13": (component or {}).get("record_id"),
+                "M14": (selection or {}).get("record_id"),
+            }.items()
+            if value
+        },
+        source_evidence_ids={
+            key: _dedupe_strings(value or [])
+            for key, value in {
+                "M12": record.get("pool_evidence_ids"),
+                "M12_FEATURE": feature.get("evidence_ids"),
+                "M13": (component or {}).get("evidence_ids"),
+                "M14": (selection or {}).get("evidence_ids"),
             }.items()
             if value
         },
@@ -311,11 +331,11 @@ def _reference_items(
                         "price_band_size",
                     }
                 },
-                source_hashes={
-                    "M07": str((candidate or {}).get("result_hash"))
+                source_hashes=(
+                    {"M07": str((candidate or {}).get("result_hash"))}
                     if (candidate or {}).get("result_hash")
-                    else "market_reference",
-                },
+                    else {}
+                ),
             )
         )
     return result

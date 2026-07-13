@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import logging
 from threading import Lock
 from typing import Iterator, Protocol, Sequence
 
@@ -33,6 +34,7 @@ from app.services.core3_real_data.hash_utils import stable_hash
 
 
 PROFILE_DIFF_HASH_VERSION = "sellpoint_value_profile_diff_v1"
+logger = logging.getLogger(__name__)
 
 
 class SellpointValueGenerationAlreadyRunningError(RuntimeError):
@@ -105,7 +107,10 @@ class SellpointValueProfileLifecycleService:
                 method_version=SELLPOINT_VALUE_PROFILE_METHOD_VERSION,
                 method_versions_json=dict(sorted(request.method_versions.items())),
                 generated_by=request.generated_by,
-                source_batch_ids_json=[request.batch_id],
+                source_batch_ids_json=list(
+                    request.source_scope.get("source_batch_ids")
+                    or [request.batch_id]
+                ),
                 source_scope_json=request.source_scope,
                 input_fingerprint=request.version_input_fingerprint,
                 candidate_universe_fingerprint=(
@@ -124,6 +129,13 @@ class SellpointValueProfileLifecycleService:
         *,
         sku_code: str,
     ) -> ProfileGenerationReadback:
+        authoritative = _unique_codes(
+            self.input_provider.list_authoritative_sku_codes(request)
+        )
+        if sku_code not in set(authoritative):
+            raise ValueError(
+                f"SKU is outside the authoritative profile scope: {sku_code}"
+            )
         version = self.ensure_version(request)
         key = _lock_key(request)
         with self.generation_lock.acquire(key) as acquired:
@@ -132,14 +144,19 @@ class SellpointValueProfileLifecycleService:
                     f"profile generation already running: {key}"
                 )
             with self.repository.db.begin():
-                readback, _ = self._generate_one(request, version, sku_code)
-                authoritative = _unique_codes(
-                    self.input_provider.list_authoritative_sku_codes(request)
-                )
                 self._update_progress(
                     request=request,
                     version_id=version.sellpoint_value_profile_version_id,
-                    authoritative_sku_codes=authoritative or [sku_code],
+                    authoritative_sku_codes=authoritative,
+                    status_updates={},
+                    checkpoint_sku_code=sku_code,
+                    processing_status="running",
+                )
+                readback, _ = self._generate_one(request, version, sku_code)
+                self._update_progress(
+                    request=request,
+                    version_id=version.sellpoint_value_profile_version_id,
+                    authoritative_sku_codes=authoritative,
                     status_updates={sku_code: "generated"},
                     checkpoint_sku_code=sku_code,
                     processing_status="completed",
@@ -206,6 +223,14 @@ class SellpointValueProfileLifecycleService:
                         self.repository.db.commit()
                         continue
                     try:
+                        self._update_progress(
+                            request=request,
+                            version_id=version.sellpoint_value_profile_version_id,
+                            authoritative_sku_codes=sku_codes,
+                            status_updates=status_updates,
+                            checkpoint_sku_code=checkpoint,
+                            processing_status="running",
+                        )
                         readback, reused = self._generate_one(
                             request,
                             version,
@@ -231,6 +256,16 @@ class SellpointValueProfileLifecycleService:
                         self.repository.db.commit()
                     except Exception as exc:  # isolated per SKU by design
                         self.repository.db.rollback()
+                        logger.exception(
+                            "sellpoint-value profile generation failed",
+                            extra={
+                                "project_id": request.project_id,
+                                "category_code": request.category_code,
+                                "batch_id": request.batch_id,
+                                "profile_version": request.profile_version,
+                                "sku_code": sku_code,
+                            },
+                        )
                         statuses.append(
                             SkuGenerationStatus(
                                 sku_code=sku_code,
@@ -374,7 +409,6 @@ class SellpointValueProfileLifecycleService:
         )
         persisted = self.repository.write_draft(
             materialized.persistence_bundle,
-            use_savepoint=False,
         )
         _verify_readback(materialized.persistence_bundle, persisted)
         return (

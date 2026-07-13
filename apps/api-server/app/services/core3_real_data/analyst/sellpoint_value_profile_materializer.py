@@ -64,6 +64,7 @@ def build_profile_input_fingerprint(
             "project_id": source.project_id,
             "category_code": source.category_code,
             "batch_id": source.batch_id,
+            "source_batch_scope_id": source.source_batch_scope_id,
             "target_sku_code": source.target.sku_code,
             "source_lineage": lineage,
             "candidate_manifest_hash": source.candidate_universe.candidate_manifest_hash,
@@ -891,12 +892,14 @@ def _manifest_evidence_refs(
 ) -> list[SellpointValueEvidenceRef]:
     return [
         SellpointValueEvidenceRef(
-            module_code=module_code,
-            record_type="candidate_manifest_source",
-            record_id=f"{row.candidate_sku_code}:{module_code}",
+            module_code=module_code.split("_", maxsplit=1)[0],
+            record_type=f"candidate_manifest_source:{module_code}",
+            record_id=row.source_record_ids[module_code],
             result_hash=result_hash,
+            evidence_ids=row.source_evidence_ids.get(module_code, []),
         )
         for module_code, result_hash in sorted(row.source_hashes.items())
+        if row.source_record_ids.get(module_code)
     ]
 
 

@@ -1,0 +1,31 @@
+{
+  "schema_version": "sellpoint_value_profile_g08_rc_manifest_v1",
+  "generated_at": "2026-07-13T00:00:00+08:00",
+  "branch": "new/base-publish-workbench-design",
+  "design_base_commit": "526e660",
+  "g07_commit": "d090e81",
+  "rc_commit": "recorded_after_commit_in_goal_receipt",
+  "migration_head": "0045_core3_sellpoint_value_profile",
+  "deployment_status": "not_deployed",
+  "remote_write_status": "not_attempted",
+  "publish_status": "not_attempted",
+  "quality": {
+    "profile_tests_passed": 105,
+    "v4_v5_profile_tests_passed": 288,
+    "full_api_tests_collected": 1215,
+    "full_api_tests_passed": 1208,
+    "baseline_failures": 7,
+    "target_module_coverage_percent": 93,
+    "max_candidate_count_tested": 1000,
+    "max_candidate_manifest_seconds": 0.03,
+    "max_candidate_repository_queries": 5,
+    "max_candidate_repository_seconds": 0.1247
+  },
+  "commands": {
+    "single_generate": "sellpoint-value-profile-generate",
+    "batch_generate": "sellpoint-value-profile-batch-generate",
+    "required_write_gate": "--enable-profile-write",
+    "publish_command_exposed": false
+  },
+  "next_gate": "G09_65E7Q_draft_only_205_acceptance"
+}

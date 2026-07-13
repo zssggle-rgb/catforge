@@ -25,6 +25,7 @@ from tests.core3_real_data.test_sellpoint_value_profile_persistence import (
     _create_profile_tables,
     _engine,
     _repository,
+    _mark_version_ready,
     _source_batch,
     _version_payload,
 )
@@ -270,6 +271,7 @@ def _write_version(
         )
     )
     if publish:
+        _mark_version_ready(repository, version.sellpoint_value_profile_version_id)
         repository.review_version(
             sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
             reviewed_by="reviewer",

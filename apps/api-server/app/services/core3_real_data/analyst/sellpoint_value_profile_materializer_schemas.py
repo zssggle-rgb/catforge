@@ -193,6 +193,7 @@ class SellpointValueMaterializationInput(SellpointValueProfileBaseModel):
     project_id: str = Field(min_length=1)
     category_code: Literal["TV", "AC"]
     batch_id: str = Field(min_length=1)
+    source_batch_scope_id: str | None = None
     profile_version: str = Field(min_length=1)
     target: SkuIdentity
     source_lineage: list[ProfileSourceLineage]
@@ -214,7 +215,8 @@ class SellpointValueMaterializationInput(SellpointValueProfileBaseModel):
         if (
             self.candidate_universe.project_id != self.project_id
             or self.candidate_universe.category_code != self.category_code
-            or self.candidate_universe.batch_id != self.batch_id
+            or self.candidate_universe.batch_id
+            != (self.source_batch_scope_id or self.batch_id)
         ):
             raise ValueError("candidate universe scope must match materialization")
         if self.target.sku_code != self.v5_report.target.sku_code:

@@ -581,6 +581,18 @@ def test_single_generate_is_idempotent_and_readback_hashes_match(
     ) is not None
 
 
+def test_single_generate_rejects_sku_outside_authoritative_scope_before_loading_input(
+    session: Session,
+) -> None:
+    provider = FixtureProvider(["TV001"])
+    service = _service(session, provider)
+
+    with pytest.raises(ValueError, match="outside the authoritative profile scope"):
+        service.generate_draft(_request(), sku_code="TV999")
+
+    assert provider.calls == []
+
+
 def test_batch_failure_isolated_then_resume_only_runs_unfinished(
     session: Session,
 ) -> None:
@@ -694,6 +706,36 @@ def test_readback_hash_mismatch_rolls_back_sku_write(
     monkeypatch.setattr(service.repository, "write_draft", tampered_write)
     with pytest.raises(SellpointValueReadbackHashMismatchError):
         service.generate_draft(_request(), sku_code="TV001")
+    assert session.scalar(
+        select(func.count()).select_from(entities.Core3SkuSellpointValueProfile)
+    ) == 0
+
+
+def test_batch_readback_hash_mismatch_rolls_back_only_failed_sku(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = FixtureProvider(["TV001"])
+    service = _service(session, provider)
+    original = service.repository.write_draft
+
+    def tampered_write(bundle, **kwargs):
+        result = original(bundle, **kwargs)
+        return result.model_copy(
+            update={
+                "profile": result.profile.model_copy(
+                    update={"result_hash": "tampered-result-hash"}
+                )
+            }
+        )
+
+    monkeypatch.setattr(service.repository, "write_draft", tampered_write)
+    result = service.batch_generate(_request())
+
+    assert result.failed_count == 1
+    assert result.statuses[0].error_code == (
+        "SellpointValueReadbackHashMismatchError"
+    )
     assert session.scalar(
         select(func.count()).select_from(entities.Core3SkuSellpointValueProfile)
     ) == 0

@@ -111,6 +111,16 @@ TV_BATTLEFIELD_CN = {
 ALL_BATTLEFIELD_CN = {**TV_BATTLEFIELD_CN, **AC_BATTLEFIELD_CN}
 
 
+def sellpoint_value_v5_method_configs() -> MethodConfigManifest:
+    return MethodConfigManifest(
+        recall_version="sellpoint_value_pm_v5_counterfactual_recall_v2",
+        synthetic_version="sellpoint_value_pm_v5_synthetic_control_v2",
+        archetype_version="sellpoint_value_pm_v5_performance_archetype_v2",
+        expansion_version="sellpoint_value_pm_v5_expansion_gate_v1",
+        amount_version="sellpoint_value_pm_v4_matched_wtp_config_v2",
+    )
+
+
 def adapt_v4_context_to_v5(
     v4_context: SellpointValueV4Context,
     *,
@@ -149,13 +159,7 @@ def adapt_v4_context_to_v5(
         "v4_context": v4_context,
         "market_universe": ordered,
         "battlefield_taxonomy": taxonomy,
-        "method_configs": MethodConfigManifest(
-            recall_version="sellpoint_value_pm_v5_counterfactual_recall_v2",
-            synthetic_version="sellpoint_value_pm_v5_synthetic_control_v2",
-            archetype_version="sellpoint_value_pm_v5_performance_archetype_v2",
-            expansion_version="sellpoint_value_pm_v5_expansion_gate_v1",
-            amount_version="sellpoint_value_pm_v4_matched_wtp_config_v2",
-        ),
+        "method_configs": sellpoint_value_v5_method_configs(),
         "source_authorities": v4_context.authority_manifest,
         "evidence_refs": v4_context.evidence_refs,
     }
