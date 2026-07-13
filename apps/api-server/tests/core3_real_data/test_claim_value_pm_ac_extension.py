@@ -170,4 +170,6 @@ def test_m12c_rule_selection_is_category_specific() -> None:
     assert _m12c_population("fact_complete_with_comment") == "claim_value_ready_with_comment"
     assert _m12c_population("all_semantic_profiles") == "claim_value_ready"
     assert _sellpoint_m12c_population("AC", "fact_complete_with_comment") == "claim_value_ready_with_comment"
-    assert _sellpoint_m12c_population("TV", "fact_complete_with_comment") == "fact_complete_with_comment"
+    assert _sellpoint_m12c_population("TV", "fact_complete_with_comment") == (
+        "claim_value_ready_with_comment"
+    )

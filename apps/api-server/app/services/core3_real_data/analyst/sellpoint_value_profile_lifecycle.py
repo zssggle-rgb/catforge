@@ -161,7 +161,20 @@ class SellpointValueProfileLifecycleService:
                     checkpoint_sku_code=sku_code,
                     processing_status="completed",
                 )
-            return readback
+            persisted = self.get_profile(
+                batch_id=request.batch_id,
+                profile_version=request.profile_version,
+                sku_code=sku_code,
+            )
+            if persisted is None:
+                raise SellpointValueReadbackHashMismatchError(
+                    "profile disappeared after final generation commit"
+                )
+            _verify_readback(readback.persisted, persisted)
+            return ProfileGenerationReadback(
+                profile=readback.profile,
+                persisted=persisted,
+            )
 
     def batch_generate(
         self,

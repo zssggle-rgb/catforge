@@ -33,7 +33,7 @@ from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
 )
 from app.services.core3_real_data.analyst.competitor_answer import CLAIM_LABELS_CN
 from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
-    candidate_manifest_as_v4_fallback,
+    candidate_manifest_as_v4_context_pool,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_materializer_schemas import (
     ProfileSourceLineage,
@@ -125,7 +125,7 @@ class AnalystSellpointValueMaterializationInputProvider:
         v4_payload = self.atomic_handlers.sellpoint_value_v4_context(
             context,
             sku_code=sku_code,
-            fallback_candidates=candidate_manifest_as_v4_fallback(
+            fallback_candidates=candidate_manifest_as_v4_context_pool(
                 candidate_universe
             ),
             m12d_profile_version=_optional_scope_text(
@@ -369,7 +369,11 @@ def build_capability_investment_inputs(
     report_rows: Sequence[ValueAccountRow],
     candidate_universe: CandidateUniverseManifest,
 ) -> list[CapabilityInvestmentInput]:
-    snapshots = list(v4_context.candidate_snapshots)
+    snapshots = [
+        row
+        for row in v4_context.candidate_snapshots
+        if _is_competitor_snapshot(row)
+    ]
     snapshot_by_code = {row.identity.sku_code: row for row in snapshots}
     candidate_codes = sorted(snapshot_by_code)
     target = v4_context.target_snapshot
@@ -398,7 +402,7 @@ def build_capability_investment_inputs(
                     CAPABILITY_LABELS_CN.get(claim_code, claim_code),
                 )
                 member_statuses[claim_code].append("confirmed")
-                member_tiers[claim_code].append(member.business_tier)
+                member_tiers[claim_code].append("unknown")
 
     all_codes = set(rows_by_capability)
     all_codes.update(
@@ -734,6 +738,11 @@ def _snapshot_claim_codes(snapshot: SkuEvidenceSnapshot) -> set[str]:
         _string_set(claim_fact.get("fact_claim_codes")),
         _string_set(comment_fact.get("supported_claim_codes")),
     )
+
+
+def _is_competitor_snapshot(snapshot: SkuEvidenceSnapshot) -> bool:
+    source = snapshot.facts.get("candidate_source") or {}
+    return source.get("authority_eligible") is not False
 
 
 def _comparison_scope(

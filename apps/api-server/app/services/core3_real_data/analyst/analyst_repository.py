@@ -3304,6 +3304,8 @@ def _v4_candidate_references(
                 "selection_rank": int(row.selection_rank),
                 "slot_code": row.slot_code,
                 "selection_confidence": _number(row.confidence),
+                "authority_eligible": True,
+                "reference_purposes": [],
                 "source_refs": [
                     _v4_row_evidence_ref(
                         "M14",
@@ -3327,13 +3329,16 @@ def _v4_candidate_references(
             continue
         seen.add(sku_code)
         m14 = m14_by_code.get(sku_code)
+        provenance = item.get("candidate_source") or "competitor_set_fallback"
+        authority_eligible = item.get("authority_eligible")
+        if authority_eligible is None:
+            authority_eligible = provenance != "analysis_reference"
         result.append(
             {
                 "sku_code": sku_code,
                 "brand_name": (candidate or {}).get("brand_name"),
                 "model_name": (candidate or {}).get("model_name"),
-                "provenance": item.get("candidate_source")
-                or "competitor_set_fallback",
+                "provenance": provenance,
                 "selection_rank": int(m14.selection_rank) if m14 else rank,
                 "slot_code": (
                     m14.slot_code
@@ -3348,6 +3353,8 @@ def _v4_candidate_references(
                     else _number(item.get("confidence"))
                     or _number(item.get("business_score"))
                 ),
+                "authority_eligible": bool(m14) or bool(authority_eligible),
+                "reference_purposes": list(item.get("reference_purposes") or []),
                 "source_refs": (
                     [
                         _v4_row_evidence_ref(
@@ -3883,6 +3890,10 @@ def _v4_sku_snapshot(
             "selection_rank": candidate_ref.get("selection_rank"),
             "slot_code": candidate_ref.get("slot_code"),
             "selection_confidence": candidate_ref.get("selection_confidence"),
+            "authority_eligible": bool(candidate_ref.get("authority_eligible")),
+            "reference_purposes": list(
+                candidate_ref.get("reference_purposes") or []
+            ),
         }
     market = _market_payload(rows.get("M07"))
     tasks_payload = _user_task_payload(rows.get("M09C"))
@@ -4155,9 +4166,8 @@ def _m12c_rule_version(product_category: str) -> str:
 
 
 def _sellpoint_m12c_population(product_category: str, analysis_population: str) -> str:
-    if str(product_category).upper() == "AC":
-        return _m12c_population(analysis_population)
-    return analysis_population
+    del product_category
+    return _m12c_population(analysis_population)
 
 
 def _m11c_comparable_market_context(row: entities.Core3SkuValueBattlefieldScore | None) -> dict[str, Any]:

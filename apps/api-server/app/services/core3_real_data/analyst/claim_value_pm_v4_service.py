@@ -340,6 +340,9 @@ def build_counterfactual_assessments(
     focus_definitions = [value_unit_by_code[code] for code in focus_codes if code in value_unit_by_code]
     assessments: list[ComparabilityAssessment] = []
     for candidate in context.candidate_snapshots:
+        candidate_source = candidate.facts.get("candidate_source") or {}
+        if candidate_source.get("authority_eligible") is False:
+            continue
         provenance, slot_code = _candidate_source(candidate)
         exact_size = _exact_size(target, candidate)
         battlefield_overlap = _battlefield_overlap(

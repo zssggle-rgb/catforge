@@ -571,6 +571,8 @@ def test_single_generate_is_idempotent_and_readback_hashes_match(
 
     assert first.profile.result_hash == second.profile.result_hash
     assert first.persisted.profile.result_hash == first.profile.result_hash
+    assert first.persisted.version.processing_status == "completed"
+    assert first.persisted.version.sku_count == 1
     assert len(service.list_profiles(
         sellpoint_value_profile_version_id=first.persisted.version.sellpoint_value_profile_version_id
     )) == 1

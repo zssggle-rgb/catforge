@@ -36,6 +36,7 @@ def _snapshot(
     contradicted: list[str] | None = None,
     advertised: list[str] | None = None,
     authority_eligible: bool | None = None,
+    provenance: str = "M14",
     platforms: int = 2,
     sales_volume: float = 1000,
 ) -> SkuEvidenceSnapshot:
@@ -50,7 +51,7 @@ def _snapshot(
     facts["contradicted_claim_codes"] = contradicted or []
     if authority_eligible is not None:
         facts["candidate_source"] = {
-            "provenance": "M14",
+            "provenance": provenance,
             "authority_eligible": authority_eligible,
         }
     payload["facts"] = facts
@@ -78,6 +79,7 @@ def _snapshot(
 def _v5_context(
     *,
     direct_authority_eligible: bool = False,
+    direct_reference_only: bool = False,
     weak_own_curve: bool = False,
     reverse_universe: bool = False,
 ) -> SellpointValueV5Context:
@@ -100,6 +102,7 @@ def _v5_context(
         price=5800,
         tier=2,
         authority_eligible=direct_authority_eligible,
+        provenance="analysis_reference" if direct_reference_only else "M14",
     )
     same_claim = _snapshot(
         target,
@@ -239,6 +242,17 @@ def test_authoritative_direct_candidate_wins_when_explicitly_eligible() -> None:
     assert direct.stage == "eligible"
     assert direct.comparability_grade == "A"
     assert direct.common_week_count == 12
+
+
+def test_analysis_reference_cannot_be_reported_as_direct_competitor() -> None:
+    relative = {
+        row.question: row
+        for row in _sets(_v5_context(direct_reference_only=True))
+    }["relative_highlight"]
+
+    direct = next(row for row in relative.candidates if row.method == "direct_sku")
+    assert direct.stage == "rejected"
+    assert "not_competitor_authority" in direct.reject_reasons
 
 
 def test_unknown_tier_is_never_treated_as_lower_value() -> None:

@@ -99,6 +99,37 @@ def candidate_manifest_as_v4_fallback(
                 "competitor_role_cn": row.m14_slot_name_cn,
                 "confidence": row.component_total_score,
                 "candidate_source": "M12_M13_candidate_universe",
+                "authority_eligible": True,
+            }
+        )
+    return result
+
+
+def candidate_manifest_as_v4_context_pool(
+    manifest: CandidateUniverseManifest,
+) -> list[dict[str, Any]]:
+    """Expose competitors and references to V4 while keeping their roles explicit."""
+
+    result = candidate_manifest_as_v4_fallback(manifest)
+    included = {
+        str((row.get("candidate") or {}).get("sku_code") or "") for row in result
+    }
+    for row in manifest.analysis_references:
+        if row.reference_sku_code in included:
+            continue
+        result.append(
+            {
+                "candidate": {
+                    "sku_code": row.reference_sku_code,
+                    "brand_name": row.brand_name,
+                    "model_name": row.model_name,
+                },
+                "competitor_role": "analysis_reference",
+                "competitor_role_cn": "分析参考产品",
+                "confidence": None,
+                "candidate_source": "analysis_reference",
+                "authority_eligible": False,
+                "reference_purposes": list(row.reference_purposes),
             }
         )
     return result
@@ -385,5 +416,6 @@ def _dedupe_strings(values: Iterable[Any]) -> list[str]:
 __all__ = [
     "ALL_CANDIDATE_QUESTIONS",
     "build_candidate_universe_manifest",
+    "candidate_manifest_as_v4_context_pool",
     "candidate_manifest_as_v4_fallback",
 ]

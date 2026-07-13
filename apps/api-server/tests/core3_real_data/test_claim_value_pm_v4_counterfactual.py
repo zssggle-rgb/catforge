@@ -86,6 +86,7 @@ def _candidate(
     brightness: float | None = None,
     zones: int | None = None,
     other_bundle_differences: bool = False,
+    authority_eligible: bool | None = None,
 ) -> SkuEvidenceSnapshot:
     payload = context.target_snapshot.model_dump(mode="python")
     payload["identity"].update(
@@ -104,6 +105,8 @@ def _candidate(
         "slot_code": role,
         "provenance": provenance,
     }
+    if authority_eligible is not None:
+        facts["candidate_source"]["authority_eligible"] = authority_eligible
     facts["parameter_fact"]["dimension_tier_profile"]["picture"] = tier
     picture = facts["parameter_fact"]["core_params"]["picture"]
     picture["screen_size_inch"] = {
@@ -299,6 +302,35 @@ def test_final_assessments_are_capped_to_three_per_computed_role() -> None:
         "SAME-1",
         "SAME-2",
     ]
+
+
+def test_analysis_references_do_not_enter_strict_v4_assessments() -> None:
+    context = _base_context()
+    context = _with_candidates(
+        context,
+        [
+            _candidate(
+                context,
+                sku_code="REFERENCE-ONLY",
+                role="analysis_reference",
+                provenance="analysis_reference",
+                tier="premium",
+                authority_eligible=False,
+            ),
+            _candidate(
+                context,
+                sku_code="COMPETITOR",
+                role="base_value",
+                provenance="M14",
+                tier="enhanced",
+                authority_eligible=True,
+            ),
+        ],
+    )
+
+    results = build_counterfactual_assessments(context, _picture_link(context))
+
+    assert {row.candidate_sku_code for row in results} == {"COMPETITOR"}
 
 
 @pytest.mark.parametrize(

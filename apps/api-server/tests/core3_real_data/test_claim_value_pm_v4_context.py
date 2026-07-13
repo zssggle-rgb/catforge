@@ -608,7 +608,7 @@ def test_m12c_adapter_reads_pool_and_numeric_tier_but_not_legacy_amounts(
             sku_codes=["TV00029112"],
             product_category="TV",
             market_window="full_observed_window",
-            analysis_population="claim_value_ready_with_comment",
+            analysis_population="fact_complete_with_comment",
         )
     finally:
         session.close()

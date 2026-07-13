@@ -282,14 +282,20 @@ def _direct_candidate(
     if battlefield_overlap <= 0:
         reasons.append("battlefield_mismatch")
     authority_eligible = _direct_authority_eligible(peer)
+    source = _candidate_source(peer)
+    if source == "analysis_reference":
+        reasons.append("not_competitor_authority")
     common_weeks, common_platforms = _common_market_scope(
         context, target.identity.sku_code, peer.identity.sku_code
     )
-    hard_reject = any(reason in {"size_mismatch", "battlefield_mismatch"} for reason in reasons)
+    hard_reject = any(
+        reason
+        in {"size_mismatch", "battlefield_mismatch", "not_competitor_authority"}
+        for reason in reasons
+    )
     stage = "rejected" if hard_reject else "eligible"
     grade = "unusable" if hard_reject else "A" if authority_eligible else "B"
     eligible_measures = ["direct_relative_comparison"] if stage == "eligible" else []
-    source = _candidate_source(peer)
     return _candidate(
         target,
         [peer],
@@ -547,7 +553,7 @@ def _highest_available_method(
 
 def _direct_authority_eligible(snapshot: SkuEvidenceSnapshot) -> bool:
     source = snapshot.facts.get("candidate_source") or {}
-    return source.get("authority_eligible") is True
+    return source.get("authority_eligible") is not False
 
 
 def _candidate_source(snapshot: SkuEvidenceSnapshot) -> str:

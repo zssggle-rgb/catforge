@@ -18,6 +18,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_repo
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
     build_candidate_universe_manifest,
+    candidate_manifest_as_v4_context_pool,
     candidate_manifest_as_v4_fallback,
 )
 
@@ -245,6 +246,32 @@ def test_reference_pool_stays_separate_and_merges_reference_purposes() -> None:
     ]
     assert by_code["TV-REFERENCE-ONLY"].also_competitor is False
     assert by_code["TV-REFERENCE-ONLY"].source_hashes == {}
+
+
+def test_v4_context_pool_keeps_references_non_competitive_and_deduplicated() -> None:
+    manifest = _manifest(
+        [_record(1)],
+        references=[
+            {
+                "sku_code": "TV-CANDIDATE-001",
+                "reference_purposes": ["same_size_market"],
+            },
+            {
+                "sku_code": "TV-REFERENCE-ONLY",
+                "reference_purposes": ["parameter_group"],
+            },
+        ],
+    )
+
+    rows = candidate_manifest_as_v4_context_pool(manifest)
+    by_code = {row["candidate"]["sku_code"]: row for row in rows}
+
+    assert set(by_code) == {"TV-CANDIDATE-001", "TV-REFERENCE-ONLY"}
+    assert by_code["TV-CANDIDATE-001"]["authority_eligible"] is True
+    assert by_code["TV-REFERENCE-ONLY"]["authority_eligible"] is False
+    assert by_code["TV-REFERENCE-ONLY"]["candidate_source"] == (
+        "analysis_reference"
+    )
 
 
 def test_without_m12_or_m13_market_rows_remain_reference_only() -> None:
