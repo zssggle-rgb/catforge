@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Sequence
 
 from pydantic import Field
@@ -91,6 +92,9 @@ class StoredSellpointValuePmReport(SellpointValueProfileBaseModel):
     freshness_status: str = Field(min_length=1)
     profile_version: str = Field(min_length=1)
     release_status: str = Field(min_length=1)
+    generated_at: datetime
+    published_at: datetime | None = None
+    candidate_manifest_hash: str = Field(min_length=1)
     profile_result_hash: str = Field(min_length=1)
     first_screen: StoredPmFirstScreen
     value_accounts: list[StoredPmValueAccountRow]
@@ -167,6 +171,12 @@ def build_stored_profile_pm_report(
         freshness_status=profile.freshness_status,
         profile_version=profile.profile_version,
         release_status=profile.release_status,
+        generated_at=bundle.version.generated_at,
+        published_at=bundle.version.published_at,
+        candidate_manifest_hash=str(
+            profile.candidate_universe_summary_json.get("candidate_manifest_hash")
+            or bundle.version.candidate_universe_fingerprint
+        ),
         profile_result_hash=profile.result_hash,
         first_screen=first_screen,
         value_accounts=values,
@@ -202,6 +212,11 @@ def build_stored_profile_answer_artifacts(
             "schema_version": report.schema_version,
             "profile_version": report.profile_version,
             "release_status": report.release_status,
+            "generated_at": report.generated_at.isoformat(),
+            "published_at": (
+                report.published_at.isoformat() if report.published_at else None
+            ),
+            "candidate_manifest_hash": report.candidate_manifest_hash,
             "result_hash": report.profile_result_hash,
         },
         "short_answer": render_stored_profile_short_answer(
@@ -232,16 +247,22 @@ def render_stored_profile_short_answer(
     max_chat_chars: int = 900,
 ) -> str:
     screen = report.first_screen
-    lines = [
+    business_lines = [
         f"{_display_name(report.target)} 用户卖点价值结论",
         f"保留什么｜{screen.retain_cn}",
         f"哪里没转化｜{screen.unconverted_cn}",
         f"竞品配置怎么处理｜{screen.competitor_action_cn}",
         f"当前价格是否撑得住｜{screen.price_support_cn}",
         f"如果要销量｜{screen.growth_action_cn}",
+    ]
+    trace_lines = [
         (
             f"画像版本｜{report.profile_version}（{report.release_status}，"
-            f"{report.freshness_status}）｜结果编号 {report.profile_result_hash}"
+            f"{report.freshness_status}）｜{_release_time_cn(report)}"
+        ),
+        (
+            f"候选范围编号｜{report.candidate_manifest_hash}｜"
+            f"结果编号 {report.profile_result_hash}"
         ),
     ]
     suffix = "\n".join(
@@ -249,9 +270,10 @@ def render_stored_profile_short_answer(
         for item in links
         if item.get("url", "").startswith("http")
     )
-    body_limit = max(1, max_chat_chars - len(suffix) - (1 if suffix else 0))
-    body = _compress("\n".join(lines), body_limit)
-    return _sanitize(f"{body}\n{suffix}" if suffix else body)
+    mandatory = "\n".join(trace_lines + ([suffix] if suffix else []))
+    body_limit = max(1, max_chat_chars - len(mandatory) - 1)
+    body = _compress("\n".join(business_lines), body_limit)
+    return _sanitize(f"{body}\n{mandatory}")
 
 
 def render_stored_profile_markdown(
@@ -266,7 +288,11 @@ def render_stored_profile_markdown(
         "",
         (
             f"> 画像版本：{report.profile_version}｜状态：{report.release_status}｜"
-            f"新鲜度：{report.freshness_status}｜结果哈希：{report.profile_result_hash}"
+            f"新鲜度：{report.freshness_status}｜{_release_time_cn(report)}"
+        ),
+        (
+            f"> 候选范围编号：{report.candidate_manifest_hash}｜"
+            f"结果编号：{report.profile_result_hash}"
         ),
         "",
         "## 一、产品经理先看这五个答案",
@@ -379,7 +405,11 @@ def render_stored_profile_feishu_card(
             f"**如果要销量**：{screen.growth_action_cn}",
             (
                 f"画像版本：{report.profile_version}｜{report.release_status}｜"
-                f"{report.freshness_status}｜结果编号：{report.profile_result_hash}"
+                f"{report.freshness_status}｜{_release_time_cn(report)}"
+            ),
+            (
+                f"候选范围编号：{report.candidate_manifest_hash}｜"
+                f"结果编号：{report.profile_result_hash}"
             ),
         )
     )
@@ -408,6 +438,11 @@ def render_stored_profile_feishu_card(
         "body": {"elements": elements},
         "profile_version": report.profile_version,
         "release_status": report.release_status,
+        "generated_at": report.generated_at.isoformat(),
+        "published_at": (
+            report.published_at.isoformat() if report.published_at else None
+        ),
+        "candidate_manifest_hash": report.candidate_manifest_hash,
         "result_hash": report.profile_result_hash,
     }
 
@@ -613,6 +648,17 @@ def _number(value: Any) -> float | None:
 
 def _number_or_dash(value: float | None) -> str:
     return f"{value:,.1f}" if value is not None else "—"
+
+
+def _datetime_cn(value: datetime) -> str:
+    return value.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def _release_time_cn(report: StoredSellpointValuePmReport) -> str:
+    generated = f"生成时间：{_datetime_cn(report.generated_at)}"
+    if report.published_at is None:
+        return generated
+    return f"{generated}｜发布时间：{_datetime_cn(report.published_at)}"
 
 
 def _compress(value: str, limit: int) -> str:

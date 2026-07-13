@@ -230,6 +230,9 @@ def test_published_profile_drives_all_report_formats_with_one_hash(
     report = payload["sellpoint_value_pm_v5"]
     answer = payload["sellpoint_value_pm_v5_answer"]
     assert report["profile_version"] == "spv-published"
+    assert report["generated_at"]
+    assert report["published_at"]
+    assert report["candidate_manifest_hash"] == "candidate-spv-published"
     assert report["candidate_count"] == 1
     assert report["reference_count"] == 1
     assert len(report["first_screen"]) == 5
@@ -237,10 +240,16 @@ def test_published_profile_drives_all_report_formats_with_one_hash(
     assert answer["report_ref"]["result_hash"] == answer["result_hash"]
     assert answer["feishu_card_payload"]["result_hash"] == answer["result_hash"]
     assert answer["result_hash"] in answer["short_answer"]
+    assert report["candidate_manifest_hash"] in answer["short_answer"]
+    assert "发布时间" in answer["short_answer"]
     assert answer["result_hash"] in json.dumps(
         answer["feishu_card_payload"], ensure_ascii=False
     )
     assert answer["feishu_card_payload"]["release_status"] == "published"
+    assert (
+        answer["feishu_card_payload"]["candidate_manifest_hash"]
+        == report["candidate_manifest_hash"]
+    )
     assert [item["label"] for item in answer["report_links"]] == [
         "查看用户选择对比",
         "查看完整画像",
