@@ -22,6 +22,7 @@ from app.services.core3_real_data.hash_utils import stable_hash
 PROFILE_QA_HASH_VERSION = "sellpoint_value_profile_qa_v1"
 ProfileQaStatus = Literal["answered", "limited", "unknown"]
 ProfileQaTopicCode = Literal[
+    "capability_investment",
     "retain_investment",
     "unconverted_investment",
     "do_not_follow",
@@ -45,6 +46,10 @@ TOPIC_PATTERNS: tuple[tuple[ProfileQaTopicCode, tuple[str, ...]], ...] = (
     ("do_not_follow", (r"不用跟|不需要跟|无需跟|不跟进",)),
     ("missing_gap", (r"缺口|补齐|需要补|必须补",)),
     ("unconverted_investment", (r"未转化|没有感知|没感知|具备.*没有|投入.*没",)),
+    (
+        "capability_investment",
+        (r"值得.*投入|继续.*投入|是否.*保留|要不要.*投入|该不该.*投入|还要.*投入",),
+    ),
     ("table_stake", (r"基础竞争|普及|常规功能|门槛",)),
     ("battlefield_action", (r"价值战场|新战场|战场.*增强|相邻战场",)),
     ("competitor_selection", (r"为什么.*对照|为什么.*选|为什么.*没选|竞品|相比.*赢|相比.*输",)),
@@ -194,6 +199,8 @@ class SellpointValueProfileQaService:
             "missing_gap": "missing_competitive_gap",
             "table_stake": "table_stake",
         }
+        if topic == "capability_investment":
+            return _specific_investment_answer(bundle, question)
         if topic in investment_topics:
             return _investment_answer(
                 bundle,
@@ -364,6 +371,125 @@ def _investment_answer(
         candidate_rows=candidates,
         value_rows=items,
     )
+
+
+def _specific_investment_answer(
+    bundle: SellpointValueProfileReadBundle,
+    question: str,
+) -> SellpointValueProfileAnswer:
+    rows = _matching_investment_rows(
+        bundle.profile.investment_decisions_json,
+        question,
+    )
+    if not rows:
+        return _answer(
+            bundle,
+            question=question,
+            topic_code="capability_investment",
+            answer_status="unknown",
+            direct_answer_cn="当前画像没有找到问题中所指的具体投入。",
+            work_implication_cn="请使用画像中的卖点或用户价值名称重新提问。",
+            boundary_cn="没有用相近名称的其他投入替代问题中的目标。",
+            limitations=["specific_investment_not_found"],
+        )
+    if len(rows) > 1:
+        names = "、".join(_capability_name(row) for row in rows)
+        return _answer(
+            bundle,
+            question=question,
+            topic_code="capability_investment",
+            answer_status="unknown",
+            direct_answer_cn=f"问题同时命中多项投入：{names}。",
+            work_implication_cn="请指定其中一项后再判断是否继续投入。",
+            boundary_cn="没有把多项投入合并成一个产品取舍结论。",
+            limitations=["specific_investment_ambiguous"],
+        )
+
+    row = rows[0]
+    capability_code = str(row.get("capability_code") or "unknown")
+    capability_name = _capability_name(row)
+    classification = str(row.get("classification") or "unknown")
+    status_cn = _investment_status_cn(classification)
+    reason_cn = _business_text(
+        row.get("business_reason_cn") or "画像尚未保存更具体的判断依据。"
+    )
+    is_unknown = classification == "unknown"
+    candidate_codes = {
+        str(code) for code in row.get("candidate_scope_ids", [])
+    }
+    candidates = [
+        item
+        for item in bundle.candidates
+        if item.candidate_sku_code in candidate_codes
+    ]
+    items = [
+        item
+        for item in bundle.value_items
+        if capability_code in item.capability_codes_json
+    ]
+    return _answer(
+        bundle,
+        question=question,
+        topic_code="capability_investment",
+        answer_status="unknown" if is_unknown else "answered",
+        direct_answer_cn=f"{capability_name}当前建议是“{status_cn}”：{reason_cn}",
+        facts=[
+            ProfileQaFact(
+                fact_path=f"investment_decisions.{capability_code}",
+                summary_cn=f"{capability_name}：{status_cn}。{reason_cn}",
+                record_type="sku_sellpoint_value_profile",
+                record_id=bundle.profile.sku_sellpoint_value_profile_id,
+            )
+        ],
+        work_implication_cn=(
+            "先保持当前产品定义，补足该项独立用户价值或市场表现证据后再决定是否加码。"
+            if is_unknown
+            else _specific_investment_work_cn(classification)
+        ),
+        boundary_cn=_business_text(
+            row.get("boundary_cn") or "只适用于当前画像候选范围。"
+        ),
+        candidate_rows=candidates,
+        value_rows=items,
+        limitations=(
+            [f"specific_investment_decision_unknown:{capability_code}"]
+            if is_unknown
+            else []
+        ),
+    )
+
+
+def _matching_investment_rows(
+    rows: Sequence[dict[str, Any]],
+    question: str,
+) -> list[dict[str, Any]]:
+    normalized_question = _normalized_capability_text(question)
+    matches = []
+    for row in rows:
+        name = _capability_name(row)
+        normalized_name = _normalized_capability_text(name)
+        aliases = {normalized_name}
+        for suffix in ("连接", "体验", "能力", "功能", "性能", "显示"):
+            alias = normalized_name.removesuffix(suffix)
+            if len(alias) >= 2:
+                aliases.add(alias)
+        if any(alias in normalized_question for alias in aliases):
+            matches.append(row)
+    return matches
+
+
+def _normalized_capability_text(value: str) -> str:
+    return re.sub(r"[^0-9a-zA-Z\u4e00-\u9fff.]", "", value).lower()
+
+
+def _specific_investment_work_cn(classification: str) -> str:
+    return {
+        "retain": "继续保留该项投入，并保证用户体验兑现。",
+        "unconverted": "先改善体验兑现和卖点表达，不建议继续只堆参数。",
+        "do_not_follow": "维持当前产品定义，不为了参数对齐追加投入。",
+        "missing_competitive_gap": "进入下一轮产品定义评估，核对补齐成本和受影响用户价值。",
+        "table_stake": "维持基础可用性即可，不让它承担核心溢价和差异化任务。",
+    }.get(classification, "暂不据此调整产品定义。")
 
 
 def _price_answer(

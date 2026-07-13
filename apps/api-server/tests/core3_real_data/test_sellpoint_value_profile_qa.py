@@ -294,6 +294,7 @@ def _write_version(
     [
         ("哪些投入值得保留", "retain_investment"),
         ("哪些投入还没有转化成用户价值", "unconverted_investment"),
+        ("HDMI 2.1 是否值得继续投入", "capability_investment"),
         ("哪个竞品配置不用跟", "do_not_follow"),
         ("有哪些缺口必须补齐", "missing_gap"),
         ("当前价格为什么撑得住", "price_support"),
@@ -353,6 +354,51 @@ def test_qa_compacts_full_lineage_to_one_summary_anchor_per_module() -> None:
     assert record_ids == {"M03B:2", "M05C:1", "param-1"}
 
 
+def test_specific_investment_question_preserves_unknown_decision_boundary(
+    qa_session: Session,
+) -> None:
+    repository = _write_version(
+        qa_session,
+        profile_version="spv-unknown-investment",
+        variant="current",
+        publish=False,
+    )
+    profile = qa_session.query(entities.Core3SkuSellpointValueProfile).filter(
+        entities.Core3SkuSellpointValueProfile.profile_version
+        == "spv-unknown-investment"
+    ).one()
+    decisions = [dict(row) for row in profile.investment_decisions_json]
+    hdmi = next(
+        row for row in decisions if row["capability_name_cn"] == "HDMI 2.1"
+    )
+    hdmi.update(
+        {
+            "classification": "unknown",
+            "business_reason_cn": (
+                "产品已具备这项能力，但现有用户体验和市场表现不足以判断应保留还是调整。"
+            ),
+        }
+    )
+    profile.investment_decisions_json = decisions
+    qa_session.commit()
+
+    answer = SellpointValueProfileQaService(repository).answer(
+        batch_id="batch-tv",
+        sku_code="TV001",
+        profile_version="spv-unknown-investment",
+        question="HDMI 2.1 是否值得继续投入",
+    )
+
+    assert answer is not None
+    assert answer.answer_status == "unknown"
+    assert answer.topic_code == "capability_investment"
+    assert "暂不作产品取舍" in answer.direct_answer_cn
+    assert "不足以判断应保留还是调整" in answer.direct_answer_cn
+    assert answer.limitations == [
+        "specific_investment_decision_unknown:hdmi_21"
+    ]
+
+
 def test_profile_qa_answers_ten_business_topics_from_one_published_profile(
     qa_session: Session,
 ) -> None:
@@ -369,6 +415,12 @@ def test_profile_qa_answers_ten_business_topics_from_one_published_profile(
         ("哪些配置不用跟", "do_not_follow", "量子点", None),
         ("需要补齐哪些缺口", "missing_gap", "高亮客厅画质", None),
         ("HDMI 2.1 是否只是基础竞争能力", "table_stake", "HDMI 2.1", None),
+        (
+            "HDMI 2.1 是否值得继续投入",
+            "capability_investment",
+            "保持基础竞争能力",
+            None,
+        ),
         ("当前价格为什么获得支撑", "price_support", "价格", None),
         ("如果要走量应该改什么", "volume_action", "价格位置", None),
         (
