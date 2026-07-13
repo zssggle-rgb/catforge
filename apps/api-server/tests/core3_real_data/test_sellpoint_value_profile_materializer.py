@@ -650,6 +650,30 @@ def test_batch_without_resume_reuses_all_existing_profiles(session: Session) -> 
     assert provider.calls == ["TV001", "TV002"]
 
 
+def test_batch_progress_never_hydrates_full_profile_rows(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = FixtureProvider(["TV001", "TV002"])
+    service = _service(session, provider)
+
+    def reject_full_profile_scan(**kwargs):
+        del kwargs
+        raise AssertionError("batch progress must use the lightweight projection")
+
+    monkeypatch.setattr(
+        service.repository,
+        "list_profiles",
+        reject_full_profile_scan,
+    )
+
+    result = service.batch_generate(_request(), page_size=1)
+
+    assert result.generated_count == 2
+    assert result.failed_count == 0
+    assert provider.calls == ["TV001", "TV002"]
+
+
 def test_changed_input_cannot_overwrite_same_profile_version(
     session: Session,
 ) -> None:

@@ -291,6 +291,19 @@ class SkuSellpointValueProfileRecord(SkuSellpointValueProfileDraft):
     updated_at: datetime
 
 
+class SkuSellpointValueProfileProgressRecord(SellpointValuePersistenceBaseModel):
+    """Small projection used by batch progress accounting.
+
+    Full profile rows contain multi-megabyte evidence JSON. Batch scheduling only
+    needs these three fields and must not hydrate the analytical payload for every
+    completed SKU at each checkpoint.
+    """
+
+    sku_code: str = Field(min_length=1)
+    analysis_state: Literal["ready", "partial", "blocked"]
+    review_required: bool
+
+
 class SkuSellpointValueCandidateRecord(SkuSellpointValueCandidateDraft):
     sku_sellpoint_value_candidate_id: str = Field(min_length=1)
     sku_sellpoint_value_profile_id: str = Field(min_length=1)
@@ -408,5 +421,6 @@ __all__ = [
     "SkuSellpointValueItemDraft",
     "SkuSellpointValueItemRecord",
     "SkuSellpointValueProfileDraft",
+    "SkuSellpointValueProfileProgressRecord",
     "SkuSellpointValueProfileRecord",
 ]

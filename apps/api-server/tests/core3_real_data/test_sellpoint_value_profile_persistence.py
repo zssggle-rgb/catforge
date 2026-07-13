@@ -586,6 +586,17 @@ def test_candidate_and_value_item_filters_paginate_after_filtering(
         analysis_state="ready",
         limit=1,
     )[0].sku_code == "TV001"
+    progress = repository.list_profile_progress(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        limit=1,
+    )
+    assert [row.model_dump() for row in progress] == [
+        {
+            "sku_code": "TV001",
+            "analysis_state": "ready",
+            "review_required": False,
+        }
+    ]
     assert [
         row.candidate_sku_code
         for row in repository.list_candidates(

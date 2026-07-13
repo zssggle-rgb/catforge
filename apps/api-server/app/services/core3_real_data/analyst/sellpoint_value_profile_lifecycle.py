@@ -25,6 +25,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SellpointValueReleaseQualityStatus,
     SellpointValueVersionDraftCreate,
     SellpointValueVersionRecord,
+    SkuSellpointValueProfileProgressRecord,
     SkuSellpointValueProfileRecord,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
@@ -197,7 +198,7 @@ class SellpointValueProfileLifecycleService:
             )
             completed = {
                 row.sku_code
-                for row in self._all_profiles(
+                for row in self._all_profile_progress(
                     version.sellpoint_value_profile_version_id
                 )
             }
@@ -212,7 +213,7 @@ class SellpointValueProfileLifecycleService:
                 checkpoint_sku_code=None,
                 processing_status="running",
             )
-            self.repository.db.commit()
+            self._commit_batch_checkpoint()
 
             for page_start in range(0, len(sku_codes), page_size):
                 for sku_code in sku_codes[page_start : page_start + page_size]:
@@ -233,7 +234,7 @@ class SellpointValueProfileLifecycleService:
                             checkpoint_sku_code=checkpoint,
                             processing_status="running",
                         )
-                        self.repository.db.commit()
+                        self._commit_batch_checkpoint()
                         continue
                     try:
                         self._update_progress(
@@ -266,7 +267,7 @@ class SellpointValueProfileLifecycleService:
                             checkpoint_sku_code=checkpoint,
                             processing_status="running",
                         )
-                        self.repository.db.commit()
+                        self._commit_batch_checkpoint()
                     except Exception as exc:  # isolated per SKU by design
                         self.repository.db.rollback()
                         logger.exception(
@@ -296,7 +297,7 @@ class SellpointValueProfileLifecycleService:
                             checkpoint_sku_code=checkpoint,
                             processing_status="running",
                         )
-                        self.repository.db.commit()
+                        self._commit_batch_checkpoint()
 
             final_processing = (
                 "completed_with_errors"
@@ -311,7 +312,7 @@ class SellpointValueProfileLifecycleService:
                 checkpoint_sku_code=checkpoint,
                 processing_status=final_processing,
             )
-            self.repository.db.commit()
+            self._commit_batch_checkpoint()
             return SellpointValueBatchGenerationResult(
                 version=final_version,
                 requested_sku_count=len(sku_codes),
@@ -456,7 +457,7 @@ class SellpointValueProfileLifecycleService:
         authoritative = set(authoritative_sku_codes)
         profiles = [
             row
-            for row in self._all_profiles(version_id)
+            for row in self._all_profile_progress(version_id)
             if row.sku_code in authoritative
         ]
         ready_count = sum(
@@ -519,14 +520,14 @@ class SellpointValueProfileLifecycleService:
             },
         )
 
-    def _all_profiles(
+    def _all_profile_progress(
         self,
         version_id: str,
-    ) -> list[SkuSellpointValueProfileRecord]:
-        result = []
+    ) -> list[SkuSellpointValueProfileProgressRecord]:
+        result: list[SkuSellpointValueProfileProgressRecord] = []
         offset = 0
         while True:
-            page = self.repository.list_profiles(
+            page = self.repository.list_profile_progress(
                 sellpoint_value_profile_version_id=version_id,
                 limit=1000,
                 offset=offset,
@@ -535,6 +536,10 @@ class SellpointValueProfileLifecycleService:
             if len(page) < 1000:
                 return result
             offset += len(page)
+
+    def _commit_batch_checkpoint(self) -> None:
+        self.repository.db.commit()
+        self.repository.db.expunge_all()
 
 
 def _assert_request_matches_input(

@@ -24,6 +24,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SkuSellpointValueCandidateRecord,
     SkuSellpointValueItemRecord,
     SkuSellpointValueProfileRecord,
+    SkuSellpointValueProfileProgressRecord,
 )
 from app.services.core3_real_data.repositories import (
     Core3BaseRepository,
@@ -416,6 +417,43 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         return [
             SkuSellpointValueProfileRecord.model_validate(row)
             for row in self.db.execute(stmt).scalars()
+        ]
+
+    def list_profile_progress(
+        self,
+        *,
+        sellpoint_value_profile_version_id: str,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> list[SkuSellpointValueProfileProgressRecord]:
+        """Read only the fields needed to resume and update batch counters."""
+
+        self._version_by_id(sellpoint_value_profile_version_id)
+        normalized_limit, normalized_offset = self.pagination(
+            limit,
+            offset,
+            max_limit=1000,
+        )
+        profile = entities.Core3SkuSellpointValueProfile
+        stmt = (
+            select(
+                profile.sku_code,
+                profile.analysis_state,
+                profile.review_required,
+            )
+            .where(profile.project_id == self.project_id)
+            .where(profile.category_code == self.category_code.value)
+            .where(
+                profile.sellpoint_value_profile_version_id
+                == sellpoint_value_profile_version_id
+            )
+            .order_by(profile.sku_code)
+            .offset(normalized_offset)
+            .limit(normalized_limit)
+        )
+        return [
+            SkuSellpointValueProfileProgressRecord.model_validate(row)
+            for row in self.db.execute(stmt).mappings()
         ]
 
     def list_candidates(
