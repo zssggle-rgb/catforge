@@ -40,6 +40,19 @@ INVESTMENT_ACTION_CN = {
     "unknown": "暂不作产品取舍",
 }
 
+RELEASE_STATUS_CN = {
+    "draft": "草稿",
+    "reviewed": "已审核",
+    "published": "已发布",
+    "deprecated": "已停用",
+}
+
+FRESHNESS_STATUS_CN = {
+    "current": "数据已更新",
+    "stale": "数据已过期",
+    "unknown": "数据时效待确认",
+}
+
 
 class StoredPmFirstScreen(SellpointValueProfileBaseModel):
     retain_cn: str = Field(min_length=1)
@@ -258,8 +271,10 @@ def render_stored_profile_short_answer(
     ]
     trace_lines = [
         (
-            f"画像版本｜{report.profile_version}（{report.release_status}，"
-            f"{report.freshness_status}）｜{_release_time_cn(report)}"
+            f"画像版本｜{report.profile_version}（"
+            f"{_release_status_cn(report.release_status)}，"
+            f"{_freshness_status_cn(report.freshness_status)}）｜"
+            f"{_release_time_cn(report)}"
         ),
         (
             f"候选范围编号｜{report.candidate_manifest_hash}｜"
@@ -288,8 +303,10 @@ def render_stored_profile_markdown(
         f"# {title}",
         "",
         (
-            f"> 画像版本：{report.profile_version}｜状态：{report.release_status}｜"
-            f"新鲜度：{report.freshness_status}｜{_release_time_cn(report)}"
+            f"> 画像版本：{report.profile_version}｜"
+            f"状态：{_release_status_cn(report.release_status)}｜"
+            f"数据状态：{_freshness_status_cn(report.freshness_status)}｜"
+            f"{_release_time_cn(report)}"
         ),
         (
             f"> 候选范围编号：{report.candidate_manifest_hash}｜"
@@ -405,8 +422,10 @@ def render_stored_profile_feishu_card(
             f"**价格是否撑得住**：{screen.price_support_cn}",
             f"**如果要销量**：{screen.growth_action_cn}",
             (
-                f"画像版本：{report.profile_version}｜{report.release_status}｜"
-                f"{report.freshness_status}｜{_release_time_cn(report)}"
+                f"画像版本：{report.profile_version}｜"
+                f"{_release_status_cn(report.release_status)}｜"
+                f"{_freshness_status_cn(report.freshness_status)}｜"
+                f"{_release_time_cn(report)}"
             ),
             (
                 f"候选范围编号：{report.candidate_manifest_hash}｜"
@@ -656,6 +675,14 @@ def _number(value: Any) -> float | None:
 
 def _number_or_dash(value: float | None) -> str:
     return f"{value:,.1f}" if value is not None else "—"
+
+
+def _release_status_cn(value: str) -> str:
+    return RELEASE_STATUS_CN.get(value, "状态待确认")
+
+
+def _freshness_status_cn(value: str) -> str:
+    return FRESHNESS_STATUS_CN.get(value, "数据时效待确认")
 
 
 def _datetime_cn(value: datetime) -> str:

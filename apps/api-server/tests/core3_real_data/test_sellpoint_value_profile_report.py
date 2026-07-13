@@ -246,6 +246,10 @@ def test_published_profile_drives_all_report_formats_with_one_hash(
     assert answer["feishu_card_payload"]["result_hash"] == answer["result_hash"]
     assert answer["result_hash"] in answer["short_answer"]
     assert report["candidate_manifest_hash"] in answer["short_answer"]
+    assert "（已发布，数据已更新）" in answer["short_answer"]
+    rendered_card = json.dumps(answer["feishu_card_payload"], ensure_ascii=False)
+    assert "已发布" in rendered_card
+    assert "数据已更新" in rendered_card
     assert "发布时间" in answer["short_answer"]
     assert answer["result_hash"] in json.dumps(
         answer["feishu_card_payload"], ensure_ascii=False
