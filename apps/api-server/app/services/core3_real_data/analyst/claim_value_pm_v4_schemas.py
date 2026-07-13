@@ -463,7 +463,7 @@ class SellpointValueV4Context(SellpointValueV4BaseModel):
     lineage_gate: LineageGate
     target_snapshot: SkuEvidenceSnapshot
     purchase_reason_profile: PurchaseReasonSnapshot
-    candidate_snapshots: list[SkuEvidenceSnapshot] = Field(max_length=12)
+    candidate_snapshots: list[SkuEvidenceSnapshot] = Field(default_factory=list)
     market_cells: list[MarketCellRow] = Field(max_length=2000)
     m12c_pool_tiers: list[ComparablePoolTierFact]
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)

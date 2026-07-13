@@ -3261,7 +3261,12 @@ def _v4_candidate_references(
     selection_rows: Sequence[entities.Core3CompetitorSelection],
     fallback_candidates: Sequence[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
-    if selection_rows:
+    m14_by_code = {
+        str(row.candidate_sku_code): row
+        for row in selection_rows
+        if str(row.candidate_sku_code) != target_sku_code
+    }
+    if fallback_candidates is None:
         candidates = [
             {
                 "sku_code": str(row.candidate_sku_code),
@@ -3281,10 +3286,10 @@ def _v4_candidate_references(
                     )
                 ],
             }
-            for row in selection_rows[:30]
+            for row in selection_rows
             if str(row.candidate_sku_code) != target_sku_code
         ]
-        return _v4_select_snapshot_candidates(candidates, limit=12)
+        return _v4_select_snapshot_candidates(candidates, limit=0)
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
     for rank, item in enumerate(fallback_candidates or (), start=1):
@@ -3293,21 +3298,44 @@ def _v4_candidate_references(
         if not sku_code or sku_code == target_sku_code or sku_code in seen:
             continue
         seen.add(sku_code)
+        m14 = m14_by_code.get(sku_code)
         result.append(
             {
                 "sku_code": sku_code,
                 "brand_name": (candidate or {}).get("brand_name"),
                 "model_name": (candidate or {}).get("model_name"),
-                "provenance": "competitor_set_fallback",
-                "selection_rank": rank,
-                "slot_code": item.get("competitor_role") or item.get("role") or "existing_competitor_sop",
-                "selection_confidence": _number(item.get("confidence")) or _number(item.get("business_score")),
-                "source_refs": [],
+                "provenance": item.get("candidate_source")
+                or "competitor_set_fallback",
+                "selection_rank": int(m14.selection_rank) if m14 else rank,
+                "slot_code": (
+                    m14.slot_code
+                    if m14
+                    else item.get("competitor_role")
+                    or item.get("role")
+                    or "existing_competitor_sop"
+                ),
+                "selection_confidence": (
+                    _number(m14.confidence)
+                    if m14
+                    else _number(item.get("confidence"))
+                    or _number(item.get("business_score"))
+                ),
+                "source_refs": (
+                    [
+                        _v4_row_evidence_ref(
+                            "M14",
+                            m14,
+                            record_type="core3_competitor_selection",
+                            record_id_attr="competitor_selection_id",
+                            result_hash_attr="result_hash",
+                        )
+                    ]
+                    if m14
+                    else []
+                ),
             }
         )
-        if len(result) >= 30:
-            break
-    return _v4_select_snapshot_candidates(result, limit=12)
+    return _v4_select_snapshot_candidates(result, limit=0)
 
 
 def _v4_select_snapshot_candidates(
@@ -3315,7 +3343,7 @@ def _v4_select_snapshot_candidates(
     *,
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Keep declared-role coverage before filling the bounded snapshot set."""
+    """Keep declared-role coverage; zero means the complete candidate set."""
 
     buckets: dict[str, list[dict[str, Any]]] = {
         "base_value": [],
@@ -3328,7 +3356,8 @@ def _v4_select_snapshot_candidates(
             candidate
         )
     selected: list[dict[str, Any]] = []
-    while len(selected) < max(limit, 0):
+    effective_limit = len(candidates) if limit == 0 else max(limit, 0)
+    while len(selected) < effective_limit:
         added = False
         for bucket in (
             "base_value",
@@ -3336,7 +3365,7 @@ def _v4_select_snapshot_candidates(
             "stretch_benchmark",
             "unknown",
         ):
-            if buckets[bucket] and len(selected) < limit:
+            if buckets[bucket] and len(selected) < effective_limit:
                 selected.append(buckets[bucket].pop(0))
                 added = True
         if not added:

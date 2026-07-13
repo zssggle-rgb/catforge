@@ -8,6 +8,9 @@ from app.services.core3_real_data.analyst.analyst_service import (
     route_question,
 )
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
+from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
+    build_candidate_universe_manifest,
+)
 from tests.core3_real_data.test_claim_value_pm_v4_quantification import (
     _synthetic_context,
 )
@@ -68,6 +71,54 @@ class _FakeAtomicHandlersWithMarketPool(_FakeAtomicHandlers):
             "evidence": [],
             "limitations": [],
         }
+
+
+class _FakeAtomicHandlersWithCandidateUniverse(_FakeAtomicHandlers):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fallback_count = None
+
+    def sellpoint_value_candidate_universe(self, context, **kwargs):
+        del context, kwargs
+        records = [
+            {
+                "candidate_sku_code": f"TV-CANDIDATE-{index:03d}",
+                "primary_relation_type": "direct_fight",
+                "processing_status": "success",
+                "component": {
+                    "component_total_score": 0.8,
+                    "processing_status": "success",
+                    "review_required": False,
+                    "result_hash": f"component-{index}",
+                },
+                "roles": [],
+                "feature": {
+                    "market_feature": {"price_wavg": 5000 + index},
+                    "param_feature": {"refresh_rate": 144},
+                    "claim_value_overlap": {"picture": 0.8},
+                },
+                "pool_result_hash": f"pool-{index}",
+            }
+            for index in range(35)
+        ]
+        manifest = build_candidate_universe_manifest(
+            project_id="project-1",
+            category_code="TV",
+            batch_id="batch-1",
+            target_sku_code=self.v4_context.target.sku_code,
+            candidate_records=records,
+        )
+        return {
+            "status": "ok",
+            "result": {"candidate_universe": manifest.model_dump(mode="json")},
+            "atoms_used": [],
+            "evidence": [],
+            "limitations": [],
+        }
+
+    def sellpoint_value_v4_context(self, context, **kwargs):
+        self.fallback_count = len(kwargs["fallback_candidates"])
+        return super().sellpoint_value_v4_context(context, **kwargs)
 
 
 def test_cli_command_exists_but_is_default_off() -> None:
@@ -138,7 +189,7 @@ def test_explicit_command_returns_one_report_for_all_renderers() -> None:
     ]
 
 
-def test_live_market_fallback_keeps_full_evidence_snapshots_bounded() -> None:
+def test_live_market_reference_is_not_used_as_competitor_fallback() -> None:
     handlers = _FakeAtomicHandlersWithMarketPool()
     orchestrator = SopOrchestrators(handlers)  # type: ignore[arg-type]
 
@@ -147,7 +198,20 @@ def test_live_market_fallback_keeps_full_evidence_snapshots_bounded() -> None:
     )
 
     assert result["status"] == "ok"
-    assert handlers.candidate_limit == 12
+    assert handlers.candidate_limit is None
+
+
+def test_v5_uses_complete_candidate_universe_without_m14_or_count_cap() -> None:
+    handlers = _FakeAtomicHandlersWithCandidateUniverse()
+    orchestrator = SopOrchestrators(handlers)  # type: ignore[arg-type]
+
+    result = orchestrator.sellpoint_value_pm_v5(
+        _analyst_context(), sku_code="TV00029112", enable_v5=True
+    )
+
+    assert result["status"] == "ok"
+    assert handlers.fallback_count == 35
+    assert len(result["result"]["candidate_universe"]["competitor_candidates"]) == 35
 
 
 def test_natural_language_route_remains_on_v2() -> None:

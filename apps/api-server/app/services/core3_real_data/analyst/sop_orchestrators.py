@@ -55,6 +55,12 @@ from app.services.core3_real_data.analyst.replacement_pressure import (
     ReplacementPressureClassifier,
     ReplacementPressureInput,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
+    candidate_manifest_as_v4_fallback,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    CandidateUniverseManifest,
+)
 
 
 CLAIM_VALUE_REPORT_LIMIT = 200
@@ -63,12 +69,10 @@ LOW_AMOUNT_RATIO_THRESHOLD = Decimal("0.90")
 NOT_WEAK_SALES_RATIO_THRESHOLD = Decimal("0.90")
 NOT_WEAK_AMOUNT_RATIO_THRESHOLD = Decimal("1.00")
 MIN_OVERLAP_WEEKS = 4
-V5_FALLBACK_SNAPSHOT_LIMIT = 12
-
-
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
     "sellpoint-value-pm-v5": (
         "resolve-sku",
+        "sellpoint-value-candidate-universe",
         "sellpoint-value-v4-context",
         "v5-multilayer-counterfactual",
         "v5-market-reference",
@@ -192,22 +196,31 @@ class SopOrchestrators:
                 message_cn="用户卖点价值 V5 默认关闭；请使用显式 enable_v5 参数。",
             )
         atom_results: list[dict[str, Any]] = []
-        if (
-            fallback_candidates is None
-            and getattr(self.atomic_handlers, "repository", None) is not None
-        ):
-            fallback_result = self.atomic_handlers.same_size_price_candidates(
+        candidate_universe: CandidateUniverseManifest | None = None
+        candidate_handler = getattr(
+            self.atomic_handlers, "sellpoint_value_candidate_universe", None
+        )
+        if callable(candidate_handler):
+            candidate_result = candidate_handler(
                 context,
                 query=query,
                 sku_code=sku_code,
                 model_name=model_name,
-                limit=V5_FALLBACK_SNAPSHOT_LIMIT,
             )
-            atom_results.append(fallback_result)
-            fallback_payload = fallback_result.get("result") or {}
-            fallback_candidates = (fallback_payload.get("candidate_search") or {}).get(
-                "candidates"
-            ) or []
+            atom_results.append(candidate_result)
+            if not _ok(candidate_result):
+                return _sop_error(
+                    command="sellpoint-value-pm-v5",
+                    context=context,
+                    atom_results=atom_results,
+                    message_cn="用户卖点价值分析前未能加载竞品候选宇宙。",
+                )
+            candidate_universe = CandidateUniverseManifest.model_validate(
+                (candidate_result.get("result") or {}).get("candidate_universe")
+            )
+            fallback_candidates = candidate_manifest_as_v4_fallback(
+                candidate_universe
+            )
         context_atom = self.atomic_handlers.sellpoint_value_v4_context(
             context,
             query=query,
@@ -227,7 +240,10 @@ class SopOrchestrators:
         v4_context = SellpointValueV4Context.model_validate(
             ((context_atom.get("result") or {}).get("sellpoint_value_v4_context"))
         )
-        v5_context = adapt_v4_context_to_v5(v4_context)
+        v5_context = adapt_v4_context_to_v5(
+            v4_context,
+            candidate_universe=candidate_universe,
+        )
         report = build_perceived_value_market_report(v5_context)
         answer = build_v5_answer_artifacts(
             report,
@@ -245,6 +261,11 @@ class SopOrchestrators:
             result={
                 "sellpoint_value_pm_v5": report.model_dump(mode="json"),
                 "sellpoint_value_pm_v5_answer": answer,
+                "candidate_universe": (
+                    candidate_universe.model_dump(mode="json")
+                    if candidate_universe is not None
+                    else None
+                ),
             },
             sop_steps=[
                 {"step_code": code, "status": "ok", "run_count": 1}

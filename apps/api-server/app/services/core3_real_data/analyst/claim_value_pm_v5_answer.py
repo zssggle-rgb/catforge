@@ -54,6 +54,9 @@ from app.services.core3_real_data.analyst.competitor_answer import (
     CLAIM_LABELS_CN,
     _publish_report,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    CandidateUniverseManifest,
+)
 
 
 VALUE_STATUS_CN = {
@@ -108,7 +111,11 @@ TV_BATTLEFIELD_CN = {
 ALL_BATTLEFIELD_CN = {**TV_BATTLEFIELD_CN, **AC_BATTLEFIELD_CN}
 
 
-def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValueV5Context:
+def adapt_v4_context_to_v5(
+    v4_context: SellpointValueV4Context,
+    *,
+    candidate_universe: CandidateUniverseManifest | None = None,
+) -> SellpointValueV5Context:
     """Reuse the immutable V4 evidence context without querying another source."""
 
     universe = [v4_context.target_snapshot, *v4_context.candidate_snapshots]
@@ -157,6 +164,11 @@ def adapt_v4_context_to_v5(v4_context: SellpointValueV4Context) -> SellpointValu
         input_hash=canonical_v4_hash(
             {
                 "v4_input_hash": v4_context.input_hash,
+                "candidate_manifest_hash": (
+                    candidate_universe.candidate_manifest_hash
+                    if candidate_universe is not None
+                    else None
+                ),
                 "market_universe": [row.snapshot_hash for row in ordered],
                 "taxonomy": [row.model_dump(mode="json") for row in taxonomy],
             }

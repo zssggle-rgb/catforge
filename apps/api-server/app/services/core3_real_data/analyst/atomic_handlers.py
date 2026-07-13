@@ -10,6 +10,12 @@ from app.services.core3_real_data.analyst.claim_value_answer import build_claim_
 from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
     RepositoryPurchaseReasonProfileReader,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_repositories import (
+    SellpointValueCandidateUniverseRepository,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
+    build_candidate_universe_manifest,
+)
 
 
 class AtomicAnalystHandlers:
@@ -225,6 +231,97 @@ class AtomicAnalystHandlers:
             ],
             limitations=limitations,
             answer_outline=["已加载只读的用户价值、反事实和市场量价上下文。"],
+        )
+
+    def sellpoint_value_candidate_universe(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Load the complete M12/M13 competitor manifest and separate references."""
+
+        resolved = self._resolve_one(
+            context,
+            command="sellpoint-value-candidate-universe",
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+        )
+        if resolved["status"] != AnalystStatus.OK:
+            return resolved["payload"]
+        target = resolved["candidate"]
+        repository = SellpointValueCandidateUniverseRepository(
+            self.repository.db,
+            project_id=self.repository.project_id,
+            category_code=self.repository.category_code,
+        )
+        candidate_records = repository.load_candidate_records(
+            batch_id=context.batch_id,
+            target_sku_code=target.sku_code,
+        )
+        reference_search = self.repository.same_size_price_candidates(
+            batch_id=context.batch_id,
+            target_sku_code=target.sku_code,
+            product_category=context.product_category,
+            market_window=context.market_window,
+            limit=0,
+        )
+        reference_purpose = (
+            "battlefield_benchmark"
+            if reference_search.get("match_policy")
+            == "m11c_comparable_value_battlefield_pool"
+            else "same_size_market"
+        )
+        market_references = [
+            {**item, "reference_purposes": [reference_purpose]}
+            for item in (reference_search.get("candidates") or [])
+        ]
+        manifest = build_candidate_universe_manifest(
+            project_id=context.project_id,
+            category_code=context.category_code,
+            batch_id=context.batch_id,
+            target_sku_code=target.sku_code,
+            candidate_records=candidate_records,
+            market_references=market_references,
+        )
+        m13_count = sum(
+            1 for item in candidate_records if item.get("component") is not None
+        )
+        m14_count = sum(
+            1 for item in candidate_records if item.get("selection") is not None
+        )
+        limitations = list(manifest.limitations)
+        if candidate_records and m13_count == 0:
+            limitations.append("m13_candidate_scores_unavailable")
+        if not market_references:
+            limitations.append("analysis_reference_pool_unavailable")
+        return base_result(
+            status=AnalystStatus.OK,
+            command="sellpoint-value-candidate-universe",
+            context=context,
+            target=target.to_dict(),
+            result={"candidate_universe": manifest.model_dump(mode="json")},
+            atoms_used=[
+                {"ability_code": "resolve-sku", "status": "ok"},
+                {
+                    "ability_code": "sellpoint-value-candidate-universe",
+                    "status": "ok",
+                },
+            ],
+            evidence=[
+                {"source_module": "M12", "row_count": len(candidate_records)},
+                {"source_module": "M13", "row_count": m13_count},
+                {"source_module": "M14", "row_count": m14_count},
+                {"source_module": "M07/M11C", "row_count": len(market_references)},
+            ],
+            limitations=limitations,
+            answer_outline=[
+                f"已加载 {len(candidate_records)} 个完整竞品候选和 "
+                f"{len(market_references)} 个独立分析参照。"
+            ],
         )
 
     def semantic_dimension_space(

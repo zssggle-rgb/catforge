@@ -11,6 +11,7 @@ from app.core.database import SessionLocal
 from app.models import entities
 from app.services.core3_real_data.analyst.analyst_repository import (
     AnalystRepository,
+    _v4_candidate_references,
     _v4_multirow_authority,
     _v4_current_m12d_input_lineage,
     _v4_pick_rows_by_key,
@@ -118,9 +119,13 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
             market_window="full_observed_window",
             analysis_population="claim_value_ready_with_comment",
             fallback_candidates=[
-                {"candidate": {"sku_code": "TV00029020", "model_name": "L65MC-SP"}},
-                {"candidate": {"sku_code": "TV00027541", "model_name": "65E5Q"}},
-                {"candidate": {"sku_code": "TV00027899", "model_name": "K-65XR50"}},
+                {
+                    "candidate": {
+                        "sku_code": f"TV-CANDIDATE-{index:03d}",
+                        "model_name": f"候选型号{index}",
+                    }
+                }
+                for index in range(35)
             ],
         )
         multi_candidate_query_count = len(statements)
@@ -153,7 +158,7 @@ def test_context_loader_is_read_only_bounded_and_keeps_fallback_provenance(
     assert context.market_cells == []
     assert context.m12c_pool_tiers == []
     assert context.input_hash
-    assert len(multi_candidate_context.candidate_snapshots) == 3
+    assert len(multi_candidate_context.candidate_snapshots) == 35
 
 
 def test_target_only_m12d_lineage_keeps_composite_semantic_scope() -> None:
@@ -322,6 +327,40 @@ def test_snapshot_selection_preserves_declared_roles_beyond_top_three() -> None:
     assert len(selected) == 4
     assert any(item["sku_code"] == "TV4" for item in selected)
     assert {item["slot_code"] for item in selected} == {"same_value", "base_value"}
+
+
+def test_m14_labels_authoritative_candidates_but_cannot_expand_them() -> None:
+    def selection(sku_code: str, rank: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            candidate_sku_code=sku_code,
+            candidate_brand_name="品牌",
+            candidate_model_name=sku_code,
+            selection_rank=rank,
+            slot_code="same_value",
+            confidence=Decimal("0.9"),
+            competitor_selection_id=f"selection-{rank}",
+            result_hash=f"selection-hash-{rank}",
+            batch_id=BATCH_ID,
+            rule_version="m14-v1",
+            evidence_ids=[],
+        )
+
+    candidates = _v4_candidate_references(
+        target_sku_code="TV-TARGET",
+        selection_rows=[selection("TV-M12-1", 1), selection("TV-M14-ONLY", 2)],
+        fallback_candidates=[
+            {
+                "candidate": {"sku_code": "TV-M12-1"},
+                "candidate_source": "M12_M13_candidate_universe",
+                "competitor_role": "direct_fight",
+            }
+        ],
+    )
+
+    assert [item["sku_code"] for item in candidates] == ["TV-M12-1"]
+    assert candidates[0]["slot_code"] == "same_value"
+    assert candidates[0]["provenance"] == "M12_M13_candidate_universe"
+    assert candidates[0]["source_refs"][0].module_code == "M14"
 
 
 def test_market_row_budget_keeps_complete_groups_and_reports_truncation() -> None:
