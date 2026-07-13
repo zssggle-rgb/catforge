@@ -164,6 +164,21 @@ ATOM_ABILITIES: tuple[AbilityDefinition, ...] = (
 
 SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
+        code="sellpoint-value-profile-ask",
+        ability_type="sop",
+        description_cn="锁定一份已保存的用户卖点价值画像，回答产品投入、价格、销量、竞品、价值战场和版本变化追问。",
+        required_inputs=("sku_code|query", "question"),
+        optional_inputs=(
+            "profile_version",
+            "expected_result_hash",
+            "candidate_sku_code",
+            "compare_profile_version",
+            "topic_code",
+        ),
+        source_modules=(),
+        status="implemented",
+    ),
+    AbilityDefinition(
         code="sellpoint-value-pm-v5",
         ability_type="sop",
         description_cn="显式启用后生成用户感知价值、相对亮点、量价承接、市场合成参照和战场组合；默认不参与自然语言路由。",

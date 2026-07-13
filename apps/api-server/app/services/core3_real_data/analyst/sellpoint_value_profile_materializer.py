@@ -7,7 +7,10 @@ from typing import Any, Iterable, Sequence
 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_materializer_schemas import (
     MaterializedSellpointValueDraft,
+    ProfileCandidateEvaluation,
     ProfileQaTopic,
+    ProfileQuestionAnalysis,
+    ProfileRejectedCandidate,
     ProfileSourceLineage,
     SellpointValueDecisionValueItem,
     SellpointValueFivePmDecisions,
@@ -90,7 +93,7 @@ def materialize_sellpoint_value_profile(
         key=lambda row: row.capability_code,
     )
     pm_decisions = _pm_decisions(source, investment_decisions)
-    qa_index = _qa_index()
+    qa_index = _qa_index(value_items, question_analyses)
     review_reasons = _dedupe(
         [
             *freshness_reasons,
@@ -226,8 +229,8 @@ def materialize_sellpoint_value_profile(
         review_reason_json={"reasons": review_reasons},
     )
     candidates = [
-        *_competitor_drafts(source, common),
-        *_reference_drafts(source, common),
+        *_competitor_drafts(source, common, question_analyses),
+        *_reference_drafts(source, common, question_analyses),
     ]
     persisted_items = _value_item_drafts(source, common, value_items)
     return MaterializedSellpointValueDraft(
@@ -264,21 +267,13 @@ def _value_items(
             decisions[code] for code in capability_codes if code in decisions
         ]
         questions = [
-            {
-                "question": item.question,
-                "highest_available_method": item.highest_available_method,
-                "eligible_candidate_sku_codes": sorted(
-                    {
-                        sku_code
-                        for candidate in item.candidates
-                        if candidate.stage == "eligible"
-                        for sku_code in candidate.candidate_sku_codes
-                    }
-                ),
-                "selection_reasons": item.selection_reasons,
-                "degradation_reasons": item.degradation_reasons,
-                "set_hash": item.set_hash,
-            }
+            _profile_question_analysis(
+                source,
+                battlefield_code=battlefield_code,
+                value_bundle_code=row.sellpoint_bundle.bundle_code,
+                boundary_cn=row.boundary_cn,
+                counterfactual_set=item,
+            ).model_dump(mode="json")
             for item in sorted(
                 row.counterfactual_sets,
                 key=lambda item: (item.question, item.bundle_code),
@@ -350,7 +345,7 @@ def _question_analyses(
     return sorted(
         result,
         key=lambda row: (
-            str(row.get("question")),
+            str(row.get("question_code")),
             str(row.get("battlefield_code")),
             str(row.get("value_bundle_code")),
         ),
@@ -381,39 +376,197 @@ def _pm_decisions(
     )
 
 
-def _qa_index() -> list[ProfileQaTopic]:
+def _qa_index(
+    value_items: Sequence[SellpointValueDecisionValueItem],
+    question_analyses: Sequence[dict[str, Any]],
+) -> list[ProfileQaTopic]:
+    candidate_codes = sorted(
+        {
+            str(code)
+            for row in question_analyses
+            for code in row.get("eligible_candidate_ids", [])
+        }
+    )
+    value_keys = sorted(
+        f"{row.battlefield_code}:{row.value_bundle_code}" for row in value_items
+    )
+    boundary = "只解释当前画像已保存的事实；画像未保存的结论返回 unknown。"
     return [
         ProfileQaTopic(
             topic_code="investment",
             question_examples_cn=["哪些投入值得保留", "哪些投入没有转化"],
             fact_paths=["investment_decisions", "value_items"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
         ProfileQaTopic(
             topic_code="price",
             question_examples_cn=["当前价格是否获得用户价值支撑"],
             fact_paths=["price_role", "value_items.*.price_realization"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
         ProfileQaTopic(
             topic_code="volume",
             question_examples_cn=["如果追求销量应该改价格还是卖点"],
             fact_paths=["pm_decisions.growth_action_cn", "value_items.*.volume_realization"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
         ProfileQaTopic(
             topic_code="competitor",
             question_examples_cn=["为什么选择这个对照产品"],
             fact_paths=["candidate_universe", "question_analyses"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
         ProfileQaTopic(
             topic_code="battlefield",
             question_examples_cn=["应增强已有战场还是进入新战场"],
             fact_paths=["battlefield_options", "value_items"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
         ProfileQaTopic(
             topic_code="version",
             question_examples_cn=["与上一版画像相比发生了什么"],
             fact_paths=["profile_version", "result_hash"],
+            candidate_scope_codes=candidate_codes,
+            value_item_keys=value_keys,
+            answer_boundary_cn=boundary,
         ),
     ]
+
+
+def _profile_question_analysis(
+    source: SellpointValueMaterializationInput,
+    *,
+    battlefield_code: str,
+    value_bundle_code: str,
+    boundary_cn: str,
+    counterfactual_set: Any,
+) -> ProfileQuestionAnalysis:
+    highest_method = counterfactual_set.highest_available_method
+    evaluations = []
+    rejected = []
+    eligible_ids: set[str] = set()
+    selected_ids: set[str] = set()
+    metrics: set[str] = set()
+    for candidate in sorted(
+        counterfactual_set.candidates,
+        key=lambda row: (row.method, row.stage, row.candidate_key),
+    ):
+        codes = sorted(set(candidate.candidate_sku_codes))
+        selected = candidate.stage == "eligible" and candidate.method == highest_method
+        if candidate.stage == "eligible":
+            eligible_ids.update(codes)
+            metrics.update(candidate.eligible_measures)
+        if selected:
+            selected_ids.update(codes)
+        else:
+            reasons = list(candidate.reject_reasons)
+            if not reasons:
+                reasons = [
+                    "存在更适合回答本问题的比较方法"
+                    if candidate.stage == "eligible"
+                    else f"候选状态为 {candidate.stage}，尚未满足当前问题的可用条件"
+                ]
+            rejected.append(
+                ProfileRejectedCandidate(
+                    candidate_sku_codes=codes,
+                    method=candidate.method,
+                    reasons=sorted(set(reasons)),
+                )
+            )
+        evaluations.append(
+            ProfileCandidateEvaluation(
+                candidate_key=candidate.candidate_key,
+                candidate_sku_codes=codes,
+                method=candidate.method,
+                stage=candidate.stage,
+                selected=selected,
+                eligible_measures=sorted(set(candidate.eligible_measures)),
+                reject_reasons=sorted(set(candidate.reject_reasons)),
+                sample_manifest_hash=candidate.sample_manifest_hash,
+            )
+        )
+    known_competitors = {
+        row.candidate_sku_code
+        for row in source.candidate_universe.competitor_candidates
+    }
+    known_references = {
+        row.reference_sku_code for row in source.candidate_universe.analysis_references
+    }
+    used_codes = eligible_ids | selected_ids
+    pool_types = {
+        *("competitor" for code in used_codes if code in known_competitors),
+        *("reference" for code in used_codes if code in known_references),
+    }
+    pool_type = (
+        next(iter(pool_types))
+        if len(pool_types) == 1
+        else "mixed"
+        if len(pool_types) > 1
+        else "unknown"
+    )
+    question_code = _business_question_code(
+        str(counterfactual_set.question),
+        str(highest_method) if highest_method else None,
+    )
+    payload = {
+        "question_code": question_code,
+        "source_question_code": counterfactual_set.question,
+        "business_question_cn": _business_question_cn(question_code),
+        "battlefield_code": battlefield_code,
+        "value_bundle_code": value_bundle_code,
+        "candidate_pool_type": pool_type,
+        "eligible_candidate_ids": sorted(eligible_ids),
+        "selected_candidate_ids": sorted(selected_ids),
+        "rejected_candidates": [row.model_dump(mode="json") for row in rejected],
+        "candidate_evaluations": [
+            row.model_dump(mode="json") for row in evaluations
+        ],
+        "method": highest_method,
+        "selection_reasons": sorted(set(counterfactual_set.selection_reasons)),
+        "degradation_reasons": sorted(set(counterfactual_set.degradation_reasons)),
+        "metrics": sorted(metrics),
+        "conclusion_boundary_cn": boundary_cn,
+        "sample_manifest_hash": counterfactual_set.set_hash,
+    }
+    return ProfileQuestionAnalysis(
+        **payload,
+        result_hash=stable_hash(payload, version="profile_question_analysis_v1"),
+    )
+
+
+def _business_question_code(source_question: str, method: str | None) -> str:
+    if method == "param_tier_pool":
+        return "parameter_conversion"
+    return {
+        "user_realization": "value_relative_advantage",
+        "relative_highlight": "value_relative_advantage",
+        "without_value_baseline": "value_relative_advantage",
+        "price_realization": "current_price_support",
+        "strict_bundle_price_interval": "current_price_support",
+        "volume_realization": "scale_conversion",
+        "battlefield_portfolio": "battlefield_expansion",
+    }.get(source_question, "specific_competitor")
+
+
+def _business_question_cn(question_code: str) -> str:
+    return {
+        "value_relative_advantage": "这项用户价值相对其他产品是否形成优势",
+        "current_price_support": "当前价格是否得到用户价值支撑",
+        "scale_conversion": "当前用户价值是否转化成销量",
+        "parameter_conversion": "不同参数取值是否形成不同用户价值",
+        "battlefield_expansion": "应增强已有价值战场还是拓展新战场",
+        "specific_competitor": "指定产品是否适合回答当前问题",
+    }.get(question_code, "当前产品问题")
 
 
 def _freshness(
@@ -493,9 +646,13 @@ def _value_confidence(value_status: str) -> float:
 def _competitor_drafts(
     source: SellpointValueMaterializationInput,
     common: dict[str, Any],
+    question_analyses: Sequence[dict[str, Any]],
 ) -> list[SkuSellpointValueCandidateDraft]:
     result = []
     for row in source.candidate_universe.competitor_candidates:
+        question_usage = _candidate_question_usage(
+            row.candidate_sku_code, question_analyses
+        )
         confidence = row.component_total_score or row.recall_priority_score or 0.0
         needs_review = (
             row.review_required
@@ -530,11 +687,13 @@ def _competitor_drafts(
                 "slot_name_cn": row.m14_slot_name_cn,
                 "selection_rank": row.m14_selection_rank,
             },
-            "eligible_questions_json": row.eligible_questions,
+            "eligible_questions_json": sorted(
+                set(row.eligible_questions) | set(question_usage["eligible"])
+            ),
             "data_availability_json": row.data_availability.model_dump(mode="json"),
             "market_summary_json": row.market_summary,
-            "selected_questions_json": [],
-            "selection_reasons_json": {},
+            "selected_questions_json": question_usage["selected"],
+            "selection_reasons_json": question_usage["selection_reasons"],
             "confidence": Decimal(str(confidence)),
             "evidence_refs_json": _manifest_evidence_refs(row),
             "limitations_json": row.unavailable_questions,
@@ -559,9 +718,20 @@ def _competitor_drafts(
 def _reference_drafts(
     source: SellpointValueMaterializationInput,
     common: dict[str, Any],
+    question_analyses: Sequence[dict[str, Any]],
 ) -> list[SkuSellpointValueCandidateDraft]:
     result = []
     for row in source.candidate_universe.analysis_references:
+        question_usage = _candidate_question_usage(
+            row.reference_sku_code, question_analyses
+        )
+        allowed_reference_questions = {"parameter_conversion", "battlefield_expansion"}
+        eligible_questions = sorted(
+            set(question_usage["eligible"]) & allowed_reference_questions
+        )
+        selected_questions = sorted(
+            set(question_usage["selected"]) & allowed_reference_questions
+        )
         confidence = 0.7 if row.market_summary else 0.6
         payload = {
             **common,
@@ -576,11 +746,15 @@ def _reference_drafts(
             "m12_summary_json": {},
             "m13_summary_json": {},
             "m14_summary_json": {},
-            "eligible_questions_json": [],
+            "eligible_questions_json": eligible_questions,
             "data_availability_json": {"market": bool(row.market_summary)},
             "market_summary_json": row.market_summary,
-            "selected_questions_json": [],
-            "selection_reasons_json": {},
+            "selected_questions_json": selected_questions,
+            "selection_reasons_json": {
+                key: value
+                for key, value in question_usage["selection_reasons"].items()
+                if key in allowed_reference_questions
+            },
             "confidence": Decimal(str(confidence)),
             "evidence_refs_json": _reference_evidence_refs(row),
             "limitations_json": ["analysis_reference_not_competitor"],
@@ -599,6 +773,28 @@ def _reference_drafts(
             )
         )
     return result
+
+
+def _candidate_question_usage(
+    sku_code: str,
+    question_analyses: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    eligible = set()
+    selected = set()
+    reasons: dict[str, str] = {}
+    for analysis in question_analyses:
+        question_code = str(analysis.get("question_code") or "")
+        if sku_code in analysis.get("eligible_candidate_ids", []):
+            eligible.add(question_code)
+        if sku_code in analysis.get("selected_candidate_ids", []):
+            selected.add(question_code)
+            reason_values = analysis.get("selection_reasons") or []
+            reasons[question_code] = "；".join(str(item) for item in reason_values)
+    return {
+        "eligible": sorted(eligible),
+        "selected": sorted(selected),
+        "selection_reasons": dict(sorted(reasons.items())),
+    }
 
 
 def _value_item_drafts(
@@ -641,9 +837,9 @@ def _value_item_drafts(
                 question_result_refs_json=row.question_analyses,
                 question_codes_json=sorted(
                     {
-                        str(item.get("question"))
+                        str(item.get("question_code"))
                         for item in row.question_analyses
-                        if item.get("question")
+                        if item.get("question_code")
                     }
                 ),
                 price_realization_json=row.price_realization,

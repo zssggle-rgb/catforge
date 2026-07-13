@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.models import entities
 from app.services.core3_real_data.analyst.claim_value_pm_v5_schemas import (
+    CounterfactualCandidate,
+    CounterfactualSet,
     SkuPerceivedValueMarketRealizationReport,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_candidate_service import (
@@ -425,6 +427,79 @@ def test_materializer_builds_one_auditable_profile_and_is_deterministic() -> Non
         if row.pool_type == "reference"
     )
     assert reference.eligible_questions_json == []
+
+
+def test_materializer_persists_selected_and_rejected_candidates_by_question() -> None:
+    request = _request()
+    source = _materialization_input(request, "TV001")
+    selected_code = "TV001-C0"
+    rejected_code = "TV001-C1"
+    counterfactual_set = CounterfactualSet(
+        bundle_code="picture_bundle",
+        question="relative_highlight",
+        candidates=[
+            CounterfactualCandidate(
+                method="direct_sku",
+                question="relative_highlight",
+                stage="eligible",
+                candidate_key="selected",
+                candidate_sku_codes=[selected_code],
+                provenance="saved_candidate_universe",
+                control_dimensions={"budget": "same"},
+                eligible_measures=["price", "volume"],
+                reject_reasons=[],
+                sample_manifest_hash="selected-manifest",
+            ),
+            CounterfactualCandidate(
+                method="same_budget_pool",
+                question="relative_highlight",
+                stage="rejected",
+                candidate_key="rejected",
+                candidate_sku_codes=[rejected_code],
+                provenance="saved_candidate_universe",
+                control_dimensions={"budget": "same"},
+                reject_reasons=["用户价值组合不同"],
+                sample_manifest_hash="rejected-manifest",
+            ),
+        ],
+        highest_available_method="direct_sku",
+        selection_reasons=["用户价值相同且预算接近"],
+        degradation_reasons=[],
+        set_hash="question-set-hash",
+    )
+    value_row = source.v5_report.value_account_rows[0].model_copy(
+        update={"counterfactual_sets": [counterfactual_set]}
+    )
+    report = source.v5_report.model_copy(
+        update={"value_account_rows": [value_row]}
+    )
+
+    materialized = materialize_sellpoint_value_profile(
+        source.model_copy(update={"v5_report": report}),
+        sellpoint_value_profile_version_id="version-id",
+    )
+
+    analysis = materialized.profile.question_analyses[0]
+    assert analysis["question_code"] == "value_relative_advantage"
+    assert analysis["eligible_candidate_ids"] == [selected_code]
+    assert analysis["selected_candidate_ids"] == [selected_code]
+    assert analysis["rejected_candidates"] == [
+        {
+            "candidate_sku_codes": [rejected_code],
+            "method": "same_budget_pool",
+            "reasons": ["用户价值组合不同"],
+        }
+    ]
+    selected = next(
+        row
+        for row in materialized.persistence_bundle.candidates
+        if row.candidate_sku_code == selected_code
+    )
+    assert "value_relative_advantage" in selected.eligible_questions_json
+    assert selected.selected_questions_json == ["value_relative_advantage"]
+    assert selected.selection_reasons_json == {
+        "value_relative_advantage": "用户价值相同且预算接近"
+    }
 
 
 def test_input_fingerprint_includes_missing_sources_and_all_method_versions() -> None:

@@ -234,8 +234,12 @@ class SkuSellpointValueCandidateDraft(SellpointValuePersistedScope):
             self.review_required,
             self.review_status,
         )
-        if self.pool_type == "reference" and self.eligible_questions_json:
-            raise ValueError("reference rows cannot drive competitor questions")
+        if self.pool_type == "reference" and not set(
+            self.eligible_questions_json
+        ).issubset({"parameter_conversion", "battlefield_expansion"}):
+            raise ValueError(
+                "reference rows can only drive parameter or battlefield questions"
+            )
         if not set(self.selected_questions_json).issubset(
             set(self.eligible_questions_json)
         ):

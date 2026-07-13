@@ -63,6 +63,48 @@ class ProfileQaTopic(SellpointValueProfileBaseModel):
     topic_code: str = Field(min_length=1)
     question_examples_cn: list[str] = Field(default_factory=list)
     fact_paths: list[str] = Field(min_length=1)
+    candidate_scope_codes: list[str] = Field(default_factory=list)
+    value_item_keys: list[str] = Field(default_factory=list)
+    answer_boundary_cn: str = Field(min_length=1)
+
+
+class ProfileRejectedCandidate(SellpointValueProfileBaseModel):
+    candidate_sku_codes: list[str] = Field(default_factory=list)
+    method: str = Field(min_length=1)
+    reasons: list[str] = Field(min_length=1)
+
+
+class ProfileCandidateEvaluation(SellpointValueProfileBaseModel):
+    candidate_key: str = Field(min_length=1)
+    candidate_sku_codes: list[str] = Field(default_factory=list)
+    method: str = Field(min_length=1)
+    stage: str = Field(min_length=1)
+    selected: bool
+    eligible_measures: list[str] = Field(default_factory=list)
+    reject_reasons: list[str] = Field(default_factory=list)
+    sample_manifest_hash: str | None = None
+
+
+class ProfileQuestionAnalysis(SellpointValueProfileBaseModel):
+    question_code: str = Field(min_length=1)
+    source_question_code: str = Field(min_length=1)
+    business_question_cn: str = Field(min_length=1)
+    battlefield_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    candidate_pool_type: Literal["competitor", "reference", "mixed", "unknown"]
+    eligible_candidate_ids: list[str] = Field(default_factory=list)
+    selected_candidate_ids: list[str] = Field(default_factory=list)
+    rejected_candidates: list[ProfileRejectedCandidate] = Field(default_factory=list)
+    candidate_evaluations: list[ProfileCandidateEvaluation] = Field(
+        default_factory=list
+    )
+    method: str | None = None
+    selection_reasons: list[str] = Field(default_factory=list)
+    degradation_reasons: list[str] = Field(default_factory=list)
+    metrics: list[str] = Field(default_factory=list)
+    conclusion_boundary_cn: str = Field(min_length=1)
+    sample_manifest_hash: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
 
 
 class SellpointValueFivePmDecisions(SellpointValueProfileBaseModel):

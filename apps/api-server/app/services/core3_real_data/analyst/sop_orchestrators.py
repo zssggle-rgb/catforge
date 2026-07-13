@@ -57,6 +57,11 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_report import 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_qa import (
+    ProfileQaTargetAmbiguousError,
+    ProfileQaTopicCode,
+    SellpointValueProfileQaService,
+)
 
 
 CLAIM_VALUE_REPORT_LIMIT = 200
@@ -66,6 +71,11 @@ NOT_WEAK_SALES_RATIO_THRESHOLD = Decimal("0.90")
 NOT_WEAK_AMOUNT_RATIO_THRESHOLD = Decimal("1.00")
 MIN_OVERLAP_WEEKS = 4
 SOP_STEP_MAP: dict[str, tuple[str, ...]] = {
+    "sellpoint-value-profile-ask": (
+        "sellpoint-value-profile-read",
+        "sellpoint-value-profile-topic-route",
+        "sellpoint-value-profile-answer",
+    ),
     "sellpoint-value-pm-v5": (
         "sellpoint-value-profile-read",
         "v5-product-manager-report",
@@ -147,11 +157,17 @@ class SopOrchestrators:
     ) -> None:
         self.atomic_handlers = atomic_handlers
         self.sellpoint_value_profile_repository = sellpoint_value_profile_repository
+        self.sellpoint_value_profile_qa_service = (
+            SellpointValueProfileQaService(sellpoint_value_profile_repository)
+            if sellpoint_value_profile_repository is not None
+            else None
+        )
 
     def dispatch(
         self, command: str, context: AnalystContext, **kwargs: Any
     ) -> dict[str, Any]:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
+            "sellpoint-value-profile-ask": self.sellpoint_value_profile_ask,
             "sellpoint-value-pm-v5": self.sellpoint_value_pm_v5,
             "sellpoint-value-pm-v4": self.sellpoint_value_pm_v4,
             "sellpoint-value-pm": self.sellpoint_value_pm,
@@ -167,6 +183,104 @@ class SopOrchestrators:
         if handler is None:
             return self.planned_sop(context, command=command, **kwargs)
         return handler(context, **kwargs)
+
+    def sellpoint_value_profile_ask(
+        self,
+        context: AnalystContext,
+        *,
+        question: str,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        profile_version: str | None = None,
+        expected_result_hash: str | None = None,
+        topic_code: ProfileQaTopicCode | None = None,
+        candidate_sku_code: str | None = None,
+        compare_profile_version: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        command = "sellpoint-value-profile-ask"
+        if not question.strip():
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command=command,
+                context=context,
+                limitations=["画像追问不能为空。"],
+                message_cn="请提供要追问的产品问题。",
+            )
+        service = self.sellpoint_value_profile_qa_service
+        if service is None:
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command=command,
+                context=context,
+                limitations=["当前运行环境尚未接入用户卖点价值画像存储。"],
+                message_cn="当前没有可读取的用户卖点价值画像。",
+            )
+        try:
+            answer = service.answer(
+                batch_id=context.batch_id,
+                question=question,
+                query=query,
+                sku_code=sku_code,
+                model_name=model_name,
+                profile_version=profile_version,
+                expected_result_hash=expected_result_hash,
+                topic_code=topic_code,
+                candidate_sku_code=candidate_sku_code,
+                compare_profile_version=compare_profile_version,
+            )
+        except ProfileQaTargetAmbiguousError as exc:
+            return base_result(
+                status=AnalystStatus.AMBIGUOUS,
+                command=command,
+                context=context,
+                result={"candidates": exc.candidates},
+                limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
+                message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
+            )
+        if answer is None:
+            scope_cn = (
+                f"指定画像版本 {profile_version}"
+                if profile_version
+                else "当前已发布画像"
+            )
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command=command,
+                context=context,
+                limitations=[f"{scope_cn}中没有匹配的 SKU，且不会临时重算。"],
+                message_cn=f"{scope_cn}中没有找到该 SKU。",
+            )
+        answer_payload = answer.model_dump(mode="json")
+        return base_result(
+            status=AnalystStatus.OK,
+            command=command,
+            context=context,
+            target={"sku_code": answer.sku_code},
+            result={"sellpoint_value_profile_answer": answer_payload},
+            sop_steps=[
+                {"step_code": code, "status": "ok", "run_count": 1}
+                for code in SOP_STEP_MAP[command]
+            ],
+            atoms_used=[],
+            evidence=[
+                {
+                    "source": "sku_sellpoint_value_profile",
+                    "profile_version": answer.profile_version,
+                    "release_status": answer.release_status,
+                    "result_hash": answer.result_hash,
+                    "answer_hash": answer.answer_hash,
+                }
+            ],
+            limitations=answer.limitations,
+            answer_outline=[
+                answer.direct_answer_cn,
+                *(row.summary_cn for row in answer.profile_facts),
+                answer.work_implication_cn,
+                answer.evidence_boundary_cn,
+            ],
+        )
 
     def sellpoint_value_pm_v5(
         self,

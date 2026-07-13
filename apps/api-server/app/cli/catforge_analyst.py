@@ -63,6 +63,7 @@ ATOM_COMMAND_ORDER = (
 )
 
 SOP_COMMAND_ORDER = (
+    "sellpoint-value-profile-ask",
     "sellpoint-value-pm-v5",
     "sellpoint-value-pm-v4",
     "sellpoint-value-pm",
@@ -123,7 +124,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     market_window=args.market_window,
                     analysis_population=args.analysis_population,
                     ability_type=getattr(args, "ability_type", None),
-                    question=" ".join(getattr(args, "question", ()) or ()),
+                    question=(
+                        getattr(args, "profile_question", None)
+                        or " ".join(getattr(args, "question", ()) or ())
+                    ),
                     query=getattr(args, "query", None),
                     sku_code=getattr(args, "sku_code", None),
                     model_name=getattr(args, "model_name", None),
@@ -151,6 +155,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     evidence_report_url=getattr(args, "evidence_report_url", None),
                     preview_profile_version=getattr(
                         args, "preview_profile_version", None
+                    ),
+                    profile_version=getattr(args, "profile_version", None),
+                    expected_result_hash=getattr(
+                        args, "expected_result_hash", None
+                    ),
+                    topic_code=getattr(args, "qa_topic", None),
+                    compare_profile_version=getattr(
+                        args, "compare_profile_version", None
                     ),
                 )
                 attach_feishu_card_delivery(result, args)
@@ -212,6 +224,17 @@ def build_parser() -> argparse.ArgumentParser:
         add_dimension_args(command_parser)
         command_parser.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
         add_answer_args(command_parser)
+        if command == "sellpoint-value-profile-ask":
+            command_parser.add_argument(
+                "--question",
+                dest="profile_question",
+                required=True,
+                help="Product-manager question answered from one stored profile.",
+            )
+            command_parser.add_argument("--profile-version")
+            command_parser.add_argument("--expected-result-hash")
+            command_parser.add_argument("--qa-topic")
+            command_parser.add_argument("--compare-profile-version")
         if command == "sellpoint-value-pm-v5":
             command_parser.add_argument(
                 "--enable-v5",
@@ -1442,6 +1465,24 @@ def format_business_text(result: dict[str, Any]) -> str:
     payload = result.get("result") or {}
     if result.get("status") == "ambiguous" and payload.get("candidates"):
         return _format_ambiguous_sku_text(result)
+    profile_answer = payload.get("sellpoint_value_profile_answer") or {}
+    if profile_answer.get("direct_answer_cn"):
+        facts = profile_answer.get("profile_facts") or []
+        sections = [
+            str(profile_answer["direct_answer_cn"]),
+            *(
+                f"画像事实｜{row.get('summary_cn')}"
+                for row in facts
+                if row.get("summary_cn")
+            ),
+            f"产品工作含义｜{profile_answer.get('work_implication_cn')}",
+            f"证据边界｜{profile_answer.get('evidence_boundary_cn')}",
+            (
+                f"画像版本｜{profile_answer.get('profile_version')}｜"
+                f"结果编号 {profile_answer.get('result_hash')}"
+            ),
+        ]
+        return "\n".join(item for item in sections if item and not item.endswith("｜None"))
     competitor_answer = payload.get("competitor_answer") or {}
     if competitor_answer.get("short_answer"):
         return str(competitor_answer["short_answer"])

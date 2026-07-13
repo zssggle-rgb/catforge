@@ -526,7 +526,8 @@ def _value_row(
         names = [candidate_names.get(str(code), str(code)) for code in codes]
         if names:
             comparisons.append(
-                f"用{'、'.join(names[:5])}判断{_question_cn(question.get('question'))}"
+                f"用{'、'.join(names[:5])}判断"
+                f"{_question_cn(question.get('question_code') or question.get('question'))}"
             )
     return StoredPmValueAccountRow(
         battlefield_code=row.battlefield_code,
@@ -597,6 +598,12 @@ def _question_cn(value: Any) -> str:
         "volume_realization": "当前销量表现",
         "strict_bundle_price_interval": "价格承接范围",
         "battlefield_portfolio": "产品价值方向",
+        "current_price_support": "当前价格支撑",
+        "value_relative_advantage": "相对用户价值优势",
+        "scale_conversion": "当前销量表现",
+        "parameter_conversion": "参数是否转化为用户价值",
+        "battlefield_expansion": "产品价值方向",
+        "specific_competitor": "指定产品比较",
     }.get(str(value), "当前产品问题")
 
 

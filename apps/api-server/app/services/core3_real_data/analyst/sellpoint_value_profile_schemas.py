@@ -22,6 +22,8 @@ CandidateQuestion = Literal[
     "scale_conversion",
     "configuration_follow",
     "specific_competitor",
+    "parameter_conversion",
+    "battlefield_expansion",
 ]
 ReferencePurpose = Literal[
     "same_size_market",

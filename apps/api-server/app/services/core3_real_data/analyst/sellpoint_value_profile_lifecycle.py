@@ -282,11 +282,18 @@ class SellpointValueProfileLifecycleService:
         profile_version: str,
         sku_code: str,
     ) -> SellpointValueProfileReadBundle | None:
+        targets = self.repository.resolve_profile_targets(
+            batch_id=batch_id,
+            profile_version=profile_version,
+            sku_code=sku_code,
+        )
+        if not targets:
+            return None
         return self.repository.get_profile(
             batch_id=batch_id,
             profile_version=profile_version,
             sku_code=sku_code,
-            rule_version=SELLPOINT_VALUE_PROFILE_RULE_VERSION,
+            rule_version=str(targets[0]["rule_version"]),
         )
 
     def list_profiles(

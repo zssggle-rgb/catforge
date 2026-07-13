@@ -24,6 +24,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_report import 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_qa import (
+    SellpointValueProfileQaService,
+)
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
 from app.services.core3_real_data.constants import Core3CategoryCode
 from tests.core3_real_data.test_sellpoint_value_profile_persistence import (
@@ -372,7 +375,16 @@ def test_report_adapter_supports_ac_profile_without_tv_language(
     report = build_stored_profile_pm_report(bundle)
     markdown = render_stored_profile_markdown(report, title="空调用户卖点价值")
     artifacts = build_stored_profile_answer_artifacts(report)
+    qa_answer = SellpointValueProfileQaService(repository).answer(
+        batch_id="batch-ac",
+        sku_code="AC001",
+        profile_version="spv-ac",
+        question="哪些投入值得保留",
+    )
     assert report.target["product_category"] == "AC"
     assert "舒适送风" in markdown
     assert "不直吹" in markdown
     assert artifacts["result_hash"] == report.profile_result_hash
+    assert qa_answer is not None
+    assert qa_answer.category_code == "AC"
+    assert qa_answer.answer_status == "answered"
