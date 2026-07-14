@@ -1,6 +1,6 @@
 # CatForge 竞品画像 V1 串行 Goal 调度
 
-状态：G01—G23 completed；G24 pending
+状态：G01—G24 completed；G25 pending
 
 日期：2026-07-14
 

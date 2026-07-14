@@ -1,0 +1,67 @@
+{
+  "schema": "2.0",
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "海信 65e7q 竞品决策"
+    },
+    "template": "turquoise"
+  },
+  "body": {
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**总结果**\n目前还不能把任何一款产品列为本品的直接二选一对象；海信 75E7Q应作为产品线与使用场景参照，重点判断本品的产品角色和市场防守。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**本品靠什么赢**\n当前没有找到本品相对可比较产品的稳定用户价值优势；现有卖点不能直接作为加价或继续追加投入的依据。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**哪里容易被替代**\n竞争最集中的价值是客厅换新一步到位（22款）、游戏低延迟（15款）、画质配置解释加价（13款）、贵得值的体验升级（13款）、局部控光（9款）。下一版产品定义应从中选择一至两项建立明确领先，不再把同质功能当作差异化。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**价格和销量受谁影响**\n海信 75E7Q均价比本品高19.7%、周均销量是本品2.45倍，显示更高价方案获得了更强市场承接；雷鸟 85R69A ULTRA均价比本品高1.4%、周均销量是本品3.34倍，构成同预算下的规模压力。这些压力首先指向价值表达和产品角色，降价不应作为第一动作。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**产品经理怎么做**\n先明确本品与海信 75E7Q的产品角色分工；再从客厅换新一步到位、游戏低延迟中选择一至两项建立领先；价格先对照海信 75E7Q、雷鸟 85R69A ULTRA的量价表现，不把降价作为第一动作。"
+      },
+      {
+        "tag": "button",
+        "text": {
+          "tag": "plain_text",
+          "content": "查看用户选择对比"
+        },
+        "type": "primary",
+        "url": "https://my.feishu.cn/docx/VYJmdXnnfogsMWxmo7scvYC3n7c"
+      },
+      {
+        "tag": "button",
+        "text": {
+          "tag": "plain_text",
+          "content": "查看分析依据"
+        },
+        "type": "default",
+        "url": "https://my.feishu.cn/docx/YCfzd1zQIoao4mxjXrScbb6RnQe"
+      }
+    ]
+  }
+}
