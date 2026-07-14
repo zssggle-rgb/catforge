@@ -482,6 +482,24 @@ def test_runtime_boundary_rejects_nested_factory_keys() -> None:
         SkuCompetitorDecisionProfileDraft(**payload)
 
 
+def test_runtime_boundary_does_not_copy_the_validated_model_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _profile().model_dump(mode="python")
+
+    def _unexpected_model_dump(*args, **kwargs):
+        raise AssertionError("runtime-boundary validation must not dump the model graph")
+
+    monkeypatch.setattr(
+        SkuCompetitorDecisionProfileDraft,
+        "model_dump",
+        _unexpected_model_dump,
+    )
+
+    profile = SkuCompetitorDecisionProfileDraft(**payload)
+    assert profile.target_sku_code == "TV-TARGET"
+
+
 def test_gate_preserves_unknown_instead_of_false() -> None:
     gate = _gate("unknown_gate", known=False, passed=None)
     assert gate.passed is None

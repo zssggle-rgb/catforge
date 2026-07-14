@@ -165,7 +165,7 @@ class CompetitorProfileBaseModel(BaseModel):
 
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "CompetitorProfileBaseModel":
-        _assert_no_factory_only_keys(self.model_dump(mode="python"))
+        _assert_no_factory_only_keys(self)
         return self
 
 
@@ -761,7 +761,18 @@ class CompetitorProfileDraftBundle(CompetitorProfileBaseModel):
 
 
 def _assert_no_factory_only_keys(value: Any) -> None:
-    if isinstance(value, dict):
+    if isinstance(value, BaseModel):
+        forbidden = FORBIDDEN_FACTORY_EXPORT_KEYS.intersection(
+            type(value).model_fields
+        )
+        if forbidden:
+            raise ValueError(
+                "factory-only keys are forbidden in competitor profile contracts: "
+                + ", ".join(sorted(forbidden))
+            )
+        for field_name in type(value).model_fields:
+            _assert_no_factory_only_keys(getattr(value, field_name))
+    elif isinstance(value, dict):
         forbidden = FORBIDDEN_FACTORY_EXPORT_KEYS.intersection(value)
         if forbidden:
             raise ValueError(
