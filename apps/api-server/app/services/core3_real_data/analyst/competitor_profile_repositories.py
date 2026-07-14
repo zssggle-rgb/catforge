@@ -15,6 +15,7 @@ from app.models import entities
 from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas import (
     CompetitorProfilePersistenceBundle,
     CompetitorProfileReadBundle,
+    CompetitorProfileResultHashReceipt,
     CompetitorProfileVersionDraftCreate,
     CompetitorProfileVersionRecord,
     SkuCompetitorPairDraft,
@@ -226,19 +227,88 @@ class CompetitorProfileRepository(Core3BaseRepository):
         competitor_profile_version_id: str,
         target_sku_code: str,
         preview: bool = True,
+        compact: bool = False,
     ) -> CompetitorProfileReadBundle | None:
         version = self._version_by_id(competitor_profile_version_id)
         profile = self._find_profile(
             version_id=competitor_profile_version_id,
             target_sku_code=target_sku_code,
         )
-        return self._read_bundle(version, profile, preview=preview) if profile else None
+        return (
+            self._read_bundle(version, profile, preview=preview, compact=compact)
+            if profile
+            else None
+        )
+
+    def get_profile_result_hash_receipt(
+        self,
+        *,
+        competitor_profile_version_id: str,
+        target_sku_code: str,
+    ) -> CompetitorProfileResultHashReceipt:
+        profile = self._find_profile(
+            version_id=competitor_profile_version_id,
+            target_sku_code=target_sku_code,
+        )
+        if profile is None:
+            raise CompetitorProfileNotFoundError(
+                f"competitor SKU profile not found: {target_sku_code}"
+            )
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        relation_model = entities.Core3SkuCompetitorProfileRelation
+        selection_model = entities.Core3SkuCompetitorProfileSelection
+        pair_hashes = tuple(
+            self.db.execute(
+                select(pair_model.candidate_sku_code, pair_model.result_hash)
+                .where(pair_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
+                .order_by(pair_model.candidate_sku_code)
+            ).all()
+        )
+        relation_hashes = tuple(
+            self.db.execute(
+                select(
+                    relation_model.candidate_sku_code,
+                    relation_model.relation_code,
+                    relation_model.result_hash,
+                )
+                .join(
+                    pair_model,
+                    pair_model.sku_competitor_profile_pair_id
+                    == relation_model.sku_competitor_profile_pair_id,
+                )
+                .where(pair_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
+                .order_by(
+                    relation_model.candidate_sku_code,
+                    relation_model.relation_code,
+                )
+            ).all()
+        )
+        selection_hashes = tuple(
+            self.db.execute(
+                select(
+                    selection_model.candidate_sku_code,
+                    selection_model.result_hash,
+                )
+                .where(
+                    selection_model.sku_competitor_profile_id
+                    == profile.sku_competitor_profile_id
+                )
+                .order_by(selection_model.candidate_sku_code)
+            ).all()
+        )
+        return CompetitorProfileResultHashReceipt(
+            profile_result_hash=profile.result_hash,
+            pair_hashes=pair_hashes,
+            relation_hashes=relation_hashes,
+            selection_hashes=selection_hashes,
+        )
 
     def get_current_published_profile(
         self,
         *,
         release_scope_key: str,
         target_sku_code: str,
+        compact: bool = False,
     ) -> CompetitorProfileReadBundle | None:
         """Read one formal profile without falling back to drafts or legacy outputs."""
 
@@ -263,7 +333,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             raise CompetitorProfileRepositoryError(
                 "current version and SKU profile release state are inconsistent"
             )
-        return self._read_bundle(version, profile, preview=False)
+        return self._read_bundle(version, profile, preview=False, compact=compact)
 
     def update_draft_generation_state(
         self,
@@ -498,28 +568,32 @@ class CompetitorProfileRepository(Core3BaseRepository):
         profile: entities.Core3SkuCompetitorProfile,
         *,
         preview: bool,
+        compact: bool = False,
     ) -> CompetitorProfileReadBundle:
         profile_id = profile.sku_competitor_profile_id
         pair_model = entities.Core3SkuCompetitorProfilePair
+        pair_stmt = (
+            select(
+                *_scope_select_columns(pair_model),
+                pair_model.sku_competitor_profile_pair_id,
+                pair_model.sku_competitor_profile_id,
+                pair_model.target_sku_code,
+                pair_model.candidate_sku_code,
+                pair_model.candidate_status,
+                pair_model.confidence_level,
+                pair_model.selected,
+                pair_model.competitor_member,
+                pair_model.reference_member,
+                pair_model.pair_payload_json,
+            )
+            .where(pair_model.sku_competitor_profile_id == profile_id)
+            .order_by(pair_model.candidate_sku_code)
+        )
+        if compact:
+            pair_stmt = pair_stmt.where(pair_model.competitor_member.is_(True))
         pairs = [
             _pair_draft_from_mapping(row)
-            for row in self.db.execute(
-                select(
-                    *_scope_select_columns(pair_model),
-                    pair_model.sku_competitor_profile_pair_id,
-                    pair_model.sku_competitor_profile_id,
-                    pair_model.target_sku_code,
-                    pair_model.candidate_sku_code,
-                    pair_model.candidate_status,
-                    pair_model.confidence_level,
-                    pair_model.selected,
-                    pair_model.competitor_member,
-                    pair_model.reference_member,
-                    pair_model.pair_payload_json,
-                )
-                .where(pair_model.sku_competitor_profile_id == profile_id)
-                .order_by(pair_model.candidate_sku_code)
-            ).mappings()
+            for row in self.db.execute(pair_stmt).mappings()
         ]
         nested_relations = {
             (pair.candidate_sku_code, relation.relation_code): relation
@@ -528,7 +602,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
         }
         relation_model = entities.Core3SkuCompetitorProfileRelation
         relations = []
-        for row in self.db.execute(
+        relation_stmt = (
             select(
                 *_scope_select_columns(relation_model),
                 relation_model.sku_competitor_profile_relation_id,
@@ -547,7 +621,10 @@ class CompetitorProfileRepository(Core3BaseRepository):
                 relation_model.candidate_sku_code,
                 relation_model.relation_code,
             )
-        ).mappings():
+        )
+        if compact:
+            relation_stmt = relation_stmt.where(pair_model.competitor_member.is_(True))
+        for row in self.db.execute(relation_stmt).mappings():
             relation_payload = nested_relations.get(
                 (row["candidate_sku_code"], row["relation_code"])
             )

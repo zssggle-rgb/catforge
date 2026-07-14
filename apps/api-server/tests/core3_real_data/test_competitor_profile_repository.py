@@ -21,6 +21,7 @@ from app.services.core3_real_data.analyst.competitor_profile_repositories import
 from app.services.core3_real_data.constants import Core3CategoryCode
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 from tests.core3_real_data.test_competitor_profile_schemas import (
+    _pair,
     _persistence_bundle,
     _scope,
 )
@@ -169,6 +170,21 @@ def test_write_draft_round_trips_all_five_tables(session: Session) -> None:
     )
     assert len(readback.selections) == 1
     assert readback.selections[0].selection_rank == 1
+    receipt = repository.get_profile_result_hash_receipt(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+    )
+    assert receipt.profile_result_hash == readback.profile.result_hash
+    assert len(receipt.pair_hashes) == 1
+    assert len(receipt.relation_hashes) == 7
+    assert len(receipt.selection_hashes) == 1
+    compact = repository.get_profile(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+        compact=True,
+    )
+    assert compact is not None
+    assert all(row.competitor_member for row in compact.pairs)
 
 
 def test_write_draft_without_readback_defers_full_graph_materialization(
@@ -199,6 +215,70 @@ def test_write_draft_without_readback_defers_full_graph_materialization(
     assert readback is not None
     assert len(readback.pairs) == 1
     assert len(readback.relations) == 7
+
+
+def test_compact_read_keeps_formal_competitors_and_full_hash_receipt(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(
+        _version_payload(pair_count=2, relation_count=14)
+    )
+    bundle = _bundle(version.competitor_profile_version_id)
+    reference_payload = _pair(
+        candidate_code="TV-R1",
+        selected=False,
+        competitor_member=False,
+        reference_member=True,
+        candidate_status="reference_only",
+    )
+    reference_pair = bundle.pairs[0].model_copy(
+        update={
+            "candidate_sku_code": "TV-R1",
+            "candidate_status": "reference_only",
+            "selected": False,
+            "competitor_member": False,
+            "reference_member": True,
+            "input_fingerprint": "pair-input-TV-R1",
+            "result_hash": "pair-result-TV-R1",
+            "pair_payload": reference_payload,
+        }
+    )
+    reference_relations = [
+        bundle.relations[0].model_copy(
+            update={
+                "candidate_sku_code": "TV-R1",
+                "relation_code": relation.relation_code,
+                "result_hash": relation.result_hash,
+                "relation_payload": relation,
+            }
+        )
+        for relation in reference_payload.relation_assessments
+    ]
+    extended = CompetitorProfilePersistenceBundle(
+        profile=bundle.profile,
+        pairs=[*bundle.pairs, reference_pair],
+        relations=[*bundle.relations, *reference_relations],
+        selections=bundle.selections,
+    )
+    repository.write_draft_without_readback(extended)
+    session.commit()
+
+    receipt = repository.get_profile_result_hash_receipt(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+    )
+    compact = repository.get_profile(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+        compact=True,
+    )
+
+    assert len(receipt.pair_hashes) == 2
+    assert len(receipt.relation_hashes) == 14
+    assert compact is not None
+    assert [row.candidate_sku_code for row in compact.pairs] == ["TV-C1"]
+    assert len(compact.relations) == 7
 
 
 def test_write_same_draft_is_idempotent_and_child_change_is_immutable(

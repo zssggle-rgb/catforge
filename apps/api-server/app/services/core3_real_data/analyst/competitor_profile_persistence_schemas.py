@@ -305,6 +305,13 @@ class CompetitorProfileReadBundle(CompetitorProfileBaseModel):
         return self
 
 
+class CompetitorProfileResultHashReceipt(CompetitorProfileBaseModel):
+    profile_result_hash: str = Field(min_length=1)
+    pair_hashes: tuple[tuple[str, str], ...]
+    relation_hashes: tuple[tuple[str, str, str], ...]
+    selection_hashes: tuple[tuple[str, str], ...]
+
+
 def validate_persistence_bundle_parts(
     *,
     profile: SkuCompetitorProfileDraft,
@@ -392,6 +399,7 @@ __all__ = [
     "CompetitorProfileDraftScope",
     "CompetitorProfilePersistenceBundle",
     "CompetitorProfileReadBundle",
+    "CompetitorProfileResultHashReceipt",
     "CompetitorProfileVersionDraftCreate",
     "CompetitorProfileVersionRecord",
     "SkuCompetitorPairDraft",

@@ -75,6 +75,7 @@ class CompetitorProfileReader:
             bundle = self.repository.get_current_published_profile(
                 release_scope_key=request.release_scope_key,
                 target_sku_code=request.target_sku_code,
+                compact=True,
             )
         else:
             version = self.repository.get_version_by_id(
@@ -86,6 +87,7 @@ class CompetitorProfileReader:
                 competitor_profile_version_id=version.competitor_profile_version_id,
                 target_sku_code=request.target_sku_code,
                 preview=True,
+                compact=True,
             )
         if bundle is None:
             return CompetitorProfileReaderResult(
