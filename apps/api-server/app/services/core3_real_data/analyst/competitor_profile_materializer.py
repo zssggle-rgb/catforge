@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from collections import Counter
 from decimal import Decimal
+import gc
 from typing import Any, Iterable, Sequence
 
 from app.services.core3_real_data.analyst.competitor_profile_candidate_determinism import (
     CandidatePipelineDeterminismGuard,
-    CandidatePipelineRun,
+)
+from app.services.core3_real_data.analyst.competitor_profile_candidate_eligibility_schemas import (
+    CandidateEligibilityAssessment,
 )
 from app.services.core3_real_data.analyst.competitor_profile_input_schemas import (
     CompetitorProfileCategoryInputBundle,
@@ -60,6 +63,7 @@ from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     CompetitorProfileDraftBundle,
     EvidenceRef,
     KeyCompetitorSummary,
+    ServingScope,
     SkuCompetitorDecisionProfileDraft,
 )
 from app.services.core3_real_data.analyst.competitor_profile_value_substitution import (
@@ -114,6 +118,22 @@ class CompetitorProfileMaterializer:
             eligibility_config=config.eligibility,
         )
         features = PairFeatureBuilder().build(pipeline)
+        pipeline_result_hash = pipeline.receipt.result_hash
+        serving_scope = pipeline.category_bundle.serving_scope
+        profile_target_bundle = pipeline.target_bundle
+        eligibility_by_sku = {
+            row.candidate.sku_code: row
+            for row in pipeline.eligibility_manifest.candidates
+        }
+        expected_candidate_codes = [
+            row.candidate.sku_code for row in pipeline.eligibility_manifest.candidates
+        ]
+        category_input_fingerprint = category_bundle.input_fingerprint
+        target_input_fingerprint = target_bundle.input_fingerprint
+        target_sku_code = target_bundle.target_sku_code
+        product_category = serving_scope.product_category
+        del pipeline, category_bundle, target_bundle
+        gc.collect()
         pool = PurchasePoolSemanticEvaluator().evaluate(
             features,
             config.purchase_pool,
@@ -141,7 +161,7 @@ class CompetitorProfileMaterializer:
             config.key_selection,
         )
         _assert_stage_conservation(
-            pipeline,
+            expected_candidate_codes,
             features,
             pool,
             value,
@@ -150,7 +170,7 @@ class CompetitorProfileMaterializer:
             selection,
         )
         stage_result_hashes = {
-            "candidate_pipeline": pipeline.receipt.result_hash,
+            "candidate_pipeline": pipeline_result_hash,
             "pair_feature": features.result_hash,
             "purchase_pool": pool.result_hash,
             "value_substitution": value.result_hash,
@@ -160,7 +180,9 @@ class CompetitorProfileMaterializer:
         }
         del value
         draft = _assemble_draft(
-            pipeline,
+            serving_scope,
+            profile_target_bundle,
+            eligibility_by_sku,
             features,
             pool,
             pressure,
@@ -174,24 +196,24 @@ class CompetitorProfileMaterializer:
         }
         input_fingerprint = stable_hash(
             {
-                "category_input_fingerprint": category_bundle.input_fingerprint,
-                "target_input_fingerprint": target_bundle.input_fingerprint,
+                "category_input_fingerprint": category_input_fingerprint,
+                "target_input_fingerprint": target_input_fingerprint,
                 "config": config.model_dump(mode="json"),
                 "stage_result_hashes": stage_hashes,
             },
             version="competitor_profile_materializer_input_v1",
         )
         return MaterializedCompetitorProfile(
-            target_sku_code=target_bundle.target_sku_code,
-            product_category=category_bundle.serving_scope.product_category,
+            target_sku_code=target_sku_code,
+            product_category=product_category,
             draft=draft,
             stage_result_hashes=stage_hashes,
             config_version=config.config_version,
             input_fingerprint=input_fingerprint,
             result_hash=stable_hash(
                 {
-                    "target_sku_code": target_bundle.target_sku_code,
-                    "product_category": category_bundle.serving_scope.product_category,
+                    "target_sku_code": target_sku_code,
+                    "product_category": product_category,
                     "stage_result_hashes": stage_hashes,
                     "config_version": config.config_version,
                     "input_fingerprint": input_fingerprint,
@@ -288,7 +310,7 @@ def _assert_materialization_scope(
 
 
 def _assert_stage_conservation(
-    pipeline: CandidatePipelineRun,
+    expected_candidate_codes: list[str],
     features: PairFeatureBundle,
     pool: PurchasePoolSemanticBundle,
     value: ValueSubstitutionEvidenceBundle,
@@ -298,7 +320,7 @@ def _assert_stage_conservation(
 ) -> None:
     expected = [row.candidate.sku_code for row in features.pairs]
     candidate_lists = [
-        [row.candidate.sku_code for row in pipeline.eligibility_manifest.candidates],
+        expected_candidate_codes,
         [row.candidate.sku_code for row in pool.pairs],
         [row.candidate.sku_code for row in value.pairs],
         [row.candidate.sku_code for row in pressure.pairs],
@@ -438,7 +460,9 @@ def _materialize_blocked_target(
 
 
 def _assemble_draft(
-    pipeline: CandidatePipelineRun,
+    serving_scope: ServingScope,
+    target_bundle: CompetitorProfileTargetInputBundle,
+    eligibility_by_sku: dict[str, CandidateEligibilityAssessment],
     features: PairFeatureBundle,
     pool: PurchasePoolSemanticBundle,
     pressure: PriceVolumePressureBundle,
@@ -450,13 +474,10 @@ def _assemble_draft(
     pool_by_sku = {row.candidate.sku_code: row for row in pool.pairs}
     pressure_by_sku = {row.candidate.sku_code: row for row in pressure.pairs}
     relation_by_sku = {row.candidate.sku_code: row for row in relations.pairs}
-    eligibility_by_sku = {
-        row.candidate.sku_code: row for row in pipeline.eligibility_manifest.candidates
-    }
     decision_by_sku = {row.candidate.sku_code: row for row in selection.pair_decisions}
     pairs = [
         _materialize_pair(
-            pipeline.category_bundle.serving_scope.project_id,
+            serving_scope.project_id,
             feature_by_sku[sku_code],
             pool_by_sku[sku_code],
             relation_by_sku[sku_code],
@@ -467,7 +488,8 @@ def _assemble_draft(
         for sku_code in sorted(feature_by_sku)
     ]
     profile = _profile(
-        pipeline,
+        serving_scope,
+        target_bundle,
         features,
         pressure_by_sku,
         relation_by_sku,
@@ -574,7 +596,8 @@ def _materialize_pair(
 
 
 def _profile(
-    pipeline: CandidatePipelineRun,
+    serving_scope: ServingScope,
+    target_bundle: CompetitorProfileTargetInputBundle,
     features: PairFeatureBundle,
     pressure_by_sku: dict[str, PriceVolumePressureAssessment],
     relation_by_sku: dict[str, CompetitorRelationPairEvaluation],
@@ -582,7 +605,6 @@ def _profile(
     pairs: Sequence[CompetitorPairDraft],
     config: CompetitorProfileMaterializationConfig,
 ) -> SkuCompetitorDecisionProfileDraft:
-    target_bundle = pipeline.target_bundle
     target = features.target
     analysis_state = _analysis_state(target_bundle, relation_by_sku, selection)
     conclusion_state = _conclusion_state(selection, analysis_state)
@@ -629,7 +651,7 @@ def _profile(
         | set(selection.limitations)
         | {item for row in pairs for item in row.limitations}
     )
-    source_lineage = _source_lineage(pipeline)
+    source_lineage = _source_lineage_from_scope(serving_scope)
     target_market_summary = _target_market_summary(target_bundle)
     input_fingerprint = stable_hash(
         {
@@ -641,8 +663,8 @@ def _profile(
         version="competitor_profile_sku_profile_input_v1",
     )
     payload = {
-        "project_id": pipeline.category_bundle.serving_scope.project_id,
-        "category_code": pipeline.category_bundle.serving_scope.category_code,
+        "project_id": serving_scope.project_id,
+        "category_code": serving_scope.category_code,
         "target_sku_code": target.sku_code,
         "analysis_state": analysis_state,
         "conclusion_state": conclusion_state,
@@ -663,8 +685,8 @@ def _profile(
         "input_fingerprint": input_fingerprint,
     }
     return SkuCompetitorDecisionProfileDraft(
-        project_id=pipeline.category_bundle.serving_scope.project_id,
-        category_code=pipeline.category_bundle.serving_scope.category_code,
+        project_id=serving_scope.project_id,
+        category_code=serving_scope.category_code,
         target_sku_code=target.sku_code,
         brand_name=target.brand_name,
         model_name=target.model_name,
@@ -929,11 +951,7 @@ def _qa_index(relations) -> list[dict[str, Any]]:
     ]
 
 
-def _source_lineage(pipeline) -> list[dict[str, Any]]:
-    return _source_lineage_from_scope(pipeline.category_bundle.serving_scope)
-
-
-def _source_lineage_from_scope(scope) -> list[dict[str, Any]]:
+def _source_lineage_from_scope(scope: ServingScope) -> list[dict[str, Any]]:
     return [
         {
             "module_code": module_code,
