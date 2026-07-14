@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
+from sqlalchemy.orm import load_only
 
 from app.models import entities
 from app.services.core3_real_data.analyst.competitor_profile_input_schemas import (
@@ -549,6 +550,24 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
         model = spec.model
         stmt = (
             select(model)
+            .options(
+                load_only(
+                    *_projected_columns(
+                        model,
+                        spec.module_code,
+                        required={
+                            "project_id",
+                            "category_code",
+                            "batch_id",
+                            "sku_code",
+                            "rule_version",
+                            spec.record_id_attr,
+                            spec.result_hash_attr,
+                            *(("product_category",) if spec.has_product_category else ()),
+                        },
+                    )
+                )
+            )
             .where(model.project_id == request.project_id)
             .where(model.category_code == request.category_code)
             .where(model.batch_id.in_(request.source_batch_ids))
@@ -627,6 +646,26 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
         rows = list(
             self.db.execute(
                 select(profile)
+                .options(
+                    load_only(
+                        *_projected_columns(
+                            profile,
+                            "M12D",
+                            required={
+                                "purchase_reason_profile_id",
+                                "project_id",
+                                "category_code",
+                                "product_category",
+                                "batch_id",
+                                "sku_code",
+                                "m12d_profile_version",
+                                "schema_version",
+                                "rule_version",
+                                "result_hash",
+                            },
+                        )
+                    )
+                )
                 .where(profile.project_id == request.project_id)
                 .where(profile.category_code == request.category_code)
                 .where(profile.product_category == request.product_category)
@@ -1152,6 +1191,24 @@ def _row_facts(row: Any, module_code: str) -> dict[str, Any]:
     if confidence is not None:
         facts["confidence"] = confidence
     return facts
+
+
+def _projected_columns(
+    model: Any,
+    module_code: str,
+    *,
+    required: set[str],
+) -> list[Any]:
+    """Project only fields consumed by the typed snapshot and audit lineage."""
+
+    names = (
+        required
+        | _ALGORITHM_FACT_FIELDS_BY_MODULE[module_code]
+        | _COMMON_QUALITY_FACT_FIELDS
+        | _TRACE_CONTAINER_FIELDS
+        | _CONFIDENCE_FIELDS
+    )
+    return [getattr(model, name) for name in sorted(names) if hasattr(model, name)]
 
 
 def _sorted_unique_text(values: Any) -> list[str]:

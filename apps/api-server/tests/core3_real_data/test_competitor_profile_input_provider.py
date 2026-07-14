@@ -490,15 +490,32 @@ def test_tv_category_bundle_locks_exact_authorities_and_avoids_n_plus_one(
     provider = _provider(session)
     request = _request()
     select_count = 0
+    select_statements: list[str] = []
 
     def _count_selects(_, __, statement, ___, ____, _____) -> None:
         nonlocal select_count
         if statement.lstrip().upper().startswith("SELECT"):
             select_count += 1
+            select_statements.append(statement)
 
     event.listen(session.bind, "before_cursor_execute", _count_selects)
     bundle = provider.load_category_input_bundle(request)
     assert select_count == 11
+    m05_select = next(
+        statement
+        for statement in select_statements
+        if "FROM core3_sku_comment_fact_profile" in statement
+    )
+    m12c_select = next(
+        statement
+        for statement in select_statements
+        if "FROM core3_sku_claim_value_quantification" in statement
+    )
+    assert "evidence_examples_json" not in m05_select
+    assert "signal_summary_json" not in m05_select
+    assert "supported_claim_codes" in m05_select
+    assert "claim_name" not in m12c_select
+    assert "claim_code" in m12c_select
     before_target = select_count
     target = provider.load_target_input(bundle, "TV000001")
     assert select_count == before_target
