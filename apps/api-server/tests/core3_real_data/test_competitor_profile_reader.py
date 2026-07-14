@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -13,6 +14,7 @@ from app.services.core3_real_data.analyst.competitor_profile_generation import (
 )
 from app.services.core3_real_data.analyst.competitor_profile_reader import (
     CompetitorProfileReader,
+    _business_pair_comparisons,
     _business_mapping,
 )
 from app.services.core3_real_data.analyst.competitor_profile_reader_schemas import (
@@ -27,6 +29,9 @@ from tests.core3_real_data.test_competitor_profile_generation import (
     _FixtureInputProvider,
     _repository,
     _request,
+)
+from tests.core3_real_data.test_competitor_profile_schemas import (
+    _persistence_bundle,
 )
 
 
@@ -125,6 +130,23 @@ def test_business_dto_contains_business_labels_not_internal_snake_case(
     assert_business_keys(payload)
     assert payload["目标产品"]
     assert "分析结论" in payload
+
+
+def test_selected_pair_uses_saved_selection_reason_in_business_comparison() -> None:
+    bundle = _persistence_bundle()
+
+    comparisons = _business_pair_comparisons(
+        SimpleNamespace(
+            profile=SimpleNamespace(profile_payload=bundle.profile.profile_payload),
+            pairs=bundle.pairs,
+            selections=bundle.selections,
+        )
+    )
+
+    assert comparisons[0]["关注层级"] == "重点关注"
+    assert comparisons[0]["为什么关注"] == (
+        bundle.selections[0].selection_payload.selection_reason_cn
+    )
 
 
 def test_formal_read_returns_only_current_published_profile(session: Session) -> None:

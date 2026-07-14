@@ -195,7 +195,7 @@ def _business_pair_comparisons(
                 "产品编号": pair.candidate.sku_code,
                 "关注层级": "重点关注" if selection else "专项对比",
                 "为什么关注": (
-                    selection.conclusion_cn
+                    selection.selection_reason_cn
                     if selection
                     else _relation_effect_cn(primary)
                 ),
