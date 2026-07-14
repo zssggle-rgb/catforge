@@ -1,0 +1,71 @@
+{
+  "task_id": "COMPETITOR-PROFILE-G23",
+  "status": "completed",
+  "verified_at": "2026-07-14T17:32:50+08:00",
+  "host": "123.56.42.205",
+  "app_dir": "/opt/catforge",
+  "branch": "new/base-publish-workbench-design",
+  "predeploy_commit": "79e50bfe0bbddb13926517e195a2c0ad19b0d959",
+  "deployed_commit": "89929b53edb9c6cdf330e5dc1fad120b385fe00f",
+  "backup": {
+    "path": "/home/deploy/catforge-deploy-backups/competitor-profile-g23-20260714_172031",
+    "git_bundle_sha256": "4ef5caa1d78fa8bf076bbb90d799dc996542d6cd3261faf68734277c7b0f6558",
+    "schema_only_sha256": "bcc6844bf94093182ddfec757cb6c82330a3d33298adc706babb8ff4a74f3536",
+    "runtime_env_hash_unchanged": true
+  },
+  "migration": {
+    "before": "0045_core3_sellpoint_value_profile",
+    "after": "0046_core3_competitor_profile",
+    "head_count": 1,
+    "downgrade_upgrade_exercised": true,
+    "downgrade_health_ready": true,
+    "final_head": "0046_core3_competitor_profile"
+  },
+  "new_tables": {
+    "core3_competitor_profile_version": {"columns": 48, "foreign_keys": 2, "unique_constraints": 1, "check_constraints": 16, "indexes": 26, "rows": 0},
+    "core3_sku_competitor_profile": {"columns": 40, "foreign_keys": 3, "unique_constraints": 1, "check_constraints": 6, "indexes": 22, "rows": 0},
+    "core3_sku_competitor_profile_pair": {"columns": 47, "foreign_keys": 4, "unique_constraints": 1, "check_constraints": 7, "indexes": 28, "rows": 0},
+    "core3_sku_competitor_profile_relation": {"columns": 36, "foreign_keys": 4, "unique_constraints": 1, "check_constraints": 4, "indexes": 20, "rows": 0},
+    "core3_sku_competitor_profile_selection": {"columns": 36, "foreign_keys": 5, "unique_constraints": 2, "check_constraints": 3, "indexes": 21, "rows": 0}
+  },
+  "database_guard": {
+    "core3_competitor_candidate": 28,
+    "core3_competitor_result": 30,
+    "core3_purchase_reason_profile_version": 7,
+    "core3_sku_purchase_reason_profile": 1751,
+    "core3_sku_purchase_reason_anchor": 17899,
+    "core3_sellpoint_value_profile_version": 7,
+    "core3_sku_sellpoint_value_profile": 691,
+    "core3_sku_sellpoint_value_candidate": 45070,
+    "core3_sku_sellpoint_value_item": 3123,
+    "counts_unchanged": true,
+    "recent_updates_since_deploy": 0,
+    "other_active_sessions_final": 0
+  },
+  "runtime": {
+    "healthz": "ok",
+    "readyz": "ready_database_ok",
+    "api_restart_count": 0,
+    "redis_restart_count": 0,
+    "web_restart_count": 0,
+    "api_error_lines": 0,
+    "repository_clean": true,
+    "repository_container_hashes_match": true,
+    "competitor_profile_import_smoke": "passed"
+  },
+  "tests": {
+    "local_migration_tests": "11 passed",
+    "local_alembic_single_head": true
+  },
+  "forbidden_actions": {
+    "profile_generation": false,
+    "review": false,
+    "publish": false,
+    "set_current": false,
+    "deprecate": false,
+    "consumer_switch": false,
+    "legacy_m12_m13_m14_write": false
+  },
+  "next_goal": "G24",
+  "next_goal_created": false
+}
