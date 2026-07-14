@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
+import gc
 import logging
 from threading import Lock
 from typing import Iterator, Protocol
@@ -42,6 +44,14 @@ from app.services.core3_real_data.hash_utils import stable_hash
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _CompetitorProfileReadbackReceipt:
+    profile_result_hash: str
+    pair_hashes: tuple[tuple[str, str], ...]
+    relation_hashes: tuple[tuple[str, str, str], ...]
+    selection_hashes: tuple[tuple[str, str], ...]
 
 
 class CompetitorProfileGenerationAlreadyRunningError(RuntimeError):
@@ -155,26 +165,27 @@ class CompetitorProfileGenerationService:
                 raise CompetitorProfileGenerationAlreadyRunningError(
                     f"competitor profile generation already running: {key}"
                 )
-            existing = self.repository.get_profile(
-                competitor_profile_version_id=version.competitor_profile_version_id,
-                target_sku_code=target_code,
-            )
-            self.repository.db.commit()
             target = self.input_provider.load_target_input(category, target_code)
             materialized = self.materializer.materialize(category, target, request.config)
             bundle = materialized_to_persistence_bundle(materialized, version)
+            receipt = _readback_receipt(bundle)
             failures = _generation_failures(version)
             failures.pop(target_code, None)
             with self.repository.db.begin():
-                persisted = self.repository.write_draft(bundle, use_savepoint=False)
+                created = self.repository.write_draft_without_readback(
+                    bundle,
+                    use_savepoint=False,
+                )
                 updated = _checkpoint_version(
                     self.repository,
                     version,
-                    added=None if existing else materialized,
+                    added=materialized if created else None,
                     failures=failures,
                     processing_status="running",
                 )
-            _verify_readback(bundle, persisted)
+            del bundle, materialized, target, category
+            self.repository.db.expunge_all()
+            gc.collect()
             if updated.sku_count == (
                 updated.ready_count
                 + updated.partial_count
@@ -207,9 +218,9 @@ class CompetitorProfileGenerationService:
                 raise CompetitorProfileGenerationReadbackError(
                     "competitor profile disappeared after generation commit"
                 )
-            _verify_readback(bundle, persisted)
+            _verify_readback(receipt, persisted)
             return CompetitorProfileGenerationReadback(
-                status="reused" if existing else "generated",
+                status="generated" if created else "reused",
                 persisted=persisted,
             )
 
@@ -284,7 +295,7 @@ class CompetitorProfileGenerationService:
                                 failures=failures,
                                 processing_status="running",
                             )
-                        _verify_readback(bundle, persisted)
+                        _verify_readback(_readback_receipt(bundle), persisted)
                         existing_codes.add(code)
                         statuses.append(
                             CompetitorProfileSkuGenerationStatus(
@@ -587,36 +598,53 @@ def _checkpoint_version(
     )
 
 
-def _verify_readback(
+def _readback_receipt(
     expected: CompetitorProfilePersistenceBundle,
+) -> _CompetitorProfileReadbackReceipt:
+    return _CompetitorProfileReadbackReceipt(
+        profile_result_hash=expected.profile.result_hash,
+        pair_hashes=tuple(
+            sorted((row.candidate_sku_code, row.result_hash) for row in expected.pairs)
+        ),
+        relation_hashes=tuple(
+            sorted(
+                (row.candidate_sku_code, row.relation_code, row.result_hash)
+                for row in expected.relations
+            )
+        ),
+        selection_hashes=tuple(
+            sorted(
+                (row.candidate_sku_code, row.result_hash)
+                for row in expected.selections
+            )
+        ),
+    )
+
+
+def _verify_readback(
+    expected: _CompetitorProfileReadbackReceipt,
     actual: CompetitorProfileReadBundle,
 ) -> None:
-    if expected.profile.result_hash != actual.profile.result_hash:
+    if expected.profile_result_hash != actual.profile.result_hash:
         raise CompetitorProfileGenerationReadbackError(
             "competitor profile readback hash mismatch"
         )
-    expected_pairs = {
-        row.candidate_sku_code: row.result_hash for row in expected.pairs
-    }
-    actual_pairs = {row.candidate_sku_code: row.result_hash for row in actual.pairs}
-    expected_relations = {
-        (row.candidate_sku_code, row.relation_code): row.result_hash
-        for row in expected.relations
-    }
-    actual_relations = {
-        (row.candidate_sku_code, row.relation_code): row.result_hash
-        for row in actual.relations
-    }
-    expected_selections = {
-        row.candidate_sku_code: row.result_hash for row in expected.selections
-    }
-    actual_selections = {
-        row.candidate_sku_code: row.result_hash for row in actual.selections
-    }
+    actual_pairs = tuple(
+        sorted((row.candidate_sku_code, row.result_hash) for row in actual.pairs)
+    )
+    actual_relations = tuple(
+        sorted(
+            (row.candidate_sku_code, row.relation_code, row.result_hash)
+            for row in actual.relations
+        )
+    )
+    actual_selections = tuple(
+        sorted((row.candidate_sku_code, row.result_hash) for row in actual.selections)
+    )
     if (
-        expected_pairs != actual_pairs
-        or expected_relations != actual_relations
-        or expected_selections != actual_selections
+        expected.pair_hashes != actual_pairs
+        or expected.relation_hashes != actual_relations
+        or expected.selection_hashes != actual_selections
     ):
         raise CompetitorProfileGenerationReadbackError(
             "competitor profile child readback hash mismatch"

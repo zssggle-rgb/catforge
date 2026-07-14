@@ -164,6 +164,36 @@ def test_write_draft_round_trips_all_five_tables(session: Session) -> None:
     assert readback.selections[0].selection_rank == 1
 
 
+def test_write_draft_without_readback_defers_full_graph_materialization(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+    original_read_bundle = repository._read_bundle
+
+    def _unexpected_readback(*args, **kwargs):
+        raise AssertionError("write transaction must not materialize a readback graph")
+
+    monkeypatch.setattr(repository, "_read_bundle", _unexpected_readback)
+    bundle = _bundle(version.competitor_profile_version_id)
+    created = repository.write_draft_without_readback(bundle)
+    session.commit()
+    reused = repository.write_draft_without_readback(bundle)
+    session.commit()
+
+    assert created is True
+    assert reused is False
+    monkeypatch.setattr(repository, "_read_bundle", original_read_bundle)
+    readback = repository.get_profile(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+    )
+    assert readback is not None
+    assert len(readback.pairs) == 1
+    assert len(readback.relations) == 7
+
+
 def test_write_same_draft_is_idempotent_and_child_change_is_immutable(
     session: Session,
 ) -> None:

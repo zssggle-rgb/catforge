@@ -96,6 +96,41 @@ class CompetitorProfileRepository(Core3BaseRepository):
         *,
         use_savepoint: bool = True,
     ) -> CompetitorProfileReadBundle:
+        version, row, _ = self._write_draft_rows(
+            bundle,
+            use_savepoint=use_savepoint,
+        )
+        return self._read_bundle(version, row, preview=True)
+
+    def write_draft_without_readback(
+        self,
+        bundle: CompetitorProfilePersistenceBundle,
+        *,
+        use_savepoint: bool = True,
+    ) -> bool:
+        """Persist one immutable draft without materializing a second full graph.
+
+        Generation callers that already hold the complete materialized graph can
+        release it after commit and perform one deliberate readback afterwards.
+        The return value is true only when this call inserted the draft.
+        """
+
+        _, _, created = self._write_draft_rows(
+            bundle,
+            use_savepoint=use_savepoint,
+        )
+        return created
+
+    def _write_draft_rows(
+        self,
+        bundle: CompetitorProfilePersistenceBundle,
+        *,
+        use_savepoint: bool,
+    ) -> tuple[
+        entities.Core3CompetitorProfileVersion,
+        entities.Core3SkuCompetitorProfile,
+        bool,
+    ]:
         profile = bundle.profile
         self._assert_context_scope(profile.project_id, profile.category_code)
         version = self._version_by_id(
@@ -110,10 +145,10 @@ class CompetitorProfileRepository(Core3BaseRepository):
         )
         if existing is not None:
             self._assert_same_profile_inputs(existing, bundle)
-            return self._read_bundle(version, existing, preview=True)
+            return version, existing, False
         if not use_savepoint:
             row = self._insert_bundle(bundle)
-            return self._read_bundle(version, row, preview=True)
+            return version, row, True
         try:
             with self.db.begin_nested():
                 row = self._insert_bundle(bundle)
@@ -125,8 +160,8 @@ class CompetitorProfileRepository(Core3BaseRepository):
             if concurrent is None:
                 raise
             self._assert_same_profile_inputs(concurrent, bundle)
-            return self._read_bundle(version, concurrent, preview=True)
-        return self._read_bundle(version, row, preview=True)
+            return version, concurrent, False
+        return version, row, True
 
     def get_version(
         self,
@@ -484,28 +519,56 @@ class CompetitorProfileRepository(Core3BaseRepository):
             raise CompetitorProfileImmutableError(
                 "draft SKU exists with different immutable inputs"
             )
-        actual = self._read_bundle(
-            self._version_by_id(existing.competitor_profile_version_id),
-            existing,
-            preview=True,
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        relation_model = entities.Core3SkuCompetitorProfileRelation
+        selection_model = entities.Core3SkuCompetitorProfileSelection
+        actual_pairs = dict(
+            self.db.execute(
+                select(pair_model.candidate_sku_code, pair_model.result_hash).where(
+                    pair_model.sku_competitor_profile_id
+                    == existing.sku_competitor_profile_id
+                )
+            ).all()
+        )
+        actual_relations = {
+            (candidate_sku_code, relation_code): result_hash
+            for candidate_sku_code, relation_code, result_hash in self.db.execute(
+                select(
+                    relation_model.candidate_sku_code,
+                    relation_model.relation_code,
+                    relation_model.result_hash,
+                )
+                .join(
+                    pair_model,
+                    pair_model.sku_competitor_profile_pair_id
+                    == relation_model.sku_competitor_profile_pair_id,
+                )
+                .where(
+                    pair_model.sku_competitor_profile_id
+                    == existing.sku_competitor_profile_id
+                )
+            ).all()
+        }
+        actual_selections = dict(
+            self.db.execute(
+                select(
+                    selection_model.candidate_sku_code,
+                    selection_model.result_hash,
+                ).where(
+                    selection_model.sku_competitor_profile_id
+                    == existing.sku_competitor_profile_id
+                )
+            ).all()
         )
         expected_pairs = {
             row.candidate_sku_code: row.result_hash for row in bundle.pairs
         }
-        actual_pairs = {row.candidate_sku_code: row.result_hash for row in actual.pairs}
         expected_relations = {
             (row.candidate_sku_code, row.relation_code): row.result_hash
             for row in bundle.relations
         }
-        actual_relations = {
-            (row.candidate_sku_code, row.relation_code): row.result_hash
-            for row in actual.relations
-        }
         expected_selections = {
             row.candidate_sku_code: row.result_hash for row in bundle.selections
-        }
-        actual_selections = {
-            row.candidate_sku_code: row.result_hash for row in actual.selections
         }
         if (
             expected_pairs != actual_pairs
