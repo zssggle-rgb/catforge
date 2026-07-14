@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from app.models import entities
@@ -54,7 +54,7 @@ class CompetitorProfileDraftWriteNotAllowedError(CompetitorProfileRepositoryErro
     pass
 
 
-_PERSISTENCE_FLUSH_BATCH_SIZE = 32
+_PERSISTENCE_INSERT_BATCH_SIZE = 8
 
 
 class CompetitorProfileRepository(Core3BaseRepository):
@@ -412,70 +412,76 @@ class CompetitorProfileRepository(Core3BaseRepository):
         self,
         bundle: CompetitorProfilePersistenceBundle,
     ) -> entities.Core3SkuCompetitorProfile:
-        profile_row = entities.Core3SkuCompetitorProfile(
-            **_profile_entity_payload(bundle.profile)
+        profile_id = entities.new_id()
+        profile_payload = _profile_entity_payload(bundle.profile)
+        profile_payload["sku_competitor_profile_id"] = profile_id
+        self.db.execute(
+            insert(entities.Core3SkuCompetitorProfile.__table__),
+            [profile_payload],
         )
-        self.db.add(profile_row)
-        self.db.flush()
+        del profile_payload
         pair_ids: dict[str, str] = {}
-        for start in range(0, len(bundle.pairs), _PERSISTENCE_FLUSH_BATCH_SIZE):
-            rows = [
-                entities.Core3SkuCompetitorProfilePair(
-                    **_pair_entity_payload(
-                        pair,
-                        profile_id=profile_row.sku_competitor_profile_id,
-                    )
+        for start in range(0, len(bundle.pairs), _PERSISTENCE_INSERT_BATCH_SIZE):
+            rows: list[dict[str, Any]] = []
+            for pair in bundle.pairs[
+                start : start + _PERSISTENCE_INSERT_BATCH_SIZE
+            ]:
+                pair_id = entities.new_id()
+                pair_ids[pair.candidate_sku_code] = pair_id
+                payload = _pair_entity_payload(pair, profile_id=profile_id)
+                payload["sku_competitor_profile_pair_id"] = pair_id
+                rows.append(payload)
+            self.db.execute(insert(entities.Core3SkuCompetitorProfilePair.__table__), rows)
+            del rows
+        for start in range(
+            0,
+            len(bundle.relations),
+            _PERSISTENCE_INSERT_BATCH_SIZE,
+        ):
+            rows = []
+            for relation in bundle.relations[
+                start : start + _PERSISTENCE_INSERT_BATCH_SIZE
+            ]:
+                payload = _relation_entity_payload(
+                    relation,
+                    pair_id=pair_ids[relation.candidate_sku_code],
                 )
-                for pair in bundle.pairs[
-                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
-                ]
-            ]
-            self.db.add_all(rows)
-            self.db.flush()
-            pair_ids.update(
-                {
-                    row.candidate_sku_code: row.sku_competitor_profile_pair_id
-                    for row in rows
-                }
+                payload["sku_competitor_profile_relation_id"] = entities.new_id()
+                rows.append(payload)
+            self.db.execute(
+                insert(entities.Core3SkuCompetitorProfileRelation.__table__),
+                rows,
             )
-            for row in rows:
-                self.db.expunge(row)
             del rows
-        for start in range(0, len(bundle.relations), _PERSISTENCE_FLUSH_BATCH_SIZE):
-            rows = [
-                entities.Core3SkuCompetitorProfileRelation(
-                    **_relation_entity_payload(
-                        relation,
-                        pair_id=pair_ids[relation.candidate_sku_code],
-                    )
+        for start in range(
+            0,
+            len(bundle.selections),
+            _PERSISTENCE_INSERT_BATCH_SIZE,
+        ):
+            rows = []
+            for selection in bundle.selections[
+                start : start + _PERSISTENCE_INSERT_BATCH_SIZE
+            ]:
+                payload = _selection_entity_payload(
+                    selection,
+                    profile_id=profile_id,
+                    pair_id=pair_ids[selection.candidate_sku_code],
                 )
-                for relation in bundle.relations[
-                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
-                ]
-            ]
-            self.db.add_all(rows)
-            self.db.flush()
-            for row in rows:
-                self.db.expunge(row)
+                payload["sku_competitor_profile_selection_id"] = entities.new_id()
+                rows.append(payload)
+            self.db.execute(
+                insert(entities.Core3SkuCompetitorProfileSelection.__table__),
+                rows,
+            )
             del rows
-        for start in range(0, len(bundle.selections), _PERSISTENCE_FLUSH_BATCH_SIZE):
-            rows = [
-                entities.Core3SkuCompetitorProfileSelection(
-                    **_selection_entity_payload(
-                        selection,
-                        profile_id=profile_row.sku_competitor_profile_id,
-                        pair_id=pair_ids[selection.candidate_sku_code],
-                    )
-                )
-                for selection in bundle.selections[
-                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
-                ]
-            ]
-            self.db.add_all(rows)
-            self.db.flush()
-            for row in rows:
-                self.db.expunge(row)
-            del rows
+        profile_row = self._find_profile(
+            version_id=bundle.profile.competitor_profile_version_id,
+            target_sku_code=bundle.profile.target_sku_code,
+        )
+        if profile_row is None:
+            raise CompetitorProfileRepositoryError(
+                "competitor profile insert did not produce a readable root row"
+            )
         return profile_row
 
     def _read_bundle(
