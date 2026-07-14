@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from app.services.core3_real_data.analyst import competitor_profile_schemas
 from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas import (
     CompetitorProfilePersistenceBundle,
     CompetitorProfileReadBundle,
@@ -37,6 +38,10 @@ from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     SkuCompetitorDecisionProfileDraft,
     SourceAuthorityRef,
 )
+
+
+class _RuntimeBoundaryProbe(competitor_profile_schemas.CompetitorProfileBaseModel):
+    evidence_refs: list[EvidenceRef]
 
 
 def _authority(
@@ -145,11 +150,16 @@ def _pool(*, unknown: bool = False) -> PurchasePoolAssessment:
 def _families() -> list[EvidenceFamilyAssessment]:
     rows = []
     for family in sorted(ALL_EVIDENCE_FAMILIES):
-        status = "discriminative" if family in {
-            "F1_purchase_reason",
-            "F2_task_value_scene",
-            "F4_user_realization",
-        } else "supporting"
+        status = (
+            "discriminative"
+            if family
+            in {
+                "F1_purchase_reason",
+                "F2_task_value_scene",
+                "F4_user_realization",
+            }
+            else "supporting"
+        )
         rows.append(
             EvidenceFamilyAssessment(
                 family=family,
@@ -199,14 +209,10 @@ def _relations() -> list[RelationAssessment]:
                 confidence_level="high" if primary else "medium",
                 gate_results=[_gate(f"{code}_gate")],
                 supporting_evidence_families=(
-                    ["F1_purchase_reason", "F4_user_realization"]
-                    if primary
-                    else []
+                    ["F1_purchase_reason", "F4_user_realization"] if primary else []
                 ),
                 eligible_question_codes=(
-                    ["purchase_choice", "key_competitor_selection"]
-                    if primary
-                    else []
+                    ["purchase_choice", "key_competitor_selection"] if primary else []
                 ),
                 reason_codes=[] if primary else ["relation_gate_failed"],
                 evidence_refs=[_evidence()],
@@ -232,12 +238,12 @@ def _questions(*, selected: bool = True) -> list[QuestionEligibility]:
                     "F4_user_realization",
                 ],
                 available_evidence_families=(
-                    ["F1_purchase_reason", "F4_user_realization"]
-                    if eligible
-                    else []
+                    ["F1_purchase_reason", "F4_user_realization"] if eligible else []
                 ),
                 missing_inputs=[] if eligible else [f"missing-{code}"],
-                business_boundary_code="question_usable" if eligible else "input_missing",
+                business_boundary_code="question_usable"
+                if eligible
+                else "input_missing",
                 reason_cn="可以回答。" if eligible else "当前证据不足。",
                 result_hash=f"question-{code}",
             )
@@ -458,14 +464,18 @@ def test_serving_scope_rejects_unsorted_batches_and_cross_category_authority() -
 
 
 def test_source_authority_rejects_published_non_current_and_preview_current() -> None:
-    with pytest.raises(ValidationError, match="published source authority must be current"):
+    with pytest.raises(
+        ValidationError, match="published source authority must be current"
+    ):
         SourceAuthorityRef(
             **{
                 **_authority().model_dump(mode="python"),
                 "is_current": False,
             }
         )
-    with pytest.raises(ValidationError, match="preview source authority cannot be current"):
+    with pytest.raises(
+        ValidationError, match="preview source authority cannot be current"
+    ):
         SourceAuthorityRef(
             **{
                 **_authority(release_status="preview").model_dump(mode="python"),
@@ -488,7 +498,9 @@ def test_runtime_boundary_does_not_copy_the_validated_model_graph(
     payload = _profile().model_dump(mode="python")
 
     def _unexpected_model_dump(*args, **kwargs):
-        raise AssertionError("runtime-boundary validation must not dump the model graph")
+        raise AssertionError(
+            "runtime-boundary validation must not dump the model graph"
+        )
 
     monkeypatch.setattr(
         SkuCompetitorDecisionProfileDraft,
@@ -498,6 +510,38 @@ def test_runtime_boundary_does_not_copy_the_validated_model_graph(
 
     profile = SkuCompetitorDecisionProfileDraft(**payload)
     assert profile.target_sku_code == "TV-TARGET"
+
+
+def test_runtime_boundary_does_not_rescan_validated_child_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence_ref = EvidenceRef(
+        module_code="M07",
+        profile_version="m07-v1",
+        rule_version="m07-rule-v1",
+        taxonomy_version="not_applicable",
+        record_type="market_profile",
+        record_id="market-1",
+        result_hash="market-hash",
+    )
+    original = competitor_profile_schemas._assert_no_factory_only_keys
+    calls = 0
+
+    def counted(value: Any) -> None:
+        nonlocal calls
+        calls += 1
+        original(value)
+
+    monkeypatch.setattr(
+        competitor_profile_schemas,
+        "_assert_no_factory_only_keys",
+        counted,
+    )
+
+    probe = _RuntimeBoundaryProbe(evidence_refs=[evidence_ref] * 500)
+
+    assert len(probe.evidence_refs) == 500
+    assert calls <= 510
 
 
 def test_gate_preserves_unknown_instead_of_false() -> None:
@@ -670,13 +714,14 @@ def test_profile_distinguishes_no_priority_from_insufficient(
             _profile(**kwargs)
 
 
-def test_profile_and_bundle_allow_zero_to_three_selections_without_forcing_three() -> None:
+def test_profile_and_bundle_allow_zero_to_three_selections_without_forcing_three() -> (
+    None
+):
     for count in range(4):
-        selections = [_selection(f"TV-C{index}", index) for index in range(1, count + 1)]
-        pairs = [
-            _pair(candidate_code=f"TV-C{index}")
-            for index in range(1, count + 1)
+        selections = [
+            _selection(f"TV-C{index}", index) for index in range(1, count + 1)
         ]
+        pairs = [_pair(candidate_code=f"TV-C{index}") for index in range(1, count + 1)]
         conclusion = "available" if count else "no_priority_competitor"
         profile = _profile(conclusion_state=conclusion, selections=selections)
         bundle = CompetitorProfileDraftBundle(

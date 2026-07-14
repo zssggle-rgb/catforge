@@ -762,16 +762,16 @@ class CompetitorProfileDraftBundle(CompetitorProfileBaseModel):
 
 def _assert_no_factory_only_keys(value: Any) -> None:
     if isinstance(value, BaseModel):
-        forbidden = FORBIDDEN_FACTORY_EXPORT_KEYS.intersection(
-            type(value).model_fields
-        )
-        if forbidden:
-            raise ValueError(
-                "factory-only keys are forbidden in competitor profile contracts: "
-                + ", ".join(sorted(forbidden))
-            )
+        _assert_model_has_no_factory_only_fields(value)
         for field_name in type(value).model_fields:
-            _assert_no_factory_only_keys(getattr(value, field_name))
+            child = getattr(value, field_name)
+            if isinstance(child, CompetitorProfileBaseModel):
+                _assert_model_has_no_factory_only_fields(child)
+                continue
+            if isinstance(child, BaseModel) or (
+                isinstance(child, (dict, list, tuple)) and child
+            ):
+                _assert_no_factory_only_keys(child)
     elif isinstance(value, dict):
         forbidden = FORBIDDEN_FACTORY_EXPORT_KEYS.intersection(value)
         if forbidden:
@@ -780,10 +780,31 @@ def _assert_no_factory_only_keys(value: Any) -> None:
                 + ", ".join(sorted(forbidden))
             )
         for child in value.values():
-            _assert_no_factory_only_keys(child)
+            if isinstance(child, CompetitorProfileBaseModel):
+                _assert_model_has_no_factory_only_fields(child)
+                continue
+            if isinstance(child, BaseModel) or (
+                isinstance(child, (dict, list, tuple)) and child
+            ):
+                _assert_no_factory_only_keys(child)
     elif isinstance(value, (list, tuple)):
         for child in value:
-            _assert_no_factory_only_keys(child)
+            if isinstance(child, CompetitorProfileBaseModel):
+                _assert_model_has_no_factory_only_fields(child)
+                continue
+            if isinstance(child, BaseModel) or (
+                isinstance(child, (dict, list, tuple)) and child
+            ):
+                _assert_no_factory_only_keys(child)
+
+
+def _assert_model_has_no_factory_only_fields(value: BaseModel) -> None:
+    forbidden = FORBIDDEN_FACTORY_EXPORT_KEYS.intersection(type(value).model_fields)
+    if forbidden:
+        raise ValueError(
+            "factory-only keys are forbidden in competitor profile contracts: "
+            + ", ".join(sorted(forbidden))
+        )
 
 
 def _assert_sorted_unique(values: list[str], label: str) -> None:
