@@ -232,3 +232,18 @@ def test_pm_summaries_turn_saved_rows_into_product_decisions() -> None:
     assert "HDMI 2.1" not in configuration
     assert "先明确本品与海信 75E7Q的产品角色分工" in action
     assert "不把降价作为第一动作" in action
+
+
+def test_cross_brand_action_uses_market_positioning_language() -> None:
+    business = SimpleNamespace(
+        目标产品="海信 KFR-35GW/S550-X1",
+        重点竞品=[{"产品": "华凌 KFR-35GW/N8HA1III-P"}],
+        可替代价值=[],
+        价格销量压力=[],
+        竞品对比=[],
+    )
+
+    action = _action_summary(business)
+
+    assert "本品相对华凌 KFR-35GW/N8HA1III-P的目标用户和价值取舍" in action
+    assert "产品角色分工" not in action

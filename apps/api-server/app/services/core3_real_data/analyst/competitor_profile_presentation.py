@@ -552,10 +552,21 @@ def _action_summary(business: Any) -> str:
         if value_focus
         else "再选择一至两项用户价值建立领先"
     )
+    target_brand = _product_brand(str(business.目标产品))
+    selected_brand = _product_brand(selected)
+    positioning_action = (
+        f"先明确本品与{selected}的产品角色分工"
+        if target_brand and selected_brand and target_brand == selected_brand
+        else f"先明确本品相对{selected}的目标用户和价值取舍"
+    )
     return (
-        f"先明确本品与{selected}的产品角色分工；{value_action}；"
+        f"{positioning_action}；{value_action}；"
         f"价格先对照{pressure_focus}的量价表现，不把降价作为第一动作。"
     )
+
+
+def _product_brand(display_name: str) -> str:
+    return display_name.strip().split(maxsplit=1)[0].casefold()
 
 
 def _ranked_labels(

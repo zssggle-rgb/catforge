@@ -16,6 +16,8 @@ from app.services.core3_real_data.analyst.competitor_profile_reader import (
     CompetitorProfileReader,
     _business_pair_comparisons,
     _business_mapping,
+    _business_product_name,
+    _key_competitor_conclusion_cn,
 )
 from app.services.core3_real_data.analyst.competitor_profile_reader_schemas import (
     CompetitorProfileReaderResult,
@@ -36,6 +38,21 @@ from tests.core3_real_data.test_competitor_profile_schemas import (
 
 
 pytest_plugins = ("tests.core3_real_data.test_competitor_profile_generation",)
+
+
+def test_ac_business_names_and_scenario_language_are_product_manager_readable() -> None:
+    row = SimpleNamespace(
+        primary_relation_code="scenario_substitute",
+        conclusion_cn="它揭示了同品牌产品线重叠或另一种场景方案。",
+    )
+
+    assert _business_product_name(
+        "海信 kfr-35gw/s550-x1",
+        "AC00032008",
+    ) == "海信 KFR-35GW/S550-X1"
+    conclusion = _key_competitor_conclusion_cn(row)
+    assert "另一种产品方案" in conclusion
+    assert "同品牌产品线重叠或" not in conclusion
 
 
 def _generated(session: Session):

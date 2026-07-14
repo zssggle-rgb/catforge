@@ -118,15 +118,21 @@ class CompetitorProfileReader:
 def _business_dto(bundle: CompetitorProfileReadBundle) -> CompetitorProfileBusinessDTO:
     profile = bundle.profile.profile_payload
     return CompetitorProfileBusinessDTO(
-        目标产品=profile.display_name_cn,
+        目标产品=_business_product_name(
+            profile.display_name_cn,
+            profile.target_sku_code,
+        ),
         分析结论=_STATE_CN[str(profile.analysis_state)],
         结论状态=_CONCLUSION_CN[str(profile.conclusion_state)],
         重点竞品=[
             {
-                "产品": row.display_name_cn,
+                "产品": _business_product_name(
+                    row.display_name_cn,
+                    row.candidate_sku_code,
+                ),
                 "排序": row.selection_rank,
                 "主要回答": _business_label(str(row.primary_decision_topic)),
-                "为什么要关注": row.conclusion_cn,
+                "为什么要关注": _key_competitor_conclusion_cn(row),
             }
             for row in profile.key_competitor_summary
         ],
@@ -191,7 +197,10 @@ def _business_pair_comparisons(
         pressure = pressure_by_sku.get(pair.candidate.sku_code, {})
         rows.append(
             {
-                "产品": pair.candidate.display_name_cn,
+                "产品": _business_product_name(
+                    pair.candidate.display_name_cn,
+                    pair.candidate.sku_code,
+                ),
                 "产品编号": pair.candidate.sku_code,
                 "关注层级": "重点关注" if selection else "专项对比",
                 "为什么关注": (
@@ -245,6 +254,23 @@ def _relation_effect_cn(row: Any | None) -> str:
         "same_value_competition": "它能替代本品承接同一项用户价值。",
         "same_value_research": "它适合比较同一用户价值，但不能用于判断用户二选一。",
     }.get(effect, "它能回答一项明确的产品竞争问题。")
+
+
+def _key_competitor_conclusion_cn(row: Any) -> str:
+    relation_code = str(row.primary_relation_code)
+    if relation_code == "same_brand_ladder":
+        return "它揭示了同品牌产品线的升降档关系，影响本品的产品角色定义。"
+    if relation_code == "scenario_substitute":
+        return "它提供了满足同一场景的另一种产品方案，影响本品的目标用户和使用场景定位。"
+    return str(row.conclusion_cn)
+
+
+def _business_product_name(display_name: str, sku_code: str) -> str:
+    name = str(display_name).strip()
+    if not str(sku_code).upper().startswith("AC") or " " not in name:
+        return name
+    brand, model = name.split(maxsplit=1)
+    return f"{brand} {model.upper()}"
 
 
 def _candidate_status_label(value: str) -> str:

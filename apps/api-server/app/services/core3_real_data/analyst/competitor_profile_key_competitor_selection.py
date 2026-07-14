@@ -55,6 +55,10 @@ _SELECTION_REASON_CN = {
     "portfolio_or_scenario": "它揭示了同品牌产品线重叠或另一种场景方案，影响本品的产品角色定义。",
     "value_route": "它证明同一用户价值可以被替代或由另一条价值路线实现，影响卖点投入与强化方向。",
 }
+_SELECTION_REASON_CN_BY_RELATION = {
+    "same_brand_ladder": "它揭示了同品牌产品线的升降档关系，影响本品的产品角色定义。",
+    "scenario_substitute": "它提供了满足同一场景的另一种产品方案，影响本品的目标用户和使用场景定位。",
+}
 _INDEPENDENT_REASON_CN = {
     "purchase_choice": "它补充回答了谁最可能与本品进入同一购买选择；同主题其他候选没有提供更强且更完整的证据。",
     "price_scale_pressure": "它补充回答了本品在上探、下探或同预算竞争中应重点防守谁；同主题其他候选没有形成更明确的市场压力。",
@@ -412,7 +416,10 @@ def _selection_draft(
         "covered_decision_topics": covered_topics,
         "primary_relation_code": primary_relation,
         "auxiliary_relation_codes": auxiliary,
-        "selection_reason_cn": _SELECTION_REASON_CN[pick.primary_topic],
+        "selection_reason_cn": _selection_reason_cn(
+            pick.primary_topic,
+            primary_relation,
+        ),
         "independent_information_reason_cn": _INDEPENDENT_REASON_CN[pick.primary_topic],
         "price_value_pressure_summary": summary,
         "confidence_level": primary.best_confidence_level,
@@ -425,6 +432,15 @@ def _selection_draft(
             version="competitor_profile_key_competitor_selection_v1",
         ),
     )
+
+
+def _selection_reason_cn(primary_topic: str, primary_relation: str) -> str:
+    if primary_topic == "portfolio_or_scenario":
+        return _SELECTION_REASON_CN_BY_RELATION.get(
+            primary_relation,
+            _SELECTION_REASON_CN[primary_topic],
+        )
+    return _SELECTION_REASON_CN[primary_topic]
 
 
 def _pair_decision(

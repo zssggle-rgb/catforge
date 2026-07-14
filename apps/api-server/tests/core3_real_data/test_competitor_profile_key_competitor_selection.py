@@ -12,6 +12,7 @@ from app.services.core3_real_data.analyst import (
 from app.services.core3_real_data.analyst.competitor_profile_key_competitor_selection import (
     KeyCompetitorSelectionError,
     KeyCompetitorSelector,
+    _selection_reason_cn,
 )
 from app.services.core3_real_data.analyst.competitor_profile_key_competitor_selection_schemas import (
     DecisionTopicAssessment,
@@ -200,6 +201,19 @@ def test_two_candidates_cover_purchase_and_portfolio_without_duplicate_slots() -
         "portfolio_or_scenario",
     ]
     assert [row.selection_rank for row in result.selections] == [1, 2]
+    assert result.selections[1].primary_relation_code == "same_brand_ladder"
+    assert "同品牌产品线的升降档关系" in result.selections[1].selection_reason_cn
+    assert "同品牌产品线重叠或" not in result.selections[1].selection_reason_cn
+
+
+def test_scenario_selection_reason_does_not_imply_same_brand() -> None:
+    reason = _selection_reason_cn(
+        "portfolio_or_scenario",
+        "scenario_substitute",
+    )
+
+    assert "另一种产品方案" in reason
+    assert "同品牌" not in reason
 
 
 def test_three_candidates_add_stronger_price_pressure_and_portfolio_information() -> (
