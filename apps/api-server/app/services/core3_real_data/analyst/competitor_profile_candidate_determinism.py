@@ -173,9 +173,11 @@ class CandidatePipelineDeterminismGuard:
             second_recall,
             eligibility_config,
         )
-        if _payload(first_recall) != _payload(second_recall):
+        if _manifest_signature(first_recall) != _manifest_signature(second_recall):
             raise CandidatePipelineHashIntegrityError("recall replay is not idempotent")
-        if _payload(first_eligibility) != _payload(second_eligibility):
+        if _manifest_signature(first_eligibility) != _manifest_signature(
+            second_eligibility
+        ):
             raise CandidatePipelineHashIntegrityError(
                 "eligibility replay is not idempotent"
             )
@@ -238,9 +240,8 @@ def _canonicalize_inputs(
             sku_code: sorted(grouped[sku_code], key=_record_sort_key)
             for sku_code in sorted(grouped)
         }
-        category_modules[module_code] = ModuleCategorySnapshot.model_validate(
-            {
-                **module.model_dump(mode="python"),
+        category_modules[module_code] = module.model_copy(
+            update={
                 "record_count": len(canonical_selected),
                 "sku_count": len(records_by_sku),
                 "records_by_sku": records_by_sku,
@@ -252,11 +253,8 @@ def _canonicalize_inputs(
             selected_duplicates,
         )
 
-    canonical_category = CompetitorProfileCategoryInputBundle.model_validate(
-        {
-            **category_bundle.model_dump(mode="python"),
-            "modules": category_modules,
-        }
+    canonical_category = category_bundle.model_copy(
+        update={"modules": category_modules}
     )
     target_modules: dict[str, TargetModuleInput] = {}
     target_evidence_refs: list[EvidenceRef] = []
@@ -276,9 +274,8 @@ def _canonicalize_inputs(
             )
         refs = [_evidence_ref(record) for record in target_records]
         target_evidence_refs.extend(refs)
-        target_modules[module_code] = TargetModuleInput.model_validate(
-            {
-                **target_module.model_dump(mode="python"),
+        target_modules[module_code] = target_module.model_copy(
+            update={
                 "records": target_records,
                 "evidence_refs": refs,
             }
@@ -304,9 +301,8 @@ def _canonicalize_inputs(
                 ),
             )
         )
-    canonical_target = CompetitorProfileTargetInputBundle.model_validate(
-        {
-            **target_bundle.model_dump(mode="python"),
+    canonical_target = target_bundle.model_copy(
+        update={
             "modules": target_modules,
             "evidence_refs": _dedupe_refs(target_evidence_refs),
         }
@@ -530,6 +526,16 @@ def _payload(value: object) -> dict[str, object]:
     if model_dump is None:
         raise TypeError("determinism payload must be a typed model")
     return model_dump(mode="python")
+
+
+def _manifest_signature(value: object) -> tuple[str, str, tuple[str, ...]]:
+    """Compare replay outputs without materializing another full nested payload."""
+
+    result_hash = str(getattr(value, "result_hash", ""))
+    input_fingerprint = str(getattr(value, "input_fingerprint", ""))
+    candidates = getattr(value, "candidates", ())
+    candidate_hashes = tuple(str(row.result_hash) for row in candidates)
+    return result_hash, input_fingerprint, candidate_hashes
 
 
 __all__ = [

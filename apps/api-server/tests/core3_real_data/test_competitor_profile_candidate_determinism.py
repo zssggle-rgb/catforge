@@ -126,6 +126,19 @@ def test_two_pass_generation_is_idempotent_and_emits_typed_hash_receipt() -> Non
     }
 
 
+def test_canonicalization_reuses_typed_source_records_without_deep_copy() -> None:
+    bundle = _category_bundle()
+    original = bundle.modules["M12C"].records_by_sku["TV000002"][0]
+
+    generated = _run(bundle, "TV000001")
+
+    canonical = generated.category_bundle.modules["M12C"].records_by_sku[
+        "TV000002"
+    ][0]
+    assert canonical is original
+    assert canonical.facts is original.facts
+
+
 def test_verify_recomputes_every_nested_hash_chain_and_rejects_tampering() -> None:
     bundle = _category_bundle()
     target = _target_bundle(bundle, "TV000001")
