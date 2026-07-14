@@ -138,6 +138,7 @@ def test_question_answer_uses_saved_business_view_and_keeps_boundary(session) ->
     assert answer.profile_result_hash == context.evidence.profile_result_hash
     assert "不临时改变比较对象或重点名单" in answer.boundary_cn
     assert answer.answer_cn
+    assert answer.answer_cn != _selection_summary(context.business)
 
 
 def test_presentation_rejects_unavailable_or_partial_context() -> None:

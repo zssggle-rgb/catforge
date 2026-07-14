@@ -341,16 +341,7 @@ def answer_competitor_profile_question(
 ) -> CompetitorProfileQuestionAnswer:
     business, evidence = _require_available(context)
     normalized = question.strip()
-    if any(token in normalized for token in ("谁", "比较", "竞品", "选择")):
-        answer = _selection_summary(business)
-        products = [str(row.get("产品") or "") for row in business.重点竞品]
-    elif any(token in normalized for token in ("优势", "赢", "强")):
-        answer = _advantage_summary(business)
-        products = _supporting_products(business.本品优势, business)
-    elif any(token in normalized for token in ("替代", "风险", "丢")):
-        answer = _substitution_summary(business)
-        products = _supporting_products(business.可替代价值, business)
-    elif any(token in normalized for token in ("价格", "销量", "降价", "规模")):
+    if any(token in normalized for token in ("价格", "销量", "降价", "规模")):
         answer = _pressure_summary(business)
         products = _supporting_products(business.价格销量压力, business)
     elif any(token in normalized for token in ("配置", "跟进", "功能")):
@@ -359,6 +350,15 @@ def answer_competitor_profile_question(
     elif any(token in normalized for token in ("产品线", "同品牌", "角色")):
         answer = _portfolio_summary(business)
         products = _supporting_products(business.同品牌产品线, business)
+    elif any(token in normalized for token in ("优势", "赢", "强")):
+        answer = _advantage_summary(business)
+        products = _supporting_products(business.本品优势, business)
+    elif any(token in normalized for token in ("替代", "风险", "丢")):
+        answer = _substitution_summary(business)
+        products = _supporting_products(business.可替代价值, business)
+    elif any(token in normalized for token in ("谁", "比较", "竞品", "选择")):
+        answer = _selection_summary(business)
+        products = [str(row.get("产品") or "") for row in business.重点竞品]
     else:
         answer = _action_summary(business)
         products = [str(row.get("产品") or "") for row in business.重点竞品]
