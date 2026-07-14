@@ -167,6 +167,8 @@ class CompetitorProfileGenerationService:
                 )
             target = self.input_provider.load_target_input(category, target_code)
             materialized = self.materializer.materialize(category, target, request.config)
+            del target, category
+            gc.collect()
             bundle = materialized_to_persistence_bundle(materialized, version)
             receipt = _readback_receipt(bundle)
             failures = _generation_failures(version)
@@ -183,7 +185,7 @@ class CompetitorProfileGenerationService:
                     failures=failures,
                     processing_status="running",
                 )
-            del bundle, materialized, target, category
+            del bundle, materialized
             self.repository.db.expunge_all()
             gc.collect()
             if updated.sku_count == (
