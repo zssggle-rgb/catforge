@@ -54,6 +54,9 @@ class CompetitorProfileDraftWriteNotAllowedError(CompetitorProfileRepositoryErro
     pass
 
 
+_PERSISTENCE_FLUSH_BATCH_SIZE = 32
+
+
 class CompetitorProfileRepository(Core3BaseRepository):
     def __init__(self, context: Core3RepositoryContext) -> None:
         super().__init__(context)
@@ -414,42 +417,65 @@ class CompetitorProfileRepository(Core3BaseRepository):
         )
         self.db.add(profile_row)
         self.db.flush()
-        pair_rows: dict[str, entities.Core3SkuCompetitorProfilePair] = {}
-        for pair in bundle.pairs:
-            row = entities.Core3SkuCompetitorProfilePair(
-                **_pair_entity_payload(
-                    pair,
-                    profile_id=profile_row.sku_competitor_profile_id,
+        pair_ids: dict[str, str] = {}
+        for start in range(0, len(bundle.pairs), _PERSISTENCE_FLUSH_BATCH_SIZE):
+            rows = [
+                entities.Core3SkuCompetitorProfilePair(
+                    **_pair_entity_payload(
+                        pair,
+                        profile_id=profile_row.sku_competitor_profile_id,
+                    )
                 )
+                for pair in bundle.pairs[
+                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
+                ]
+            ]
+            self.db.add_all(rows)
+            self.db.flush()
+            pair_ids.update(
+                {
+                    row.candidate_sku_code: row.sku_competitor_profile_pair_id
+                    for row in rows
+                }
             )
-            pair_rows[pair.candidate_sku_code] = row
-        self.db.add_all(list(pair_rows.values()))
-        self.db.flush()
-        relation_rows = [
-            entities.Core3SkuCompetitorProfileRelation(
-                **_relation_entity_payload(
-                    relation,
-                    pair_id=pair_rows[
-                        relation.candidate_sku_code
-                    ].sku_competitor_profile_pair_id,
+            for row in rows:
+                self.db.expunge(row)
+            del rows
+        for start in range(0, len(bundle.relations), _PERSISTENCE_FLUSH_BATCH_SIZE):
+            rows = [
+                entities.Core3SkuCompetitorProfileRelation(
+                    **_relation_entity_payload(
+                        relation,
+                        pair_id=pair_ids[relation.candidate_sku_code],
+                    )
                 )
-            )
-            for relation in bundle.relations
-        ]
-        selection_rows = [
-            entities.Core3SkuCompetitorProfileSelection(
-                **_selection_entity_payload(
-                    selection,
-                    profile_id=profile_row.sku_competitor_profile_id,
-                    pair_id=pair_rows[
-                        selection.candidate_sku_code
-                    ].sku_competitor_profile_pair_id,
+                for relation in bundle.relations[
+                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
+                ]
+            ]
+            self.db.add_all(rows)
+            self.db.flush()
+            for row in rows:
+                self.db.expunge(row)
+            del rows
+        for start in range(0, len(bundle.selections), _PERSISTENCE_FLUSH_BATCH_SIZE):
+            rows = [
+                entities.Core3SkuCompetitorProfileSelection(
+                    **_selection_entity_payload(
+                        selection,
+                        profile_id=profile_row.sku_competitor_profile_id,
+                        pair_id=pair_ids[selection.candidate_sku_code],
+                    )
                 )
-            )
-            for selection in bundle.selections
-        ]
-        self.db.add_all([*relation_rows, *selection_rows])
-        self.db.flush()
+                for selection in bundle.selections[
+                    start : start + _PERSISTENCE_FLUSH_BATCH_SIZE
+                ]
+            ]
+            self.db.add_all(rows)
+            self.db.flush()
+            for row in rows:
+                self.db.expunge(row)
+            del rows
         return profile_row
 
     def _read_bundle(
@@ -871,11 +897,16 @@ def _selection_entity_payload(
 
 
 def _scope_entity_payload(payload: BaseModel) -> dict[str, Any]:
-    raw = _model_payload(payload)
-    raw.pop("profile_payload", None)
-    raw.pop("pair_payload", None)
-    raw.pop("relation_payload", None)
-    raw.pop("selection_payload", None)
+    raw = payload.model_dump(
+        mode="python",
+        exclude={
+            "profile_payload",
+            "pair_payload",
+            "relation_payload",
+            "selection_payload",
+        },
+    )
+    raw = {key: _jsonable(value) for key, value in raw.items()}
     raw["review_reasons_json"] = raw.pop("review_reasons")
     return raw
 
