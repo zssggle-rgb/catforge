@@ -46,6 +46,9 @@ from app.services.core3_real_data.analyst.competitor_profile_input_provider impo
     CompetitorProfileInputError,
     CompetitorProfileInputProvider,
 )
+from app.services.core3_real_data.analyst.competitor_profile_presentation import (
+    build_competitor_profile_presentation,
+)
 from app.services.core3_real_data.analyst.competitor_profile_reader import (
     CompetitorProfileReader,
 )
@@ -55,6 +58,9 @@ from app.services.core3_real_data.analyst.competitor_profile_reader_schemas impo
 from app.services.core3_real_data.analyst.competitor_profile_repositories import (
     CompetitorProfileRepository,
     CompetitorProfileRepositoryError,
+)
+from app.services.core3_real_data.analyst.competitor_profile_request_builder import (
+    build_production_generation_request,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_input_provider import (
     AnalystSellpointValueMaterializationInputProvider,
@@ -167,6 +173,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         with SessionLocal() as db:
             if args.command in COMPETITOR_PROFILE_WRITE_COMMANDS:
                 result = run_competitor_profile_generation(db, args)
+            elif args.command == "competitor-profile-build-request":
+                result = run_competitor_profile_build_request(db, args)
+            elif args.command == "competitor-profile-preview":
+                result = run_competitor_profile_preview(db, args)
             elif args.command == "competitor-profile-read":
                 result = run_competitor_profile_read(db, args)
             elif args.command in PROFILE_WRITE_COMMANDS:
@@ -313,6 +323,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_competitor_profile_generation_args(competitor_profile_batch, batch=True)
 
+    competitor_profile_request = subparsers.add_parser(
+        "competitor-profile-build-request",
+        help="Build a typed generation request from one current published category scope.",
+    )
+    competitor_profile_request.add_argument("--project-id", required=True)
+    competitor_profile_request.add_argument(
+        "--category-code", choices=("TV", "AC"), required=True
+    )
+    competitor_profile_request.add_argument("--profile-version", required=True)
+    competitor_profile_request.add_argument("--generated-by", required=True)
+    add_format_arg(competitor_profile_request)
+
     competitor_profile_read = subparsers.add_parser(
         "competitor-profile-read",
         help="Read one formal current profile or one explicitly selected draft preview.",
@@ -333,6 +355,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicitly allow the selected draft only for development acceptance.",
     )
     add_format_arg(competitor_profile_read)
+
+    competitor_profile_preview = subparsers.add_parser(
+        "competitor-profile-preview",
+        help="Render card, reports, QA, and sellpoint handoff from one saved profile.",
+    )
+    competitor_profile_preview.add_argument("--project-id", required=True)
+    competitor_profile_preview.add_argument(
+        "--category-code", choices=("TV", "AC"), required=True
+    )
+    competitor_profile_preview.add_argument("--release-scope-key", required=True)
+    competitor_profile_preview.add_argument("--sku-code", required=True)
+    competitor_profile_preview.add_argument(
+        "--mode", choices=("formal", "preview"), default="formal"
+    )
+    competitor_profile_preview.add_argument("--competitor-profile-version-id")
+    competitor_profile_preview.add_argument(
+        "--allow-draft-preview",
+        action="store_true",
+        help="Explicitly allow the selected draft only for development acceptance.",
+    )
+    competitor_profile_preview.add_argument(
+        "--with-report",
+        choices=("none", "markdown", "feishu-doc"),
+        default="none",
+    )
+    add_format_arg(competitor_profile_preview)
 
     for command in ATOM_COMMAND_ORDER:
         command_parser = subparsers.add_parser(command, help=f"Run analyst atom: {command}.")
@@ -562,7 +610,7 @@ def run_competitor_profile_generation(
     }
 
 
-def run_competitor_profile_read(
+def run_competitor_profile_build_request(
     db: Session,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
@@ -571,8 +619,67 @@ def run_competitor_profile_read(
         project_id=args.project_id,
         category_code=Core3CategoryCode(args.category_code),
     )
+    request = build_production_generation_request(
+        provider=CompetitorProfileInputProvider(context),
+        profile_version=args.profile_version,
+        generated_by=args.generated_by,
+    )
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "request": request.model_dump(mode="json"),
+    }
+
+
+def run_competitor_profile_read(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    consumption = _load_competitor_profile_consumption(db, args)
+    return {
+        "status": (
+            AnalystStatus.OK.value
+            if consumption.status == "available"
+            else AnalystStatus.NOT_FOUND.value
+        ),
+        "command": args.command,
+        "consumption": consumption.model_dump(mode="json"),
+    }
+
+
+def run_competitor_profile_preview(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    consumption = _load_competitor_profile_consumption(db, args)
+    if consumption.status != "available":
+        return {
+            "status": AnalystStatus.NOT_FOUND.value,
+            "command": args.command,
+            "consumption": consumption.model_dump(mode="json"),
+        }
+    presentation = build_competitor_profile_presentation(
+        consumption,
+        with_report=args.with_report,
+    )
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "presentation": presentation.model_dump(mode="json"),
+    }
+
+
+def _load_competitor_profile_consumption(
+    db: Session,
+    args: argparse.Namespace,
+):
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=args.project_id,
+        category_code=Core3CategoryCode(args.category_code),
+    )
     repository = CompetitorProfileRepository(context)
-    consumption = CompetitorProfileConsumptionService(
+    return CompetitorProfileConsumptionService(
         CompetitorProfileReader(repository)
     ).load(
         CompetitorProfileReadRequest(
@@ -585,15 +692,6 @@ def run_competitor_profile_read(
             allow_draft_preview=bool(args.allow_draft_preview),
         )
     )
-    return {
-        "status": (
-            AnalystStatus.OK.value
-            if consumption.status == "available"
-            else AnalystStatus.NOT_FOUND.value
-        ),
-        "command": args.command,
-        "consumption": consumption.model_dump(mode="json"),
-    }
 
 
 def _load_competitor_profile_generation_request(

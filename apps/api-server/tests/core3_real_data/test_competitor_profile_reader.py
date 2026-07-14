@@ -236,8 +236,8 @@ def test_reader_contract_rejects_partial_envelopes_and_translates_nested_rows() 
         }
     )
     assert "causal_claim" not in translated
-    assert translated["对产品工作的影响"]["effect·code"] == (
-        "purchase·choice·overlap"
+    assert translated["对产品工作的影响"]["影响方式"] == (
+        "进入同一批用户的最终选择"
     )
-    assert translated["用户价值"][0] == "clear·picture"
+    assert translated["用户价值"][0] == "画质清晰"
     assert translated["用户价值"][1]["建议动作"] == "评估是否值得跟进"

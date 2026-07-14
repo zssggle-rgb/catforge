@@ -115,6 +115,56 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
     ) -> ServingScope:
         return self.load_category_input_bundle(request).serving_scope
 
+    def build_production_input_request(self) -> CompetitorProfileInputRequest:
+        """Resolve the one current published category authority without latest fallback."""
+
+        version_model = entities.Core3PurchaseReasonProfileVersion
+        versions = list(
+            self.db.execute(
+                select(version_model)
+                .where(version_model.project_id == self.project_id)
+                .where(version_model.category_code == self.category_code.value)
+                .where(version_model.product_category == self.category_code.value)
+                .where(version_model.rule_version == CORE3_M12D_RULE_VERSION)
+                .where(version_model.release_status == "published")
+                .where(version_model.is_current.is_(True))
+                .order_by(version_model.purchase_reason_version_id)
+            ).scalars()
+        )
+        if len(versions) != 1:
+            raise CompetitorProfileSourceAuthorityError(
+                "production request requires exactly one current published M12D version"
+            )
+        version = versions[0]
+        if version.release_quality_status not in {"ready", "limited"}:
+            raise CompetitorProfileSourceAuthorityError(
+                "production request requires a consumable current published M12D version"
+            )
+        source_batch_ids = _sorted_unique_text(version.source_batch_ids_json)
+        if not source_batch_ids or version.batch_id not in source_batch_ids:
+            raise CompetitorProfileSourceAuthorityError(
+                "production M12D authority has an invalid source batch scope"
+            )
+        scope = dict(version.input_scope_json or {})
+        market_window = str(scope.get("market_window") or "full_observed_window")
+        category = self.category_code.value
+        semantic_population = (
+            "fact_complete_with_comment"
+            if category == "TV"
+            else "all_semantic_profiles"
+        )
+        return CompetitorProfileInputRequest(
+            project_id=self.project_id,
+            category_code=category,
+            product_category=category,
+            storage_batch_id=str(version.batch_id),
+            source_batch_ids=source_batch_ids,
+            analysis_population="competitor_profile_full_published_scope",
+            semantic_market_analysis_population=semantic_population,
+            claim_value_analysis_population="claim_value_ready_with_comment",
+            market_window=market_window,
+        )
+
     def list_authoritative_sku_codes(
         self,
         request: CompetitorProfileInputRequest,

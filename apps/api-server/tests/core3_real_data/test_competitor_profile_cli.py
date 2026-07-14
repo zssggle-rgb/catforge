@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -123,6 +124,41 @@ def test_generation_handler_validates_request_and_normalizes_target(
     assert result["generation"]["status"] == "generated"
 
 
+def test_build_request_handler_uses_current_production_scope(monkeypatch) -> None:
+    captured = {}
+
+    class _Request:
+        def model_dump(self, *, mode):
+            assert mode == "json"
+            return {"profile_version": "competitor-profile-g24"}
+
+    def fake_build(*, provider, profile_version, generated_by):
+        captured["provider"] = provider
+        captured["profile_version"] = profile_version
+        captured["generated_by"] = generated_by
+        return _Request()
+
+    monkeypatch.setattr(
+        catforge_analyst,
+        "build_production_generation_request",
+        fake_build,
+    )
+    result = catforge_analyst.run_competitor_profile_build_request(
+        object(),
+        argparse.Namespace(
+            command="competitor-profile-build-request",
+            project_id="project-tv",
+            category_code="TV",
+            profile_version="competitor-profile-g24",
+            generated_by="g24",
+        ),
+    )
+
+    assert captured["profile_version"] == "competitor-profile-g24"
+    assert captured["generated_by"] == "g24"
+    assert result["request"]["profile_version"] == "competitor-profile-g24"
+
+
 def test_batch_generation_handler_preserves_resume_controls(
     monkeypatch,
     tmp_path,
@@ -202,6 +238,81 @@ def test_read_handler_builds_one_consumption_context(monkeypatch) -> None:
     assert captured["request"].target_sku_code == "TV000001"
     assert captured["request"].mode == "formal"
     assert result["status"] == "not_found"
+
+
+def test_preview_handler_loads_once_and_renders_one_locked_context(
+    monkeypatch,
+) -> None:
+    captured = {"loads": 0, "renders": 0}
+    context = SimpleNamespace(status="available")
+
+    def fake_load(db, args):
+        del db
+        captured["loads"] += 1
+        captured["args"] = args
+        return context
+
+    class _Presentation:
+        def model_dump(self, *, mode):
+            assert mode == "json"
+            return {"competitor_profile_version_id": "version-g24"}
+
+    def fake_render(value, *, with_report):
+        captured["renders"] += 1
+        assert value is context
+        assert with_report == "feishu-doc"
+        return _Presentation()
+
+    monkeypatch.setattr(
+        catforge_analyst,
+        "_load_competitor_profile_consumption",
+        fake_load,
+    )
+    monkeypatch.setattr(
+        catforge_analyst,
+        "build_competitor_profile_presentation",
+        fake_render,
+    )
+    result = catforge_analyst.run_competitor_profile_preview(
+        object(),
+        argparse.Namespace(
+            command="competitor-profile-preview",
+            with_report="feishu-doc",
+        ),
+    )
+
+    assert captured["loads"] == 1
+    assert captured["renders"] == 1
+    assert result["presentation"]["competitor_profile_version_id"] == "version-g24"
+
+
+def test_parser_requires_explicit_preview_version_and_report_mode() -> None:
+    parser = catforge_analyst.build_parser()
+    args = parser.parse_args(
+        [
+            "competitor-profile-preview",
+            "--project-id",
+            "project-tv",
+            "--category-code",
+            "TV",
+            "--release-scope-key",
+            "scope-tv",
+            "--sku-code",
+            "TV000001",
+            "--mode",
+            "preview",
+            "--competitor-profile-version-id",
+            "version-g24",
+            "--allow-draft-preview",
+            "--with-report",
+            "feishu-doc",
+        ]
+    )
+
+    assert args.mode == "preview"
+    assert args.competitor_profile_version_id == "version-g24"
+    assert args.allow_draft_preview is True
+    assert args.with_report == "feishu-doc"
 
 
 def test_request_loader_rejects_invalid_or_cross_category_config(tmp_path) -> None:

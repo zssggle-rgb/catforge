@@ -44,6 +44,9 @@ class CompetitorProfileBusinessDTO(CompetitorProfileBaseModel):
     价格销量压力: list[dict[str, Any]] = Field(default_factory=list)
     同品牌产品线: list[dict[str, Any]] = Field(default_factory=list)
     配置决策: list[dict[str, Any]] = Field(default_factory=list)
+    候选概况: dict[str, Any] = Field(default_factory=dict)
+    竞品对比: list[dict[str, Any]] = Field(default_factory=list)
+    问答范围: list[dict[str, Any]] = Field(default_factory=list)
     数据不足说明: dict[str, Any] = Field(default_factory=dict)
 
 

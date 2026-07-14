@@ -550,6 +550,26 @@ def test_public_manifest_and_scope_methods_use_the_same_exact_snapshot(
     }
 
 
+def test_production_input_request_uses_exact_current_published_m12d_scope(
+    session: Session,
+) -> None:
+    _seed_category(session)
+    request = _provider(session).build_production_input_request()
+
+    assert request == _request("TV")
+    assert request.allow_preview_inputs is False
+
+
+def test_production_input_request_fails_closed_without_one_current_version(
+    session: Session,
+) -> None:
+    with pytest.raises(
+        CompetitorProfileSourceAuthorityError,
+        match="exactly one current published M12D",
+    ):
+        _provider(session).build_production_input_request()
+
+
 def test_optional_target_gap_is_unknown_not_zero_or_whole_sku_block(
     session: Session,
 ) -> None:
