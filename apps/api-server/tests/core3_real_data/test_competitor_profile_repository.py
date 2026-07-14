@@ -160,6 +160,13 @@ def test_write_draft_round_trips_all_five_tables(session: Session) -> None:
     assert readback.pairs[0].sku_competitor_profile_pair_id
     assert len(readback.relations) == 7
     assert all(row.sku_competitor_profile_relation_id for row in readback.relations)
+    nested_relations = {
+        row.relation_code: row for row in readback.pairs[0].pair_payload.relation_assessments
+    }
+    assert all(
+        row.relation_payload is nested_relations[row.relation_code]
+        for row in readback.relations
+    )
     assert len(readback.selections) == 1
     assert readback.selections[0].selection_rank == 1
 

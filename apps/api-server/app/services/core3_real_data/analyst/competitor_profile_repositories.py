@@ -500,50 +500,94 @@ class CompetitorProfileRepository(Core3BaseRepository):
         preview: bool,
     ) -> CompetitorProfileReadBundle:
         profile_id = profile.sku_competitor_profile_id
-        pair_rows = list(
-            self.db.execute(
-                select(entities.Core3SkuCompetitorProfilePair)
-                .where(
-                    entities.Core3SkuCompetitorProfilePair.sku_competitor_profile_id
-                    == profile_id
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        pairs = [
+            _pair_draft_from_mapping(row)
+            for row in self.db.execute(
+                select(
+                    *_scope_select_columns(pair_model),
+                    pair_model.sku_competitor_profile_pair_id,
+                    pair_model.sku_competitor_profile_id,
+                    pair_model.target_sku_code,
+                    pair_model.candidate_sku_code,
+                    pair_model.candidate_status,
+                    pair_model.confidence_level,
+                    pair_model.selected,
+                    pair_model.competitor_member,
+                    pair_model.reference_member,
+                    pair_model.pair_payload_json,
                 )
-                .order_by(entities.Core3SkuCompetitorProfilePair.candidate_sku_code)
-            ).scalars()
-        )
-        relation_rows = list(
-            self.db.execute(
-                select(entities.Core3SkuCompetitorProfileRelation)
-                .join(
-                    entities.Core3SkuCompetitorProfilePair,
-                    entities.Core3SkuCompetitorProfilePair.sku_competitor_profile_pair_id
-                    == entities.Core3SkuCompetitorProfileRelation.sku_competitor_profile_pair_id,
+                .where(pair_model.sku_competitor_profile_id == profile_id)
+                .order_by(pair_model.candidate_sku_code)
+            ).mappings()
+        ]
+        nested_relations = {
+            (pair.candidate_sku_code, relation.relation_code): relation
+            for pair in pairs
+            for relation in pair.pair_payload.relation_assessments
+        }
+        relation_model = entities.Core3SkuCompetitorProfileRelation
+        relations = []
+        for row in self.db.execute(
+            select(
+                *_scope_select_columns(relation_model),
+                relation_model.sku_competitor_profile_relation_id,
+                relation_model.sku_competitor_profile_pair_id,
+                relation_model.target_sku_code,
+                relation_model.candidate_sku_code,
+                relation_model.relation_code,
+            )
+            .join(
+                pair_model,
+                pair_model.sku_competitor_profile_pair_id
+                == relation_model.sku_competitor_profile_pair_id,
+            )
+            .where(pair_model.sku_competitor_profile_id == profile_id)
+            .order_by(
+                relation_model.candidate_sku_code,
+                relation_model.relation_code,
+            )
+        ).mappings():
+            relation_payload = nested_relations.get(
+                (row["candidate_sku_code"], row["relation_code"])
+            )
+            if relation_payload is None or relation_payload.result_hash != row["result_hash"]:
+                raise CompetitorProfileRepositoryError(
+                    "persisted relation hash does not match its pair payload"
                 )
-                .where(
-                    entities.Core3SkuCompetitorProfilePair.sku_competitor_profile_id
-                    == profile_id
+            relations.append(
+                _relation_draft_from_mapping(row, relation_payload=relation_payload)
+            )
+        del nested_relations
+        selection_model = entities.Core3SkuCompetitorProfileSelection
+        selections = [
+            _selection_draft_from_mapping(row)
+            for row in self.db.execute(
+                select(
+                    *_scope_select_columns(selection_model),
+                    selection_model.sku_competitor_profile_selection_id,
+                    selection_model.sku_competitor_profile_id,
+                    selection_model.sku_competitor_profile_pair_id,
+                    selection_model.target_sku_code,
+                    selection_model.candidate_sku_code,
+                    selection_model.selection_rank,
+                    selection_model.selection_payload_json,
                 )
-                .order_by(
-                    entities.Core3SkuCompetitorProfileRelation.candidate_sku_code,
-                    entities.Core3SkuCompetitorProfileRelation.relation_code,
-                )
-            ).scalars()
-        )
-        selection_rows = list(
-            self.db.execute(
-                select(entities.Core3SkuCompetitorProfileSelection)
-                .where(
-                    entities.Core3SkuCompetitorProfileSelection.sku_competitor_profile_id
-                    == profile_id
-                )
-                .order_by(entities.Core3SkuCompetitorProfileSelection.selection_rank)
-            ).scalars()
-        )
-        return CompetitorProfileReadBundle(
-            version=_version_record(version),
+                .where(selection_model.sku_competitor_profile_id == profile_id)
+                .order_by(selection_model.selection_rank)
+            ).mappings()
+        ]
+        version_record = _version_record(version)
+        if not preview and (
+            version_record.release_status != "published" or not version_record.is_current
+        ):
+            raise ValueError("formal read bundles require current published versions")
+        return CompetitorProfileReadBundle.model_construct(
+            version=version_record,
             profile=_profile_draft(profile),
-            pairs=[_pair_draft(row) for row in pair_rows],
-            relations=[_relation_draft(row) for row in relation_rows],
-            selections=[_selection_draft(row) for row in selection_rows],
+            pairs=pairs,
+            relations=relations,
+            selections=selections,
             preview=preview,
         )
 
@@ -988,6 +1032,108 @@ def _selection_draft(
         selection_rank=row.selection_rank,
         selection_payload=KeyCompetitorSelectionDraft(**row.selection_payload_json),
     )
+
+
+def _pair_draft_from_mapping(row: Mapping[str, Any]) -> SkuCompetitorPairDraft:
+    return SkuCompetitorPairDraft(
+        **_mapping_scope(row),
+        sku_competitor_profile_pair_id=row["sku_competitor_profile_pair_id"],
+        sku_competitor_profile_id=row["sku_competitor_profile_id"],
+        target_sku_code=row["target_sku_code"],
+        candidate_sku_code=row["candidate_sku_code"],
+        candidate_status=row["candidate_status"],
+        confidence_level=row["confidence_level"],
+        selected=row["selected"],
+        competitor_member=row["competitor_member"],
+        reference_member=row["reference_member"],
+        pair_payload=CompetitorPairDraft(**row["pair_payload_json"]),
+    )
+
+
+def _relation_draft_from_mapping(
+    row: Mapping[str, Any],
+    *,
+    relation_payload: RelationAssessment,
+) -> SkuCompetitorRelationDraft:
+    return SkuCompetitorRelationDraft(
+        **_mapping_scope(row),
+        sku_competitor_profile_relation_id=row[
+            "sku_competitor_profile_relation_id"
+        ],
+        sku_competitor_profile_pair_id=row["sku_competitor_profile_pair_id"],
+        target_sku_code=row["target_sku_code"],
+        candidate_sku_code=row["candidate_sku_code"],
+        relation_code=row["relation_code"],
+        relation_payload=relation_payload,
+    )
+
+
+def _selection_draft_from_mapping(
+    row: Mapping[str, Any],
+) -> SkuCompetitorSelectionDraft:
+    return SkuCompetitorSelectionDraft(
+        **_mapping_scope(row),
+        sku_competitor_profile_selection_id=row[
+            "sku_competitor_profile_selection_id"
+        ],
+        sku_competitor_profile_id=row["sku_competitor_profile_id"],
+        sku_competitor_profile_pair_id=row["sku_competitor_profile_pair_id"],
+        target_sku_code=row["target_sku_code"],
+        candidate_sku_code=row["candidate_sku_code"],
+        selection_rank=row["selection_rank"],
+        selection_payload=KeyCompetitorSelectionDraft(
+            **row["selection_payload_json"]
+        ),
+    )
+
+
+def _scope_select_columns(model: Any) -> list[Any]:
+    return [
+        getattr(model, field_name)
+        for field_name in (
+            "competitor_profile_version_id",
+            "project_id",
+            "category_code",
+            "product_category",
+            "storage_batch_id",
+            "release_scope_key",
+            "profile_version",
+            "schema_version",
+            "rule_version",
+            "method_version",
+            "release_status",
+            "is_current",
+            "input_fingerprint",
+            "result_hash",
+            "processing_status",
+            "review_required",
+            "review_status",
+            "review_reasons_json",
+        )
+    ]
+
+
+def _mapping_scope(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "competitor_profile_version_id": row["competitor_profile_version_id"],
+        "project_id": row["project_id"],
+        "category_code": row["category_code"],
+        "product_category": row["product_category"],
+        "storage_batch_id": row["storage_batch_id"],
+        "release_scope_key": row["release_scope_key"],
+        "profile_version": row["profile_version"],
+        "schema_version": row["schema_version"],
+        "rule_version": row["rule_version"],
+        "method_version": row["method_version"],
+        "release_status": row["release_status"],
+        "is_current": row["is_current"],
+        "input_fingerprint": row["input_fingerprint"],
+        "result_hash": row["result_hash"],
+        "processing_status": row["processing_status"],
+        "review_required": row["review_required"],
+        "review_status": row["review_status"],
+        "review_reasons": row["review_reasons_json"],
+    }
 
 
 def _row_scope(row: Any) -> dict[str, Any]:
