@@ -232,6 +232,28 @@ def test_batch_is_resumable_and_isolates_safe_per_sku_failures(session: Session)
     assert resumed.version.processing_status == "completed"
 
 
+def test_batch_verifies_hash_receipts_without_full_graph_readback(
+    session: Session,
+) -> None:
+    category = _category_bundle(
+        specs=[_default_spec("TV", 1), _default_spec("TV", 2)]
+    )
+    repository = _repository(session)
+
+    def reject_full_readback(*args, **kwargs):
+        raise AssertionError("batch generation must not build a full read bundle")
+
+    repository.write_draft = reject_full_readback  # type: ignore[method-assign]
+    result = CompetitorProfileGenerationService(
+        repository=repository,
+        input_provider=_FixtureInputProvider(category),
+    ).batch_generate(_request(category), page_size=1)
+
+    assert result.generated_count == 2
+    assert result.failed_count == 0
+    assert result.version.processing_status == "completed"
+
+
 def test_same_version_rejects_changed_materialization_inputs(session: Session) -> None:
     category = _category_bundle(specs=[_default_spec("TV", 1), _default_spec("TV", 2)])
     service = CompetitorProfileGenerationService(

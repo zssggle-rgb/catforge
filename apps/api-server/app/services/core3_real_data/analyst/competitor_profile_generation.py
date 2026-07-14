@@ -281,32 +281,41 @@ class CompetitorProfileGenerationService:
                             request.config,
                         )
                         bundle = materialized_to_persistence_bundle(materialized, current)
-                        existing = code in existing_codes
+                        receipt = _readback_receipt(bundle)
                         failures.pop(code, None)
                         with self.repository.db.begin():
-                            persisted = self.repository.write_draft(
+                            created = self.repository.write_draft_without_readback(
                                 bundle,
                                 use_savepoint=False,
                             )
                             current = _checkpoint_version(
                                 self.repository,
                                 current,
-                                added=None if existing else materialized,
+                                added=materialized if created else None,
                                 failures=failures,
                                 processing_status="running",
                             )
                         _verify_readback(
-                            _readback_receipt(bundle),
-                            _receipt_from_read_bundle(persisted),
+                            receipt,
+                            self.repository.get_profile_result_hash_receipt(
+                                competitor_profile_version_id=(
+                                    current.competitor_profile_version_id
+                                ),
+                                target_sku_code=code,
+                            ),
                         )
+                        self.repository.db.commit()
                         existing_codes.add(code)
                         statuses.append(
                             CompetitorProfileSkuGenerationStatus(
                                 target_sku_code=code,
-                                status="reused" if existing else "generated",
+                                status="generated" if created else "reused",
                                 profile_result_hash=materialized.draft.profile.result_hash,
                             )
                         )
+                        del bundle, materialized, target
+                        self.repository.db.expunge_all()
+                        gc.collect()
                     except Exception as exc:  # noqa: BLE001 - per-SKU isolation boundary
                         self.repository.db.rollback()
                         logger.exception(
