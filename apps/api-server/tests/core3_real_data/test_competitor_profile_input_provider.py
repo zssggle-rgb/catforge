@@ -892,6 +892,30 @@ def test_evidence_identity_is_preserved_in_target_refs(
     assert ref.evidence_ids == ["evidence-shared-1"]
 
 
+def test_input_snapshots_exclude_unconsumed_large_payloads_but_keep_evidence(
+    session: Session,
+) -> None:
+    _seed_category(session)
+    row = session.execute(
+        select(entities.Core3SkuCommentFactProfile).where(
+            entities.Core3SkuCommentFactProfile.sku_code == "TV000001"
+        )
+    ).scalar_one()
+    row.supported_claim_codes = ["claim-picture"]
+    row.evidence_ids = ["comment-evidence-1"]
+    row.evidence_examples_json = [{"text": "x" * 100_000}]
+    session.flush()
+
+    bundle = _provider(session).load_category_input_bundle(_request())
+    facts = bundle.modules["M05C"].records_by_sku["TV000001"][0].facts
+
+    assert facts["supported_claim_codes"] == ["claim-picture"]
+    assert facts["evidence_ids"] == ["comment-evidence-1"]
+    assert "evidence_examples_json" not in facts
+    assert "signal_summary_json" not in facts
+    assert "project_id" not in facts
+
+
 def test_target_outside_manifest_is_not_silently_resolved(session: Session) -> None:
     _seed_category(session)
     provider = _provider(session)

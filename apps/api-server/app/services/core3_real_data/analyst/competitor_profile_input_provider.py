@@ -79,6 +79,144 @@ class CompetitorProfileTargetNotFoundError(CompetitorProfileInputError):
     pass
 
 
+_COMMON_QUALITY_FACT_FIELDS = {
+    "conflict_count",
+    "evidence_lineage_status",
+    "lineage_status",
+    "processing_status",
+    "quality_flags",
+    "review_required",
+    "review_required_count",
+    "review_status",
+    "risk_flags",
+    "source_lineage_status",
+}
+_ALGORITHM_FACT_FIELDS_BY_MODULE = {
+    "M03B": {
+        "model_name",
+        "param_values_json",
+        "core_picture_params_json",
+        "core_gaming_params_json",
+        "core_system_params_json",
+        "core_eye_care_params_json",
+        "param_code",
+        "normalized_value",
+        "param_value",
+        "value",
+    },
+    "M04C": {
+        "claim_codes",
+        "fact_claim_codes",
+        "service_claim_codes",
+        "supported_claim_codes",
+        "unsupported_claim_codes",
+        "claim_code",
+        "claim_status",
+    },
+    "M05C": {
+        "supported_claim_codes",
+        "supported_param_codes",
+        "contradicted_claim_codes",
+        "contradicted_param_codes",
+        "unmentioned_claim_codes",
+        "unmentioned_param_codes",
+        "topic_codes",
+        "value_codes",
+        "topic_code",
+        "support_status",
+    },
+    "M07": {
+        "brand",
+        "brand_name",
+        "model_name",
+        "series",
+        "market_pool_key",
+        "screen_size_inch",
+        "size_segment",
+        "price_wavg",
+        "weighted_price",
+        "avg_weekly_volume",
+        "weekly_volume",
+        "sales_volume_total",
+        "active_week_count",
+        "platform_count",
+        "promotion_suspect_flag",
+        "market_row_count",
+        "sales_amount_total",
+        "sales_amount",
+        "same_pool_price_percentile",
+        "price_percentile_in_size",
+        "price_percentile",
+        "same_pool_volume_percentile",
+        "volume_percentile_in_size",
+        "sales_percentile",
+        "common_week_count",
+        "common_platform_count",
+        "price_band_size",
+    },
+    "M09C": {
+        "primary_user_task_code",
+        "secondary_user_task_codes_json",
+        "comment_observed_task_codes_json",
+        "latent_capability_task_codes_json",
+    },
+    "M10C": {
+        "primary_target_group_code",
+        "secondary_target_group_codes_json",
+        "comment_observed_group_codes_json",
+        "latent_group_codes_json",
+    },
+    "M11C": {
+        "primary_battlefield_code",
+        "secondary_battlefield_codes_json",
+        "opportunity_battlefield_codes_json",
+        "drag_factor_battlefield_codes_json",
+    },
+    "M11D": {"dimension_code", "allocation_role"},
+    "M12C": {
+        "claim_code",
+        "claim_value_role",
+        "claim_role",
+        "allocation_role",
+        "context_type",
+        "context_code",
+    },
+    "M12D": {
+        "brand_name",
+        "model_name",
+        "core_reasons_json",
+        "core_payment_anchors_json",
+        "supporting_anchors_json",
+        "weak_expression_anchors_json",
+        "risk_drag_anchors_json",
+        "established_anchors_json",
+        "proposition_anchors_json",
+    },
+}
+_TRACE_CONTAINER_FIELDS = {
+    "evidence_ids",
+    "evidence_ids_json",
+    "evidence_refs",
+    "evidence_refs_json",
+    "market_evidence_ids",
+    "param_evidence_ids",
+    "raw_row_id",
+    "raw_row_ids",
+    "raw_row_ids_json",
+    "source_file_id",
+    "source_file_ids",
+    "source_file_ids_json",
+    "source_lineage",
+    "source_lineage_json",
+}
+_CONFIDENCE_FIELDS = {
+    "confidence",
+    "confidence_score",
+    "market_confidence",
+    "profile_confidence",
+}
+
+
 @dataclass(frozen=True)
 class _ModuleSpec:
     module_code: str
@@ -807,7 +945,7 @@ def _record_snapshot(
         rule_version=str(row.rule_version),
         taxonomy_version=authority.taxonomy_version,
         result_hash=str(getattr(row, spec.result_hash_attr)),
-        facts=_row_facts(row),
+        facts=_row_facts(row, spec.module_code),
     )
 
 
@@ -829,7 +967,7 @@ def _record_snapshot_from_m12d(
         rule_version=str(row.rule_version),
         taxonomy_version=authority.taxonomy_version,
         result_hash=str(row.result_hash),
-        facts=_row_facts(row),
+        facts=_row_facts(row, "M12D"),
     )
 
 
@@ -929,7 +1067,10 @@ def _trace_fields(
         if isinstance(value, Mapping):
             for key, child in value.items():
                 normalized = str(key).lower()
-                if normalized in {"evidence_id", "evidence_ids", "evidence_ids_json"}:
+                if normalized in {"evidence_id", "evidence_ids", "evidence_ids_json"} or (
+                    normalized.endswith("_evidence_ids")
+                    or normalized.endswith("_evidence_ids_json")
+                ):
                     add_text(evidence_ids, child)
                 elif normalized in {
                     "source_file_id",
@@ -939,7 +1080,7 @@ def _trace_fields(
                     add_text(source_file_ids, child)
                 elif normalized in {"raw_row_id", "raw_row_ids", "raw_row_ids_json"}:
                     add_text(raw_row_ids, child)
-                elif normalized in {"confidence", "confidence_score"}:
+                elif normalized in _CONFIDENCE_FIELDS:
                     add_confidence(child)
                 elif normalized in {
                     "evidence_refs",
@@ -980,8 +1121,37 @@ def _target_identity(
     }
 
 
-def _row_facts(row: Any) -> dict[str, Any]:
-    return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+def _row_facts(row: Any, module_code: str) -> dict[str, Any]:
+    """Keep only consumed facts plus normalized audit lineage from an ORM row."""
+
+    columns = {column.name for column in row.__table__.columns}
+    allowed = _ALGORITHM_FACT_FIELDS_BY_MODULE[module_code] | (
+        _COMMON_QUALITY_FACT_FIELDS
+    )
+    facts = {
+        name: getattr(row, name)
+        for name in sorted(allowed & columns)
+        if getattr(row, name) is not None
+    }
+    trace_payload = {
+        name: getattr(row, name)
+        for name in sorted(
+            (_TRACE_CONTAINER_FIELDS | _CONFIDENCE_FIELDS) & columns
+        )
+        if getattr(row, name) is not None
+    }
+    evidence_ids, source_file_ids, raw_row_ids, confidence = _trace_fields(
+        trace_payload
+    )
+    if evidence_ids:
+        facts["evidence_ids"] = evidence_ids
+    if source_file_ids:
+        facts["source_file_ids"] = source_file_ids
+    if raw_row_ids:
+        facts["raw_row_ids"] = raw_row_ids
+    if confidence is not None:
+        facts["confidence"] = confidence
+    return facts
 
 
 def _sorted_unique_text(values: Any) -> list[str]:
