@@ -417,6 +417,7 @@ def _selection_draft(
         "primary_relation_code": primary_relation,
         "auxiliary_relation_codes": auxiliary,
         "selection_reason_cn": _selection_reason_cn(
+            config.product_category,
             pick.primary_topic,
             primary_relation,
         ),
@@ -434,8 +435,12 @@ def _selection_draft(
     )
 
 
-def _selection_reason_cn(primary_topic: str, primary_relation: str) -> str:
-    if primary_topic == "portfolio_or_scenario":
+def _selection_reason_cn(
+    product_category: str,
+    primary_topic: str,
+    primary_relation: str,
+) -> str:
+    if product_category == "AC" and primary_topic == "portfolio_or_scenario":
         return _SELECTION_REASON_CN_BY_RELATION.get(
             primary_relation,
             _SELECTION_REASON_CN[primary_topic],

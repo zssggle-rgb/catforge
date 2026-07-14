@@ -202,18 +202,34 @@ def test_two_candidates_cover_purchase_and_portfolio_without_duplicate_slots() -
     ]
     assert [row.selection_rank for row in result.selections] == [1, 2]
     assert result.selections[1].primary_relation_code == "same_brand_ladder"
-    assert "同品牌产品线的升降档关系" in result.selections[1].selection_reason_cn
-    assert "同品牌产品线重叠或" not in result.selections[1].selection_reason_cn
+    assert "同品牌产品线重叠或" in result.selections[1].selection_reason_cn
 
 
 def test_scenario_selection_reason_does_not_imply_same_brand() -> None:
     reason = _selection_reason_cn(
+        "AC",
         "portfolio_or_scenario",
         "scenario_substitute",
+    )
+    same_brand_reason = _selection_reason_cn(
+        "AC",
+        "portfolio_or_scenario",
+        "same_brand_ladder",
     )
 
     assert "另一种产品方案" in reason
     assert "同品牌" not in reason
+    assert "同品牌产品线的升降档关系" in same_brand_reason
+
+
+def test_tv_selection_reason_preserves_the_accepted_g24_profile_contract() -> None:
+    reason = _selection_reason_cn(
+        "TV",
+        "portfolio_or_scenario",
+        "scenario_substitute",
+    )
+
+    assert reason == "它揭示了同品牌产品线重叠或另一种场景方案，影响本品的产品角色定义。"
 
 
 def test_three_candidates_add_stronger_price_pressure_and_portfolio_information() -> (
