@@ -1,0 +1,430 @@
+{
+  "contract_version": "competitor_profile_schema_contract_v1",
+  "status": "design_frozen",
+  "categories": [
+    "TV",
+    "AC"
+  ],
+  "schema_version": "sku_competitor_decision_profile_v1",
+  "rule_version": "competitor_profile_materializer_v1",
+  "method_version": "competitor_profile_method_v1",
+  "enums": {
+    "release_status": [
+      "draft",
+      "review",
+      "published",
+      "deprecated"
+    ],
+    "release_quality_status": [
+      "unassessed",
+      "ready",
+      "limited",
+      "blocked"
+    ],
+    "analysis_state": [
+      "ready",
+      "partial",
+      "blocked"
+    ],
+    "conclusion_state": [
+      "available",
+      "no_priority_competitor",
+      "insufficient_evidence"
+    ],
+    "candidate_status": [
+      "eligible",
+      "limited",
+      "review_required",
+      "blocked",
+      "recalled_only",
+      "reference_only"
+    ],
+    "relation_code": [
+      "direct_substitute",
+      "same_budget_alternative",
+      "downtrade_diversion",
+      "uptrade_alternative",
+      "same_brand_ladder",
+      "scenario_substitute",
+      "same_value_substitute"
+    ],
+    "relation_status": [
+      "passed",
+      "limited",
+      "unassessable",
+      "failed",
+      "review_required"
+    ],
+    "purchase_pool_level": [
+      "P0",
+      "P1",
+      "P2",
+      "P3",
+      "unknown"
+    ],
+    "question_availability": [
+      "eligible",
+      "limited",
+      "unavailable"
+    ],
+    "confidence_level": [
+      "high",
+      "medium",
+      "low",
+      "unknown"
+    ],
+    "evidence_family": [
+      "F1_purchase_reason",
+      "F2_task_value_scene",
+      "F3_audience_need",
+      "F4_user_realization",
+      "F5_capability_expression"
+    ],
+    "question_code": [
+      "purchase_choice",
+      "price_volume_pressure",
+      "value_substitution",
+      "configuration_follow",
+      "same_brand_portfolio_role",
+      "scenario_solution",
+      "price_ladder_defense",
+      "key_competitor_selection"
+    ],
+    "reference_purpose": [
+      "market_baseline_without_value",
+      "high_performance_value_bundle",
+      "low_performance_value_bundle",
+      "parameter_tier_reference",
+      "adjacent_battlefield_reference",
+      "same_value_realization_reference",
+      "price_volume_archetype_reference"
+    ],
+    "decision_topic": [
+      "purchase_choice",
+      "price_scale_pressure",
+      "portfolio_or_scenario",
+      "value_route"
+    ]
+  },
+  "typed_models": {
+    "ServingScope": {
+      "required": [
+        "project_id",
+        "category_code",
+        "product_category",
+        "analysis_population",
+        "market_window",
+        "taxonomy_version",
+        "storage_batch_id",
+        "source_batch_ids",
+        "source_authorities",
+        "authoritative_sku_count",
+        "authoritative_sku_manifest_hash"
+      ],
+      "validators": [
+        "category_code_equals_product_category",
+        "source_batch_ids_non_empty_sorted_unique",
+        "source_authorities_exact_rule_taxonomy_and_release_scope",
+        "authoritative_sku_count_matches_manifest"
+      ]
+    },
+    "CompetitorPairDraft": {
+      "required": [
+        "target_sku_code",
+        "candidate_sku_code",
+        "recall_sources",
+        "competitor_member",
+        "reference_member",
+        "candidate_status",
+        "purchase_pool",
+        "evidence_family_assessments",
+        "market_comparison",
+        "relation_assessments",
+        "question_eligibility",
+        "reference_purposes",
+        "input_fingerprint",
+        "result_hash"
+      ],
+      "validators": [
+        "target_not_candidate",
+        "membership_required_except_recalled_review_blocked",
+        "exactly_five_evidence_families",
+        "exactly_seven_unique_relations",
+        "exactly_eight_unique_questions",
+        "unknown_is_not_false",
+        "selected_pair_is_eligible_or_limited"
+      ]
+    },
+    "SkuCompetitorDecisionProfileDraft": {
+      "required": [
+        "target_sku_code",
+        "analysis_state",
+        "conclusion_state",
+        "profile_confidence",
+        "candidate_status_counts",
+        "relation_status_counts",
+        "key_competitor_summary",
+        "source_lineage",
+        "evidence_refs",
+        "limitations",
+        "input_fingerprint",
+        "result_hash"
+      ],
+      "validators": [
+        "no_priority_requires_ready",
+        "insufficient_requires_partial_or_blocked",
+        "key_competitor_count_lte_three",
+        "low_confidence_requires_review"
+      ]
+    },
+    "KeyCompetitorSelectionDraft": {
+      "required": [
+        "target_sku_code",
+        "candidate_sku_code",
+        "selection_rank",
+        "primary_decision_topic",
+        "covered_decision_topics",
+        "primary_relation_code",
+        "selection_reason_cn",
+        "independent_information_reason_cn",
+        "confidence_level",
+        "result_hash"
+      ],
+      "validators": [
+        "rank_between_one_and_three",
+        "candidate_selected_once",
+        "rank_contiguous_within_profile",
+        "selected_pair_question_eligible"
+      ]
+    }
+  },
+  "tables": {
+    "core3_competitor_profile_version": {
+      "primary_key": "competitor_profile_version_id",
+      "business_unique": [
+        "project_id",
+        "category_code",
+        "release_scope_key",
+        "profile_version",
+        "rule_version"
+      ],
+      "required_columns": [
+        "project_id",
+        "category_code",
+        "product_category",
+        "storage_batch_id",
+        "release_scope_key",
+        "profile_version",
+        "schema_version",
+        "rule_version",
+        "method_version",
+        "method_versions_json",
+        "serving_scope_json",
+        "source_authorities_json",
+        "source_batch_ids_json",
+        "authoritative_sku_manifest_hash",
+        "release_status",
+        "release_quality_status",
+        "is_current",
+        "freshness_status",
+        "sku_count",
+        "ready_count",
+        "partial_count",
+        "blocked_count",
+        "failed_count",
+        "pair_count",
+        "relation_count",
+        "selection_count",
+        "input_fingerprint",
+        "candidate_universe_fingerprint",
+        "result_hash",
+        "processing_status",
+        "review_required"
+      ],
+      "checks": [
+        "category_code = product_category",
+        "all_counts >= 0",
+        "ready_count + partial_count + blocked_count + failed_count <= sku_count",
+        "NOT is_current OR release_status = 'published'"
+      ],
+      "partial_unique": "one current published row per project/category/release_scope_key"
+    },
+    "core3_sku_competitor_profile": {
+      "primary_key": "sku_competitor_profile_id",
+      "foreign_keys": {
+        "competitor_profile_version_id": "core3_competitor_profile_version"
+      },
+      "business_unique": [
+        "competitor_profile_version_id",
+        "target_sku_code"
+      ],
+      "required_columns": [
+        "scope_columns",
+        "target_sku_code",
+        "display_name_cn",
+        "analysis_state",
+        "conclusion_state",
+        "profile_confidence",
+        "candidate_status_counts_json",
+        "relation_status_counts_json",
+        "competitive_advantages_json",
+        "substitutable_values_json",
+        "price_scale_pressure_json",
+        "same_brand_findings_json",
+        "configuration_decisions_json",
+        "no_conclusion_reason_json",
+        "source_lineage_json",
+        "qa_index_json",
+        "evidence_refs_json",
+        "limitations_json",
+        "input_fingerprint",
+        "result_hash"
+      ]
+    },
+    "core3_sku_competitor_profile_pair": {
+      "primary_key": "sku_competitor_profile_pair_id",
+      "foreign_keys": {
+        "sku_competitor_profile_id": "core3_sku_competitor_profile",
+        "competitor_profile_version_id": "core3_competitor_profile_version"
+      },
+      "business_unique": [
+        "sku_competitor_profile_id",
+        "candidate_sku_code"
+      ],
+      "required_columns": [
+        "scope_columns",
+        "target_sku_code",
+        "candidate_sku_code",
+        "candidate_identity_json",
+        "recall_sources_json",
+        "recall_facts_json",
+        "competitor_member",
+        "reference_member",
+        "candidate_status",
+        "purchase_pool_level",
+        "purchase_pool_json",
+        "evidence_family_json",
+        "market_comparison_json",
+        "question_eligibility_json",
+        "reference_purposes_json",
+        "primary_relation_code",
+        "relation_codes_json",
+        "selected",
+        "non_selection_reason_code",
+        "confidence_level",
+        "confidence",
+        "evidence_refs_json",
+        "limitations_json",
+        "risk_flags_json",
+        "input_fingerprint",
+        "result_hash"
+      ],
+      "checks": [
+        "target_sku_code <> candidate_sku_code",
+        "competitor_member OR reference_member OR candidate_status IN ('review_required','blocked','recalled_only')",
+        "confidence BETWEEN 0 AND 1",
+        "NOT selected OR candidate_status IN ('eligible','limited')"
+      ]
+    },
+    "core3_sku_competitor_profile_relation": {
+      "primary_key": "sku_competitor_profile_relation_id",
+      "foreign_keys": {
+        "sku_competitor_profile_pair_id": "core3_sku_competitor_profile_pair",
+        "competitor_profile_version_id": "core3_competitor_profile_version"
+      },
+      "business_unique": [
+        "sku_competitor_profile_pair_id",
+        "relation_code"
+      ],
+      "required_columns": [
+        "scope_columns",
+        "target_sku_code",
+        "candidate_sku_code",
+        "relation_code",
+        "relation_status",
+        "is_primary",
+        "confidence_level",
+        "gate_results_json",
+        "supporting_evidence_families_json",
+        "business_effect_json",
+        "eligible_question_codes_json",
+        "reason_codes_json",
+        "evidence_refs_json",
+        "limitations_json",
+        "input_fingerprint",
+        "result_hash"
+      ],
+      "checks": [
+        "passed_or_limited_has_eligible_question",
+        "failed_or_unassessable_has_reason"
+      ]
+    },
+    "core3_sku_competitor_profile_selection": {
+      "primary_key": "sku_competitor_profile_selection_id",
+      "foreign_keys": {
+        "sku_competitor_profile_id": "core3_sku_competitor_profile",
+        "sku_competitor_profile_pair_id": "core3_sku_competitor_profile_pair",
+        "competitor_profile_version_id": "core3_competitor_profile_version"
+      },
+      "business_unique": [
+        [
+          "sku_competitor_profile_id",
+          "selection_rank"
+        ],
+        [
+          "sku_competitor_profile_id",
+          "candidate_sku_code"
+        ]
+      ],
+      "required_columns": [
+        "scope_columns",
+        "target_sku_code",
+        "candidate_sku_code",
+        "selection_rank",
+        "primary_decision_topic",
+        "covered_decision_topics_json",
+        "primary_relation_code",
+        "auxiliary_relation_codes_json",
+        "selection_reason_cn",
+        "independent_information_reason_cn",
+        "price_value_pressure_summary_json",
+        "confidence_level",
+        "evidence_refs_json",
+        "input_fingerprint",
+        "result_hash"
+      ],
+      "checks": [
+        "selection_rank BETWEEN 1 AND 3"
+      ]
+    }
+  },
+  "lifecycle": {
+    "transitions": [
+      "none->draft",
+      "draft->review",
+      "review->published",
+      "published->deprecated"
+    ],
+    "publish_sets_current": false,
+    "set_current_is_separate": true,
+    "set_current_requires_compare_and_swap": true,
+    "published_analytical_content_immutable": true,
+    "draft_generation_authorized_in_current_task": true,
+    "review_publish_set_current_authorized_in_current_task": false
+  },
+  "reader": {
+    "formal": "current published only, no fallback",
+    "preview": "explicit profile_version and allow_draft_preview=true",
+    "version_lock": "all card/report/qa/sellpoint reads use one resolved version id",
+    "upstream_preview": "unsupported in V1; generation inputs require published/current upstream authorities"
+  },
+  "runtime_boundary_forbidden_keys": [
+    "prompt",
+    "prompt_template",
+    "prompt_templates",
+    "gold_set",
+    "gold_sets",
+    "benchmark_gold",
+    "threshold_tuning_samples"
+  ]
+}

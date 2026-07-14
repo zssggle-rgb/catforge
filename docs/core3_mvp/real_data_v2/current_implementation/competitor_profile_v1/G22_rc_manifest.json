@@ -1,0 +1,56 @@
+{
+  "rc_id": "competitor_profile_v1_g22_rc_20260714",
+  "status": "local_rc_ready_for_g23",
+  "project": "CatForge",
+  "scope": "competitor profile V1 G01-G22",
+  "categories": ["TV", "AC"],
+  "migration_head": "0046_core3_competitor_profile",
+  "base_migration": "0045_core3_sellpoint_value_profile",
+  "profile_tables": [
+    "core3_competitor_profile_version",
+    "core3_sku_competitor_profile",
+    "core3_sku_competitor_profile_pair",
+    "core3_sku_competitor_profile_relation",
+    "core3_sku_competitor_profile_selection"
+  ],
+  "scoped_paths": [
+    "apps/api-server/alembic/versions/0046_core3_competitor_profile.py",
+    "apps/api-server/app/models/entities.py#competitor-profile-entities-only",
+    "apps/api-server/app/cli/catforge_analyst.py#competitor-profile-cli-only",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_*.py",
+    "apps/api-server/tests/core3_real_data/test_competitor_profile_*.py",
+    "docs/core3_mvp/real_data_v2/current_implementation/competitor_profile_v1/*"
+  ],
+  "test_evidence": {
+    "competitor_profile_tests": 270,
+    "performance_tests": 12,
+    "service_statement_coverage_pct": 92.2,
+    "service_branch_combined_coverage_pct": 88.0,
+    "max_candidate_cases": [377, 512],
+    "full_chain_pair_count": 377,
+    "full_chain_relation_count": 2639
+  },
+  "known_unrelated_core3_failures": 7,
+  "prohibited_actions_executed": [],
+  "remote_205_touched": false,
+  "database_written": false,
+  "deployed": false,
+  "profile_generated": false,
+  "review_publish_current_executed": false,
+  "rollback_document": "G22_rollback.md",
+  "checksums": {
+    "apps/api-server/alembic/versions/0046_core3_competitor_profile.py": "938d96492c5895bc7eaf3e9a67974213bd9b3fdc31a1f3394df7aca4867a8f82",
+    "apps/api-server/app/models/entities.py": "be08a9ce7a51ad8eee4ad4a7809c46d108ddcba3d8982530a6c819bfb641ed01",
+    "apps/api-server/app/cli/catforge_analyst.py": "678a801ecfd4cbc5274d31ac99dfb4c6df536603a13161628caa1fbad3bb1fea",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_generation.py": "f965cf12666c909fa78e6068c0dc1606edeb1bfc02567cb782a51a270886a958",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_repositories.py": "8b749f8312be27a8f4cb0e3a437c087ff36d3555bbe7d37b99c717519753fe2e",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_persistence_schemas.py": "7dcfdca1651eec85144b658f250602fdb30799f3a983dfbc5d3293a62fc5eccc",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_consumption.py": "e206eb5ed878b5162de02776335cb94a2cac6bbfa059049b161a87d6765fac05",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_consumption_schemas.py": "46ee66e3e682e80b198fe466b27ce055ad46a57854d98f3ceeded2b1b618b096",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_lifecycle.py": "a81dc8aefbcb548ffb38e98cdb18ea86e375266f8b1c2c3644cad4c4c592779f",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_reader.py": "f9d84989d9f3cc3e547017db6a97ea8292178a20a9908e0078e3a51277c80d56",
+    "apps/api-server/app/services/core3_real_data/analyst/competitor_profile_materializer.py": "a9437efa6b8c13e23da87f86999c8e2d15a3f09d03054d8cb18574bf17506f82",
+    "docs/core3_mvp/real_data_v2/current_implementation/competitor_profile_v1/COMPETITOR_PROFILE_V1_schema_contract.json": "dac754617dc18ad2a5829797f9ab577477842dabb1380f58ca97448131a1ebce",
+    "docs/core3_mvp/real_data_v2/current_implementation/competitor_profile_v1/COMPETITOR_PROFILE_V1_detailed_design.md": "657ddc45624461e041548fc32f27f2c0353f23b75764f1985456338876a5f429"
+  }
+}

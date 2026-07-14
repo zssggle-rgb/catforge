@@ -13,6 +13,7 @@ import re
 import sys
 from collections.abc import Sequence
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,31 @@ from app.services.core3_real_data.analyst.analyst_service import (
     CatForgeAnalystError,
     CatForgeAnalystService,
 )
+from app.services.core3_real_data.analyst.competitor_profile_consumption import (
+    CompetitorProfileConsumptionService,
+)
+from app.services.core3_real_data.analyst.competitor_profile_generation import (
+    CompetitorProfileGenerationAlreadyRunningError,
+    CompetitorProfileGenerationReadbackError,
+    CompetitorProfileGenerationService,
+)
+from app.services.core3_real_data.analyst.competitor_profile_generation_schemas import (
+    CompetitorProfileGenerationRequest,
+)
+from app.services.core3_real_data.analyst.competitor_profile_input_provider import (
+    CompetitorProfileInputError,
+    CompetitorProfileInputProvider,
+)
+from app.services.core3_real_data.analyst.competitor_profile_reader import (
+    CompetitorProfileReader,
+)
+from app.services.core3_real_data.analyst.competitor_profile_reader_schemas import (
+    CompetitorProfileReadRequest,
+)
+from app.services.core3_real_data.analyst.competitor_profile_repositories import (
+    CompetitorProfileRepository,
+    CompetitorProfileRepositoryError,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_input_provider import (
     AnalystSellpointValueMaterializationInputProvider,
     SellpointValueProfileInputError,
@@ -45,6 +71,10 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories i
 from app.services.core3_real_data.constants import (
     CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
     CORE3_M12D_TV_ANCHOR_TAXONOMY_VERSION,
+    Core3CategoryCode,
+)
+from app.services.core3_real_data.repositories import (
+    Core3RepositoryContext,
 )
 from app.services.core3_real_data.purchase_reason_profile_preview import (
     M12DSkuPurchaseReasonPreviewError,
@@ -92,8 +122,15 @@ SOP_COMMAND_ORDER = (
 )
 
 PROFILE_WRITE_COMMANDS = (
+    "competitor-profile-batch-generate",
+    "competitor-profile-generate",
     "sellpoint-value-profile-generate",
     "sellpoint-value-profile-batch-generate",
+)
+
+COMPETITOR_PROFILE_WRITE_COMMANDS = (
+    "competitor-profile-batch-generate",
+    "competitor-profile-generate",
 )
 
 
@@ -128,7 +165,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     try:
         with SessionLocal() as db:
-            if args.command in PROFILE_WRITE_COMMANDS:
+            if args.command in COMPETITOR_PROFILE_WRITE_COMMANDS:
+                result = run_competitor_profile_generation(db, args)
+            elif args.command == "competitor-profile-read":
+                result = run_competitor_profile_read(db, args)
+            elif args.command in PROFILE_WRITE_COMMANDS:
                 result = run_sellpoint_value_profile_generation(db, args)
             elif args.command == "sku-purchase-reason":
                 result = sku_purchase_reason(
@@ -204,6 +245,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         SellpointValueGenerationAlreadyRunningError,
         SellpointValueProfileInputError,
         SellpointValueProfileRepositoryError,
+        CompetitorProfileGenerationAlreadyRunningError,
+        CompetitorProfileGenerationReadbackError,
+        CompetitorProfileInputError,
+        CompetitorProfileRepositoryError,
         ValueError,
     ) as exc:
         result = {
@@ -255,6 +300,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate drafts for the complete authoritative SKU scope.",
     )
     add_profile_generation_args(profile_batch, batch=True)
+
+    competitor_profile_generate = subparsers.add_parser(
+        "competitor-profile-generate",
+        help="Generate and persist one competitor-profile draft from a typed request.",
+    )
+    add_competitor_profile_generation_args(competitor_profile_generate, batch=False)
+
+    competitor_profile_batch = subparsers.add_parser(
+        "competitor-profile-batch-generate",
+        help="Generate competitor-profile drafts for one authoritative category scope.",
+    )
+    add_competitor_profile_generation_args(competitor_profile_batch, batch=True)
+
+    competitor_profile_read = subparsers.add_parser(
+        "competitor-profile-read",
+        help="Read one formal current profile or one explicitly selected draft preview.",
+    )
+    competitor_profile_read.add_argument("--project-id", required=True)
+    competitor_profile_read.add_argument(
+        "--category-code", choices=("TV", "AC"), required=True
+    )
+    competitor_profile_read.add_argument("--release-scope-key", required=True)
+    competitor_profile_read.add_argument("--sku-code", required=True)
+    competitor_profile_read.add_argument(
+        "--mode", choices=("formal", "preview"), default="formal"
+    )
+    competitor_profile_read.add_argument("--competitor-profile-version-id")
+    competitor_profile_read.add_argument(
+        "--allow-draft-preview",
+        action="store_true",
+        help="Explicitly allow the selected draft only for development acceptance.",
+    )
+    add_format_arg(competitor_profile_read)
 
     for command in ATOM_COMMAND_ORDER:
         command_parser = subparsers.add_parser(command, help=f"Run analyst atom: {command}.")
@@ -374,6 +452,37 @@ def add_profile_generation_args(
     add_format_arg(parser)
 
 
+def add_competitor_profile_generation_args(
+    parser: argparse.ArgumentParser,
+    *,
+    batch: bool,
+) -> None:
+    parser.add_argument(
+        "--request-json",
+        required=True,
+        help=(
+            "Path to a CompetitorProfileGenerationRequest JSON document, or '-' "
+            "to read it from stdin."
+        ),
+    )
+    if not batch:
+        parser.add_argument("--sku-code", required=True)
+    parser.add_argument(
+        "--enable-profile-write",
+        action="store_true",
+        help="Explicitly allow draft-only profile writes for this invocation.",
+    )
+    if batch:
+        parser.add_argument("--page-size", type=int, default=50)
+        parser.add_argument("--max-new-skus", type=int)
+        parser.add_argument(
+            "--regenerate-existing",
+            action="store_true",
+            help="Re-read existing immutable drafts instead of resuming unfinished SKUs only.",
+        )
+    add_format_arg(parser)
+
+
 def add_sku_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--query", help="Natural SKU/model query.")
     parser.add_argument("--sku-code", help="Exact SKU code, such as TV00029112.")
@@ -413,6 +522,92 @@ def add_answer_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--feishu-reply-in-thread", action="store_true", help="Send the Feishu card as a thread reply.")
     parser.add_argument("--feishu-card-idempotency-key", help="Optional idempotency key for Feishu card reply.")
     parser.add_argument("--feishu-card-only", action="store_true", help="For text output, print only Feishu card delivery status.")
+
+
+def run_competitor_profile_generation(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    request = _load_competitor_profile_generation_request(args.request_json)
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=request.input_request.project_id,
+        category_code=Core3CategoryCode(request.input_request.category_code),
+    )
+    repository = CompetitorProfileRepository(context)
+    service = CompetitorProfileGenerationService(
+        repository=repository,
+        input_provider=CompetitorProfileInputProvider(context),
+    )
+    if args.command == "competitor-profile-generate":
+        result = service.generate_draft(
+            request,
+            target_sku_code=str(args.sku_code).strip().upper(),
+        )
+        return {
+            "status": AnalystStatus.OK.value,
+            "command": args.command,
+            "generation": result.model_dump(mode="json"),
+        }
+    result = service.batch_generate(
+        request,
+        resume_unfinished_only=not bool(args.regenerate_existing),
+        page_size=args.page_size,
+        max_new_skus=args.max_new_skus,
+    )
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "generation": result.model_dump(mode="json"),
+    }
+
+
+def run_competitor_profile_read(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=args.project_id,
+        category_code=Core3CategoryCode(args.category_code),
+    )
+    repository = CompetitorProfileRepository(context)
+    consumption = CompetitorProfileConsumptionService(
+        CompetitorProfileReader(repository)
+    ).load(
+        CompetitorProfileReadRequest(
+            project_id=args.project_id,
+            category_code=args.category_code,
+            release_scope_key=args.release_scope_key,
+            target_sku_code=str(args.sku_code).strip().upper(),
+            mode=args.mode,
+            competitor_profile_version_id=args.competitor_profile_version_id,
+            allow_draft_preview=bool(args.allow_draft_preview),
+        )
+    )
+    return {
+        "status": (
+            AnalystStatus.OK.value
+            if consumption.status == "available"
+            else AnalystStatus.NOT_FOUND.value
+        ),
+        "command": args.command,
+        "consumption": consumption.model_dump(mode="json"),
+    }
+
+
+def _load_competitor_profile_generation_request(
+    request_json: str,
+) -> CompetitorProfileGenerationRequest:
+    try:
+        raw = (
+            sys.stdin.read()
+            if request_json == "-"
+            else Path(request_json).read_text(encoding="utf-8")
+        )
+    except OSError as exc:
+        raise ValueError("竞品画像生成请求文件无法读取。") from exc
+    return CompetitorProfileGenerationRequest.model_validate_json(raw)
 
 
 def run_sellpoint_value_profile_generation(

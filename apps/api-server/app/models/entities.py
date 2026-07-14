@@ -7275,6 +7275,496 @@ class Core3SkuSellpointValueItem(Base, AuditMixin):
     review_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
 
 
+class Core3CompetitorProfileVersion(Base, AuditMixin):
+    __tablename__ = "core3_competitor_profile_version"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "category_code",
+            "release_scope_key",
+            "profile_version",
+            "rule_version",
+            name="uq_core3_cp_version_key",
+        ),
+        CheckConstraint("category_code = product_category", name="ck_core3_cp_version_category"),
+        CheckConstraint("sku_count >= 0", name="ck_core3_cp_version_sku_count"),
+        CheckConstraint("ready_count >= 0", name="ck_core3_cp_version_ready_count"),
+        CheckConstraint("partial_count >= 0", name="ck_core3_cp_version_partial_count"),
+        CheckConstraint("blocked_count >= 0", name="ck_core3_cp_version_blocked_count"),
+        CheckConstraint("failed_count >= 0", name="ck_core3_cp_version_failed_count"),
+        CheckConstraint("pair_count >= 0", name="ck_core3_cp_version_pair_count"),
+        CheckConstraint("relation_count >= 0", name="ck_core3_cp_version_relation_count"),
+        CheckConstraint("selection_count >= 0", name="ck_core3_cp_version_selection_count"),
+        CheckConstraint(
+            "ready_count + partial_count + blocked_count + failed_count <= sku_count",
+            name="ck_core3_cp_version_status_counts",
+        ),
+        CheckConstraint(
+            "selection_count <= sku_count * 3",
+            name="ck_core3_cp_version_selection_limit",
+        ),
+        CheckConstraint(
+            "relation_count <= pair_count * 7",
+            name="ck_core3_cp_version_relation_limit",
+        ),
+        CheckConstraint(
+            "release_status in ('draft','review','published','deprecated')",
+            name="ck_core3_cp_version_release_status",
+        ),
+        CheckConstraint(
+            "release_quality_status in ('unassessed','ready','limited','blocked')",
+            name="ck_core3_cp_version_quality_status",
+        ),
+        CheckConstraint(
+            "freshness_status in ('current','stale','unknown')",
+            name="ck_core3_cp_version_freshness",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_cp_version_current_release",
+        ),
+        Index(
+            "ix_core3_cp_version_scope",
+            "project_id",
+            "category_code",
+            "release_scope_key",
+        ),
+        Index(
+            "ix_core3_cp_version_release",
+            "project_id",
+            "category_code",
+            "release_scope_key",
+            "release_status",
+            "is_current",
+        ),
+        Index("ix_core3_cp_version_input_fp", "input_fingerprint"),
+        Index("ix_core3_cp_version_result_hash", "result_hash"),
+        Index(
+            "uq_core3_cp_current_published",
+            "project_id",
+            "category_code",
+            "release_scope_key",
+            unique=True,
+            postgresql_where=text("release_status = 'published' AND is_current = true"),
+            sqlite_where=text("release_status = 'published' AND is_current = 1"),
+        ),
+        Index(
+            "ix_core3_cp_version_scope_gin",
+            "serving_scope_json",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_core3_cp_version_authority_gin",
+            "source_authorities_json",
+            postgresql_using="gin",
+        ),
+    )
+
+    competitor_profile_version_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    storage_batch_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_source_batch.batch_id"), index=True
+    )
+    release_scope_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    rule_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    method_versions_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    serving_scope_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_authorities_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_batch_ids_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    authoritative_sku_manifest_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    release_quality_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unassessed", index=True
+    )
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    freshness_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unknown", index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    generated_by: Mapped[str] = mapped_column(String(160), nullable=False, default="system")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reviewed_by: Mapped[str | None] = mapped_column(String(160))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    published_by: Mapped[str | None] = mapped_column(String(160))
+    current_at: Mapped[datetime | None] = mapped_column(DateTime)
+    current_by: Mapped[str | None] = mapped_column(String(160))
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deprecated_by: Mapped[str | None] = mapped_column(String(160))
+    release_note_cn: Mapped[str | None] = mapped_column(Text)
+    sku_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ready_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    partial_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    blocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pair_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    relation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    selection_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    candidate_universe_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False)
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="pending", index=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="unassessed", index=True)
+    review_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    safe_error_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+
+
+class Core3SkuCompetitorProfile(Base, AuditMixin):
+    __tablename__ = "core3_sku_competitor_profile"
+    __table_args__ = (
+        UniqueConstraint(
+            "competitor_profile_version_id",
+            "target_sku_code",
+            name="uq_core3_cp_profile_key",
+        ),
+        CheckConstraint("category_code = product_category", name="ck_core3_cp_profile_category"),
+        CheckConstraint(
+            "analysis_state in ('ready','partial','blocked')",
+            name="ck_core3_cp_profile_analysis_state",
+        ),
+        CheckConstraint(
+            "conclusion_state in ('available','no_priority_competitor','insufficient_evidence')",
+            name="ck_core3_cp_profile_conclusion_state",
+        ),
+        CheckConstraint(
+            "profile_confidence >= 0 and profile_confidence <= 1",
+            name="ck_core3_cp_profile_confidence",
+        ),
+        CheckConstraint(
+            "release_status in ('draft','review','published','deprecated')",
+            name="ck_core3_cp_profile_release_status",
+        ),
+        CheckConstraint(
+            "NOT is_current OR release_status = 'published'",
+            name="ck_core3_cp_profile_current_release",
+        ),
+        Index("ix_core3_cp_profile_version", "competitor_profile_version_id"),
+        Index(
+            "ix_core3_cp_profile_sku",
+            "project_id",
+            "category_code",
+            "release_scope_key",
+            "target_sku_code",
+        ),
+        Index(
+            "ix_core3_cp_profile_status",
+            "project_id",
+            "category_code",
+            "analysis_state",
+            "conclusion_state",
+            "review_required",
+        ),
+        Index("ix_core3_cp_profile_result_hash", "result_hash"),
+        Index("ix_core3_cp_profile_qa_gin", "qa_index_json", postgresql_using="gin"),
+    )
+
+    sku_competitor_profile_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    competitor_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "core3_competitor_profile_version.competitor_profile_version_id",
+            ondelete="CASCADE",
+        ),
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    storage_batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    release_scope_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    display_name_cn: Mapped[str] = mapped_column(String(320), nullable=False)
+    analysis_state: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    conclusion_state: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    freshness_status: Mapped[str] = mapped_column(String(40), nullable=False, default="unknown")
+    profile_confidence: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
+    candidate_status_counts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    relation_status_counts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    competitive_advantages_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    substitutable_values_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    price_scale_pressure_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    same_brand_findings_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    configuration_decisions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    no_conclusion_reason_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_lineage_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    qa_index_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    profile_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    input_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success")
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass")
+    review_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+
+
+class Core3SkuCompetitorProfilePair(Base, AuditMixin):
+    __tablename__ = "core3_sku_competitor_profile_pair"
+    __table_args__ = (
+        UniqueConstraint(
+            "sku_competitor_profile_id",
+            "candidate_sku_code",
+            name="uq_core3_cp_pair_key",
+        ),
+        CheckConstraint("target_sku_code <> candidate_sku_code", name="ck_core3_cp_pair_distinct"),
+        CheckConstraint(
+            "competitor_member OR reference_member OR candidate_status in ('review_required','blocked','recalled_only')",
+            name="ck_core3_cp_pair_membership",
+        ),
+        CheckConstraint("confidence >= 0 and confidence <= 1", name="ck_core3_cp_pair_confidence"),
+        CheckConstraint(
+            "candidate_status in ('eligible','limited','review_required','blocked','recalled_only','reference_only')",
+            name="ck_core3_cp_pair_status",
+        ),
+        CheckConstraint(
+            "purchase_pool_level in ('P0','P1','P2','P3','unknown')",
+            name="ck_core3_cp_pair_pool",
+        ),
+        CheckConstraint(
+            "confidence_level in ('high','medium','low','unknown')",
+            name="ck_core3_cp_pair_confidence_level",
+        ),
+        CheckConstraint(
+            "NOT selected OR candidate_status in ('eligible','limited')",
+            name="ck_core3_cp_pair_selected_status",
+        ),
+        Index("ix_core3_cp_pair_profile", "sku_competitor_profile_id", "candidate_status"),
+        Index("ix_core3_cp_pair_version", "competitor_profile_version_id"),
+        Index(
+            "ix_core3_cp_pair_target_candidate",
+            "project_id",
+            "category_code",
+            "target_sku_code",
+            "candidate_sku_code",
+        ),
+        Index("ix_core3_cp_pair_candidate_target", "candidate_sku_code", "target_sku_code"),
+        Index("ix_core3_cp_pair_selected", "sku_competitor_profile_id", "selected"),
+        Index("ix_core3_cp_pair_questions_gin", "question_eligibility_json", postgresql_using="gin"),
+        Index("ix_core3_cp_pair_reference_gin", "reference_purposes_json", postgresql_using="gin"),
+    )
+
+    sku_competitor_profile_pair_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sku_competitor_profile_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_sku_competitor_profile.sku_competitor_profile_id", ondelete="CASCADE"),
+        index=True,
+    )
+    competitor_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_competitor_profile_version.competitor_profile_version_id", ondelete="CASCADE"),
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    storage_batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    release_scope_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    method_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_identity_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    recall_sources_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    recall_facts_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    competitor_member: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reference_member: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    candidate_status: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    purchase_pool_level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    purchase_pool_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    evidence_family_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    market_comparison_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    question_eligibility_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    reference_purposes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    primary_relation_code: Mapped[str | None] = mapped_column(String(80), index=True)
+    relation_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    non_selection_reason_code: Mapped[str | None] = mapped_column(String(120), index=True)
+    non_selection_reason_cn: Mapped[str | None] = mapped_column(Text)
+    confidence_level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    risk_flags_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    pair_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success")
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass")
+    review_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+
+
+class Core3SkuCompetitorProfileRelation(Base, AuditMixin):
+    __tablename__ = "core3_sku_competitor_profile_relation"
+    __table_args__ = (
+        UniqueConstraint(
+            "sku_competitor_profile_pair_id",
+            "relation_code",
+            name="uq_core3_cp_relation_key",
+        ),
+        CheckConstraint(
+            "relation_code in ('direct_substitute','same_budget_alternative','downtrade_diversion','uptrade_alternative','same_brand_ladder','scenario_substitute','same_value_substitute')",
+            name="ck_core3_cp_relation_code",
+        ),
+        CheckConstraint(
+            "relation_status in ('passed','limited','unassessable','failed','review_required')",
+            name="ck_core3_cp_relation_status",
+        ),
+        CheckConstraint(
+            "confidence_level in ('high','medium','low','unknown')",
+            name="ck_core3_cp_relation_confidence",
+        ),
+        CheckConstraint(
+            "NOT is_primary OR relation_status in ('passed','limited')",
+            name="ck_core3_cp_relation_primary",
+        ),
+        Index("ix_core3_cp_relation_pair", "sku_competitor_profile_pair_id", "relation_code"),
+        Index("ix_core3_cp_relation_version", "competitor_profile_version_id"),
+        Index("ix_core3_cp_relation_status", "relation_code", "relation_status", "confidence_level"),
+        Index("ix_core3_cp_relation_review", "project_id", "category_code", "review_required"),
+    )
+
+    sku_competitor_profile_relation_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sku_competitor_profile_pair_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_sku_competitor_profile_pair.sku_competitor_profile_pair_id", ondelete="CASCADE"),
+        index=True,
+    )
+    competitor_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_competitor_profile_version.competitor_profile_version_id", ondelete="CASCADE"),
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    storage_batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    release_scope_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    profile_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    method_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    relation_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    relation_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confidence_level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    gate_results_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    supporting_evidence_families_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    business_effect_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    eligible_question_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    reason_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    relation_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success")
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass")
+    review_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+
+
+class Core3SkuCompetitorProfileSelection(Base, AuditMixin):
+    __tablename__ = "core3_sku_competitor_profile_selection"
+    __table_args__ = (
+        UniqueConstraint(
+            "sku_competitor_profile_id",
+            "selection_rank",
+            name="uq_core3_cp_selection_rank",
+        ),
+        UniqueConstraint(
+            "sku_competitor_profile_id",
+            "candidate_sku_code",
+            name="uq_core3_cp_selection_candidate",
+        ),
+        CheckConstraint(
+            "selection_rank >= 1 and selection_rank <= 3",
+            name="ck_core3_cp_selection_rank",
+        ),
+        CheckConstraint(
+            "primary_decision_topic in ('purchase_choice','price_scale_pressure','portfolio_or_scenario','value_route')",
+            name="ck_core3_cp_selection_topic",
+        ),
+        CheckConstraint(
+            "confidence_level in ('high','medium','low','unknown')",
+            name="ck_core3_cp_selection_confidence",
+        ),
+        Index("ix_core3_cp_selection_profile", "sku_competitor_profile_id", "selection_rank"),
+        Index("ix_core3_cp_selection_pair", "sku_competitor_profile_pair_id"),
+        Index("ix_core3_cp_selection_version", "competitor_profile_version_id"),
+        Index("ix_core3_cp_selection_topic", "primary_decision_topic"),
+    )
+
+    sku_competitor_profile_selection_id: Mapped[str] = mapped_column(
+        String(120), primary_key=True, default=new_id
+    )
+    sku_competitor_profile_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_sku_competitor_profile.sku_competitor_profile_id", ondelete="CASCADE"),
+        index=True,
+    )
+    sku_competitor_profile_pair_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_sku_competitor_profile_pair.sku_competitor_profile_pair_id", ondelete="CASCADE"),
+        index=True,
+    )
+    competitor_profile_version_id: Mapped[str] = mapped_column(
+        ForeignKey("core3_competitor_profile_version.competitor_profile_version_id", ondelete="CASCADE"),
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("category_project.project_id"), index=True)
+    category_code: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    product_category: Mapped[str] = mapped_column(String(40), nullable=False)
+    storage_batch_id: Mapped[str] = mapped_column(ForeignKey("core3_source_batch.batch_id"), index=True)
+    release_scope_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    profile_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    method_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    candidate_sku_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    selection_rank: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    primary_decision_topic: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    covered_decision_topics_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    primary_relation_code: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    auxiliary_relation_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    selection_reason_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    independent_information_reason_cn: Mapped[str] = mapped_column(Text, nullable=False)
+    price_value_pressure_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    confidence_level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+    selection_payload_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    release_status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    result_hash: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="success")
+    review_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    review_status: Mapped[str] = mapped_column(String(60), nullable=False, default="auto_pass")
+    review_reasons_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
+
+
 class Core3SkuBattlefieldClaimCandidate(Base, AuditMixin):
     __tablename__ = "core3_sku_battlefield_claim_candidate"
     __table_args__ = (
