@@ -217,7 +217,7 @@ def test_write_draft_without_readback_defers_full_graph_materialization(
     assert len(readback.relations) == 7
 
 
-def test_compact_read_keeps_formal_competitors_and_full_hash_receipt(
+def test_compact_read_keeps_consumption_candidates_and_full_hash_receipt(
     session: Session,
 ) -> None:
     repository = _repository(session)
@@ -277,8 +277,12 @@ def test_compact_read_keeps_formal_competitors_and_full_hash_receipt(
     assert len(receipt.pair_hashes) == 2
     assert len(receipt.relation_hashes) == 14
     assert compact is not None
-    assert [row.candidate_sku_code for row in compact.pairs] == ["TV-C1"]
-    assert len(compact.relations) == 7
+    assert [row.candidate_sku_code for row in compact.pairs] == ["TV-C1", "TV-R1"]
+    assert [row.candidate_status for row in compact.pairs] == [
+        "eligible",
+        "reference_only",
+    ]
+    assert len(compact.relations) == 14
 
 
 def test_write_same_draft_is_idempotent_and_child_change_is_immutable(

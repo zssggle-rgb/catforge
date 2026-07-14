@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel
-from sqlalchemy import insert, select
+from sqlalchemy import insert, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.models import entities
@@ -582,7 +582,12 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .order_by(pair_model.candidate_sku_code)
         )
         if compact:
-            pair_stmt = pair_stmt.where(pair_model.competitor_member.is_(True))
+            pair_stmt = pair_stmt.where(
+                or_(
+                    pair_model.competitor_member.is_(True),
+                    pair_model.candidate_status == "reference_only",
+                )
+            )
         pairs = [
             _pair_draft_from_mapping(row)
             for row in self.db.execute(pair_stmt).mappings()
@@ -615,7 +620,12 @@ class CompetitorProfileRepository(Core3BaseRepository):
             )
         )
         if compact:
-            relation_stmt = relation_stmt.where(pair_model.competitor_member.is_(True))
+            relation_stmt = relation_stmt.where(
+                or_(
+                    pair_model.competitor_member.is_(True),
+                    pair_model.candidate_status == "reference_only",
+                )
+            )
         for row in self.db.execute(relation_stmt).mappings():
             relation_payload = nested_relations.get(
                 (row["candidate_sku_code"], row["relation_code"])
