@@ -161,87 +161,136 @@ class CompetitorProfileRepository(Core3BaseRepository):
 
         pair_model = entities.Core3SkuCompetitorProfilePair
         relation_model = entities.Core3SkuCompetitorProfileRelation
-        pair_rows = self.db.execute(
-            select(pair_model)
-            .where(
-                pair_model.competitor_profile_version_id
-                == competitor_profile_version_id
-            )
-            .where(pair_model.target_sku_code.in_(normalized_codes))
-            .order_by(pair_model.target_sku_code, pair_model.candidate_sku_code)
-        ).scalars()
-        pair_count = 0
-        for row in pair_rows:
-            decoded = decode_pair_payload(row.pair_payload_json or {})
-            encoded = encode_pair_payload(decoded)
-            changed = (
-                row.pair_payload_json != encoded
-                or row.purchase_pool_json != {}
-                or row.evidence_family_json != []
-                or row.evidence_refs_json != []
-            )
-            if not changed:
-                continue
-            if (
-                decoded.get("result_hash") != row.result_hash
-                or decoded.get("input_fingerprint") != row.input_fingerprint
-            ):
-                raise CompetitorProfileImmutableError(
-                    "pair payload hash identity changed before storage compaction"
+        pair_ids = tuple(
+            self.db.execute(
+                select(pair_model.sku_competitor_profile_pair_id)
+                .where(
+                    pair_model.competitor_profile_version_id
+                    == competitor_profile_version_id
                 )
-            row.pair_payload_json = encoded
-            row.purchase_pool_json = {}
-            row.evidence_family_json = []
-            row.evidence_refs_json = []
-            pair_count += 1
+                .where(pair_model.target_sku_code.in_(normalized_codes))
+                .order_by(
+                    pair_model.target_sku_code,
+                    pair_model.candidate_sku_code,
+                )
+            ).scalars()
+        )
+        pair_count = 0
+        for start in range(0, len(pair_ids), _PERSISTENCE_INSERT_BATCH_SIZE):
+            batch_ids = pair_ids[start : start + _PERSISTENCE_INSERT_BATCH_SIZE]
+            pair_rows = list(
+                self.db.execute(
+                    select(pair_model)
+                    .where(
+                        pair_model.sku_competitor_profile_pair_id.in_(batch_ids)
+                    )
+                    .order_by(
+                        pair_model.target_sku_code,
+                        pair_model.candidate_sku_code,
+                    )
+                ).scalars()
+            )
+            for row in pair_rows:
+                decoded = decode_pair_payload(row.pair_payload_json or {})
+                encoded = encode_pair_payload(decoded)
+                changed = (
+                    row.pair_payload_json != encoded
+                    or row.purchase_pool_json != {}
+                    or row.evidence_family_json != []
+                    or row.evidence_refs_json != []
+                )
+                if not changed:
+                    continue
+                if (
+                    decoded.get("result_hash") != row.result_hash
+                    or decoded.get("input_fingerprint") != row.input_fingerprint
+                ):
+                    raise CompetitorProfileImmutableError(
+                        "pair payload hash identity changed before storage compaction"
+                    )
+                row.pair_payload_json = encoded
+                row.purchase_pool_json = {}
+                row.evidence_family_json = []
+                row.evidence_refs_json = []
+                pair_count += 1
+            self.db.flush()
+            for row in pair_rows:
+                self.db.expunge(row)
 
-        relation_rows = self.db.execute(
-            select(relation_model)
-            .where(
-                relation_model.competitor_profile_version_id
-                == competitor_profile_version_id
-            )
-            .where(relation_model.target_sku_code.in_(normalized_codes))
-            .order_by(
-                relation_model.target_sku_code,
-                relation_model.candidate_sku_code,
-                relation_model.relation_code,
-            )
-        ).scalars()
+        relation_ids = tuple(
+            self.db.execute(
+                select(relation_model.sku_competitor_profile_relation_id)
+                .where(
+                    relation_model.competitor_profile_version_id
+                    == competitor_profile_version_id
+                )
+                .where(relation_model.target_sku_code.in_(normalized_codes))
+                .order_by(
+                    relation_model.target_sku_code,
+                    relation_model.candidate_sku_code,
+                    relation_model.relation_code,
+                )
+            ).scalars()
+        )
         relation_count = 0
-        for row in relation_rows:
-            stored = row.relation_payload_json or {}
-            if is_relation_from_pair_pointer(stored):
-                if (
-                    stored.get("relation_code") != row.relation_code
-                    or stored.get("result_hash") != row.result_hash
-                ):
-                    raise CompetitorProfileImmutableError(
-                        "relation pointer identity changed before storage compaction"
+        for start in range(
+            0,
+            len(relation_ids),
+            _PERSISTENCE_INSERT_BATCH_SIZE,
+        ):
+            batch_ids = relation_ids[
+                start : start + _PERSISTENCE_INSERT_BATCH_SIZE
+            ]
+            relation_rows = list(
+                self.db.execute(
+                    select(relation_model)
+                    .where(
+                        relation_model.sku_competitor_profile_relation_id.in_(
+                            batch_ids
+                        )
                     )
-                pointer = dict(stored)
-            else:
-                relation = RelationAssessment(**stored)
-                if (
-                    relation.relation_code != row.relation_code
-                    or relation.result_hash != row.result_hash
-                ):
-                    raise CompetitorProfileImmutableError(
-                        "relation payload hash identity changed before storage compaction"
+                    .order_by(
+                        relation_model.target_sku_code,
+                        relation_model.candidate_sku_code,
+                        relation_model.relation_code,
                     )
-                pointer = relation_from_pair_pointer(stored)
-            changed = (
-                row.relation_payload_json != pointer
-                or row.gate_results_json != []
-                or row.evidence_refs_json != []
+                ).scalars()
             )
-            if not changed:
-                continue
-            row.relation_payload_json = pointer
-            row.gate_results_json = []
-            row.evidence_refs_json = []
-            relation_count += 1
-        self.db.flush()
+            for row in relation_rows:
+                stored = row.relation_payload_json or {}
+                if is_relation_from_pair_pointer(stored):
+                    if (
+                        stored.get("relation_code") != row.relation_code
+                        or stored.get("result_hash") != row.result_hash
+                    ):
+                        raise CompetitorProfileImmutableError(
+                            "relation pointer identity changed before storage compaction"
+                        )
+                    pointer = dict(stored)
+                else:
+                    relation = RelationAssessment(**stored)
+                    if (
+                        relation.relation_code != row.relation_code
+                        or relation.result_hash != row.result_hash
+                    ):
+                        raise CompetitorProfileImmutableError(
+                            "relation payload hash identity changed before storage compaction"
+                        )
+                    pointer = relation_from_pair_pointer(stored)
+                changed = (
+                    row.relation_payload_json != pointer
+                    or row.gate_results_json != []
+                    or row.evidence_refs_json != []
+                )
+                if not changed:
+                    continue
+                row.relation_payload_json = pointer
+                row.gate_results_json = []
+                row.evidence_refs_json = []
+                relation_count += 1
+            self.db.flush()
+            for row in relation_rows:
+                self.db.expunge(row)
         return {
             "pair_rows_compacted": pair_count,
             "relation_rows_compacted": relation_count,
