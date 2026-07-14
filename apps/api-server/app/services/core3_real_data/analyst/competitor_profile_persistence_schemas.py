@@ -278,58 +278,12 @@ class CompetitorProfilePersistenceBundle(CompetitorProfileBaseModel):
 
     @model_validator(mode="after")
     def validate_bundle(self) -> "CompetitorProfilePersistenceBundle":
-        pair_by_code: dict[str, SkuCompetitorPairDraft] = {}
-        for pair in self.pairs:
-            _validate_child_scope(self.profile, pair)
-            if pair.candidate_sku_code in pair_by_code:
-                raise ValueError("persisted pair candidates must be unique")
-            pair_by_code[pair.candidate_sku_code] = pair
-        relation_keys: set[tuple[str, str]] = set()
-        relation_codes_by_candidate: dict[str, set[str]] = {}
-        for relation in self.relations:
-            _validate_child_scope(self.profile, relation)
-            if relation.candidate_sku_code not in pair_by_code:
-                raise ValueError("persisted relation requires a matching pair")
-            key = (relation.candidate_sku_code, relation.relation_code)
-            if key in relation_keys:
-                raise ValueError("persisted relations must be unique per pair and code")
-            relation_keys.add(key)
-            relation_codes_by_candidate.setdefault(
-                relation.candidate_sku_code,
-                set(),
-            ).add(relation.relation_code)
-            nested_by_code = {
-                row.relation_code: row
-                for row in pair_by_code[
-                    relation.candidate_sku_code
-                ].pair_payload.relation_assessments
-            }
-            if relation.relation_payload != nested_by_code.get(relation.relation_code):
-                raise ValueError("persisted relation must match the pair payload")
-        for candidate_code, pair in pair_by_code.items():
-            expected = {
-                row.relation_code for row in pair.pair_payload.relation_assessments
-            }
-            if relation_codes_by_candidate.get(candidate_code, set()) != expected:
-                raise ValueError("each persisted pair requires all seven relations")
-        if len(self.selections) > 3:
-            raise ValueError("persisted bundle can contain at most three selections")
-        ranks: list[int] = []
-        selected_codes: list[str] = []
-        for selection in self.selections:
-            _validate_child_scope(self.profile, selection)
-            pair = pair_by_code.get(selection.candidate_sku_code)
-            if pair is None or not pair.selected:
-                raise ValueError("persisted selection requires a selected pair")
-            ranks.append(selection.selection_rank)
-            selected_codes.append(selection.candidate_sku_code)
-        if ranks != list(range(1, len(ranks) + 1)):
-            raise ValueError("persisted selection ranks must be contiguous and ordered")
-        if len(selected_codes) != len(set(selected_codes)):
-            raise ValueError("persisted selected candidates must be unique")
-        pair_selected = {code for code, row in pair_by_code.items() if row.selected}
-        if pair_selected != set(selected_codes):
-            raise ValueError("persisted selected pair flags must match selection rows")
+        validate_persistence_bundle_parts(
+            profile=self.profile,
+            pairs=self.pairs,
+            relations=self.relations,
+            selections=self.selections,
+        )
         return self
 
 
@@ -349,6 +303,65 @@ class CompetitorProfileReadBundle(CompetitorProfileBaseModel):
         ):
             raise ValueError("formal read bundles require current published versions")
         return self
+
+
+def validate_persistence_bundle_parts(
+    *,
+    profile: SkuCompetitorProfileDraft,
+    pairs: list[SkuCompetitorPairDraft],
+    relations: list[SkuCompetitorRelationDraft],
+    selections: list[SkuCompetitorSelectionDraft],
+) -> None:
+    """Validate cross-table invariants without rebuilding the typed object graph."""
+
+    pair_by_code: dict[str, SkuCompetitorPairDraft] = {}
+    nested_relations_by_candidate: dict[str, dict[str, RelationAssessment]] = {}
+    for pair in pairs:
+        _validate_child_scope(profile, pair)
+        if pair.candidate_sku_code in pair_by_code:
+            raise ValueError("persisted pair candidates must be unique")
+        pair_by_code[pair.candidate_sku_code] = pair
+        nested_relations_by_candidate[pair.candidate_sku_code] = {
+            row.relation_code: row for row in pair.pair_payload.relation_assessments
+        }
+    relation_keys: set[tuple[str, str]] = set()
+    relation_codes_by_candidate: dict[str, set[str]] = {}
+    for relation in relations:
+        _validate_child_scope(profile, relation)
+        if relation.candidate_sku_code not in pair_by_code:
+            raise ValueError("persisted relation requires a matching pair")
+        key = (relation.candidate_sku_code, relation.relation_code)
+        if key in relation_keys:
+            raise ValueError("persisted relations must be unique per pair and code")
+        relation_keys.add(key)
+        relation_codes_by_candidate.setdefault(
+            relation.candidate_sku_code,
+            set(),
+        ).add(relation.relation_code)
+        nested = nested_relations_by_candidate[relation.candidate_sku_code]
+        if relation.relation_payload != nested.get(relation.relation_code):
+            raise ValueError("persisted relation must match the pair payload")
+    for candidate_code, nested in nested_relations_by_candidate.items():
+        if relation_codes_by_candidate.get(candidate_code, set()) != set(nested):
+            raise ValueError("each persisted pair requires all seven relations")
+    if len(selections) > 3:
+        raise ValueError("persisted bundle can contain at most three selections")
+    ranks: list[int] = []
+    selected_codes: list[str] = []
+    for selection in selections:
+        _validate_child_scope(profile, selection)
+        pair = pair_by_code.get(selection.candidate_sku_code)
+        if pair is None or not pair.selected:
+            raise ValueError("persisted selection requires a selected pair")
+        ranks.append(selection.selection_rank)
+        selected_codes.append(selection.candidate_sku_code)
+    if ranks != list(range(1, len(ranks) + 1)):
+        raise ValueError("persisted selection ranks must be contiguous and ordered")
+    if len(selected_codes) != len(set(selected_codes)):
+        raise ValueError("persisted selected candidates must be unique")
+    pair_selected = {code for code, row in pair_by_code.items() if row.selected}
+    if pair_selected != set(selected_codes):
+        raise ValueError("persisted selected pair flags must match selection rows")
 
 
 def _validate_child_scope(
@@ -385,4 +398,5 @@ __all__ = [
     "SkuCompetitorProfileDraft",
     "SkuCompetitorRelationDraft",
     "SkuCompetitorSelectionDraft",
+    "validate_persistence_bundle_parts",
 ]

@@ -36,6 +36,7 @@ from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas
     SkuCompetitorProfileDraft,
     SkuCompetitorRelationDraft,
     SkuCompetitorSelectionDraft,
+    validate_persistence_bundle_parts,
 )
 from app.services.core3_real_data.analyst.competitor_profile_repositories import (
     CompetitorProfileRepository,
@@ -473,7 +474,13 @@ def materialized_to_persistence_bundle(
         for selection in draft.selections
     ]
     _log_memory_checkpoint("persistence_selections_built")
-    return CompetitorProfilePersistenceBundle(
+    validate_persistence_bundle_parts(
+        profile=profile,
+        pairs=pairs,
+        relations=relations,
+        selections=selections,
+    )
+    return CompetitorProfilePersistenceBundle.model_construct(
         profile=profile,
         pairs=pairs,
         relations=relations,
