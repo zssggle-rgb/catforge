@@ -149,6 +149,16 @@ class CompetitorProfileMaterializer:
             relations,
             selection,
         )
+        stage_result_hashes = {
+            "candidate_pipeline": pipeline.receipt.result_hash,
+            "pair_feature": features.result_hash,
+            "purchase_pool": pool.result_hash,
+            "value_substitution": value.result_hash,
+            "price_volume_pressure": pressure.result_hash,
+            "relation_evaluation": relations.result_hash,
+            "key_selection": selection.result_hash,
+        }
+        del value
         draft = _assemble_draft(
             pipeline,
             features,
@@ -159,13 +169,7 @@ class CompetitorProfileMaterializer:
             config,
         )
         stage_hashes = {
-            "candidate_pipeline": pipeline.receipt.result_hash,
-            "pair_feature": features.result_hash,
-            "purchase_pool": pool.result_hash,
-            "value_substitution": value.result_hash,
-            "price_volume_pressure": pressure.result_hash,
-            "relation_evaluation": relations.result_hash,
-            "key_selection": selection.result_hash,
+            **stage_result_hashes,
             "profile": draft.profile.result_hash,
         }
         input_fingerprint = stable_hash(

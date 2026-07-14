@@ -515,6 +515,15 @@ def add_competitor_profile_generation_args(
     )
     if not batch:
         parser.add_argument("--sku-code", required=True)
+        parser.add_argument(
+            "--result-detail",
+            choices=("summary", "full"),
+            default="summary",
+            help=(
+                "Return an operational summary by default; use full only for "
+                "small local fixtures."
+            ),
+        )
     parser.add_argument(
         "--enable-profile-write",
         action="store_true",
@@ -595,7 +604,10 @@ def run_competitor_profile_generation(
         return {
             "status": AnalystStatus.OK.value,
             "command": args.command,
-            "generation": result.model_dump(mode="json"),
+            "generation": _competitor_profile_generation_output(
+                result,
+                detail=getattr(args, "result_detail", "full"),
+            ),
         }
     result = service.batch_generate(
         request,
@@ -607,6 +619,37 @@ def run_competitor_profile_generation(
         "status": AnalystStatus.OK.value,
         "command": args.command,
         "generation": result.model_dump(mode="json"),
+    }
+
+
+def _competitor_profile_generation_output(result: Any, *, detail: str) -> dict[str, Any]:
+    if detail == "full":
+        return result.model_dump(mode="json")
+    if detail != "summary":
+        raise ValueError("unsupported competitor profile generation result detail")
+    persisted = result.persisted
+    profile = persisted.profile.profile_payload
+    return {
+        "status": result.status,
+        "persisted": {
+            "version": persisted.version.model_dump(mode="json"),
+            "profile": {
+                "target_sku_code": profile.target_sku_code,
+                "analysis_state": profile.analysis_state,
+                "conclusion_state": profile.conclusion_state,
+                "profile_result_hash": profile.result_hash,
+                "candidate_status_counts": profile.candidate_status_counts,
+                "key_competitor_summary": [
+                    row.model_dump(mode="json")
+                    for row in profile.key_competitor_summary
+                ],
+                "source_lineage": profile.source_lineage,
+            },
+            "pair_count": len(persisted.pairs),
+            "relation_count": len(persisted.relations),
+            "selection_count": len(persisted.selections),
+            "preview": persisted.preview,
+        },
     }
 
 

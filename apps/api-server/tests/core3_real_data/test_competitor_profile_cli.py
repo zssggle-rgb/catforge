@@ -51,6 +51,7 @@ def test_competitor_generation_commands_require_explicit_write_gate(
     )
 
     assert single.enable_profile_write is False
+    assert single.result_detail == "summary"
     assert batch.enable_profile_write is True
     assert batch.page_size == 25
     assert batch.max_new_skus == 10
@@ -122,6 +123,55 @@ def test_generation_handler_validates_request_and_normalizes_target(
     assert captured["target_sku_code"] == "TV000001"
     assert captured["request"].input_request.category_code == "TV"
     assert result["generation"]["status"] == "generated"
+
+
+def test_generation_summary_does_not_serialize_the_full_readback() -> None:
+    class _Version:
+        def model_dump(self, *, mode):
+            assert mode == "json"
+            return {
+                "competitor_profile_version_id": "version-g24",
+                "release_status": "draft",
+                "is_current": False,
+            }
+
+    class _SummaryRow:
+        def model_dump(self, *, mode):
+            assert mode == "json"
+            return {"candidate_sku_code": "TV000002"}
+
+    class _Result:
+        status = "generated"
+        persisted = SimpleNamespace(
+            version=_Version(),
+            profile=SimpleNamespace(
+                profile_payload=SimpleNamespace(
+                    target_sku_code="TV000001",
+                    analysis_state="ready",
+                    conclusion_state="available",
+                    result_hash="profile-hash",
+                    candidate_status_counts={"eligible": 1},
+                    key_competitor_summary=[_SummaryRow()],
+                    source_lineage=[{"module_code": "M07"}],
+                )
+            ),
+            pairs=[object()],
+            relations=[object()] * 7,
+            selections=[object()],
+            preview=True,
+        )
+
+        def model_dump(self, *, mode):
+            raise AssertionError(f"full readback serialized in {mode} mode")
+
+    result = catforge_analyst._competitor_profile_generation_output(
+        _Result(),
+        detail="summary",
+    )
+
+    assert result["persisted"]["pair_count"] == 1
+    assert result["persisted"]["relation_count"] == 7
+    assert result["persisted"]["profile"]["profile_result_hash"] == "profile-hash"
 
 
 def test_build_request_handler_uses_current_production_scope(monkeypatch) -> None:
