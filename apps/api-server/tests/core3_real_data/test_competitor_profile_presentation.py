@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,6 +16,11 @@ from app.services.core3_real_data.analyst.competitor_profile_consumption_schemas
     CompetitorProfileConsumptionContext,
 )
 from app.services.core3_real_data.analyst.competitor_profile_presentation import (
+    _action_summary,
+    _configuration_summary,
+    _pressure_summary,
+    _selection_summary,
+    _substitution_summary,
     answer_competitor_profile_question,
     build_competitor_profile_presentation,
 )
@@ -130,7 +136,7 @@ def test_question_answer_uses_saved_business_view_and_keeps_boundary(session) ->
 
     assert answer.competitor_profile_version_id == context.competitor_profile_version_id
     assert answer.profile_result_hash == context.evidence.profile_result_hash
-    assert "不重新召回" in answer.boundary_cn
+    assert "不临时改变比较对象或重点名单" in answer.boundary_cn
     assert answer.answer_cn
 
 
@@ -142,3 +148,86 @@ def test_presentation_rejects_unavailable_or_partial_context() -> None:
 
     with pytest.raises(ValueError, match="requires one available context"):
         build_competitor_profile_presentation(context)
+
+
+def test_pm_summaries_turn_saved_rows_into_product_decisions() -> None:
+    business = SimpleNamespace(
+        目标产品="海信 65E7Q",
+        重点竞品=[
+            {
+                "产品": "海信 75E7Q",
+                "主要回答": "产品线与使用场景",
+            }
+        ],
+        本品优势=[],
+        可替代价值=[
+            {
+                "参照产品": "TV-75",
+                "用户价值": ["相关产品价值", "客厅换新一步到位", "HDMI 2.1连接"],
+            },
+            {
+                "参照产品": "TV-85",
+                "用户价值": ["客厅换新一步到位", "游戏低延迟"],
+            },
+        ],
+        价格销量压力=[
+            {
+                "参照产品": "TV-75",
+                "价格差幅": "0.197289",
+                "周均销量倍数": "2.452165",
+                "市场压力方向": "更高价格获得市场接受",
+            },
+            {
+                "参照产品": "TV-85",
+                "价格差幅": "0.014307",
+                "周均销量倍数": "3.336986",
+                "市场压力方向": "同预算竞争压力",
+            },
+        ],
+        同品牌产品线=[],
+        配置决策=[
+            {
+                "参照产品": "TV-75",
+                "差异配置": ["HDMI 2.1连接", "局部控光"],
+                "建议动作": "评估是否值得跟进",
+            },
+            {
+                "参照产品": "TV-85",
+                "差异配置": ["屏幕尺寸英寸", "局部控光", "游戏低延迟"],
+                "建议动作": "评估是否值得跟进",
+            },
+        ],
+        竞品对比=[
+            {
+                "产品编号": "TV-75",
+                "产品": "海信 75E7Q",
+                "可以回答": ["产品线与使用场景", "价格与销量压力"],
+            },
+            {
+                "产品编号": "TV-85",
+                "产品": "雷鸟 85R69A ULTRA",
+                "可以回答": ["价格与销量压力"],
+            },
+        ],
+    )
+
+    selection = _selection_summary(business)
+    substitution = _substitution_summary(business)
+    pressure = _pressure_summary(business)
+    configuration = _configuration_summary(business)
+    action = _action_summary(business)
+
+    assert "不能把任何一款产品列为本品的直接二选一对象" in selection
+    assert "海信 75E7Q" in selection
+    assert "客厅换新一步到位（2款）" in substitution
+    assert "相关产品价值" not in substitution
+    assert "HDMI 2.1" not in substitution
+    assert "海信 75E7Q均价比本品高19.7%" in pressure
+    assert "周均销量是本品2.45倍" in pressure
+    assert "雷鸟 85R69A ULTRA均价比本品高1.4%" in pressure
+    assert "TV-75" not in pressure
+    assert "局部控光（2款）" in configuration
+    assert "游戏低延迟（1款）" in configuration
+    assert "HDMI 2.1" not in configuration
+    assert "先明确本品与海信 75E7Q的产品角色分工" in action
+    assert "不把降价作为第一动作" in action

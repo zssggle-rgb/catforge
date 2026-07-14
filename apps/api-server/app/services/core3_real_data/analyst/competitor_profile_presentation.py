@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import re
 from decimal import Decimal
 from typing import Any, Iterable
@@ -33,6 +34,13 @@ _SOURCE_NAMES = {
     "M12C": "卖点市场表现",
     "M12D": "用户成交理由",
 }
+_GENERIC_VALUE_LABELS = {"相关产品价值", "HDMI 2.1连接"}
+_FOUNDATION_CONFIGURATION_LABELS = {
+    "相关产品价值",
+    "HDMI 2.1连接",
+    "屏幕尺寸英寸",
+    "语音控制",
+}
 
 
 def build_competitor_profile_presentation(
@@ -51,7 +59,7 @@ def build_competitor_profile_presentation(
         markdown=evidence_markdown,
         with_report=with_report,
     )
-    pm_title = f"{business.目标产品} 与重点竞品的用户选择对比"
+    pm_title = f"{business.目标产品} 竞品决策与用户选择分析"
     pm_markdown = render_pm_report(
         context,
         title=pm_title,
@@ -102,19 +110,14 @@ def build_competitor_profile_presentation(
 
 def render_short_answer(context: CompetitorProfileConsumptionContext) -> str:
     business, _ = _require_available(context)
-    selected = [str(row.get("产品") or "") for row in business.重点竞品]
-    choice = (
-        f"优先关注{'、'.join(selected)}，分别用于判断用户选择、量价压力和价值替代。"
-        if selected
-        else business.结论状态
-    )
+    choice = _selection_summary(business)
     return "\n".join(
         [
             f"{business.目标产品} 竞品决策",
             f"用户选择｜{choice}",
-            f"本品优势｜{_section_summary(business.本品优势, empty='暂无已确认的相对优势。')}",
-            f"替代风险｜{_section_summary(business.可替代价值, empty='暂无已确认的价值替代风险。')}",
-            f"价格销量｜{_pressure_summary(business.价格销量压力)}",
+            f"本品优势｜{_advantage_summary(business)}",
+            f"替代风险｜{_substitution_summary(business)}",
+            f"价格销量｜{_pressure_summary(business)}",
             f"产品动作｜{_action_summary(business)}",
         ]
     )
@@ -136,10 +139,10 @@ def render_pm_report(
         f"1. **用户会比较谁**：{_selection_summary(business)}",
         f"2. **本品靠什么赢**：{_advantage_summary(business)}",
         f"3. **哪里容易被替代**：{_substitution_summary(business)}",
-        f"4. **价格和销量受谁影响**：{_pressure_summary(business.价格销量压力)}",
+        f"4. **价格和销量受谁影响**：{_pressure_summary(business)}",
         f"5. **产品经理怎么做**：{_action_summary(business)}",
         "",
-        "## 一、用户最终会在哪些产品之间取舍",
+        "## 一、谁会直接竞争，谁只需做战略参照",
         "",
     ]
     if selected:
@@ -189,7 +192,7 @@ def render_pm_report(
             "",
             "## 三、价格与销量怎么判断",
             "",
-            _pressure_summary(business.价格销量压力),
+            _pressure_summary(business),
             "",
             "## 四、产品线和配置怎么取舍",
             "",
@@ -219,10 +222,10 @@ def render_evidence_report(
         "",
         "## 一、本次比较覆盖了什么",
         "",
-        f"本次从同品类正式市场范围中识别出 {_candidate_total(business)} 款可比较或可参照产品。",
+        f"本次从同品类市场范围中识别出 {_candidate_total(business)} 款可比较或可参照产品。",
         "重点名单只保留能独立回答产品决策问题的产品，没有为了凑满数量而补入弱候选。",
         "",
-        "## 二、为什么这些产品值得关注",
+        "## 二、这些产品分别能回答什么",
         "",
     ]
     comparisons = business.竞品对比
@@ -267,7 +270,8 @@ def render_evidence_report(
             "",
             "## 四、哪些结论可以用，哪些不能扩大解释",
             "",
-            "- 可以用于比较用户会关注哪些产品、双方价值路线、均价、周均销量和产品线压力。",
+            "- 可以用于比较双方价值路线、均价、周均销量和产品线压力。",
+            "- 只有“用户购买选择”有可用结论时，才把候选写成用户会直接二选一的产品。",
             "- 可以用于判断竞品配置是否值得进入产品定义讨论，但不会因为对方具备某项功能就自动要求跟进。",
             "- 价格和销量差用于判断市场压力，不把它写成单项卖点必然带来的销量或涨价结果。",
             "- 仅用于市场参照的产品不会被写成用户会直接二选一的竞品。",
@@ -300,7 +304,7 @@ def render_feishu_card(
         {"tag": "hr"},
         _card_markdown(f"**哪里容易被替代**\n{_substitution_summary(business)}"),
         {"tag": "hr"},
-        _card_markdown(f"**价格和销量受谁影响**\n{_pressure_summary(business.价格销量压力)}"),
+        _card_markdown(f"**价格和销量受谁影响**\n{_pressure_summary(business)}"),
         {"tag": "hr"},
         _card_markdown(f"**产品经理怎么做**\n{_action_summary(business)}"),
     ]
@@ -347,7 +351,7 @@ def answer_competitor_profile_question(
         answer = _substitution_summary(business)
         products = _supporting_products(business.可替代价值, business)
     elif any(token in normalized for token in ("价格", "销量", "降价", "规模")):
-        answer = _pressure_summary(business.价格销量压力)
+        answer = _pressure_summary(business)
         products = _supporting_products(business.价格销量压力, business)
     elif any(token in normalized for token in ("配置", "跟进", "功能")):
         answer = _configuration_summary(business)
@@ -362,7 +366,7 @@ def answer_competitor_profile_question(
         "question_cn": normalized or "本品当前最重要的竞品结论是什么？",
         "answer_cn": answer,
         "supporting_products": sorted(set(filter(None, products))),
-        "boundary_cn": "答案只来自当前已保存画像；不重新召回、评分或更换重点竞品。",
+        "boundary_cn": "答案只使用本次已确认的竞品分析结果，不临时改变比较对象或重点名单。",
         "competitor_profile_version_id": str(context.competitor_profile_version_id),
         "profile_result_hash": evidence.profile_result_hash,
     }
@@ -427,15 +431,31 @@ def _default_questions() -> tuple[str, ...]:
 
 
 def _selection_summary(business: Any) -> str:
+    direct = [
+        row
+        for row in business.竞品对比
+        if "用户购买选择" in (row.get("可以回答") or [])
+    ]
+    if direct:
+        names = [str(row.get("产品") or "") for row in direct[:3]]
+        return f"用户可能在本品与{'、'.join(filter(None, names))}之间直接取舍。"
     if not business.重点竞品:
-        return business.结论状态
-    names = [str(row.get("产品") or "") for row in business.重点竞品]
-    return f"当前优先关注{'、'.join(names)}；每款都回答不同的产品决策问题。"
+        return "目前还不能把任何一款产品列为本品的直接二选一对象。"
+    row = business.重点竞品[0]
+    name = str(row.get("产品") or "重点产品")
+    purpose = str(row.get("主要回答") or "产品角色与市场压力")
+    return (
+        "目前还不能把任何一款产品列为本品的直接二选一对象；"
+        f"{name}应作为{purpose}参照，重点判断本品的产品角色和市场防守。"
+    )
 
 
 def _advantage_summary(business: Any) -> str:
     if not business.本品优势:
-        return "当前没有形成可以要求产品继续加码的相对优势。"
+        return (
+            "当前没有找到本品相对可比较产品的稳定用户价值优势；"
+            "现有卖点不能直接作为加价或继续追加投入的依据。"
+        )
     products = _supporting_products(business.本品优势, business)
     suffix = f"，主要相对{'、'.join(products)}成立" if products else ""
     return f"本品已有用户价值证据形成相对优势{suffix}，应优先强化已经被用户感知的部分。"
@@ -444,27 +464,48 @@ def _advantage_summary(business: Any) -> str:
 def _substitution_summary(business: Any) -> str:
     if not business.可替代价值:
         return "当前没有确认哪项核心用户价值正被竞品稳定替代。"
-    products = _supporting_products(business.可替代价值, business)
+    values = _ranked_labels(
+        business.可替代价值,
+        key="用户价值",
+        excluded=_GENERIC_VALUE_LABELS,
+    )
+    if not values:
+        return "已有竞品能承接与本品相同的用户价值，但现有证据还不能定位到具体价值主题。"
+    themes = "、".join(f"{label}（{count}款）" for label, count in values[:5])
     return (
-        f"{'、'.join(products)}已经能承接与本品相同的用户价值；"
-        "本品需要把差异讲清并持续兑现，而不是继续堆相同功能。"
-        if products
-        else "已有竞品能承接与本品相同的用户价值，本品需要强化真正有差异的体验。"
+        f"竞争最集中的价值是{themes}。"
+        "下一版产品定义应从中选择一至两项建立明确领先，不再把同质功能当作差异化。"
     )
 
 
-def _pressure_summary(rows: list[dict[str, Any]]) -> str:
+def _pressure_summary(business: Any) -> str:
+    rows = business.价格销量压力
     if not rows:
         return "当前没有观察到足以改变本品定价或规模判断的明确竞品压力。"
-    first = rows[0]
-    name = str(first.get("参照产品") or "相关竞品")
-    direction = str(first.get("市场压力方向") or "形成市场压力")
-    return f"{name}{direction}；先对照双方价值和量价表现判断防守方式，不把价格差直接解释为因果销量。"
+    sentences = [
+        _pressure_sentence(row, business)
+        for row in rows[:2]
+    ]
+    return (
+        "；".join(filter(None, sentences))
+        + "。这些压力首先指向价值表达和产品角色，降价不应作为第一动作。"
+    )
 
 
 def _portfolio_summary(business: Any) -> str:
     if not business.同品牌产品线:
-        return "当前没有确认同品牌产品正在明显分流本品，产品线暂不因弱证据调整。"
+        target_brand = str(business.目标产品).split(maxsplit=1)[0]
+        same_brand = [
+            str(row.get("产品") or "")
+            for row in business.重点竞品
+            if str(row.get("产品") or "").startswith(target_brand)
+        ]
+        if same_brand:
+            return (
+                f"当前没有确认{same_brand[0]}正在直接分流本品，但它是最重要的产品线与场景参照；"
+                "需要写清两款产品各自的预算、空间和升级理由，避免同系列只靠规格区分。"
+            )
+        return "当前没有确认同品牌产品正在明显分流本品，产品线不因弱证据调整。"
     products = _supporting_products(business.同品牌产品线, business)
     return f"重点检查{'、'.join(products) or '同品牌相邻产品'}与本品的升级理由是否重复，避免产品线内部互相分流。"
 
@@ -477,14 +518,85 @@ def _configuration_summary(business: Any) -> str:
     ]
     if not follow:
         return "现有配置差异尚未证明会改变用户选择，暂不作为新增投入依据。"
-    products = _supporting_products(follow, business)
-    return f"只评估{'、'.join(products) or '正式竞品'}中已同时形成用户价值和市场压力的差异配置。"
+    differences = _ranked_labels(
+        follow,
+        key="差异配置",
+        excluded=_FOUNDATION_CONFIGURATION_LABELS,
+    )
+    if not differences:
+        return (
+            "现有差异集中在基础功能或规格层面，不能作为新增投入依据；"
+            "只有具体领先档位连接到用户价值和市场压力时才进入产品定义。"
+        )
+    themes = "、".join(f"{label}（{count}款）" for label, count in differences[:3])
+    return (
+        f"需要进入产品定义评审的非基础差异集中在{themes}；"
+        "先核对双方具体档位和用户兑现，再决定强化或放弃。基础功能不进入重点追配清单。"
+    )
 
 
 def _action_summary(business: Any) -> str:
-    if business.重点竞品:
-        return "保留已经形成用户优势的投入，优先防守可替代价值；定价和配置动作只围绕重点竞品逐项判断。"
-    return "维持当前产品定义，不为弱候选追配；继续观察是否出现能改变用户选择的正式竞品。"
+    if not business.重点竞品:
+        return "不为弱候选追配；继续观察是否出现真正能改变用户选择的产品。"
+    selected = str(business.重点竞品[0].get("产品") or "重点产品")
+    substitution = _ranked_labels(
+        business.可替代价值,
+        key="用户价值",
+        excluded=_GENERIC_VALUE_LABELS,
+    )
+    value_focus = "、".join(label for label, _ in substitution[:2])
+    pressure_products = _supporting_products(business.价格销量压力, business)
+    pressure_focus = "、".join(pressure_products[:2]) or selected
+    value_action = (
+        f"再从{value_focus}中选择一至两项建立领先"
+        if value_focus
+        else "再选择一至两项用户价值建立领先"
+    )
+    return (
+        f"先明确本品与{selected}的产品角色分工；{value_action}；"
+        f"价格先对照{pressure_focus}的量价表现，不把降价作为第一动作。"
+    )
+
+
+def _ranked_labels(
+    rows: Iterable[dict[str, Any]],
+    *,
+    key: str,
+    excluded: set[str],
+) -> list[tuple[str, int]]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        labels = {
+            str(value).strip()
+            for value in row.get(key) or []
+            if str(value).strip() and str(value).strip() not in excluded
+        }
+        counts.update(labels)
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _pressure_sentence(row: dict[str, Any], business: Any) -> str:
+    names = _supporting_products([row], business)
+    name = names[0] if names else "相关竞品"
+    price_gap = _decimal(row.get("价格差幅"))
+    volume_ratio = _decimal(row.get("周均销量倍数"))
+    direction = str(row.get("市场压力方向") or "")
+    price_text = (
+        f"均价比本品{'高' if price_gap >= 0 else '低'}{abs(price_gap) * 100:.1f}%"
+        if price_gap is not None
+        else "均价可比"
+    )
+    volume_text = (
+        f"周均销量是本品{volume_ratio:.2f}倍"
+        if volume_ratio is not None
+        else "周均销量只能有限比较"
+    )
+    meaning = {
+        "更高价格获得市场接受": "显示更高价方案获得了更强市场承接",
+        "同预算竞争压力": "构成同预算下的规模压力",
+        "低价分流压力": "构成低价分流压力",
+    }.get(direction, "形成可观察的市场压力")
+    return f"{name}{price_text}、{volume_text}，{meaning}"
 
 
 def _supporting_products(rows: Iterable[dict[str, Any]], business: Any) -> list[str]:
@@ -499,10 +611,6 @@ def _supporting_products(rows: Iterable[dict[str, Any]], business: Any) -> list[
             if name_by_code.get(str(row.get("参照产品") or ""), "")
         }
     )
-
-
-def _section_summary(rows: list[dict[str, Any]], *, empty: str) -> str:
-    return f"已形成 {len(rows)} 项可用结论。" if rows else empty
 
 
 def _candidate_total(business: Any) -> int:
