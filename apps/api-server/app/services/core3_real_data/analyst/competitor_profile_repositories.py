@@ -54,7 +54,7 @@ class CompetitorProfileDraftWriteNotAllowedError(CompetitorProfileRepositoryErro
     pass
 
 
-_PERSISTENCE_INSERT_BATCH_SIZE = 8
+_PERSISTENCE_INSERT_BATCH_SIZE = 1
 
 
 class CompetitorProfileRepository(Core3BaseRepository):
