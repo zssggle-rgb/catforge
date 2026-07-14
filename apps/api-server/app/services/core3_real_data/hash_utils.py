@@ -69,7 +69,13 @@ def stable_hash(value: Any, version: str = DEFAULT_HASH_VERSION) -> str:
         "hash_version": version,
         "value": normalize_for_hash(value),
     }
-    digest = hashlib.sha256(canonicalize_json(payload).encode("utf-8")).hexdigest()
+    canonical_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
     return f"{HASH_ALGORITHM}:{version}:{digest}"
 
 

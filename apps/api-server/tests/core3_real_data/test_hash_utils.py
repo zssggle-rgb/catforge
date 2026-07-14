@@ -52,6 +52,22 @@ def test_stable_hash_includes_version_and_is_order_insensitive_for_dicts():
     assert first_hash != different_version_hash
 
 
+def test_stable_hash_preserves_existing_complex_payload_contract():
+    value = {
+        "sku": "TV00029112",
+        "price": Decimal("2999.00"),
+        "at": datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc),
+        "missing": None,
+        "tags": {"b", "a"},
+        "tuple": ("x", 1),
+    }
+
+    assert stable_hash(value, version="hash-contract-v1") == (
+        "sha256:hash-contract-v1:"
+        "bd664aa7eca76e54d12d696b66701c83dda3841123603e7dcc2b3b33438bca09"
+    )
+
+
 def test_hash_records_sorts_by_business_keys_before_hashing():
     records_a = [
         {"sku_code": "TV00029115", "source_table": "week_sales_data", "source_pk": 2, "price": Decimal("3999.00")},
@@ -73,4 +89,3 @@ def test_hash_records_sorts_by_business_keys_before_hashing():
 
 def test_list_order_remains_significant():
     assert stable_hash(["market", "param"], version="list-v1") != stable_hash(["param", "market"], version="list-v1")
-
