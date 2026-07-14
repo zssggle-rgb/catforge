@@ -55,7 +55,11 @@ class CompetitorProfileDraftWriteNotAllowedError(CompetitorProfileRepositoryErro
     pass
 
 
-_PERSISTENCE_INSERT_BATCH_SIZE = 1
+# Keep each PostgreSQL statement small enough for bounded-memory generation while
+# avoiding one network round-trip per pair/relation row.  Eight was the proven
+# streaming batch size; later graph/hash memory fixes removed the pressure that
+# temporarily required single-row inserts.
+_PERSISTENCE_INSERT_BATCH_SIZE = 8
 
 
 class CompetitorProfileRepository(Core3BaseRepository):
