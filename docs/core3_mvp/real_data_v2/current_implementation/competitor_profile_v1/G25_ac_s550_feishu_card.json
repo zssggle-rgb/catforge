@@ -1,0 +1,67 @@
+{
+  "schema": "2.0",
+  "config": {
+    "wide_screen_mode": true
+  },
+  "header": {
+    "title": {
+      "tag": "plain_text",
+      "content": "海信 KFR-35GW/S550-X1 竞品决策"
+    },
+    "template": "turquoise"
+  },
+  "body": {
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**总结果**\n用户可能在本品与华凌 KFR-35GW/N8HA1III-P之间直接取舍。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**本品靠什么赢**\n当前没有找到本品相对可比较产品的稳定用户价值优势；现有卖点不能直接作为加价或继续追加投入的依据。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**哪里容易被替代**\n竞争最集中的价值是同价位能效/能力获得感（7款）、长期省电抵消更高价格（5款）、小房间/租房安装适配（4款）。下一版产品定义应从中选择一至两项建立明确领先，不再把同质功能当作差异化。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**价格和销量受谁影响**\n华凌 KFR-35GW/N8HA1III-P均价比本品低7.1%、周均销量是本品10.03倍，构成同预算下的规模压力。这些压力首先指向价值表达和产品角色，降价不应作为第一动作。"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "markdown",
+        "content": "**产品经理怎么做**\n先明确本品相对华凌 KFR-35GW/N8HA1III-P的目标用户和价值取舍；再从同价位能效/能力获得感、长期省电抵消更高价格中选择一至两项建立领先；价格先对照华凌 KFR-35GW/N8HA1III-P的量价表现，不把降价作为第一动作。"
+      },
+      {
+        "tag": "button",
+        "text": {
+          "tag": "plain_text",
+          "content": "查看用户选择对比"
+        },
+        "type": "primary",
+        "url": "https://my.feishu.cn/docx/G85Ud5SRKoIwQVxuetvcdZSDnkd"
+      },
+      {
+        "tag": "button",
+        "text": {
+          "tag": "plain_text",
+          "content": "查看分析依据"
+        },
+        "type": "default",
+        "url": "https://my.feishu.cn/docx/RxjJdl98Oogu1txNL5fcdz1Inzg"
+      }
+    ]
+  }
+}
