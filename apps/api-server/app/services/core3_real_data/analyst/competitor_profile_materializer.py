@@ -40,7 +40,6 @@ from app.services.core3_real_data.analyst.competitor_profile_price_volume_pressu
     PriceVolumePressureEvaluator,
 )
 from app.services.core3_real_data.analyst.competitor_profile_price_volume_pressure_schemas import (
-    PriceVolumePressureAssessment,
     PriceVolumePressureBundle,
 )
 from app.services.core3_real_data.analyst.competitor_profile_purchase_pool import (
@@ -475,27 +474,56 @@ def _assemble_draft(
     pressure_by_sku = {row.candidate.sku_code: row for row in pressure.pairs}
     relation_by_sku = {row.candidate.sku_code: row for row in relations.pairs}
     decision_by_sku = {row.candidate.sku_code: row for row in selection.pair_decisions}
-    pairs = [
-        _materialize_pair(
-            serving_scope.project_id,
-            feature_by_sku[sku_code],
-            pool_by_sku[sku_code],
-            relation_by_sku[sku_code],
-            eligibility_by_sku[sku_code],
-            decision_by_sku[sku_code],
-            config,
+    target = features.target
+    analysis_state = _analysis_state(target_bundle, relation_by_sku, selection)
+    competitive_advantages = _competitive_advantages(relation_by_sku)
+    substitutable_values = _substitutable_values(relation_by_sku)
+    price_scale_pressures = _price_scale_pressures(
+        pressure_by_sku,
+        relation_by_sku,
+    )
+    same_brand_findings = _same_brand_findings(relation_by_sku)
+    configuration_decisions = _configuration_decisions(features, relation_by_sku)
+    no_conclusion_reason = _no_conclusion(selection, target_bundle)
+    qa_index = _qa_index(relation_by_sku)
+
+    candidate_codes = sorted(feature_by_sku)
+    features.pairs = []
+    pool.pairs = []
+    pressure.pairs = []
+    relations.pairs = []
+    selection.pair_decisions = []
+    pressure_by_sku.clear()
+    gc.collect()
+
+    pairs = []
+    for sku_code in candidate_codes:
+        pairs.append(
+            _materialize_pair(
+                serving_scope.project_id,
+                feature_by_sku.pop(sku_code),
+                pool_by_sku.pop(sku_code),
+                relation_by_sku.pop(sku_code),
+                eligibility_by_sku.pop(sku_code),
+                decision_by_sku.pop(sku_code),
+                config,
+            )
         )
-        for sku_code in sorted(feature_by_sku)
-    ]
     profile = _profile(
         serving_scope,
         target_bundle,
-        features,
-        pressure_by_sku,
-        relation_by_sku,
+        target,
         selection,
         pairs,
         config,
+        analysis_state=analysis_state,
+        competitive_advantages=competitive_advantages,
+        substitutable_values=substitutable_values,
+        price_scale_pressures=price_scale_pressures,
+        same_brand_findings=same_brand_findings,
+        configuration_decisions=configuration_decisions,
+        no_conclusion_reason=no_conclusion_reason,
+        qa_index=qa_index,
     )
     return CompetitorProfileDraftBundle(
         profile=profile,
@@ -598,15 +626,20 @@ def _materialize_pair(
 def _profile(
     serving_scope: ServingScope,
     target_bundle: CompetitorProfileTargetInputBundle,
-    features: PairFeatureBundle,
-    pressure_by_sku: dict[str, PriceVolumePressureAssessment],
-    relation_by_sku: dict[str, CompetitorRelationPairEvaluation],
+    target: CandidateIdentity,
     selection: KeyCompetitorSelectionBundle,
     pairs: Sequence[CompetitorPairDraft],
     config: CompetitorProfileMaterializationConfig,
+    *,
+    analysis_state: str,
+    competitive_advantages: list[dict[str, Any]],
+    substitutable_values: list[dict[str, Any]],
+    price_scale_pressures: list[dict[str, Any]],
+    same_brand_findings: list[dict[str, Any]],
+    configuration_decisions: list[dict[str, Any]],
+    no_conclusion_reason: dict[str, Any],
+    qa_index: list[dict[str, Any]],
 ) -> SkuCompetitorDecisionProfileDraft:
-    target = features.target
-    analysis_state = _analysis_state(target_bundle, relation_by_sku, selection)
     conclusion_state = _conclusion_state(selection, analysis_state)
     review_required = (
         analysis_state == "blocked"
@@ -634,13 +667,6 @@ def _profile(
         )
         for row in selection.selections
     ]
-    advantages = _competitive_advantages(relation_by_sku)
-    substitutable = _substitutable_values(relation_by_sku)
-    price_pressures = _price_scale_pressures(pressure_by_sku, relation_by_sku)
-    same_brand = _same_brand_findings(relation_by_sku)
-    configuration = _configuration_decisions(features, relation_by_sku)
-    no_conclusion = _no_conclusion(selection, target_bundle)
-    qa_index = _qa_index(relation_by_sku)
     evidence_refs = _merge_refs(
         target_bundle.evidence_refs,
         *(row.evidence_refs for row in pairs),
@@ -672,12 +698,12 @@ def _profile(
         "candidate_status_counts": dict(sorted(candidate_counts.items())),
         "relation_status_counts": dict(sorted(relation_counts.items())),
         "key_competitor_summary": [row.model_dump(mode="json") for row in key_summary],
-        "competitive_advantages": advantages,
-        "substitutable_values": substitutable,
-        "price_scale_pressures": price_pressures,
-        "same_brand_findings": same_brand,
-        "configuration_decisions": configuration,
-        "no_conclusion_reason": no_conclusion,
+        "competitive_advantages": competitive_advantages,
+        "substitutable_values": substitutable_values,
+        "price_scale_pressures": price_scale_pressures,
+        "same_brand_findings": same_brand_findings,
+        "configuration_decisions": configuration_decisions,
+        "no_conclusion_reason": no_conclusion_reason,
         "source_lineage": source_lineage,
         "qa_index": qa_index,
         "limitations": limitations,
@@ -699,12 +725,12 @@ def _profile(
         candidate_status_counts=dict(sorted(candidate_counts.items())),
         relation_status_counts=dict(sorted(relation_counts.items())),
         key_competitor_summary=key_summary,
-        competitive_advantages=advantages,
-        substitutable_values=substitutable,
-        price_scale_pressures=price_pressures,
-        same_brand_findings=same_brand,
-        configuration_decisions=configuration,
-        no_conclusion_reason=no_conclusion,
+        competitive_advantages=competitive_advantages,
+        substitutable_values=substitutable_values,
+        price_scale_pressures=price_scale_pressures,
+        same_brand_findings=same_brand_findings,
+        configuration_decisions=configuration_decisions,
+        no_conclusion_reason=no_conclusion_reason,
         source_lineage=source_lineage,
         qa_index=qa_index,
         evidence_refs=evidence_refs,
