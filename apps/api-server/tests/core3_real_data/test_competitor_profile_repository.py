@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, event, update
+from sqlalchemy import create_engine, event, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -17,6 +17,10 @@ from app.services.core3_real_data.analyst.competitor_profile_repositories import
     CompetitorProfileImmutableError,
     CompetitorProfileRepository,
     CompetitorProfileVersionNotFoundError,
+)
+from app.services.core3_real_data.analyst.competitor_profile_storage import (
+    PAIR_EVIDENCE_DICTIONARY_CODEC,
+    RELATION_FROM_PAIR_CODEC,
 )
 from app.services.core3_real_data.constants import Core3CategoryCode
 from app.services.core3_real_data.repositories import Core3RepositoryContext
@@ -185,6 +189,24 @@ def test_write_draft_round_trips_all_five_tables(session: Session) -> None:
     )
     assert compact is not None
     assert all(row.competitor_member for row in compact.pairs)
+    pair_row = session.execute(
+        select(entities.Core3SkuCompetitorProfilePair)
+    ).scalar_one()
+    relation_rows = session.execute(
+        select(entities.Core3SkuCompetitorProfileRelation)
+    ).scalars().all()
+    assert pair_row.pair_payload_json["$codec"] == (
+        PAIR_EVIDENCE_DICTIONARY_CODEC
+    )
+    assert pair_row.purchase_pool_json == {}
+    assert pair_row.evidence_family_json == []
+    assert pair_row.evidence_refs_json == []
+    assert all(
+        row.relation_payload_json["$codec"] == RELATION_FROM_PAIR_CODEC
+        for row in relation_rows
+    )
+    assert all(row.gate_results_json == [] for row in relation_rows)
+    assert all(row.evidence_refs_json == [] for row in relation_rows)
 
 
 def test_write_draft_without_readback_defers_full_graph_materialization(
@@ -215,6 +237,62 @@ def test_write_draft_without_readback_defers_full_graph_materialization(
     assert readback is not None
     assert len(readback.pairs) == 1
     assert len(readback.relations) == 7
+
+
+def test_compact_draft_storage_converts_legacy_rows_without_changing_readback(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+    bundle = _bundle(version.competitor_profile_version_id)
+    repository.write_draft_without_readback(bundle)
+    session.flush()
+    pair_row = session.execute(
+        select(entities.Core3SkuCompetitorProfilePair)
+    ).scalar_one()
+    pair_payload = bundle.pairs[0].pair_payload.model_dump(mode="json")
+    pair_row.pair_payload_json = pair_payload
+    pair_row.purchase_pool_json = pair_payload["purchase_pool"]
+    pair_row.evidence_family_json = pair_payload["evidence_family_assessments"]
+    pair_row.evidence_refs_json = pair_payload["evidence_refs"]
+    relation_by_code = {
+        row.relation_code: row.relation_payload.model_dump(mode="json")
+        for row in bundle.relations
+    }
+    for row in session.execute(
+        select(entities.Core3SkuCompetitorProfileRelation)
+    ).scalars():
+        relation = relation_by_code[row.relation_code]
+        row.relation_payload_json = relation
+        row.gate_results_json = relation["gate_results"]
+        row.evidence_refs_json = relation["evidence_refs"]
+    session.commit()
+    before = repository.get_profile(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+    )
+
+    receipt = repository.compact_draft_storage(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_codes=["TV-TARGET"],
+    )
+    session.commit()
+    after = repository.get_profile(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_code="TV-TARGET",
+    )
+    idempotent = repository.compact_draft_storage(
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        target_sku_codes=["TV-TARGET"],
+    )
+
+    assert receipt == {"pair_rows_compacted": 1, "relation_rows_compacted": 7}
+    assert idempotent == {
+        "pair_rows_compacted": 0,
+        "relation_rows_compacted": 0,
+    }
+    assert before is not None and after is not None
+    assert after.model_dump(mode="json") == before.model_dump(mode="json")
 
 
 def test_compact_read_keeps_consumption_candidates_and_full_hash_receipt(

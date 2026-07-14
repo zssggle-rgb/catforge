@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel
 from sqlalchemy import insert, or_, select
@@ -28,6 +28,12 @@ from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     RelationAssessment,
     ServingScope,
     SkuCompetitorDecisionProfileDraft,
+)
+from app.services.core3_real_data.analyst.competitor_profile_storage import (
+    decode_pair_payload,
+    encode_pair_payload,
+    is_relation_from_pair_pointer,
+    relation_from_pair_pointer,
 )
 from app.services.core3_real_data.repositories import (
     Core3BaseRepository,
@@ -128,6 +134,118 @@ class CompetitorProfileRepository(Core3BaseRepository):
             use_savepoint=use_savepoint,
         )
         return created
+
+    def compact_draft_storage(
+        self,
+        *,
+        competitor_profile_version_id: str,
+        target_sku_codes: Sequence[str],
+    ) -> dict[str, int]:
+        """Losslessly compact saved draft payloads for selected target SKUs.
+
+        The analytical rows, hashes, version identity, and typed readback remain
+        unchanged.  Callers own the transaction so production maintenance can
+        checkpoint and vacuum between bounded target-SKU batches.
+        """
+
+        version = self._version_by_id(
+            competitor_profile_version_id,
+            for_update=True,
+        )
+        self._assert_draft_version(version)
+        normalized_codes = sorted(
+            {str(code).strip().upper() for code in target_sku_codes if str(code).strip()}
+        )
+        if not normalized_codes:
+            return {"pair_rows_compacted": 0, "relation_rows_compacted": 0}
+
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        relation_model = entities.Core3SkuCompetitorProfileRelation
+        pair_rows = self.db.execute(
+            select(pair_model)
+            .where(
+                pair_model.competitor_profile_version_id
+                == competitor_profile_version_id
+            )
+            .where(pair_model.target_sku_code.in_(normalized_codes))
+            .order_by(pair_model.target_sku_code, pair_model.candidate_sku_code)
+        ).scalars()
+        pair_count = 0
+        for row in pair_rows:
+            decoded = decode_pair_payload(row.pair_payload_json or {})
+            encoded = encode_pair_payload(decoded)
+            changed = (
+                row.pair_payload_json != encoded
+                or row.purchase_pool_json != {}
+                or row.evidence_family_json != []
+                or row.evidence_refs_json != []
+            )
+            if not changed:
+                continue
+            if (
+                decoded.get("result_hash") != row.result_hash
+                or decoded.get("input_fingerprint") != row.input_fingerprint
+            ):
+                raise CompetitorProfileImmutableError(
+                    "pair payload hash identity changed before storage compaction"
+                )
+            row.pair_payload_json = encoded
+            row.purchase_pool_json = {}
+            row.evidence_family_json = []
+            row.evidence_refs_json = []
+            pair_count += 1
+
+        relation_rows = self.db.execute(
+            select(relation_model)
+            .where(
+                relation_model.competitor_profile_version_id
+                == competitor_profile_version_id
+            )
+            .where(relation_model.target_sku_code.in_(normalized_codes))
+            .order_by(
+                relation_model.target_sku_code,
+                relation_model.candidate_sku_code,
+                relation_model.relation_code,
+            )
+        ).scalars()
+        relation_count = 0
+        for row in relation_rows:
+            stored = row.relation_payload_json or {}
+            if is_relation_from_pair_pointer(stored):
+                if (
+                    stored.get("relation_code") != row.relation_code
+                    or stored.get("result_hash") != row.result_hash
+                ):
+                    raise CompetitorProfileImmutableError(
+                        "relation pointer identity changed before storage compaction"
+                    )
+                pointer = dict(stored)
+            else:
+                relation = RelationAssessment(**stored)
+                if (
+                    relation.relation_code != row.relation_code
+                    or relation.result_hash != row.result_hash
+                ):
+                    raise CompetitorProfileImmutableError(
+                        "relation payload hash identity changed before storage compaction"
+                    )
+                pointer = relation_from_pair_pointer(stored)
+            changed = (
+                row.relation_payload_json != pointer
+                or row.gate_results_json != []
+                or row.evidence_refs_json != []
+            )
+            if not changed:
+                continue
+            row.relation_payload_json = pointer
+            row.gate_results_json = []
+            row.evidence_refs_json = []
+            relation_count += 1
+        self.db.flush()
+        return {
+            "pair_rows_compacted": pair_count,
+            "relation_rows_compacted": relation_count,
+        }
 
     def _write_draft_rows(
         self,
@@ -454,6 +572,13 @@ class CompetitorProfileRepository(Core3BaseRepository):
         relation_status: str | None = None,
     ) -> list[SkuCompetitorRelationDraft]:
         pair = self._pair_by_id(sku_competitor_profile_pair_id)
+        pair_payload = CompetitorPairDraft(
+            **decode_pair_payload(pair.pair_payload_json)
+        )
+        nested_relations = {
+            row.relation_code: row
+            for row in pair_payload.relation_assessments
+        }
         model = entities.Core3SkuCompetitorProfileRelation
         stmt = (
             select(model)
@@ -464,7 +589,20 @@ class CompetitorProfileRepository(Core3BaseRepository):
         if relation_status is not None:
             stmt = stmt.where(model.relation_status == relation_status)
         rows = self.db.execute(stmt.order_by(model.relation_code)).scalars()
-        return [_relation_draft(row) for row in rows]
+        result = []
+        for row in rows:
+            relation_payload = nested_relations.get(row.relation_code)
+            if (
+                relation_payload is None
+                or relation_payload.result_hash != row.result_hash
+            ):
+                raise CompetitorProfileRepositoryError(
+                    "persisted relation hash does not match its pair payload"
+                )
+            result.append(
+                _relation_draft(row, relation_payload=relation_payload)
+            )
+        return result
 
     def list_selections(
         self,
@@ -939,8 +1077,10 @@ def _pair_entity_payload(
             "reference_member": payload.reference_member,
             "candidate_status": payload.candidate_status,
             "purchase_pool_level": pair["purchase_pool"]["level"],
-            "purchase_pool_json": pair["purchase_pool"],
-            "evidence_family_json": pair["evidence_family_assessments"],
+            # The canonical pair payload retains these exact typed values.  Do
+            # not duplicate their large evidence graphs in unqueried columns.
+            "purchase_pool_json": {},
+            "evidence_family_json": [],
             "market_comparison_json": pair["market_comparison"],
             "question_eligibility_json": pair["question_eligibility"],
             "reference_purposes_json": pair["reference_purposes"],
@@ -955,10 +1095,10 @@ def _pair_entity_payload(
             "non_selection_reason_cn": pair["non_selection_reason_cn"],
             "confidence_level": payload.confidence_level,
             "confidence": payload.pair_payload.confidence,
-            "evidence_refs_json": pair["evidence_refs"],
+            "evidence_refs_json": [],
             "limitations_json": pair["limitations"],
             "risk_flags_json": pair["risk_flags"],
-            "pair_payload_json": pair,
+            "pair_payload_json": encode_pair_payload(pair),
         }
     )
     return raw
@@ -982,16 +1122,18 @@ def _relation_entity_payload(
             "relation_status": relation["status"],
             "is_primary": relation["is_primary"],
             "confidence_level": relation["confidence_level"],
-            "gate_results_json": relation["gate_results"],
+            # Relation details are canonical inside the parent pair payload;
+            # this row remains the independently queryable relation index.
+            "gate_results_json": [],
             "supporting_evidence_families_json": relation[
                 "supporting_evidence_families"
             ],
             "business_effect_json": relation["business_effect"],
             "eligible_question_codes_json": relation["eligible_question_codes"],
             "reason_codes_json": relation["reason_codes"],
-            "evidence_refs_json": relation["evidence_refs"],
+            "evidence_refs_json": [],
             "limitations_json": relation["limitations"],
-            "relation_payload_json": relation,
+            "relation_payload_json": relation_from_pair_pointer(relation),
         }
     )
     return raw
@@ -1084,13 +1226,24 @@ def _pair_draft(row: entities.Core3SkuCompetitorProfilePair) -> SkuCompetitorPai
         selected=row.selected,
         competitor_member=row.competitor_member,
         reference_member=row.reference_member,
-        pair_payload=CompetitorPairDraft(**row.pair_payload_json),
+        pair_payload=CompetitorPairDraft(
+            **decode_pair_payload(row.pair_payload_json)
+        ),
     )
 
 
 def _relation_draft(
     row: entities.Core3SkuCompetitorProfileRelation,
+    *,
+    relation_payload: RelationAssessment | None = None,
 ) -> SkuCompetitorRelationDraft:
+    stored_payload = row.relation_payload_json or {}
+    if relation_payload is None:
+        if is_relation_from_pair_pointer(stored_payload):
+            raise CompetitorProfileRepositoryError(
+                "compact relation payload requires its parent pair"
+            )
+        relation_payload = RelationAssessment(**stored_payload)
     return SkuCompetitorRelationDraft(
         **_row_scope(row),
         sku_competitor_profile_relation_id=row.sku_competitor_profile_relation_id,
@@ -1098,7 +1251,7 @@ def _relation_draft(
         target_sku_code=row.target_sku_code,
         candidate_sku_code=row.candidate_sku_code,
         relation_code=row.relation_code,
-        relation_payload=RelationAssessment(**row.relation_payload_json),
+        relation_payload=relation_payload,
     )
 
 
@@ -1129,7 +1282,9 @@ def _pair_draft_from_mapping(row: Mapping[str, Any]) -> SkuCompetitorPairDraft:
         selected=row["selected"],
         competitor_member=row["competitor_member"],
         reference_member=row["reference_member"],
-        pair_payload=CompetitorPairDraft(**row["pair_payload_json"]),
+        pair_payload=CompetitorPairDraft(
+            **decode_pair_payload(row["pair_payload_json"])
+        ),
     )
 
 
