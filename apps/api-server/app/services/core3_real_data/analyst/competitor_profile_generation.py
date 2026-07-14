@@ -167,17 +167,23 @@ class CompetitorProfileGenerationService:
                 )
             target = self.input_provider.load_target_input(category, target_code)
             materialized = self.materializer.materialize(category, target, request.config)
+            _log_memory_checkpoint("materialized")
             del target, category
             gc.collect()
+            _log_memory_checkpoint("category_released")
             bundle = materialized_to_persistence_bundle(materialized, version)
+            _log_memory_checkpoint("persistence_bundle_built")
             receipt = _readback_receipt(bundle)
+            _log_memory_checkpoint("readback_receipt_built")
             failures = _generation_failures(version)
             failures.pop(target_code, None)
             with self.repository.db.begin():
+                _log_memory_checkpoint("draft_write_started")
                 created = self.repository.write_draft_without_readback(
                     bundle,
                     use_savepoint=False,
                 )
+                _log_memory_checkpoint("draft_rows_written")
                 updated = _checkpoint_version(
                     self.repository,
                     version,
@@ -188,6 +194,7 @@ class CompetitorProfileGenerationService:
             del bundle, materialized
             self.repository.db.expunge_all()
             gc.collect()
+            _log_memory_checkpoint("persistence_inputs_released")
             if updated.sku_count == (
                 updated.ready_count
                 + updated.partial_count
@@ -216,6 +223,7 @@ class CompetitorProfileGenerationService:
                 target_sku_code=target_code,
             )
             self.repository.db.commit()
+            _log_memory_checkpoint("profile_readback_loaded")
             if persisted is None:
                 raise CompetitorProfileGenerationReadbackError(
                     "competitor profile disappeared after generation commit"
@@ -407,6 +415,7 @@ def materialized_to_persistence_bundle(
         review_reasons=draft.profile.limitations,
         profile_payload=draft.profile,
     )
+    _log_memory_checkpoint("persistence_profile_built")
     pairs = [
         SkuCompetitorPairDraft(
             **common,
@@ -426,6 +435,7 @@ def materialized_to_persistence_bundle(
         )
         for pair in draft.pairs
     ]
+    _log_memory_checkpoint("persistence_pairs_built")
     relations = [
         SkuCompetitorRelationDraft(
             **common,
@@ -446,6 +456,7 @@ def materialized_to_persistence_bundle(
         for pair in draft.pairs
         for relation in pair.relation_assessments
     ]
+    _log_memory_checkpoint("persistence_relations_built")
     pair_by_code = {pair.candidate.sku_code: pair for pair in draft.pairs}
     selections = [
         SkuCompetitorSelectionDraft(
@@ -461,6 +472,7 @@ def materialized_to_persistence_bundle(
         )
         for selection in draft.selections
     ]
+    _log_memory_checkpoint("persistence_selections_built")
     return CompetitorProfilePersistenceBundle(
         profile=profile,
         pairs=pairs,
@@ -650,6 +662,27 @@ def _verify_readback(
     ):
         raise CompetitorProfileGenerationReadbackError(
             "competitor profile child readback hash mismatch"
+        )
+
+
+def _log_memory_checkpoint(stage: str) -> None:
+    try:
+        values = {}
+        with open("/proc/self/status", encoding="utf-8") as status_file:
+            for line in status_file:
+                key, separator, value = line.partition(":")
+                if separator and key in {"VmRSS", "VmHWM"}:
+                    values[key] = value.strip()
+        logger.warning(
+            "competitor profile memory checkpoint stage=%s rss=%s peak=%s",
+            stage,
+            values.get("VmRSS", "unknown"),
+            values.get("VmHWM", "unknown"),
+        )
+    except OSError:
+        logger.warning(
+            "competitor profile memory checkpoint stage=%s unavailable",
+            stage,
         )
 
 

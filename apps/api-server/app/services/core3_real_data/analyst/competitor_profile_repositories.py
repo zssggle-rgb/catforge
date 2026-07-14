@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import Enum
+import logging
 from typing import Any, Mapping
 
 from pydantic import BaseModel
@@ -32,6 +33,9 @@ from app.services.core3_real_data.repositories import (
     Core3BaseRepository,
     Core3RepositoryContext,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class CompetitorProfileRepositoryError(RuntimeError):
@@ -420,6 +424,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             [profile_payload],
         )
         del profile_payload
+        _log_persistence_memory_checkpoint("profile_row_inserted")
         pair_ids: dict[str, str] = {}
         for start in range(0, len(bundle.pairs), _PERSISTENCE_INSERT_BATCH_SIZE):
             rows: list[dict[str, Any]] = []
@@ -433,6 +438,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
                 rows.append(payload)
             self.db.execute(insert(entities.Core3SkuCompetitorProfilePair.__table__), rows)
             del rows
+        _log_persistence_memory_checkpoint("pair_rows_inserted")
         for start in range(
             0,
             len(bundle.relations),
@@ -453,6 +459,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
                 rows,
             )
             del rows
+        _log_persistence_memory_checkpoint("relation_rows_inserted")
         for start in range(
             0,
             len(bundle.selections),
@@ -474,6 +481,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
                 rows,
             )
             del rows
+        _log_persistence_memory_checkpoint("selection_rows_inserted")
         profile_row = self._find_profile(
             version_id=bundle.profile.competitor_profile_version_id,
             target_sku_code=bundle.profile.target_sku_code,
@@ -1028,6 +1036,27 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
     return value
+
+
+def _log_persistence_memory_checkpoint(stage: str) -> None:
+    try:
+        values = {}
+        with open("/proc/self/status", encoding="utf-8") as status_file:
+            for line in status_file:
+                key, separator, value = line.partition(":")
+                if separator and key in {"VmRSS", "VmHWM"}:
+                    values[key] = value.strip()
+        logger.warning(
+            "competitor profile persistence memory checkpoint stage=%s rss=%s peak=%s",
+            stage,
+            values.get("VmRSS", "unknown"),
+            values.get("VmHWM", "unknown"),
+        )
+    except OSError:
+        logger.warning(
+            "competitor profile persistence memory checkpoint stage=%s unavailable",
+            stage,
+        )
 
 
 __all__ = [
