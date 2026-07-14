@@ -33,7 +33,7 @@ from app.services.core3_real_data.analyst.competitor_profile_value_substitution_
     ValueSubstitutionEvidenceBundle,
     ValueSubstitutionEvidencePair,
 )
-from app.services.core3_real_data.hash_utils import stable_hash
+from app.services.core3_real_data.hash_utils import stable_hash_json
 
 
 _RELATION_QUESTIONS = {
@@ -137,7 +137,7 @@ class CompetitorRelationEvaluator:
             )
             for pair in pair_bundle.pairs
         ]
-        input_fingerprint = stable_hash(
+        input_fingerprint = stable_hash_json(
             {
                 "pair_feature_result_hash": pair_bundle.result_hash,
                 "purchase_pool_result_hash": pool_bundle.result_hash,
@@ -161,7 +161,7 @@ class CompetitorRelationEvaluator:
             value_substitution_result_hash=value_bundle.result_hash,
             price_volume_pressure_result_hash=pressure_bundle.result_hash,
             input_fingerprint=input_fingerprint,
-            result_hash=stable_hash(
+            result_hash=stable_hash_json(
                 {
                     "input_fingerprint": input_fingerprint,
                     "pair_hashes": {
@@ -302,7 +302,7 @@ class CompetitorRelationEvaluator:
         limitations = sorted(
             {limitation for draft in drafts for limitation in draft.limitations}
         )
-        input_fingerprint = stable_hash(
+        input_fingerprint = stable_hash_json(
             {
                 "pair_feature_result_hash": pair.result_hash,
                 "purchase_pool_result_hash": pool.result_hash,
@@ -354,7 +354,7 @@ class CompetitorRelationEvaluator:
             price_volume_pressure_result_hash=pressure.result_hash,
             config_version=config.config_version,
             input_fingerprint=input_fingerprint,
-            result_hash=stable_hash(
+            result_hash=stable_hash_json(
                 payload,
                 version="competitor_profile_relation_evaluation_pair_result_v1",
             ),
@@ -1067,7 +1067,7 @@ def _relation_model(
         reason_codes=draft.reason_codes,
         evidence_refs=draft.evidence_refs,
         limitations=draft.limitations,
-        result_hash=stable_hash(
+        result_hash=stable_hash_json(
             payload,
             version="competitor_profile_relation_assessment_v1",
         ),
@@ -1342,7 +1342,7 @@ def _question_eligibility(
         results.append(
             QuestionEligibility(
                 **payload,
-                result_hash=stable_hash(
+                result_hash=stable_hash_json(
                     payload,
                     version="competitor_profile_question_eligibility_v1",
                 ),

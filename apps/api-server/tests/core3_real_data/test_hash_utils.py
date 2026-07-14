@@ -1,7 +1,13 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from app.services.core3_real_data.hash_utils import canonicalize_json, hash_records, normalize_for_hash, stable_hash
+from app.services.core3_real_data.hash_utils import (
+    canonicalize_json,
+    hash_records,
+    normalize_for_hash,
+    stable_hash,
+    stable_hash_json,
+)
 
 
 def test_canonicalize_json_sorts_dict_keys_and_preserves_chinese():
@@ -65,6 +71,21 @@ def test_stable_hash_preserves_existing_complex_payload_contract():
     assert stable_hash(value, version="hash-contract-v1") == (
         "sha256:hash-contract-v1:"
         "bd664aa7eca76e54d12d696b66701c83dda3841123603e7dcc2b3b33438bca09"
+    )
+
+
+def test_stable_hash_json_matches_normalized_json_payload_contract():
+    value = {
+        "availability": "limited",
+        "candidate_codes": ["TV00022396", "TV00029112"],
+        "causal_claim": False,
+        "missing": None,
+        "rank": 2,
+    }
+
+    assert stable_hash_json(value, version="normalized-json-v1") == stable_hash(
+        value,
+        version="normalized-json-v1",
     )
 
 

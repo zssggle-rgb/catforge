@@ -79,6 +79,28 @@ def stable_hash(value: Any, version: str = DEFAULT_HASH_VERSION) -> str:
     return f"{HASH_ALGORITHM}:{version}:{digest}"
 
 
+def stable_hash_json(value: Any, version: str = DEFAULT_HASH_VERSION) -> str:
+    """Hash an already normalized JSON payload without a redundant tree walk.
+
+    Callers must pass only dictionaries, lists, and JSON scalar values emitted
+    by typed ``model_dump(mode="json")`` contracts. Raw Decimal, datetime,
+    Enum, tuple, set, and float values must continue to use :func:`stable_hash`.
+    """
+
+    payload = {
+        "hash_version": version,
+        "value": value,
+    }
+    canonical_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+    return f"{HASH_ALGORITHM}:{version}:{digest}"
+
+
 def hash_records(
     records: Iterable[Mapping[str, Any]],
     keys: Sequence[str],
