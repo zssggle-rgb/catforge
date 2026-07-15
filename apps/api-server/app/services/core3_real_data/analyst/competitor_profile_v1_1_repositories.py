@@ -42,6 +42,7 @@ class CompetitorProfileV11IntegrityError(RuntimeError):
 
 
 ReadMode = Literal["full", "compact", "question_specific"]
+_V11_PERSISTENCE_BATCH_SIZE = 8
 
 
 class CompetitorProfileV11Repository(CompetitorProfileRepository):
@@ -68,9 +69,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             raise ValueError("V1.1 atomic writes require use_savepoint=True")
         # Revalidate a fresh copy because Pydantic models can be mutated after
         # construction.  Persistence never trusts a formerly-valid instance.
-        dto = CompetitorProfileAnalysisDTO.model_validate(
-            dto.model_dump(mode="json")
-        )
+        dto = CompetitorProfileAnalysisDTO.model_validate(dto.model_dump(mode="json"))
 
         self._assert_context_scope(
             dto.profile_version.project_id,
@@ -99,13 +98,15 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             return readback
 
         def insert() -> entities.Core3SkuCompetitorProfile:
-            snapshot_rows = self._write_snapshots(version, dto)
-            self._assert_dto_snapshot_refs(dto, snapshot_rows)
-            profile_row = self._insert_profile(version, dto)
-            pair_rows = self._insert_pairs(version, profile_row, dto)
-            self._insert_relations(version, profile_row, pair_rows, dto)
-            self._insert_selections(version, profile_row, pair_rows, dto)
-            self.db.flush()
+            self._insert_materialized_graph(version, dto)
+            profile_row = self._find_v11_profile(
+                version_id=version.competitor_profile_version_id,
+                target_sku_code=dto.sku_summary.target_sku_code,
+            )
+            if profile_row is None:
+                raise CompetitorProfileV11IntegrityError(
+                    "V1.1 insert did not produce a readable profile root"
+                )
             return profile_row
 
         try:
@@ -141,6 +142,55 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             return readback
         assert readback is not None
         return readback
+
+    def write_materialized_draft_without_readback(
+        self,
+        dto: CompetitorProfileAnalysisDTO,
+    ) -> bool:
+        """Persist a freshly materialized DTO without a second full graph copy.
+
+        This bounded-memory path is intentionally limited to the production
+        materializer boundary.  It re-runs the DTO's graph validator, verifies
+        immutable hashes when the draft already exists, and streams child rows
+        in small batches.  The caller owns commit/rollback and performs the
+        deliberate acceptance readback after releasing generation memory.
+        """
+
+        dto.validate_dto()
+        self._assert_context_scope(
+            dto.profile_version.project_id,
+            dto.profile_version.category_code,
+        )
+        version = self._version_by_id(
+            dto.profile_version.competitor_profile_version_id,
+            for_update=True,
+        )
+        self._assert_v11_draft_version(version, dto)
+        existing = self._find_v11_profile(
+            version_id=version.competitor_profile_version_id,
+            target_sku_code=dto.sku_summary.target_sku_code,
+        )
+        if existing is not None:
+            self._assert_existing_materialized_graph(existing, dto)
+            return False
+        with self.db.begin_nested():
+            self._insert_materialized_graph(version, dto)
+        return True
+
+    def _insert_materialized_graph(
+        self,
+        version: entities.Core3CompetitorProfileVersion,
+        dto: CompetitorProfileAnalysisDTO,
+    ) -> None:
+        snapshot_refs = self._write_snapshots(version, dto)
+        self._assert_dto_snapshot_refs(dto, snapshot_refs)
+        profile_row = self._insert_profile(version, dto)
+        profile_id = profile_row.sku_competitor_profile_id
+        self.db.expunge(profile_row)
+        pair_ids = self._insert_pairs(version, profile_id, dto)
+        self._insert_relations(version, pair_ids, dto)
+        self._insert_selections(version, profile_id, pair_ids, dto)
+        self.db.flush()
 
     def get_profile(
         self,
@@ -191,15 +241,22 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         """Formal serving path: only the current published V1.1 version."""
 
         version_model = entities.Core3CompetitorProfileVersion
-        version = self.db.execute(
-            select(version_model)
-            .where(version_model.project_id == self.project_id)
-            .where(version_model.category_code == self.category_code.value)
-            .where(version_model.release_scope_key == release_scope_key)
-            .where(version_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
-            .where(version_model.release_status == "published")
-            .where(version_model.is_current.is_(True))
-        ).scalars().first()
+        version = (
+            self.db.execute(
+                select(version_model)
+                .where(version_model.project_id == self.project_id)
+                .where(version_model.category_code == self.category_code.value)
+                .where(version_model.release_scope_key == release_scope_key)
+                .where(
+                    version_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
+                .where(version_model.release_status == "published")
+                .where(version_model.is_current.is_(True))
+            )
+            .scalars()
+            .first()
+        )
         if version is None:
             return None
         profile = self._find_v11_profile(
@@ -237,30 +294,34 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
 
         version_model = entities.Core3CompetitorProfileVersion
         profile_model = entities.Core3SkuCompetitorProfile
-        release_scope_key = self.db.execute(
-            select(version_model.release_scope_key)
-            .join(
-                profile_model,
-                profile_model.competitor_profile_version_id
-                == version_model.competitor_profile_version_id,
+        release_scope_key = (
+            self.db.execute(
+                select(version_model.release_scope_key)
+                .join(
+                    profile_model,
+                    profile_model.competitor_profile_version_id
+                    == version_model.competitor_profile_version_id,
+                )
+                .where(version_model.project_id == self.project_id)
+                .where(version_model.category_code == self.category_code.value)
+                .where(
+                    version_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
+                .where(version_model.release_status == "published")
+                .where(version_model.is_current.is_(True))
+                .where(version_model.current_at.is_not(None))
+                .where(profile_model.target_sku_code == target_sku_code)
+                .where(profile_model.release_status == "published")
+                .where(profile_model.is_current.is_(True))
+                .order_by(
+                    version_model.current_at.desc(),
+                    version_model.competitor_profile_version_id.desc(),
+                )
             )
-            .where(version_model.project_id == self.project_id)
-            .where(version_model.category_code == self.category_code.value)
-            .where(
-                version_model.schema_version
-                == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
-            )
-            .where(version_model.release_status == "published")
-            .where(version_model.is_current.is_(True))
-            .where(version_model.current_at.is_not(None))
-            .where(profile_model.target_sku_code == target_sku_code)
-            .where(profile_model.release_status == "published")
-            .where(profile_model.is_current.is_(True))
-            .order_by(
-                version_model.current_at.desc(),
-                version_model.competitor_profile_version_id.desc(),
-            )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if release_scope_key is None:
             return None
         return self.get_current_published_profile(
@@ -274,11 +335,8 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         self,
         version: entities.Core3CompetitorProfileVersion,
         dto: CompetitorProfileAnalysisDTO,
-    ) -> dict[str, entities.Core3CompetitorProfileSkuSnapshot]:
+    ) -> dict[str, str]:
         snapshots = [dto.target_snapshot, *dto.candidate_snapshots]
-        requested_sku_codes = {
-            snapshot.identity_market.sku_code for snapshot in snapshots
-        }
         ref_owners: dict[str, str] = {}
         for snapshot in snapshots:
             sku_code = snapshot.identity_market.sku_code
@@ -290,42 +348,67 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         model = entities.Core3CompetitorProfileSkuSnapshot
         existing = list(
             self.db.execute(
-                select(model)
-                .where(model.competitor_profile_version_id == version.competitor_profile_version_id)
+                select(
+                    model.sku_code,
+                    model.project_id,
+                    model.category_code,
+                    model.release_scope_key,
+                    model.input_fingerprint,
+                    model.result_hash,
+                    model.snapshot_json["snapshot_ref"]
+                    .as_string()
+                    .label("snapshot_ref"),
+                )
+                .where(
+                    model.competitor_profile_version_id
+                    == version.competitor_profile_version_id
+                )
                 .order_by(model.sku_code)
-            ).scalars()
+            ).mappings()
         )
         by_sku = {row.sku_code: row for row in existing}
         version_ref_owners: dict[str, str] = {}
         for row in existing:
-            try:
-                saved = VersionSkuAnalysisSnapshot.model_validate(row.snapshot_json)
-            except (TypeError, ValueError) as exc:
-                raise CompetitorProfileV11IntegrityError(
-                    "saved V1.1 snapshot is not a valid typed snapshot"
-                ) from exc
             if (
-                saved.competitor_profile_version_id
-                != version.competitor_profile_version_id
-                or saved.project_id != version.project_id
-                or saved.category_code != version.category_code
-                or saved.release_scope_key != version.release_scope_key
-                or saved.identity_market.sku_code != row.sku_code
-                or (
-                    saved.result_hash != row.result_hash
-                    and row.sku_code not in requested_sku_codes
-                )
+                row.project_id != version.project_id
+                or row.category_code != version.category_code
+                or row.release_scope_key != version.release_scope_key
+                or not row.snapshot_ref
             ):
                 raise CompetitorProfileV11IntegrityError(
                     "saved V1.1 snapshot crosses its version or SKU scope"
                 )
-            owner = version_ref_owners.setdefault(saved.snapshot_ref, row.sku_code)
+            owner = version_ref_owners.setdefault(row.snapshot_ref, row.sku_code)
             if owner != row.sku_code:
                 raise CompetitorProfileV11IntegrityError(
                     "one V1.1 snapshot ref cannot identify different SKUs in a version"
                 )
+        saved_refs = {row.sku_code: row.snapshot_ref for row in existing}
+        pending_identities: dict[str, tuple[str, str, str]] = {}
+        pending: list[entities.Core3CompetitorProfileSkuSnapshot] = []
+
+        def flush_pending() -> None:
+            if not pending:
+                return
+            self.db.flush()
+            for pending_row in pending:
+                self.db.expunge(pending_row)
+            pending.clear()
+
         for snapshot in snapshots:
             sku_code = snapshot.identity_market.sku_code
+            pending_identity = pending_identities.get(sku_code)
+            requested_identity = (
+                snapshot.input_fingerprint,
+                snapshot.result_hash,
+                snapshot.snapshot_ref,
+            )
+            if pending_identity is not None:
+                if pending_identity != requested_identity:
+                    raise CompetitorProfileImmutableError(
+                        f"V1.1 snapshot is inconsistent within one DTO: {sku_code}"
+                    )
+                continue
             owner = version_ref_owners.setdefault(snapshot.snapshot_ref, sku_code)
             if owner != sku_code:
                 raise CompetitorProfileV11IntegrityError(
@@ -340,7 +423,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     or row.release_scope_key != dto.profile_version.release_scope_key
                     or row.input_fingerprint != snapshot.input_fingerprint
                     or row.result_hash != snapshot.result_hash
-                    or row.snapshot_json != payload
+                    or row.snapshot_ref != snapshot.snapshot_ref
                 ):
                     raise CompetitorProfileImmutableError(
                         f"V1.1 snapshot is immutable within a version: {sku_code}"
@@ -365,9 +448,13 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 result_hash=snapshot.result_hash,
             )
             self.db.add(row)
-            by_sku[sku_code] = row
-        self.db.flush()
-        return by_sku
+            pending.append(row)
+            pending_identities[sku_code] = requested_identity
+            saved_refs[sku_code] = snapshot.snapshot_ref
+            if len(pending) >= _V11_PERSISTENCE_BATCH_SIZE:
+                flush_pending()
+        flush_pending()
+        return saved_refs
 
     def _insert_profile(
         self,
@@ -403,9 +490,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             display_name_cn=identity.model_name or identity.sku_code,
             analysis_state=_analysis_state(summary.dimension_availability_counts),
             conclusion_state=(
-                "available"
-                if dto.priority_selections
-                else "no_priority_competitor"
+                "available" if dto.priority_selections else "no_priority_competitor"
             ),
             freshness_status="unknown",
             profile_confidence=confidence,
@@ -452,7 +537,11 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             review_required=bool(review_items),
             review_status="pending" if review_items else "auto_pass",
             review_reasons_json=[
-                str(item.get("review_code") or item.get("reason_code") or "review_required")
+                str(
+                    item.get("review_code")
+                    or item.get("reason_code")
+                    or "review_required"
+                )
                 for item in review_items
             ],
         )
@@ -463,22 +552,34 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
     def _insert_pairs(
         self,
         version: entities.Core3CompetitorProfileVersion,
-        profile: entities.Core3SkuCompetitorProfile,
+        profile_id: str,
         dto: CompetitorProfileAnalysisDTO,
-    ) -> dict[str, entities.Core3SkuCompetitorProfilePair]:
+    ) -> dict[str, str]:
         selected = {row.candidate_sku_code: row for row in dto.priority_selections}
         snapshot_by_sku = {
             row.identity_market.sku_code: row for row in dto.candidate_snapshots
         }
-        rows: dict[str, entities.Core3SkuCompetitorProfilePair] = {}
+        pair_ids: dict[str, str] = {}
+        pending: list[entities.Core3SkuCompetitorProfilePair] = []
+
+        def flush_pending() -> None:
+            if not pending:
+                return
+            self.db.flush()
+            for pending_row in pending:
+                self.db.expunge(pending_row)
+            pending.clear()
+
         for pair in dto.pair_analyses:
             selection = selected.get(pair.candidate_sku_code)
             candidate_snapshot = snapshot_by_sku[pair.candidate_sku_code]
             primary_relation = _primary_relation(pair)
             score = pair.score_breakdown
             selection_question = _question(pair, QuestionCode.KEY_COMPETITOR_SELECTION)
+            pair_id = entities.new_id()
             row = entities.Core3SkuCompetitorProfilePair(
-                sku_competitor_profile_id=profile.sku_competitor_profile_id,
+                sku_competitor_profile_pair_id=pair_id,
+                sku_competitor_profile_id=profile_id,
                 competitor_profile_version_id=version.competitor_profile_version_id,
                 project_id=version.project_id,
                 category_code=version.category_code,
@@ -497,22 +598,34 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 competitor_member=_enum_value(pair.scope_status) == "analyzable",
                 reference_member=False,
                 candidate_status=(
-                    "eligible" if _enum_value(pair.scope_status) == "analyzable" else "recalled_only"
+                    "eligible"
+                    if _enum_value(pair.scope_status) == "analyzable"
+                    else "recalled_only"
                 ),
                 scope_status=_enum_value(pair.scope_status),
                 exclusion_reason_code=pair.exclusion_reason_code,
                 target_snapshot_ref=pair.target_snapshot_ref,
                 candidate_snapshot_ref=pair.candidate_snapshot_ref,
-                purchase_pool_level=(pair.purchase_pool.level if pair.purchase_pool else "unknown"),
-                purchase_pool_json=_json(pair.purchase_pool) if pair.purchase_pool else {},
+                purchase_pool_level=(
+                    pair.purchase_pool.level if pair.purchase_pool else "unknown"
+                ),
+                purchase_pool_json=_json(pair.purchase_pool)
+                if pair.purchase_pool
+                else {},
                 evidence_family_json=[],
-                market_comparison_json=_json(pair.market_validation) if pair.market_validation else {},
+                market_comparison_json=_json(pair.market_validation)
+                if pair.market_validation
+                else {},
                 question_eligibility_json=_json(pair.business_questions),
                 reference_purposes_json=[],
                 primary_relation_code=(
-                    _enum_value(primary_relation.relation_code) if primary_relation else None
+                    _enum_value(primary_relation.relation_code)
+                    if primary_relation
+                    else None
                 ),
-                relation_codes_json=[_enum_value(row.relation_code) for row in pair.relation_assessments],
+                relation_codes_json=[
+                    _enum_value(row.relation_code) for row in pair.relation_assessments
+                ],
                 selected=selection is not None,
                 non_selection_reason_code=(
                     None
@@ -527,13 +640,19 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     else pair.selection_assessment.selection_reason_cn
                 ),
                 confidence_level=_confidence_level(pair.overall_conclusion_strength),
-                confidence=(score.ranking_score if score and score.ranking_score is not None else Decimal("0")),
+                confidence=(
+                    score.ranking_score
+                    if score and score.ranking_score is not None
+                    else Decimal("0")
+                ),
                 evidence_refs_json=_json(pair.evidence_refs),
                 limitations_json=list(pair.limitations),
                 risk_flags_json=[],
                 pair_payload_json={},
                 analysis_snapshot_json=_json(pair),
-                analysis_conclusion_strength=_enum_value(pair.overall_conclusion_strength),
+                analysis_conclusion_strength=_enum_value(
+                    pair.overall_conclusion_strength
+                ),
                 analysis_score=(score.ranking_score if score else None),
                 analysis_available_weight=(score.available_weight if score else None),
                 analysis_result_hash=pair.result_hash,
@@ -554,31 +673,48 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 review_required=pair.review_required,
                 review_status="pending" if pair.review_required else "auto_pass",
                 review_reasons_json=[
-                    str(item.get("review_code") or item.get("reason_code") or "review_required")
+                    str(
+                        item.get("review_code")
+                        or item.get("reason_code")
+                        or "review_required"
+                    )
                     for item in _json(pair.review_items)
                 ],
             )
             self.db.add(row)
-            rows[pair.candidate_sku_code] = row
-        self.db.flush()
-        return rows
+            pending.append(row)
+            pair_ids[pair.candidate_sku_code] = pair_id
+            if len(pending) >= _V11_PERSISTENCE_BATCH_SIZE:
+                flush_pending()
+        flush_pending()
+        return pair_ids
 
     def _insert_relations(
         self,
         version: entities.Core3CompetitorProfileVersion,
-        profile: entities.Core3SkuCompetitorProfile,
-        pair_rows: dict[str, entities.Core3SkuCompetitorProfilePair],
+        pair_ids: dict[str, str],
         dto: CompetitorProfileAnalysisDTO,
     ) -> None:
-        del profile
-        rows = []
+        pending: list[entities.Core3SkuCompetitorProfileRelation] = []
+
+        def flush_pending() -> None:
+            if not pending:
+                return
+            self.db.flush()
+            for pending_row in pending:
+                self.db.expunge(pending_row)
+            pending.clear()
+
         for pair in dto.pair_analyses:
             primary = _primary_relation(pair)
             for relation in pair.relation_assessments:
                 review_items = _json(relation.review_items)
-                rows.append(
+                pending.append(
                     entities.Core3SkuCompetitorProfileRelation(
-                        sku_competitor_profile_pair_id=pair_rows[pair.candidate_sku_code].sku_competitor_profile_pair_id,
+                        sku_competitor_profile_relation_id=entities.new_id(),
+                        sku_competitor_profile_pair_id=pair_ids[
+                            pair.candidate_sku_code
+                        ],
                         competitor_profile_version_id=version.competitor_profile_version_id,
                         project_id=version.project_id,
                         category_code=version.category_code,
@@ -595,8 +731,13 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                         relation_status=_enum_value(relation.status),
                         analysis_relation_status=_enum_value(relation.status),
                         analysis_review_items_json=review_items,
-                        is_primary=(primary is not None and relation.relation_code == primary.relation_code),
-                        confidence_level=_confidence_level(relation.conclusion_strength),
+                        is_primary=(
+                            primary is not None
+                            and relation.relation_code == primary.relation_code
+                        ),
+                        confidence_level=_confidence_level(
+                            relation.conclusion_strength
+                        ),
                         gate_results_json=[],
                         supporting_evidence_families_json=[],
                         business_effect_json={},
@@ -611,20 +752,29 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                         result_hash=relation.result_hash,
                         processing_status="success",
                         review_required=relation.review_required,
-                        review_status="pending" if relation.review_required else "auto_pass",
+                        review_status="pending"
+                        if relation.review_required
+                        else "auto_pass",
                         review_reasons_json=[
-                            str(item.get("review_code") or item.get("reason_code") or "review_required")
+                            str(
+                                item.get("review_code")
+                                or item.get("reason_code")
+                                or "review_required"
+                            )
                             for item in review_items
                         ],
                     )
                 )
-        self.db.add_all(rows)
+                self.db.add(pending[-1])
+                if len(pending) >= _V11_PERSISTENCE_BATCH_SIZE:
+                    flush_pending()
+        flush_pending()
 
     def _insert_selections(
         self,
         version: entities.Core3CompetitorProfileVersion,
-        profile: entities.Core3SkuCompetitorProfile,
-        pair_rows: dict[str, entities.Core3SkuCompetitorProfilePair],
+        profile_id: str,
+        pair_ids: dict[str, str],
         dto: CompetitorProfileAnalysisDTO,
     ) -> None:
         pair_by_sku = {row.candidate_sku_code: row for row in dto.pair_analyses}
@@ -645,8 +795,10 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 )
             rows.append(
                 entities.Core3SkuCompetitorProfileSelection(
-                    sku_competitor_profile_id=profile.sku_competitor_profile_id,
-                    sku_competitor_profile_pair_id=pair_rows[selection.candidate_sku_code].sku_competitor_profile_pair_id,
+                    sku_competitor_profile_id=profile_id,
+                    sku_competitor_profile_pair_id=pair_ids[
+                        selection.candidate_sku_code
+                    ],
                     competitor_profile_version_id=version.competitor_profile_version_id,
                     project_id=version.project_id,
                     category_code=version.category_code,
@@ -661,7 +813,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     candidate_sku_code=selection.candidate_sku_code,
                     selection_rank=selection.selection_rank,
                     primary_decision_topic="purchase_choice",
-                    covered_decision_topics_json=[QuestionCode.KEY_COMPETITOR_SELECTION.value],
+                    covered_decision_topics_json=[
+                        QuestionCode.KEY_COMPETITOR_SELECTION.value
+                    ],
                     primary_relation_code=_enum_value(index_relation.relation_code),
                     auxiliary_relation_codes_json=[
                         _enum_value(row.relation_code)
@@ -671,14 +825,20 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     selection_reason_cn=selection.selection_reason_cn,
                     independent_information_reason_cn=selection.selection_reason_cn,
                     price_value_pressure_summary_json={},
-                    confidence_level=_confidence_level(selection.selection_conclusion_strength),
+                    confidence_level=_confidence_level(
+                        selection.selection_conclusion_strength
+                    ),
                     evidence_refs_json=[],
                     selection_payload_json=_json(selection),
                     selection_policy_version="competitor_profile_selection_v1_1",
                     selection_score=selection.selection_score,
                     selection_available_weight=selection.selection_available_weight,
-                    selection_conclusion_strength=_enum_value(selection.selection_conclusion_strength),
-                    selection_role_codes_json=[_enum_value(row) for row in selection.role_codes],
+                    selection_conclusion_strength=_enum_value(
+                        selection.selection_conclusion_strength
+                    ),
+                    selection_role_codes_json=[
+                        _enum_value(row) for row in selection.role_codes
+                    ],
                     selection_score_breakdown_json=_json(pair.score_breakdown),
                     release_status="draft",
                     is_current=False,
@@ -703,7 +863,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
     ) -> CompetitorProfileV11ReadResult:
         self._assert_v11_version(version)
         if profile.schema_version != COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION:
-            raise CompetitorProfileV11IntegrityError("legacy V1 rows cannot enter the V1.1 reader")
+            raise CompetitorProfileV11IntegrityError(
+                "legacy V1 rows cannot enter the V1.1 reader"
+            )
         self._assert_saved_row_scope(version, profile, profile.target_sku_code)
         self._assert_version_snapshot_ref_owners(version)
         if read_mode == "question_specific":
@@ -726,8 +888,13 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         pairs = list(
             self.db.execute(
                 select(pair_model)
-                .where(pair_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
-                .where(pair_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+                .where(
+                    pair_model.sku_competitor_profile_id
+                    == profile.sku_competitor_profile_id
+                )
+                .where(
+                    pair_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
                 .order_by(pair_model.candidate_sku_code)
             ).scalars()
         )
@@ -735,10 +902,16 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         snapshots = list(
             self.db.execute(
                 select(snapshot_model)
-                .where(snapshot_model.competitor_profile_version_id == version.competitor_profile_version_id)
+                .where(
+                    snapshot_model.competitor_profile_version_id
+                    == version.competitor_profile_version_id
+                )
                 .where(
                     snapshot_model.sku_code.in_(
-                        [profile.target_sku_code, *[row.candidate_sku_code for row in pairs]]
+                        [
+                            profile.target_sku_code,
+                            *[row.candidate_sku_code for row in pairs],
+                        ]
                     )
                 )
                 .order_by(snapshot_model.sku_code)
@@ -748,18 +921,32 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         relations = list(
             self.db.execute(
                 select(relation_model)
-                .where(relation_model.competitor_profile_version_id == version.competitor_profile_version_id)
+                .where(
+                    relation_model.competitor_profile_version_id
+                    == version.competitor_profile_version_id
+                )
                 .where(relation_model.target_sku_code == profile.target_sku_code)
-                .where(relation_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
-                .order_by(relation_model.candidate_sku_code, relation_model.relation_code)
+                .where(
+                    relation_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
+                .order_by(
+                    relation_model.candidate_sku_code, relation_model.relation_code
+                )
             ).scalars()
         )
         selection_model = entities.Core3SkuCompetitorProfileSelection
         selections = list(
             self.db.execute(
                 select(selection_model)
-                .where(selection_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
-                .where(selection_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+                .where(
+                    selection_model.sku_competitor_profile_id
+                    == profile.sku_competitor_profile_id
+                )
+                .where(
+                    selection_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
                 .order_by(selection_model.selection_rank)
             ).scalars()
         )
@@ -819,7 +1006,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             ) from exc
 
         if profile.result_hash != dto.profile_result_hash:
-            raise CompetitorProfileV11IntegrityError("V1.1 profile hash columns disagree")
+            raise CompetitorProfileV11IntegrityError(
+                "V1.1 profile hash columns disagree"
+            )
         if read_mode == "full":
             return CompetitorProfileV11ReadResult(
                 status="available",
@@ -898,8 +1087,13 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     pair_model.release_status,
                     pair_model.is_current,
                 )
-                .where(pair_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
-                .where(pair_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+                .where(
+                    pair_model.sku_competitor_profile_id
+                    == profile.sku_competitor_profile_id
+                )
+                .where(
+                    pair_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
                 .order_by(pair_model.candidate_sku_code)
             ).all()
         )
@@ -907,7 +1101,10 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         snapshots = list(
             self.db.execute(
                 select(snapshot_model)
-                .where(snapshot_model.competitor_profile_version_id == version.competitor_profile_version_id)
+                .where(
+                    snapshot_model.competitor_profile_version_id
+                    == version.competitor_profile_version_id
+                )
                 .where(
                     snapshot_model.sku_code.in_(
                         [
@@ -923,8 +1120,14 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         selections = list(
             self.db.execute(
                 select(selection_model)
-                .where(selection_model.sku_competitor_profile_id == profile.sku_competitor_profile_id)
-                .where(selection_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+                .where(
+                    selection_model.sku_competitor_profile_id
+                    == profile.sku_competitor_profile_id
+                )
+                .where(
+                    selection_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
                 .order_by(selection_model.selection_rank)
             ).scalars()
         )
@@ -947,10 +1150,18 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     relation_model.release_status,
                     relation_model.is_current,
                 )
-                .where(relation_model.competitor_profile_version_id == version.competitor_profile_version_id)
+                .where(
+                    relation_model.competitor_profile_version_id
+                    == version.competitor_profile_version_id
+                )
                 .where(relation_model.target_sku_code == profile.target_sku_code)
-                .where(relation_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
-                .order_by(relation_model.candidate_sku_code, relation_model.relation_code)
+                .where(
+                    relation_model.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
+                .order_by(
+                    relation_model.candidate_sku_code, relation_model.relation_code
+                )
             ).all()
         )
         for row in [*pair_headers, *relation_headers, *selections]:
@@ -987,12 +1198,8 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 raise CompetitorProfileV11IntegrityError(
                     "compact pair index differs from saved pair rows"
                 )
-            pair_header_by_sku = {
-                row.candidate_sku_code: row for row in pair_headers
-            }
-            pair_index_by_sku = {
-                row["candidate_sku_code"]: row for row in pair_index
-            }
+            pair_header_by_sku = {row.candidate_sku_code: row for row in pair_headers}
+            pair_index_by_sku = {row["candidate_sku_code"]: row for row in pair_index}
             selection_payloads = []
             for row in selections:
                 payload = _validated_selection_payload(row)
@@ -1011,8 +1218,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 for relation_code in ALL_RELATION_CODES
             }
             actual_relations = {
-                (row.candidate_sku_code, row.relation_code)
-                for row in relation_headers
+                (row.candidate_sku_code, row.relation_code) for row in relation_headers
             }
             if expected_relations != actual_relations:
                 raise CompetitorProfileV11IntegrityError(
@@ -1030,7 +1236,8 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     or payload.get("project_id") != version.project_id
                     or payload.get("category_code") != version.category_code
                     or payload.get("release_scope_key") != version.release_scope_key
-                    or (payload.get("identity_market") or {}).get("sku_code") != row.sku_code
+                    or (payload.get("identity_market") or {}).get("sku_code")
+                    != row.sku_code
                     or payload.get("result_hash") != row.result_hash
                 ):
                     raise CompetitorProfileV11IntegrityError(
@@ -1095,7 +1302,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 "saved V1.1 rows do not form a valid compact profile"
             ) from exc
         if profile.result_hash != compact.profile_result_hash:
-            raise CompetitorProfileV11IntegrityError("V1.1 profile hash columns disagree")
+            raise CompetitorProfileV11IntegrityError(
+                "V1.1 profile hash columns disagree"
+            )
         return CompetitorProfileV11ReadResult(
             status="available",
             read_mode="compact",
@@ -1185,15 +1394,20 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 or row.category_code != version.category_code
                 or row.release_scope_key != version.release_scope_key
             ):
-                raise CompetitorProfileV11IntegrityError("V1.1 snapshot crosses version scope")
+                raise CompetitorProfileV11IntegrityError(
+                    "V1.1 snapshot crosses version scope"
+                )
             snapshot = VersionSkuAnalysisSnapshot.model_validate(row.snapshot_json)
             if (
                 snapshot.snapshot_ref in parsed
-                or snapshot.competitor_profile_version_id != version.competitor_profile_version_id
+                or snapshot.competitor_profile_version_id
+                != version.competitor_profile_version_id
                 or snapshot.identity_market.sku_code != row.sku_code
                 or snapshot.result_hash != row.result_hash
             ):
-                raise CompetitorProfileV11IntegrityError("V1.1 snapshot row is inconsistent")
+                raise CompetitorProfileV11IntegrityError(
+                    "V1.1 snapshot row is inconsistent"
+                )
             parsed[snapshot.snapshot_ref] = snapshot
         target_refs = {row.target_snapshot_ref for row in pairs}
         if pairs:
@@ -1210,11 +1424,16 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             ]
             target = target_matches[0] if len(target_matches) == 1 else None
         if target is None or target.identity_market.sku_code != profile.target_sku_code:
-            raise CompetitorProfileV11IntegrityError("V1.1 target snapshot ref is dangling")
+            raise CompetitorProfileV11IntegrityError(
+                "V1.1 target snapshot ref is dangling"
+            )
         candidates = []
         for pair in pairs:
             snapshot = parsed.get(pair.candidate_snapshot_ref)
-            if snapshot is None or snapshot.identity_market.sku_code != pair.candidate_sku_code:
+            if (
+                snapshot is None
+                or snapshot.identity_market.sku_code != pair.candidate_sku_code
+            ):
                 raise CompetitorProfileV11IntegrityError(
                     f"V1.1 candidate snapshot ref is dangling: {pair.candidate_sku_code}"
                 )
@@ -1227,7 +1446,10 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         rows: Sequence[entities.Core3SkuCompetitorProfileRelation],
     ) -> None:
         expected = {
-            (pair.candidate_sku_code, _enum_value(relation.relation_code)): relation.result_hash
+            (
+                pair.candidate_sku_code,
+                _enum_value(relation.relation_code),
+            ): relation.result_hash
             for pair in pairs
             for relation in pair.relation_assessments
         }
@@ -1242,18 +1464,128 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
     @staticmethod
     def _assert_dto_snapshot_refs(
         dto: CompetitorProfileAnalysisDTO,
-        rows: dict[str, entities.Core3CompetitorProfileSkuSnapshot],
+        saved_refs: dict[str, str],
     ) -> None:
         expected = [dto.target_snapshot, *dto.candidate_snapshots]
         for snapshot in expected:
-            row = rows.get(snapshot.identity_market.sku_code)
-            if row is None:
-                raise CompetitorProfileV11IntegrityError("required V1.1 snapshot is missing")
-            payload = VersionSkuAnalysisSnapshot.model_validate(row.snapshot_json)
-            if payload.snapshot_ref != snapshot.snapshot_ref:
+            saved_ref = saved_refs.get(snapshot.identity_market.sku_code)
+            if saved_ref is None:
+                raise CompetitorProfileV11IntegrityError(
+                    "required V1.1 snapshot is missing"
+                )
+            if saved_ref != snapshot.snapshot_ref:
                 raise CompetitorProfileV11IntegrityError(
                     "V1.1 snapshot ref does not resolve in the same version"
                 )
+
+    def _assert_existing_materialized_graph(
+        self,
+        existing: entities.Core3SkuCompetitorProfile,
+        dto: CompetitorProfileAnalysisDTO,
+    ) -> None:
+        """Verify idempotency through immutable graph hashes, without full readback."""
+
+        if (
+            existing.input_fingerprint != dto.generation_receipt.input_fingerprint
+            or existing.result_hash != dto.profile_result_hash
+            or existing.analysis_result_hash != dto.profile_result_hash
+        ):
+            raise CompetitorProfileImmutableError(
+                "existing V1.1 draft has different immutable profile hashes"
+            )
+
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        relation_model = entities.Core3SkuCompetitorProfileRelation
+        selection_model = entities.Core3SkuCompetitorProfileSelection
+        snapshot_model = entities.Core3CompetitorProfileSkuSnapshot
+        profile_id = existing.sku_competitor_profile_id
+        actual_pairs = dict(
+            self.db.execute(
+                select(pair_model.candidate_sku_code, pair_model.result_hash).where(
+                    pair_model.sku_competitor_profile_id == profile_id
+                )
+            ).all()
+        )
+        actual_relations = {
+            (candidate_sku_code, relation_code): result_hash
+            for candidate_sku_code, relation_code, result_hash in self.db.execute(
+                select(
+                    relation_model.candidate_sku_code,
+                    relation_model.relation_code,
+                    relation_model.result_hash,
+                )
+                .where(
+                    relation_model.competitor_profile_version_id
+                    == dto.profile_version.competitor_profile_version_id
+                )
+                .where(
+                    relation_model.target_sku_code == dto.sku_summary.target_sku_code
+                )
+            ).all()
+        }
+        actual_selections = dict(
+            self.db.execute(
+                select(
+                    selection_model.candidate_sku_code,
+                    selection_model.result_hash,
+                ).where(selection_model.sku_competitor_profile_id == profile_id)
+            ).all()
+        )
+        snapshots = [dto.target_snapshot, *dto.candidate_snapshots]
+        snapshot_codes = [row.identity_market.sku_code for row in snapshots]
+        actual_snapshots = {
+            row.sku_code: (
+                row.input_fingerprint,
+                row.result_hash,
+                row.snapshot_ref,
+            )
+            for row in self.db.execute(
+                select(
+                    snapshot_model.sku_code,
+                    snapshot_model.input_fingerprint,
+                    snapshot_model.result_hash,
+                    snapshot_model.snapshot_json["snapshot_ref"]
+                    .as_string()
+                    .label("snapshot_ref"),
+                )
+                .where(
+                    snapshot_model.competitor_profile_version_id
+                    == dto.profile_version.competitor_profile_version_id
+                )
+                .where(snapshot_model.sku_code.in_(snapshot_codes))
+            ).mappings()
+        }
+        expected_pairs = {
+            row.candidate_sku_code: row.result_hash for row in dto.pair_analyses
+        }
+        expected_relations = {
+            (
+                row.candidate_sku_code,
+                _enum_value(relation.relation_code),
+            ): relation.result_hash
+            for row in dto.pair_analyses
+            for relation in row.relation_assessments
+        }
+        expected_selections = {
+            row.candidate_sku_code: row.result_hash for row in dto.priority_selections
+        }
+        expected_snapshots = {
+            row.identity_market.sku_code: (
+                row.input_fingerprint,
+                row.result_hash,
+                row.snapshot_ref,
+            )
+            for row in snapshots
+        }
+        if (
+            actual_pairs != expected_pairs
+            or actual_relations != expected_relations
+            or actual_selections != expected_selections
+            or actual_snapshots != expected_snapshots
+        ):
+            raise CompetitorProfileImmutableError(
+                "existing V1.1 draft child hashes differ from materialized analysis"
+            )
 
     @staticmethod
     def _assert_v11_version(version: entities.Core3CompetitorProfileVersion) -> None:
@@ -1276,7 +1608,12 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         version: entities.Core3CompetitorProfileVersion,
         context: Any,
     ) -> None:
-        for field in ("competitor_profile_version_id", "project_id", "category_code", "release_scope_key"):
+        for field in (
+            "competitor_profile_version_id",
+            "project_id",
+            "category_code",
+            "release_scope_key",
+        ):
             if getattr(context, field) != getattr(version, field):
                 raise ValueError(f"V1.1 DTO {field} must match its version")
         if (
@@ -1303,14 +1640,18 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         target_sku_code: str,
     ) -> entities.Core3SkuCompetitorProfile | None:
         model = entities.Core3SkuCompetitorProfile
-        return self.db.execute(
-            select(model)
-            .where(model.project_id == self.project_id)
-            .where(model.category_code == self.category_code.value)
-            .where(model.competitor_profile_version_id == version_id)
-            .where(model.target_sku_code == target_sku_code)
-            .where(model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
-        ).scalars().first()
+        return (
+            self.db.execute(
+                select(model)
+                .where(model.project_id == self.project_id)
+                .where(model.category_code == self.category_code.value)
+                .where(model.competitor_profile_version_id == version_id)
+                .where(model.target_sku_code == target_sku_code)
+                .where(model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+            )
+            .scalars()
+            .first()
+        )
 
 
 def _json(value: Any) -> Any:
@@ -1416,9 +1757,7 @@ def _assert_compact_selection(
     try:
         ranking_score_raw = score_breakdown.get("ranking_score")
         expected_pair_score = (
-            None
-            if ranking_score_raw is None
-            else Decimal(str(ranking_score_raw))
+            None if ranking_score_raw is None else Decimal(str(ranking_score_raw))
         )
         expected_selection_score = expected_pair_score or Decimal("0")
         inconsistent = (

@@ -101,6 +101,44 @@ class CandidatePipelineDeterminismGuard:
             receipt=receipt,
         )
 
+    def run_precanonicalized(
+        self,
+        category_bundle: CompetitorProfileCategoryInputBundle,
+        target_bundle: CompetitorProfileTargetInputBundle,
+        *,
+        recall_config: CandidateRecallConfig | None = None,
+        eligibility_config: CandidateEligibilityConfig | None = None,
+    ) -> CandidatePipelineRun:
+        """Replay a provider-canonical bundle without constructing a full copy.
+
+        ``CompetitorProfileInputProvider`` already emits SKU-ordered, unique
+        authority records.  Production generation can therefore validate that
+        contract in place and retain the same two-pass replay receipt, avoiding
+        a second category-sized Pydantic graph in memory.  General callers that
+        may contain duplicates must continue to use :meth:`run`.
+        """
+
+        canonical = _validate_precanonicalized_inputs(category_bundle, target_bundle)
+        recall, eligibility = self._replay(
+            canonical,
+            recall_config=recall_config or CandidateRecallConfig(),
+            eligibility_config=eligibility_config or CandidateEligibilityConfig(),
+        )
+        receipt = _build_receipt(
+            mode="generated",
+            canonical=canonical,
+            recall=recall,
+            eligibility=eligibility,
+            provided_verified=False,
+        )
+        return CandidatePipelineRun(
+            category_bundle=category_bundle,
+            target_bundle=target_bundle,
+            recall_manifest=recall,
+            eligibility_manifest=eligibility,
+            receipt=receipt,
+        )
+
     def verify(
         self,
         category_bundle: CompetitorProfileCategoryInputBundle,
@@ -151,6 +189,20 @@ class CandidatePipelineDeterminismGuard:
             target_bundle,
             source_pages=source_pages,
         )
+        recall, eligibility = CandidatePipelineDeterminismGuard._replay(
+            canonical,
+            recall_config=recall_config,
+            eligibility_config=eligibility_config,
+        )
+        return canonical, recall, eligibility
+
+    @staticmethod
+    def _replay(
+        canonical: _CanonicalizedInputs,
+        *,
+        recall_config: CandidateRecallConfig,
+        eligibility_config: CandidateEligibilityConfig,
+    ) -> tuple[CandidateRecallManifest, CandidateEligibilityManifest]:
         first_recall = CandidateRecallEngine().recall(
             canonical.category_bundle,
             canonical.target_bundle,
@@ -182,7 +234,89 @@ class CandidatePipelineDeterminismGuard:
                 "eligibility replay is not idempotent"
             )
         _assert_candidate_conservation(first_recall, first_eligibility)
-        return canonical, first_recall, first_eligibility
+        return first_recall, first_eligibility
+
+
+def _validate_precanonicalized_inputs(
+    category_bundle: CompetitorProfileCategoryInputBundle,
+    target_bundle: CompetitorProfileTargetInputBundle,
+) -> _CanonicalizedInputs:
+    """Validate the provider's canonical contract without copying record facts."""
+
+    if category_bundle.serving_scope != target_bundle.serving_scope:
+        raise CandidatePipelineDeterminismError(
+            "target and category bundles must use the same serving scope"
+        )
+    if set(category_bundle.modules) != set(target_bundle.modules):
+        raise CandidatePipelineDeterminismError(
+            "precanonicalized target modules must exactly cover category modules"
+        )
+
+    stats: list[ModuleCanonicalizationStats] = []
+    for module_code in sorted(category_bundle.modules):
+        module = category_bundle.modules[module_code]
+        sku_codes = list(module.records_by_sku)
+        if sku_codes != sorted(set(sku_codes)):
+            raise CandidatePipelineDeterminismError(
+                f"precanonicalized {module_code} SKU keys are not sorted and unique"
+            )
+
+        category_count = 0
+        business_keys: set[tuple[str, str, str, str]] = set()
+        for sku_code in sku_codes:
+            records = module.records_by_sku[sku_code]
+            if records != sorted(records, key=_record_sort_key):
+                raise CandidatePipelineDeterminismError(
+                    f"precanonicalized {module_code} records are not canonical"
+                )
+            for record in records:
+                if record.sku_code != sku_code:
+                    raise CandidatePipelineDeterminismError(
+                        f"precanonicalized {module_code} record crosses its SKU key"
+                    )
+                key = _record_business_key(record)
+                if key in business_keys:
+                    raise CandidatePipelineDuplicateConflictError(
+                        f"precanonicalized {module_code} contains duplicate authority keys"
+                    )
+                business_keys.add(key)
+                category_count += 1
+
+        target_module = target_bundle.modules[module_code]
+        target_records = target_module.records
+        if target_records != sorted(target_records, key=_record_sort_key):
+            raise CandidatePipelineDeterminismError(
+                f"precanonicalized target {module_code} records are not canonical"
+            )
+        expected = module.records_by_sku.get(target_bundle.target_sku_code, [])
+        if target_records != expected:
+            raise CandidatePipelineDeterminismError(
+                f"precanonicalized target {module_code} records conflict with category"
+            )
+
+        stat_payload = {
+            "module_code": module_code,
+            "category_input_record_count": category_count,
+            "category_unique_record_count": category_count,
+            "category_exact_duplicate_count": 0,
+            "target_input_record_count": len(target_records),
+            "target_unique_record_count": len(target_records),
+            "target_exact_duplicate_count": 0,
+        }
+        stats.append(
+            ModuleCanonicalizationStats(
+                **stat_payload,
+                result_hash=stable_hash(
+                    stat_payload,
+                    version="competitor_profile_module_canonicalization_v1",
+                ),
+            )
+        )
+    return _CanonicalizedInputs(
+        category_bundle=category_bundle,
+        target_bundle=target_bundle,
+        stats=tuple(stats),
+    )
 
 
 def _canonicalize_inputs(

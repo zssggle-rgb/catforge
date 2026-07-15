@@ -126,15 +126,28 @@ def test_two_pass_generation_is_idempotent_and_emits_typed_hash_receipt() -> Non
     }
 
 
+def test_precanonicalized_replay_reuses_the_provider_graph_losslessly() -> None:
+    bundle = _category_bundle()
+    target = _target_bundle(bundle, "TV000001")
+    guard = CandidatePipelineDeterminismGuard()
+
+    canonicalized = guard.run(bundle, target)
+    in_place = guard.run_precanonicalized(bundle, target)
+
+    assert in_place.category_bundle is bundle
+    assert in_place.target_bundle is target
+    assert in_place.recall_manifest == canonicalized.recall_manifest
+    assert in_place.eligibility_manifest == canonicalized.eligibility_manifest
+    assert in_place.receipt == canonicalized.receipt
+
+
 def test_canonicalization_reuses_typed_source_records_without_deep_copy() -> None:
     bundle = _category_bundle()
     original = bundle.modules["M12C"].records_by_sku["TV000002"][0]
 
     generated = _run(bundle, "TV000001")
 
-    canonical = generated.category_bundle.modules["M12C"].records_by_sku[
-        "TV000002"
-    ][0]
+    canonical = generated.category_bundle.modules["M12C"].records_by_sku["TV000002"][0]
     assert canonical is original
     assert canonical.facts is original.facts
 

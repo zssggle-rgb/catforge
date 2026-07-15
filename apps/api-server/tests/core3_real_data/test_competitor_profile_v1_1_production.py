@@ -117,8 +117,13 @@ def test_production_work_item_preserves_the_full_candidate_universe() -> None:
     builder = CompetitorProfileV11ProductionWorkItemBuilder()
     config = build_production_materialization_config(provider.category)
     prepared = builder.prepare(provider.category, provider.target, config)
-    item = builder.build_work_item(
+    snapshot_stage = builder.build_snapshot_stage(
         prepared,
+        competitor_profile_version_id="competitor-profile-v11-production-test",
+    )
+    assert not hasattr(snapshot_stage, "category_bundle")
+    item = builder.build_work_item_from_snapshot_stage(
+        snapshot_stage,
         competitor_profile_version_id="competitor-profile-v11-production-test",
     )
 
@@ -135,8 +140,16 @@ def test_production_work_item_preserves_the_full_candidate_universe() -> None:
 
 def test_production_service_persists_once_and_reuses_the_same_draft(
     session: Session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = _repository(session)
+    monkeypatch.setattr(
+        repository,
+        "_read_projection",
+        lambda **_kwargs: pytest.fail(
+            "production generation must not materialize a second full readback"
+        ),
+    )
     service = CompetitorProfileV11ProductionService(
         repository=repository,
         input_provider=_FixtureProvider(),
@@ -177,7 +190,12 @@ def test_production_service_records_a_safe_failed_version_state(
     session: Session,
 ) -> None:
     class _FailingBuilder(CompetitorProfileV11ProductionWorkItemBuilder):
-        def build_work_item(self, prepared, *, competitor_profile_version_id):
+        def build_work_item_from_snapshot_stage(
+            self,
+            stage,
+            *,
+            competitor_profile_version_id,
+        ):
             raise RuntimeError("fixture failure with internal detail")
 
     repository = _repository(session)
