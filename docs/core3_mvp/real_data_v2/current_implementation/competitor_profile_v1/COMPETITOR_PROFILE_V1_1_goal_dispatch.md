@@ -1,6 +1,6 @@
 # CatForge 竞品画像 V1.1 串行 Goal 调度
 
-状态：G27—G39 completed；G40—G41 pending；G42 approval-only
+状态：G27—G40 completed；G41 pending；G42 approval-only
 
 日期：2026-07-16
 
@@ -234,6 +234,8 @@
 提交时只暂存 G27—G39 产生的精确文件。
 
 ## 9. G40：205 代码部署
+
+完成状态：completed；关闭回执：`G40_closure_receipt.md`。
 
 只允许：
 
