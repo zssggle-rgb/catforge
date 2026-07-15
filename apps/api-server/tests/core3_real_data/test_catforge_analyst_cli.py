@@ -4567,6 +4567,7 @@ def test_ac_ask_infers_category_reads_facts_and_uses_hp_price_pool() -> None:
         limit=5,
         answer_style="xiaoao",
         with_report="markdown",
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -4633,6 +4634,7 @@ def test_ac_competitor_set_consumes_published_m12d_without_tv_fallback() -> None
         limit=5,
         answer_style="xiaoao",
         with_report="markdown",
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -4833,6 +4835,7 @@ def test_competitor_set_sop_composes_candidate_evidence() -> None:
         product_category="tv",
         sku_code="TV00029112",
         limit=10,
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -5247,7 +5250,11 @@ def test_competitor_set_fetches_full_claim_value_payload_for_reports() -> None:
     )
 
     result = orchestrator.competitor_set(
-        context, sku_code="TV00029112", limit=20, answer_style="xiaoao"
+        context,
+        sku_code="TV00029112",
+        limit=20,
+        answer_style="xiaoao",
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -5274,6 +5281,7 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
         answer_style="xiaoao",
         with_report="markdown",
         max_chat_chars=600,
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -5817,6 +5825,7 @@ def test_competitor_set_text_format_is_business_facing() -> None:
         product_category="tv",
         sku_code="TV00029112",
         limit=10,
+        legacy_live_analysis=True,
     )
 
     text = catforge_analyst.format_business_text(result)
@@ -5847,6 +5856,7 @@ def test_competitor_set_text_uses_xiaoao_short_answer() -> None:
         limit=10,
         answer_style="xiaoao",
         with_report="markdown",
+        legacy_live_analysis=True,
     )
 
     text = catforge_analyst.format_business_text(result)
@@ -6023,6 +6033,7 @@ def test_ask_routes_competitor_question_to_sop() -> None:
         batch_id=BATCH_ID,
         product_category="tv",
         question="海信65E7Q和谁竞争？",
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"
@@ -6053,6 +6064,7 @@ def test_ask_routes_competitor_reason_question_without_candidate_to_competitor_s
         batch_id=BATCH_ID,
         product_category="tv",
         question="海信65E7Q和谁竞争，为什么？",
+        legacy_live_analysis=True,
     )
 
     assert result["status"] == "ok"

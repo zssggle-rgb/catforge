@@ -1,0 +1,153 @@
+{
+  "benchmark_version": "competitor_profile_v1_1_g39_max_scale_v1",
+  "categories": {
+    "AC": {
+      "budget": {
+        "candidate_count": 155,
+        "maximum_generation_p95_ms": 30000,
+        "maximum_peak_memory_mib": 600,
+        "maximum_serialized_draft_bytes": 268435456
+      },
+      "candidate_count": 155,
+      "deterministic": true,
+      "deterministic_profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:aaf02a1f82b45807f7974685d808d9b2b5bbe3b01fc6b58de1e5042f85e7f2d7",
+      "generation_and_serialization_p95_ms": 12005.755,
+      "maximum_peak_memory_mib": 540.344,
+      "maximum_serialized_draft_bytes": 145203967,
+      "passed": true,
+      "repeats": 3,
+      "runs": [
+        {
+          "candidate_count": 155,
+          "candidate_snapshot_count": 155,
+          "generation_and_serialization_ms": 12005.818,
+          "input_preparation_ms": 10109.411,
+          "materialized_peak_memory_mib": 885.547,
+          "peak_memory_mib": 540.344,
+          "priority_count": 3,
+          "process_peak_memory_mib": 1168.047,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:aaf02a1f82b45807f7974685d808d9b2b5bbe3b01fc6b58de1e5042f85e7f2d7",
+          "run_number": 1,
+          "serialized_draft_bytes": 145203967,
+          "work_item_baseline_memory_mib": 627.703,
+          "work_item_peak_memory_mib": 627.703
+        },
+        {
+          "candidate_count": 155,
+          "candidate_snapshot_count": 155,
+          "generation_and_serialization_ms": 11999.069,
+          "input_preparation_ms": 10101.464,
+          "materialized_peak_memory_mib": 889.375,
+          "peak_memory_mib": 512.891,
+          "priority_count": 3,
+          "process_peak_memory_mib": 1139.344,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:aaf02a1f82b45807f7974685d808d9b2b5bbe3b01fc6b58de1e5042f85e7f2d7",
+          "run_number": 2,
+          "serialized_draft_bytes": 145203967,
+          "work_item_baseline_memory_mib": 626.453,
+          "work_item_peak_memory_mib": 626.453
+        },
+        {
+          "candidate_count": 155,
+          "candidate_snapshot_count": 155,
+          "generation_and_serialization_ms": 12005.185,
+          "input_preparation_ms": 10064.466,
+          "materialized_peak_memory_mib": 889.219,
+          "peak_memory_mib": 512.188,
+          "priority_count": 3,
+          "process_peak_memory_mib": 1139.219,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:aaf02a1f82b45807f7974685d808d9b2b5bbe3b01fc6b58de1e5042f85e7f2d7",
+          "run_number": 3,
+          "serialized_draft_bytes": 145203967,
+          "work_item_baseline_memory_mib": 627.031,
+          "work_item_peak_memory_mib": 627.031
+        }
+      ]
+    },
+    "TV": {
+      "budget": {
+        "candidate_count": 377,
+        "maximum_generation_p95_ms": 60000,
+        "maximum_peak_memory_mib": 1200,
+        "maximum_serialized_draft_bytes": 536870912
+      },
+      "candidate_count": 377,
+      "deterministic": true,
+      "deterministic_profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:ace8fd9b2d46ba4142bcd008b8e017a48a4a753055c99e32b1d13711dea23f28",
+      "generation_and_serialization_p95_ms": 30859.091,
+      "maximum_peak_memory_mib": 1085.875,
+      "maximum_serialized_draft_bytes": 352784263,
+      "passed": true,
+      "repeats": 3,
+      "runs": [
+        {
+          "candidate_count": 377,
+          "candidate_snapshot_count": 377,
+          "generation_and_serialization_ms": 30827.542,
+          "input_preparation_ms": 26217.432,
+          "materialized_peak_memory_mib": 1799.016,
+          "peak_memory_mib": 1085.875,
+          "priority_count": 3,
+          "process_peak_memory_mib": 2327.375,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:ace8fd9b2d46ba4142bcd008b8e017a48a4a753055c99e32b1d13711dea23f28",
+          "run_number": 1,
+          "serialized_draft_bytes": 352784263,
+          "work_item_baseline_memory_mib": 1241.5,
+          "work_item_peak_memory_mib": 1244.5
+        },
+        {
+          "candidate_count": 377,
+          "candidate_snapshot_count": 377,
+          "generation_and_serialization_ms": 30860.908,
+          "input_preparation_ms": 26300.851,
+          "materialized_peak_memory_mib": 1837.328,
+          "peak_memory_mib": 805.406,
+          "priority_count": 3,
+          "process_peak_memory_mib": 2047.219,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:ace8fd9b2d46ba4142bcd008b8e017a48a4a753055c99e32b1d13711dea23f28",
+          "run_number": 2,
+          "serialized_draft_bytes": 352784263,
+          "work_item_baseline_memory_mib": 1241.812,
+          "work_item_peak_memory_mib": 1244.812
+        },
+        {
+          "candidate_count": 377,
+          "candidate_snapshot_count": 377,
+          "generation_and_serialization_ms": 30842.74,
+          "input_preparation_ms": 26355.084,
+          "materialized_peak_memory_mib": 1839.828,
+          "peak_memory_mib": 847.109,
+          "priority_count": 3,
+          "process_peak_memory_mib": 2091.297,
+          "profile_result_hash": "sha256:competitor_profile_v1_1_profile_result_v1:ace8fd9b2d46ba4142bcd008b8e017a48a4a753055c99e32b1d13711dea23f28",
+          "run_number": 3,
+          "serialized_draft_bytes": 352784263,
+          "work_item_baseline_memory_mib": 1244.188,
+          "work_item_peak_memory_mib": 1247.188
+        }
+      ]
+    }
+  },
+  "machine": {
+    "machine": "arm64",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "python": "3.13.5"
+  },
+  "measurement_contract": {
+    "candidate_truncation_allowed": false,
+    "dimension_dropping_allowed": false,
+    "generation_timing_scope": "materialize_frozen_g32_g35_outputs_and_serialize_draft",
+    "input_preparation_reported_separately": true,
+    "peak_memory_scope": "incremental_process_rss_above_prepared_work_item_baseline"
+  },
+  "sql_contract": {
+    "candidate_loop_selects": 0,
+    "evidence_tests": [
+      "test_provider_loads_complete_category_once_and_reuses_target_bundle",
+      "test_full_compact_and_question_reads_are_deterministic_and_bounded"
+    ],
+    "provider_select_count": 11,
+    "repository_full_compact_question_select_count": 7,
+    "target_incremental_provider_select_count": 0
+  }
+}

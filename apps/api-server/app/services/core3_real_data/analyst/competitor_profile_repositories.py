@@ -23,6 +23,7 @@ from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas
     SkuCompetitorSelectionDraft,
 )
 from app.services.core3_real_data.analyst.competitor_profile_schemas import (
+    COMPETITOR_PROFILE_SCHEMA_VERSION,
     CompetitorPairDraft,
     KeyCompetitorSelectionDraft,
     RelationAssessment,
@@ -69,6 +70,8 @@ _PERSISTENCE_INSERT_BATCH_SIZE = 8
 
 
 class CompetitorProfileRepository(Core3BaseRepository):
+    profile_schema_version = COMPETITOR_PROFILE_SCHEMA_VERSION
+
     def __init__(self, context: Core3RepositoryContext) -> None:
         super().__init__(context)
 
@@ -76,6 +79,8 @@ class CompetitorProfileRepository(Core3BaseRepository):
         self,
         payload: CompetitorProfileVersionDraftCreate,
     ) -> CompetitorProfileVersionRecord:
+        if payload.schema_version != self.profile_schema_version:
+            raise ValueError("profile schema version does not match repository")
         self._assert_context_scope(payload.project_id, payload.category_code)
         existing = self._find_version(
             release_scope_key=payload.release_scope_key,
@@ -376,6 +381,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             select(model)
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code.value)
+            .where(model.schema_version == self.profile_schema_version)
         )
         if release_scope_key is not None:
             stmt = stmt.where(model.release_scope_key == release_scope_key)
@@ -485,6 +491,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(version_model.project_id == self.project_id)
             .where(version_model.category_code == self.category_code.value)
             .where(version_model.release_scope_key == release_scope_key)
+            .where(version_model.schema_version == self.profile_schema_version)
             .where(version_model.release_status == "published")
             .where(version_model.is_current.is_(True))
         ).scalars().first()
@@ -575,6 +582,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code.value)
             .where(model.competitor_profile_version_id == competitor_profile_version_id)
+            .where(model.schema_version == self.profile_schema_version)
             .order_by(model.target_sku_code)
             .offset(normalized_offset)
             .limit(normalized_limit)
@@ -948,6 +956,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.release_scope_key == release_scope_key)
             .where(model.profile_version == profile_version)
             .where(model.rule_version == rule_version)
+            .where(model.schema_version == self.profile_schema_version)
         ).scalars().first()
 
     def _version_by_id(
@@ -962,6 +971,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code.value)
             .where(model.competitor_profile_version_id == version_id)
+            .where(model.schema_version == self.profile_schema_version)
         )
         if for_update:
             stmt = stmt.with_for_update()
@@ -985,6 +995,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.category_code == self.category_code.value)
             .where(model.competitor_profile_version_id == version_id)
             .where(model.target_sku_code == target_sku_code)
+            .where(model.schema_version == self.profile_schema_version)
         ).scalars().first()
 
     def _profile_by_id(self, profile_id: str) -> entities.Core3SkuCompetitorProfile:
@@ -994,6 +1005,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code.value)
             .where(model.sku_competitor_profile_id == profile_id)
+            .where(model.schema_version == self.profile_schema_version)
         ).scalars().first()
         if row is None:
             raise CompetitorProfileNotFoundError(
@@ -1008,6 +1020,7 @@ class CompetitorProfileRepository(Core3BaseRepository):
             .where(model.project_id == self.project_id)
             .where(model.category_code == self.category_code.value)
             .where(model.sku_competitor_profile_pair_id == pair_id)
+            .where(model.schema_version == self.profile_schema_version)
         ).scalars().first()
         if row is None:
             raise CompetitorProfileNotFoundError(

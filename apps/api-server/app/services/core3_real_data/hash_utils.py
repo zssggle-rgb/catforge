@@ -7,7 +7,7 @@ import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
 DEFAULT_HASH_VERSION = "v1"
@@ -99,6 +99,124 @@ def stable_hash_json(value: Any, version: str = DEFAULT_HASH_VERSION) -> str:
     )
     digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
     return f"{HASH_ALGORITHM}:{version}:{digest}"
+
+
+def stable_hash_streaming(value: Any, version: str = DEFAULT_HASH_VERSION) -> str:
+    """Hash a large typed graph without materializing its normalized JSON tree.
+
+    The byte stream is deliberately identical to :func:`stable_hash`. Pydantic
+    models are dumped one model at a time, so callers can hash a list containing
+    hundreds of large pair records without retaining a second complete tree and
+    a complete canonical JSON string at the same time.
+    """
+
+    digest = hashlib.sha256()
+    for chunk in _iter_normalized_json(
+        {"hash_version": version, "value": value},
+        dump_typed_models=True,
+    ):
+        digest.update(chunk.encode("utf-8"))
+    return f"{HASH_ALGORITHM}:{version}:{digest.hexdigest()}"
+
+
+def _iter_normalized_json(
+    value: Any,
+    *,
+    dump_typed_models: bool,
+) -> Iterator[str]:
+    if dump_typed_models and _is_json_dump_model(value):
+        # One typed row is bounded (for example one candidate pair). Let the C
+        # JSON encoder handle that row, then release it before advancing to the
+        # next row instead of walking millions of scalar fields in Python.
+        yield canonicalize_json(value.model_dump(mode="json"))
+        return
+    if value is None or isinstance(value, bool | int | str):
+        yield json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        return
+    if isinstance(value, float):
+        normalized = f"{value:.1f}" if value.is_integer() else repr(value)
+        yield from _iter_normalized_json(
+            {"__type": "float", "value": normalized},
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, Decimal):
+        yield from _iter_normalized_json(
+            {"__type": "decimal", "value": format(value.normalize(), "f")},
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, datetime):
+        normalized = (
+            value.isoformat(timespec="microseconds")
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc).isoformat(timespec="microseconds")
+        )
+        yield from _iter_normalized_json(
+            {"__type": "datetime", "value": normalized},
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, date):
+        yield from _iter_normalized_json(
+            {"__type": "date", "value": value.isoformat()},
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, Enum):
+        yield from _iter_normalized_json(
+            value.value,
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, Mapping):
+        yield "{"
+        for index, key in enumerate(sorted(value, key=lambda item: str(item))):
+            if index:
+                yield ","
+            yield json.dumps(str(key), ensure_ascii=False, separators=(",", ":"))
+            yield ":"
+            yield from _iter_normalized_json(
+                value[key],
+                dump_typed_models=dump_typed_models,
+            )
+        yield "}"
+        return
+    if isinstance(value, tuple):
+        yield from _iter_normalized_json(
+            {"__type": "tuple", "items": list(value)},
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    if isinstance(value, list):
+        yield "["
+        for index, item in enumerate(value):
+            if index:
+                yield ","
+            yield from _iter_normalized_json(
+                item,
+                dump_typed_models=dump_typed_models,
+            )
+        yield "]"
+        return
+    if isinstance(value, set | frozenset):
+        normalized_items = [normalize_for_hash(item) for item in value]
+        yield from _iter_normalized_json(
+            {
+                "__type": "set",
+                "items": sorted(normalized_items, key=canonicalize_json),
+            },
+            dump_typed_models=dump_typed_models,
+        )
+        return
+    yield from _iter_normalized_json(
+        {"__type": value.__class__.__name__, "value": str(value)},
+        dump_typed_models=dump_typed_models,
+    )
+
+
+def _is_json_dump_model(value: Any) -> bool:
+    return callable(getattr(value, "model_dump", None))
 
 
 def hash_records(

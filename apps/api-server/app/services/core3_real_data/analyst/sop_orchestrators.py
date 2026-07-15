@@ -7,7 +7,7 @@ query tables directly; atomic handlers remain the source of fact extraction.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from app.services.core3_real_data.analyst.anchor_substitutability import (
     AnchorSubstitutabilityResult,
@@ -37,6 +37,15 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
 )
 from app.services.core3_real_data.analyst.competitor_answer import (
     build_competitor_answer,
+    publish_rendered_competitor_profile_report,
+    render_competitor_answer_from_profile,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_adapter import (
+    CompetitorProfileAgentAdapter,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_reader import (
+    CompetitorProfileV11Reader,
+    CompetitorProfileV11ReadRequest,
 )
 from app.services.core3_real_data.analyst.low_sales_answer import build_low_sales_answer
 from app.services.core3_real_data.analyst.purchase_reason_profile_reader import (
@@ -154,9 +163,11 @@ class SopOrchestrators:
         *,
         sellpoint_value_profile_repository: SellpointValueProfileRepository
         | None = None,
+        competitor_profile_v1_1_reader: CompetitorProfileV11Reader | None = None,
     ) -> None:
         self.atomic_handlers = atomic_handlers
         self.sellpoint_value_profile_repository = sellpoint_value_profile_repository
+        self.competitor_profile_v1_1_reader = competitor_profile_v1_1_reader
         self.sellpoint_value_profile_qa_service = (
             SellpointValueProfileQaService(sellpoint_value_profile_repository)
             if sellpoint_value_profile_repository is not None
@@ -526,6 +537,7 @@ class SopOrchestrators:
                 limit=limit,
                 answer_style="xiaoao",
                 with_report="none",
+                legacy_live_analysis=True,
             )
             atom_results.append(fallback_result)
             fallback_payload = fallback_result.get("result") or {}
@@ -656,6 +668,248 @@ class SopOrchestrators:
         )
 
     def competitor_set(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None = None,
+        sku_code: str | None = None,
+        model_name: str | None = None,
+        limit: int = 20,
+        answer_style: str = "raw",
+        with_report: str = "none",
+        top_n: int = 3,
+        max_chat_chars: int = 600,
+        report_title: str | None = None,
+        profile_access_mode: Literal["formal", "preview"] = "formal",
+        competitor_profile_version_id: str | None = None,
+        competitor_profile_release_scope_key: str | None = None,
+        allow_draft_preview: bool = False,
+        legacy_live_analysis: bool = False,
+        **_: Any,
+    ) -> dict[str, Any]:
+        if legacy_live_analysis:
+            return self._competitor_set_legacy(
+                context,
+                query=query,
+                sku_code=sku_code,
+                model_name=model_name,
+                limit=limit,
+                answer_style=answer_style,
+                with_report=with_report,
+                top_n=top_n,
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+            )
+        return self._competitor_set_from_profile(
+            context,
+            query=query,
+            sku_code=sku_code,
+            model_name=model_name,
+            answer_style=answer_style,
+            with_report=with_report,
+            max_chat_chars=max_chat_chars,
+            report_title=report_title,
+            profile_access_mode=profile_access_mode,
+            competitor_profile_version_id=competitor_profile_version_id,
+            competitor_profile_release_scope_key=(
+                competitor_profile_release_scope_key
+            ),
+            allow_draft_preview=allow_draft_preview,
+            requested_top_n=top_n,
+        )
+
+    def _competitor_set_from_profile(
+        self,
+        context: AnalystContext,
+        *,
+        query: str | None,
+        sku_code: str | None,
+        model_name: str | None,
+        answer_style: str,
+        with_report: str,
+        max_chat_chars: int,
+        report_title: str | None,
+        profile_access_mode: Literal["formal", "preview"],
+        competitor_profile_version_id: str | None,
+        competitor_profile_release_scope_key: str | None,
+        allow_draft_preview: bool,
+        requested_top_n: int,
+    ) -> dict[str, Any]:
+        if with_report not in {"none", "markdown", "feishu-doc"}:
+            raise ValueError("with_report must be none, markdown, or feishu-doc")
+        resolver_result: dict[str, Any] | None = None
+        target_sku_code = str(sku_code or "").strip().upper()
+        if not target_sku_code:
+            resolver_result = self.atomic_handlers.resolve_sku(
+                context,
+                query=query,
+                model_name=model_name,
+                limit=10,
+            )
+            if not _ok(resolver_result):
+                return _sop_error(
+                    command="competitor-set",
+                    context=context,
+                    atom_results=[resolver_result],
+                    message_cn="读取竞品画像前未能唯一解析目标 SKU。",
+                )
+            target_sku_code = str(
+                (resolver_result.get("target") or {}).get("sku_code") or ""
+            ).strip().upper()
+        reader = self.competitor_profile_v1_1_reader
+        if reader is None:
+            return _profile_unavailable_result(
+                context=context,
+                target_sku_code=target_sku_code,
+                resolver_result=resolver_result,
+                preview=profile_access_mode == "preview",
+                message_cn="当前运行环境尚未接入竞品画像 V1.1 Reader。",
+            )
+        read_result = reader.read(
+            CompetitorProfileV11ReadRequest(
+                project_id=context.project_id,
+                category_code=context.category_code,
+                release_scope_key=competitor_profile_release_scope_key,
+                target_sku_code=target_sku_code,
+                access_mode=profile_access_mode,
+                read_mode="full",
+                competitor_profile_version_id=competitor_profile_version_id,
+                allow_draft_preview=allow_draft_preview,
+            )
+        )
+        if read_result.status != "available":
+            return _profile_unavailable_result(
+                context=context,
+                target_sku_code=target_sku_code,
+                resolver_result=resolver_result,
+                preview=profile_access_mode == "preview",
+                message_cn=(
+                    "没有找到可用的竞品画像：正式模式只读取 current published V1.1；"
+                    "草稿必须显式指定版本并开启预览。"
+                ),
+            )
+        adapted = CompetitorProfileAgentAdapter().adapt(read_result)
+        if adapted.status != "available" or adapted.full is None:
+            raise ValueError("available competitor profile could not be adapted")
+        expected_preview = profile_access_mode == "preview"
+        if adapted.preview != expected_preview:
+            raise ValueError("competitor profile reader returned the wrong access mode")
+        profile = adapted.full
+        if (
+            profile.profile_version.project_id != context.project_id
+            or profile.profile_version.category_code != context.category_code
+            or profile.target_snapshot.identity_market.sku_code != target_sku_code
+        ):
+            raise ValueError("competitor profile reader returned the wrong scope")
+        if (
+            competitor_profile_release_scope_key is not None
+            and profile.profile_version.release_scope_key
+            != competitor_profile_release_scope_key
+        ):
+            raise ValueError("competitor profile reader returned the wrong scope")
+        if (
+            competitor_profile_version_id is not None
+            and profile.competitor_profile_version_id
+            != competitor_profile_version_id
+        ):
+            raise ValueError("competitor profile reader returned a different version")
+        render_mode: Literal["none", "markdown"] = (
+            "markdown" if with_report in {"markdown", "feishu-doc"} else "none"
+        )
+        answer = render_competitor_answer_from_profile(
+            profile=profile,
+            max_chat_chars=max_chat_chars,
+            with_report=render_mode,
+            report_title=report_title,
+        )
+        if with_report == "feishu-doc":
+            answer = publish_rendered_competitor_profile_report(answer=answer)
+        target_identity = profile.target_snapshot.identity_market.model_dump(mode="json")
+        target_identity.update(
+            {
+                "category_code": profile.target_snapshot.category_code,
+                "price_wavg": target_identity.get("weighted_price"),
+                "sales_volume_total": target_identity.get("total_sales_volume"),
+            }
+        )
+        result_payload: dict[str, Any] = {
+            "competitor_set": {
+                "source": "competitor_profile_v1_1",
+                "profile_access_mode": profile_access_mode,
+                "competitor_profile_version_id": (
+                    profile.competitor_profile_version_id
+                ),
+                "competitor_profile_release_scope_key": (
+                    profile.profile_version.release_scope_key
+                ),
+                "profile_result_hash": profile.profile_result_hash,
+                "ranking_policy": ["saved_profile_priority_order"],
+                "candidate_count": len(profile.candidates),
+                "excluded_candidate_count": len(profile.excluded_candidates),
+                "requested_top_n": requested_top_n,
+                "saved_priority_order": profile.priority_order,
+                "candidates": answer["all_candidates"],
+                "excluded_candidate_audit": answer["excluded_candidate_audit"],
+            }
+        }
+        if answer_style == "xiaoao" or with_report != "none":
+            result_payload["competitor_answer"] = answer
+        resolver_steps = int(resolver_result is not None)
+        limitations = _dedupe_strings(
+            [
+                *profile.sku_competition_summary.limitations,
+                *(
+                    ["请求的 top_n 不改变画像保存的重点竞品顺序。"]
+                    if requested_top_n != 3
+                    else []
+                ),
+            ]
+        )
+        return base_result(
+            status=AnalystStatus.OK,
+            command="competitor-set",
+            context=context,
+            target=target_identity,
+            result=result_payload,
+            sop_steps=[
+                {
+                    "step_code": "resolve-sku",
+                    "status": "ok" if resolver_result is not None else "skipped",
+                    "run_count": resolver_steps,
+                },
+                {
+                    "step_code": "competitor-profile-read",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+                {
+                    "step_code": "competitor-profile-adapter",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+                {
+                    "step_code": "competitor-profile-render",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+            ],
+            atoms_used=(
+                [{"ability_code": "resolve-sku", "status": "ok"}]
+                if resolver_result is not None
+                else []
+            ),
+            evidence=[
+                {
+                    "source_module": "competitor_profile_v1_1",
+                    "profile_version": profile.competitor_profile_version_id,
+                    "result_hash": profile.profile_result_hash,
+                }
+            ],
+            limitations=limitations,
+            answer_outline=[answer["short_answer"]],
+        )
+
+    def _competitor_set_legacy(
         self,
         context: AnalystContext,
         *,
@@ -1257,7 +1511,11 @@ class SopOrchestrators:
             context, sku_code=target_sku, limit=limit
         )
         competitor_set = self.competitor_set(
-            context, sku_code=target_sku, limit=limit, answer_style="raw"
+            context,
+            sku_code=target_sku,
+            limit=limit,
+            answer_style="raw",
+            legacy_live_analysis=True,
         )
         competitor_rows = (
             ((competitor_set.get("result") or {}).get("competitor_set") or {}).get(
@@ -1421,6 +1679,67 @@ def _sop_error(
         atoms_used=_atoms_used(atom_results),
         evidence=_evidence(atom_results),
         limitations=_limitations(atom_results),
+        message_cn=message_cn,
+    )
+
+
+def _profile_unavailable_result(
+    *,
+    context: AnalystContext,
+    target_sku_code: str,
+    resolver_result: dict[str, Any] | None,
+    preview: bool,
+    message_cn: str,
+) -> dict[str, Any]:
+    target = (
+        dict(resolver_result.get("target") or {})
+        if resolver_result is not None
+        else {"sku_code": target_sku_code}
+    )
+    if not target.get("sku_code"):
+        target["sku_code"] = target_sku_code
+    return base_result(
+        status=AnalystStatus.NOT_FOUND,
+        command="competitor-set",
+        context=context,
+        target=target,
+        result={
+            "competitor_set": {
+                "source": "competitor_profile_v1_1",
+                "status": "profile_unavailable",
+                "preview": preview,
+                "candidate_count": 0,
+                "candidates": [],
+            }
+        },
+        sop_steps=[
+            {
+                "step_code": "resolve-sku",
+                "status": "ok" if resolver_result is not None else "skipped",
+                "run_count": int(resolver_result is not None),
+            },
+            {
+                "step_code": "competitor-profile-read",
+                "status": "not_found",
+                "run_count": 1,
+            },
+            {
+                "step_code": "competitor-profile-adapter",
+                "status": "skipped",
+                "run_count": 0,
+            },
+            {
+                "step_code": "competitor-profile-render",
+                "status": "skipped",
+                "run_count": 0,
+            },
+        ],
+        atoms_used=(
+            [{"ability_code": "resolve-sku", "status": "ok"}]
+            if resolver_result is not None
+            else []
+        ),
+        limitations=[message_cn],
         message_cn=message_cn,
     )
 

@@ -1,0 +1,161 @@
+{
+  "fixture_version": "competitor_profile_v1_1_g28_gate_matrix_v2",
+  "fixture_purpose": "G34 future executable contract golden; it does not claim the current V1 runtime already behaves this way.",
+  "runtime_behavior_proven": false,
+  "hard_exclusion_codes": [
+    "self_pair",
+    "project_mismatch",
+    "category_mismatch",
+    "candidate_outside_manifest",
+    "identity_decode_failed"
+  ],
+  "source_modules": ["M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12C", "M12D"],
+  "base_inputs": {
+    "tv_pair_base": {
+      "target": {"sku_code": "TV00029112", "brand_name": "海信", "model_name": "65E7Q", "category_code": "TV"},
+      "candidate": {"sku_code": "TVG2800001", "brand_name": "测试竞品", "model_name": "TV-G28-CANDIDATE", "category_code": "TV"},
+      "scope": {"target_project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26", "candidate_project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26", "authoritative_manifest_sku_codes": ["TV00029112", "TVG2800001"], "target_identity_decoded": true, "candidate_identity_decoded": true},
+      "module_facts": {
+        "M03B": {"target": {"screen_size_inch": 65, "refresh_rate_hz": 144}, "candidate": {"screen_size_inch": 65, "refresh_rate_hz": 120}},
+        "M04C": {"target": {"fact_claim_codes": ["tv_claim_high_refresh"]}, "candidate": {"fact_claim_codes": ["tv_claim_high_refresh"]}},
+        "M05C": {"target": {"supported_claim_codes": ["tv_claim_high_refresh"], "contradicted_claim_codes": []}, "candidate": {"supported_claim_codes": ["tv_claim_high_refresh"], "contradicted_claim_codes": []}},
+        "M07": {"target": {"price_wavg": 5949, "avg_weekly_sales_volume": 251}, "candidate": {"price_wavg": 5599, "avg_weekly_sales_volume": 217}},
+        "M09C": {"target": {"primary_user_task_code": "TASK_HOME_CINEMA_IMMERSION"}, "candidate": {"primary_user_task_code": "TASK_HOME_CINEMA_IMMERSION"}},
+        "M10C": {"target": {"primary_target_group_code": "TG_QUALITY_FAMILY_UPGRADER"}, "candidate": {"primary_target_group_code": "TG_QUALITY_FAMILY_UPGRADER"}},
+        "M11C": {"target": {"primary_battlefield_code": "BF_PREMIUM_PICTURE_UPGRADE"}, "candidate": {"primary_battlefield_code": "BF_PREMIUM_PICTURE_UPGRADE"}},
+        "M11D": {"target": {"allocation_role": "primary", "dimension_code": "BF_PREMIUM_PICTURE_UPGRADE"}, "candidate": {"allocation_role": "primary", "dimension_code": "BF_PREMIUM_PICTURE_UPGRADE"}},
+        "M12C": {"target": {"claim_values": ["bright_room_clear", "dark_detail"]}, "candidate": {"claim_values": ["bright_room_clear"]}},
+        "M12D": {"target": {"core_purchase_reasons": ["picture_upgrade_justifies_price"]}, "candidate": {"core_purchase_reasons": ["picture_upgrade_justifies_price"]}}
+      }
+    },
+    "ac_pair_base": {
+      "target": {"sku_code": "AC00032008", "brand_name": "海信", "model_name": "KFR-35GW/S550-X1", "category_code": "AC"},
+      "candidate": {"sku_code": "ACG2800001", "brand_name": "测试竞品", "model_name": "AC-G28-CANDIDATE", "category_code": "AC"},
+      "scope": {"target_project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26", "candidate_project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26", "authoritative_manifest_sku_codes": ["AC00032008", "ACG2800001"], "target_identity_decoded": true, "candidate_identity_decoded": true},
+      "module_facts": {
+        "M03B": {"target": {"ac_product_form": "wall_mounted", "cooling_capacity_segment": "1.5p"}, "candidate": {"ac_product_form": "wall_mounted", "cooling_capacity_segment": "1.5p"}},
+        "M04C": {"target": {"fact_claim_codes": ["ac_claim_fast_cooling"]}, "candidate": {"fact_claim_codes": ["ac_claim_fast_cooling"]}},
+        "M05C": {"target": {"supported_claim_codes": ["ac_claim_fast_cooling"], "contradicted_claim_codes": []}, "candidate": {"supported_claim_codes": ["ac_claim_fast_cooling"], "contradicted_claim_codes": []}},
+        "M07": {"target": {"price_wavg": 3299, "avg_weekly_sales_volume": 180}, "candidate": {"price_wavg": 3199, "avg_weekly_sales_volume": 210}},
+        "M09C": {"target": {"primary_user_task_code": "TASK_AC_FAST_COOLING"}, "candidate": {"primary_user_task_code": "TASK_AC_FAST_COOLING"}},
+        "M10C": {"target": {"primary_target_group_code": "TG_AC_QUALITY_FAMILY"}, "candidate": {"primary_target_group_code": "TG_AC_QUALITY_FAMILY"}},
+        "M11C": {"target": {"primary_battlefield_code": "BF_AC_COMFORT_EFFICIENCY"}, "candidate": {"primary_battlefield_code": "BF_AC_COMFORT_EFFICIENCY"}},
+        "M11D": {"target": {"allocation_role": "primary", "dimension_code": "BF_AC_COMFORT_EFFICIENCY"}, "candidate": {"allocation_role": "primary", "dimension_code": "BF_AC_COMFORT_EFFICIENCY"}},
+        "M12C": {"target": {"claim_values": ["fast_cooling", "stable_temperature"]}, "candidate": {"claim_values": ["fast_cooling"]}},
+        "M12D": {"target": {"core_purchase_reasons": ["fast_cooling_reduces_wait"]}, "candidate": {"core_purchase_reasons": ["fast_cooling_reduces_wait"]}}
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_code": "tv_complete",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "available", "M07": "available", "M09C": "available", "M10C": "available", "M11C": "available", "M11D": "available", "M12C": "available", "M12D": "available"},
+      "input_mutations": [],
+      "input_condition": "All legacy competitor atoms and relevant M03B-M12D facts are known.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "available", "purchase_reason": "available", "user_realization": "available", "battlefield": "available"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "supported", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["all_dimensions", "role_assignment", "priority_selection"]
+    },
+    {
+      "case_code": "tv_m12d_missing",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "available", "M07": "available", "M09C": "available", "M10C": "available", "M11C": "available", "M11D": "available", "M12C": "available", "M12D": "missing"},
+      "input_mutations": [{"operation": "remove_module_records", "module_code": "M12D", "subjects": ["target", "candidate"]}],
+      "input_condition": "M12D is missing while market, configuration and semantic facts remain known.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "available", "purchase_reason": "unknown", "user_realization": "partial", "battlefield": "available"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "directional", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["market_analysis", "configuration_analysis", "semantic_analysis", "specialty_selection"]
+    },
+    {
+      "case_code": "tv_m05c_review",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "review", "M07": "available", "M09C": "available", "M10C": "available", "M11C": "available", "M11D": "available", "M12C": "available", "M12D": "available"},
+      "input_mutations": [{"operation": "set_review_required", "module_code": "M05C", "subjects": ["candidate"], "reason_code": "supported_and_contradicted_claim_conflict"}],
+      "input_condition": "M05C user-realization evidence is review-required; other dimensions are known.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "available", "purchase_reason": "available", "user_realization": "conflict", "battlefield": "available"},
+      "review_required": true,
+      "conflict_dimensions": ["user_realization"],
+      "required_question_strength": {"direct_choice": "supported", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["all_non_conflict_dimensions", "directional_user_realization", "priority_selection"]
+    },
+    {
+      "case_code": "tv_battlefield_conflict",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "available", "M07": "available", "M09C": "available", "M10C": "available", "M11C": "conflict", "M11D": "conflict", "M12C": "available", "M12D": "available"},
+      "input_mutations": [{"operation": "append_conflicting_record", "module_code": "M11C", "subjects": ["candidate"], "facts": {"primary_battlefield_code": "BF_GAMING_SPORTS_FLUENCY"}}, {"operation": "append_conflicting_record", "module_code": "M11D", "subjects": ["candidate"], "facts": {"allocation_role": "primary", "dimension_code": "BF_GAMING_SPORTS_FLUENCY"}}],
+      "input_condition": "Battlefield role records conflict inside the same project/category scope.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "partial", "purchase_reason": "available", "user_realization": "available", "battlefield": "conflict"},
+      "review_required": true,
+      "conflict_dimensions": ["battlefield"],
+      "required_question_strength": {"direct_choice": "directional", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["all_non_conflict_dimensions", "limited_relations", "specialty_selection"]
+    },
+    {
+      "case_code": "tv_market_only",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "missing", "M05C": "missing", "M07": "available", "M09C": "missing", "M10C": "missing", "M11C": "missing", "M11D": "missing", "M12C": "missing", "M12D": "missing"},
+      "input_mutations": [{"operation": "retain_only_modules", "module_codes": ["M03B", "M07"], "subjects": ["target", "candidate"]}],
+      "input_condition": "Only target/candidate identity and comparable M07 price-volume facts are known.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "unknown", "semantic": "unknown", "purchase_reason": "unknown", "user_realization": "unknown", "battlefield": "unknown"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "unknown", "price_volume_pressure": "directional", "configuration_attention": "unknown"},
+      "must_continue": ["market_analysis", "price_volume_question", "market_reference_selection"]
+    },
+    {
+      "case_code": "tv_configuration_only",
+      "category_code": "TV",
+      "base_input_ref": "tv_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "missing", "M07": "missing", "M09C": "missing", "M10C": "missing", "M11C": "missing", "M11D": "missing", "M12C": "available", "M12D": "missing"},
+      "input_mutations": [{"operation": "retain_only_modules", "module_codes": ["M03B", "M04C", "M12C"], "subjects": ["target", "candidate"]}, {"operation": "set_feature_values", "feature_code": "hdmi_2_1", "target_value": true, "candidate_value": false}, {"operation": "set_feature_market_status", "feature_code": "hdmi_2_1", "status": "foundational", "prevalence": {"numerator": 90, "denominator": 100, "ratio": 0.9}}],
+      "input_condition": "Only identity plus real parameter/claim differences are known.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "unknown", "configuration": "available", "semantic": "unknown", "purchase_reason": "unknown", "user_realization": "unknown", "battlefield": "unknown"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "unknown", "price_volume_pressure": "unknown", "configuration_attention": "directional"},
+      "must_continue": ["configuration_analysis", "foundational_feature_filter", "configuration_benchmark_selection"]
+    },
+    {
+      "case_code": "ac_complete",
+      "category_code": "AC",
+      "base_input_ref": "ac_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "available", "M07": "available", "M09C": "available", "M10C": "available", "M11C": "available", "M11D": "available", "M12C": "available", "M12D": "available"},
+      "input_mutations": [],
+      "input_condition": "All AC atoms and M03B-M12D facts are known with AC product form and capacity segment.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "available", "purchase_reason": "available", "user_realization": "available", "battlefield": "available"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "supported", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["ac_purchase_pool", "all_dimensions", "role_assignment", "priority_selection"],
+      "purchase_pool_expectation": {"method": "ac_product_form_and_capacity_segment", "level": "P0", "product_form_match": true, "capacity_segment_match": true},
+      "forbidden_assumptions": ["screen_size_inch", "tv_size_tier", "tv_battlefield_codes"]
+    },
+    {
+      "case_code": "ac_partial",
+      "category_code": "AC",
+      "base_input_ref": "ac_pair_base",
+      "module_states": {"M03B": "available", "M04C": "available", "M05C": "partial", "M07": "available", "M09C": "partial", "M10C": "partial", "M11C": "partial", "M11D": "partial", "M12C": "available", "M12D": "missing"},
+      "input_mutations": [{"operation": "remove_module_records", "module_code": "M12D", "subjects": ["target", "candidate"]}, {"operation": "set_partial", "module_codes": ["M05C", "M09C", "M10C", "M11C", "M11D"], "subjects": ["candidate"]}],
+      "input_condition": "AC identity, product form, capacity and market facts are known; semantic and M12D facts are partial.",
+      "scope_status": "analyzable",
+      "dimension_expectations": {"market": "available", "configuration": "available", "semantic": "partial", "purchase_reason": "unknown", "user_realization": "partial", "battlefield": "partial"},
+      "review_required": false,
+      "required_question_strength": {"direct_choice": "directional", "price_volume_pressure": "supported", "configuration_attention": "supported"},
+      "must_continue": ["ac_purchase_pool", "known_dimensions", "specialty_selection"],
+      "purchase_pool_expectation": {"method": "ac_product_form_and_capacity_segment", "level": "P0", "product_form_match": true, "capacity_segment_match": true},
+      "forbidden_assumptions": ["screen_size_inch", "tv_size_tier", "tv_battlefield_codes"]
+    }
+  ]
+}

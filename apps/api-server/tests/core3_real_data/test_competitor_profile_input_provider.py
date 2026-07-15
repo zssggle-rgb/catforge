@@ -24,6 +24,9 @@ from app.services.core3_real_data.analyst.competitor_profile_input_schemas impor
     TargetModuleInput,
     UpstreamRecordSnapshot,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_snapshot_builder import (
+    VersionSkuAnalysisSnapshotBuilder,
+)
 from app.services.core3_real_data.constants import (
     CORE3_M03B_AC_RULE_VERSION,
     CORE3_M03B_AC_TAXONOMY_VERSION,
@@ -387,6 +390,8 @@ def _seed_category(
                 market_window=request.market_window,
                 analysis_population=request.claim_value_analysis_population,
                 claim_code=f"claim-{sku_code}",
+                with_claim_sku_count=8,
+                without_claim_sku_count=6,
                 pool_hash=f"pool-{sku_code}",
                 rule_version=rules["M12C"],
                 input_fingerprint=f"pool-input-{sku_code}",
@@ -394,9 +399,32 @@ def _seed_category(
             )
             session.add(pool)
             session.flush()
-            session.add(
-                entities.Core3SkuClaimValueQuantification(
+            metric = entities.Core3ClaimValuePoolMetric(
+                pool_id=pool.pool_id,
+                project_id=project_id,
+                category_code=category,
+                product_category=category,
+                batch_id=batch_id,
+                market_window=request.market_window,
+                analysis_population=request.claim_value_analysis_population,
+                claim_code=f"claim-{sku_code}",
+                claim_name="画质清晰",
+                price_premium_abs=Decimal("220"),
+                weekly_sales_lift_abs=Decimal("8"),
+                weekly_sales_amount_lift_abs=Decimal("40000"),
+                effect_confidence=Decimal("0.72"),
+                business_summary_cn="同池价格和销量共同验证",
+                result_hash=f"m12c-metric-{sku_code}",
+                rule_version=rules["M12C"],
+                is_current=True,
+            )
+            session.add(metric)
+            session.flush()
+            session.add_all(
+                [
+                    entities.Core3SkuClaimValueQuantification(
                     pool_id=pool.pool_id,
+                    metric_id=metric.metric_id,
                     project_id=project_id,
                     category_code=category,
                     product_category=category,
@@ -407,10 +435,97 @@ def _seed_category(
                     claim_code=f"claim-{sku_code}",
                     claim_name="画质清晰",
                     claim_value_role="value_bundle_claim",
+                    claim_evidence_strength=Decimal("0.8"),
+                    param_support_strength=Decimal("0.7"),
+                    comment_support_strength=Decimal("0.6"),
+                    semantic_support_strength=Decimal("0.5"),
+                    estimated_price_premium_abs=Decimal("180"),
+                    estimated_weekly_sales_lift_abs=Decimal("6"),
+                    estimated_weekly_sales_amount_lift_abs=Decimal("30000"),
+                    contribution_share_in_sku=Decimal("0.25"),
+                    attribution_confidence=Decimal("0.75"),
+                    evidence_ids_json=[f"claim-evidence-{sku_code}"],
+                    supporting_dimensions_json={
+                        "business_claim_type": "customer_value_claim",
+                        "business_claim_type_cn": "客户获得价值卖点",
+                        "business_claim_type_definition_cn": "该卖点让用户觉得产品更值。",
+                        "claim_value_score": "76",
+                        "target_has_claim": True,
+                        "market_position_type": "sales_supported",
+                        "market_position_cn": "销量承接得到验证",
+                        "parameter_competitiveness": {
+                            "overall_parameter_competitiveness_score": "80",
+                            "overall_parameter_competitiveness_level_cn": "较强",
+                        },
+                    },
                     result_hash=f"m12c-{sku_code}",
                     rule_version=rules["M12C"],
                     is_current=True,
-                )
+                    ),
+                    entities.Core3SkuClaimContributionAttribution(
+                        pool_id=pool.pool_id,
+                        project_id=project_id,
+                        category_code=category,
+                        product_category=category,
+                        batch_id=batch_id,
+                        market_window=request.market_window,
+                        analysis_population=request.claim_value_analysis_population,
+                        sku_code=sku_code,
+                        brand_name="品牌A",
+                        model_name=f"型号-{sku_code}",
+                        context_type="market_pool",
+                        context_code="all",
+                        context_name="市场池",
+                        size_tier="unknown",
+                        price_band_group="unknown",
+                        baseline_price=Decimal("4800"),
+                        baseline_weekly_sales_volume=Decimal("92"),
+                        baseline_weekly_sales_amount=Decimal("441600"),
+                        sku_price=Decimal("5000"),
+                        sku_weekly_sales_volume=Decimal("100"),
+                        sku_weekly_sales_amount=Decimal("500000"),
+                        sku_price_premium_abs=Decimal("200"),
+                        sku_weekly_sales_lift_abs=Decimal("8"),
+                        sku_weekly_sales_amount_lift_abs=Decimal("58400"),
+                        positive_claims_json=[
+                            {
+                                "claim_code": f"claim-{sku_code}",
+                                "claim_name": "画质清晰",
+                                "business_claim_type": "customer_value_claim",
+                                "business_claim_type_cn": "客户获得价值卖点",
+                                "claim_value_score": "76",
+                            },
+                            {
+                                "claim_code": "claim-second-positive",
+                                "claim_name": "第二正向卖点",
+                                "business_claim_type": "share_conversion_claim",
+                                "business_claim_type_cn": "份额转化卖点",
+                                "claim_value_score": "70",
+                            },
+                        ],
+                        drag_claims_json=[
+                            {
+                                "claim_code": "claim-drag",
+                                "claim_name": "价格压力项",
+                                "business_claim_type": "price_pressure_claim",
+                                "business_claim_type_cn": "价格压力卖点",
+                            }
+                        ],
+                        opportunity_claims_json=[
+                            {
+                                "claim_code": "claim-opportunity",
+                                "claim_name": "机会卖点",
+                                "business_claim_type": "competitor_intercept_claim",
+                                "business_claim_type_cn": "竞品拦截卖点",
+                            }
+                        ],
+                        attribution_summary_cn="卖点共同解释本品量价表现",
+                        confidence=Decimal("0.74"),
+                        result_hash=f"m12c-attribution-{sku_code}",
+                        rule_version=rules["M12C"],
+                        is_current=True,
+                    ),
+                ]
             )
 
     version = entities.Core3PurchaseReasonProfileVersion(
@@ -514,8 +629,13 @@ def test_tv_category_bundle_locks_exact_authorities_and_avoids_n_plus_one(
     assert "evidence_examples_json" not in m05_select
     assert "signal_summary_json" not in m05_select
     assert "supported_claim_codes" in m05_select
-    assert "claim_name" not in m12c_select
+    assert "claim_name" in m12c_select
     assert "claim_code" in m12c_select
+    assert "estimated_price_premium_abs" in m12c_select
+    assert "pool_id" in m12c_select
+    assert "metric_id" in m12c_select
+    assert "core3_claim_value_pool_metric" in m12c_select
+    assert "core3_sku_claim_contribution_attribution" in m12c_select
     before_target = select_count
     target = provider.load_target_input(bundle, "TV000001")
     assert select_count == before_target
@@ -537,6 +657,76 @@ def test_tv_category_bundle_locks_exact_authorities_and_avoids_n_plus_one(
     assert provider.load_category_input_bundle(request).input_fingerprint == (
         bundle.input_fingerprint
     )
+
+
+def test_v11_snapshot_builder_consumes_locked_bundle_without_queries(
+    session: Session,
+) -> None:
+    _seed_category(session)
+    provider = _provider(session)
+    bundle = provider.load_category_input_bundle(_request())
+    select_count = 0
+
+    def _count_selects(_, __, statement, ___, ____, _____) -> None:
+        nonlocal select_count
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_count += 1
+
+    event.listen(session.bind, "before_cursor_execute", _count_selects)
+    snapshot = VersionSkuAnalysisSnapshotBuilder().build(
+        bundle,
+        competitor_profile_version_id="competitor-profile-v11-provider-test",
+        sku_code="TV000001",
+    )
+    event.remove(session.bind, "before_cursor_execute", _count_selects)
+
+    assert select_count == 0
+    assert snapshot.claim_value_snapshot is not None
+    assert snapshot.claim_contribution_snapshot is not None
+    assert snapshot.claim_value_snapshot.claim_values[0].claim_name == "画质清晰"
+    claim = snapshot.claim_value_snapshot.claim_values[0]
+    assert claim.claim_value_score == Decimal("76")
+    assert claim.business_claim_type_cn == "客户获得价值卖点"
+    assert claim.claim_source_type == "target_fact_claim"
+    assert claim.market_position is not None
+    assert claim.market_position.type == "sales_supported"
+    assert claim.sku_excess_explanation is not None
+    assert claim.sku_excess_explanation.sku_excess_price_explained_abs == Decimal(
+        "180"
+    )
+    assert claim.pool_effect["pool_claim_price_delta_abs"] == "220.0000"
+    assert claim.pool_effect["with_claim_sku_count"] == 8
+    assert snapshot.claim_contribution_snapshot.attribution_count == 1
+    attribution = snapshot.claim_contribution_snapshot.attributions[0]
+    assert attribution.confidence == Decimal("0.74")
+    assert attribution.brand_name == "品牌A"
+    assert attribution.model_name == "型号-TV000001"
+    assert attribution.baseline["price"] == "4800.0000"
+    assert attribution.sku_gap_vs_baseline["price_premium_abs"] == "200.0000"
+    assert [row.claim_code for row in attribution.positive_claims] == [
+        "claim-TV000001",
+        "claim-second-positive",
+    ]
+    assert [row.claim_name for row in attribution.positive_claims] == [
+        "画质清晰",
+        "第二正向卖点",
+    ]
+    assert [row.claim_code for row in attribution.drag_claims] == ["claim-drag"]
+    assert [row.claim_code for row in attribution.opportunity_claims] == [
+        "claim-opportunity"
+    ]
+    assert snapshot.purchase_reason_snapshot is not None
+    assert snapshot.purchase_reason_snapshot.found is False
+    assert snapshot.purchase_reason_snapshot.profile_confidence == Decimal("0.85")
+    explicit_null = next(
+        row
+        for row in snapshot.source_facts
+        if row.source_atom == "M07" and row.source_path == "facts.series"
+    )
+    assert explicit_null.source_occurrences[0].raw_value is None
+    assert explicit_null.source_occurrences[0].typed_value.presence == "explicit_null"
+    assert explicit_null.resolved_value is not None
+    assert explicit_null.resolved_value.presence == "explicit_null"
 
 
 def test_public_manifest_and_scope_methods_use_the_same_exact_snapshot(

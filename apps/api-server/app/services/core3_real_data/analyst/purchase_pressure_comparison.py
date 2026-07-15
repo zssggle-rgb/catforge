@@ -34,6 +34,11 @@ PRESSURE_LEVEL_CN = {
     M12DPurchasePressureLevel.CRITICAL.value: "严重阻力",
 }
 
+PURCHASE_PRESSURE_COMPARATOR_METHOD_VERSION = "purchase_pressure_comparator_v1"
+PURCHASE_PRESSURE_COMPARATOR_CONFIG_VERSION = (
+    "purchase_pressure_established_shared_anchor_v1"
+)
+
 
 @dataclass(frozen=True)
 class PurchasePressureAnchorComparison:
@@ -203,6 +208,8 @@ def _value(value: Any) -> str:
 
 
 __all__ = [
+    "PURCHASE_PRESSURE_COMPARATOR_CONFIG_VERSION",
+    "PURCHASE_PRESSURE_COMPARATOR_METHOD_VERSION",
     "PurchasePressureAnchorComparison",
     "PurchasePressureComparator",
     "PurchasePressureComparisonResult",

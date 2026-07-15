@@ -1,0 +1,431 @@
+{
+  "fixture": {
+    "canonical_json_bytes": 55918432,
+    "canonical_json_sha256": "1218f065c6025821405ff7192a857a0a16b7f8d7fb7f0fd7cac5bf4b476fae7a",
+    "gzip_bytes": 2990129,
+    "load_benchmark": {
+      "max_ms": 1219.203,
+      "median_ms": 1173.813,
+      "min_ms": 885.664,
+      "p95_ms": 1214.664,
+      "peak_memory_mib": 551.248,
+      "repeats": 3
+    },
+    "path": "G28_65e7q_legacy_analysis_205_20260715.json.gz"
+  },
+  "machine": {
+    "logical_cpu_count": 10,
+    "machine": "arm64",
+    "physical_memory_bytes": 17179869184,
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.5"
+  },
+  "profile_scale_benchmark": {
+    "benchmark_version": "competitor_profile_v1_1_g28_scale_benchmark_v2",
+    "g29_budget_inputs": {
+      "categories": {
+        "AC": {
+          "candidate_pipeline_wall_time_ms": 2800,
+          "materialization_wall_time_ms": 10600,
+          "peak_memory_mib": 304,
+          "provider_select_count": 11,
+          "serialized_draft_bytes": 33371334,
+          "serialized_draft_leaf_value_count": 978632
+        },
+        "TV": {
+          "candidate_pipeline_wall_time_ms": 6900,
+          "materialization_wall_time_ms": 25200,
+          "peak_memory_mib": 720,
+          "provider_select_count": 11,
+          "serialized_draft_bytes": 81154326,
+          "serialized_draft_leaf_value_count": 2379932
+        }
+      },
+      "derivation_rule": "For G29 schema-budget inputs only: ceil(max(cold,p95) * 1.25) to 100ms for latency, ceil(max peak MiB * 1.25) to 16MiB, fixed provider SELECT count equals the measured count, and storage uses actual canonical JSON bytes without compression. G39/G41 set release gates after implementation and 205 readback."
+    },
+    "real_205_max_candidate_skus": {
+      "AC": {
+        "candidate_count": 151,
+        "display_name_cn": "小米 kfr-35gw/n1a1",
+        "source_environment": "205-read-only",
+        "target_sku_code": "AC00028642",
+        "tied_max_target_count": 49,
+        "version_id": "45725326-720c-45c8-9a3b-e86fb6cc1f0b"
+      },
+      "TV": {
+        "candidate_count": 359,
+        "display_name_cn": "红米 l75ma-ra",
+        "source_environment": "205-read-only",
+        "target_sku_code": "TV00025784",
+        "tied_max_target_count": 151,
+        "version_id": "c45c0002-9b8a-4b0d-8b12-344dee020e15"
+      }
+    },
+    "repeats": 3,
+    "synthetic_upper_bound_cases": {
+      "AC": {
+        "benchmark_target_sku_code": "AC000001",
+        "candidate_count": 155,
+        "candidate_pipeline": {
+          "all_runs": {
+            "peak_memory_mib": {
+              "max": 16.991,
+              "p50": 16.991,
+              "p95": 16.991,
+              "samples": [
+                16.927,
+                16.991,
+                16.991
+              ]
+            },
+            "wall_time_ms": {
+              "max": 2245.012,
+              "p50": 2165.249,
+              "p95": 2237.036,
+              "samples": [
+                2008.905,
+                2165.249,
+                2245.012
+              ]
+            }
+          },
+          "cold_run": {
+            "candidate_count": 155,
+            "peak_memory_mib": 16.927,
+            "result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a44601c3a0263a84b38677c5002e73c7a6e93c951e45f13e9c6b42ff5d8be6ac",
+            "run_kind": "cold",
+            "run_number": 1,
+            "wall_time_ms": 2008.905
+          },
+          "deterministic_result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a44601c3a0263a84b38677c5002e73c7a6e93c951e45f13e9c6b42ff5d8be6ac",
+          "repeats": 3,
+          "warm_runs": {
+            "peak_memory_mib": {
+              "max": 16.991,
+              "p50": 16.991,
+              "p95": 16.991,
+              "samples": [
+                16.991,
+                16.991
+              ]
+            },
+            "wall_time_ms": {
+              "max": 2245.012,
+              "p50": 2205.131,
+              "p95": 2241.024,
+              "samples": [
+                2165.249,
+                2245.012
+              ]
+            }
+          }
+        },
+        "category_code": "AC",
+        "full_v1_materializer": {
+          "all_runs": {
+            "materialization_ms": {
+              "max": 8463.851,
+              "p50": 8439.545,
+              "p95": 8461.421,
+              "samples": [
+                8315.163,
+                8439.545,
+                8463.851
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 231.761,
+              "p50": 231.759,
+              "p95": 231.761,
+              "samples": [
+                231.645,
+                231.759,
+                231.761
+              ]
+            },
+            "serialization_ms": {
+              "max": 1535.998,
+              "p50": 1326.41,
+              "p95": 1515.039,
+              "samples": [
+                1535.998,
+                1326.41,
+                1301.61
+              ]
+            }
+          },
+          "cold_run": {
+            "materialization_ms": 8315.163,
+            "pair_count": 155,
+            "peak_memory_mib": 231.645,
+            "relation_count": 1085,
+            "result_hash": "8477ede9e8eb857288d7aff19f78abd1824b1626c131bb1de68af54fbb220f32",
+            "run_kind": "cold",
+            "run_number": 1,
+            "serialization_ms": 1535.998
+          },
+          "deterministic_result_hash": "8477ede9e8eb857288d7aff19f78abd1824b1626c131bb1de68af54fbb220f32",
+          "pair_count": 155,
+          "relation_count": 1085,
+          "repeats": 3,
+          "storage": {
+            "serialized_draft_bytes": 33371334,
+            "serialized_draft_leaf_value_count": 978632,
+            "single_pair_bytes": {
+              "max": 211235,
+              "min": 211192,
+              "p50": 211198,
+              "p95": 211230
+            },
+            "single_pair_leaf_value_count": {
+              "max": 6193,
+              "min": 6192,
+              "p50": 6192,
+              "p95": 6193
+            }
+          },
+          "warm_runs": {
+            "materialization_ms": {
+              "max": 8463.851,
+              "p50": 8451.698,
+              "p95": 8462.636,
+              "samples": [
+                8439.545,
+                8463.851
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 231.761,
+              "p50": 231.76,
+              "p95": 231.761,
+              "samples": [
+                231.759,
+                231.761
+              ]
+            },
+            "serialization_ms": {
+              "max": 1326.41,
+              "p50": 1314.01,
+              "p95": 1325.17,
+              "samples": [
+                1326.41,
+                1301.61
+              ]
+            }
+          }
+        },
+        "provider_sql": {
+          "category_bundle_select_count": 11,
+          "database": "ephemeral_in_memory_sqlite_fixture",
+          "scale_behavior": "fixed_query_count; no_target_n_plus_one",
+          "target_incremental_select_count": 0,
+          "total_select_count": 11
+        }
+      },
+      "TV": {
+        "benchmark_target_sku_code": "TV000001",
+        "candidate_count": 377,
+        "candidate_pipeline": {
+          "all_runs": {
+            "peak_memory_mib": {
+              "max": 41.181,
+              "p50": 41.181,
+              "p95": 41.181,
+              "samples": [
+                41.158,
+                41.181,
+                41.181
+              ]
+            },
+            "wall_time_ms": {
+              "max": 5519.811,
+              "p50": 5355.94,
+              "p95": 5503.424,
+              "samples": [
+                5519.811,
+                5285.866,
+                5355.94
+              ]
+            }
+          },
+          "cold_run": {
+            "candidate_count": 377,
+            "peak_memory_mib": 41.158,
+            "result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a58e7f61343fb63651cc868c652503b3c88351d2a5a76b7bfbc5ef30e83e98f8",
+            "run_kind": "cold",
+            "run_number": 1,
+            "wall_time_ms": 5519.811
+          },
+          "deterministic_result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a58e7f61343fb63651cc868c652503b3c88351d2a5a76b7bfbc5ef30e83e98f8",
+          "repeats": 3,
+          "warm_runs": {
+            "peak_memory_mib": {
+              "max": 41.181,
+              "p50": 41.181,
+              "p95": 41.181,
+              "samples": [
+                41.181,
+                41.181
+              ]
+            },
+            "wall_time_ms": {
+              "max": 5355.94,
+              "p50": 5320.903,
+              "p95": 5352.436,
+              "samples": [
+                5285.866,
+                5355.94
+              ]
+            }
+          }
+        },
+        "category_code": "TV",
+        "full_v1_materializer": {
+          "all_runs": {
+            "materialization_ms": {
+              "max": 20155.993,
+              "p50": 20136.05,
+              "p95": 20153.999,
+              "samples": [
+                20155.993,
+                19888.686,
+                20136.05
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 563.242,
+              "p50": 563.238,
+              "p95": 563.241,
+              "samples": [
+                563.242,
+                563.236,
+                563.238
+              ]
+            },
+            "serialization_ms": {
+              "max": 3910.687,
+              "p50": 3654.938,
+              "p95": 3885.112,
+              "samples": [
+                3910.687,
+                3654.938,
+                3530.915
+              ]
+            }
+          },
+          "cold_run": {
+            "materialization_ms": 20155.993,
+            "pair_count": 377,
+            "peak_memory_mib": 563.242,
+            "relation_count": 2639,
+            "result_hash": "69da40d50f5862752fe30164669c383af971c487cc65a8a20a451d2235183699",
+            "run_kind": "cold",
+            "run_number": 1,
+            "serialization_ms": 3910.687
+          },
+          "deterministic_result_hash": "69da40d50f5862752fe30164669c383af971c487cc65a8a20a451d2235183699",
+          "pair_count": 377,
+          "relation_count": 2639,
+          "repeats": 3,
+          "storage": {
+            "serialized_draft_bytes": 81154326,
+            "serialized_draft_leaf_value_count": 2379932,
+            "single_pair_bytes": {
+              "max": 211237,
+              "min": 211192,
+              "p50": 211198,
+              "p95": 211232
+            },
+            "single_pair_leaf_value_count": {
+              "max": 6193,
+              "min": 6192,
+              "p50": 6192,
+              "p95": 6193
+            }
+          },
+          "warm_runs": {
+            "materialization_ms": {
+              "max": 20136.05,
+              "p50": 20012.368,
+              "p95": 20123.682,
+              "samples": [
+                19888.686,
+                20136.05
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 563.238,
+              "p50": 563.237,
+              "p95": 563.238,
+              "samples": [
+                563.236,
+                563.238
+              ]
+            },
+            "serialization_ms": {
+              "max": 3654.938,
+              "p50": 3592.927,
+              "p95": 3648.737,
+              "samples": [
+                3654.938,
+                3530.915
+              ]
+            }
+          }
+        },
+        "provider_sql": {
+          "category_bundle_select_count": 11,
+          "database": "ephemeral_in_memory_sqlite_fixture",
+          "scale_behavior": "fixed_query_count; no_target_n_plus_one",
+          "target_incremental_select_count": 0,
+          "total_select_count": 11
+        }
+      }
+    }
+  },
+  "status": "passed",
+  "validation": {
+    "candidate_count": 10,
+    "full_v1_universe": {
+      "candidate_code_hash": "096a20500fc0d8b39da0ee3c187c85bd144d369144ed43f584d4cf759ebf0238",
+      "candidate_count": 352,
+      "candidate_universe_fingerprint": "sha256:competitor_profile_candidate_universe_v1:f247555e5fcd52cceb218e9e6fe2743a45c2e292f50429d0bce935282a478366",
+      "fixture_hash": "5e12360c60a06bf72cc2391ffb9acfec9fc0472c03c443fa6bff27dceca2bdce",
+      "legacy_candidate_subset_count": 10,
+      "legacy_limit_not_applied": true,
+      "selection_count": 1,
+      "target_relation_count": 2464,
+      "version_result_hash": "sha256:competitor_profile_version_result_v1:3331f446b4b86704b8d1a59829fcbdd4e25ddc1eac14abd69fed9eafe9ef108d"
+    },
+    "gate_case_result_hashes": {
+      "ac_complete": "403fda11f7a0287907cb7196d0ab23937ca0133466caef010e2f89328b6fa13d",
+      "ac_partial": "abd04e2f79f39b7d20ec0fef10ffdeeecf64cb937a23b96d8b879ff033a564bc",
+      "tv_battlefield_conflict": "6b43f93e01a07e7674985bfd0e58b02f2dd8183e4e890b7da2849eea8a5c6b76",
+      "tv_complete": "9d99e344f879e510a201dd584409a12873d579053d90fdc2977a59eb6abf0a01",
+      "tv_configuration_only": "1f3719052570e3fef2e97eb664f8fc1a3974a6a034a5d5c304e89f4114e56042",
+      "tv_m05c_review": "551a91e9aee8c7484021b22e6b9836d00abcfcdc1f6d9d343ae62920ef5f2f99",
+      "tv_m12d_missing": "c0ed1e61da1d3c8d36f65e9669704c6a3d9f124e61cfc1c62d93919a15fd45c8",
+      "tv_market_only": "e82d94d918c6bcc0b655c782e8d235be8bfecbd05d0e27c5a6d5127bea78c854"
+    },
+    "gate_fixture_case_count": 8,
+    "gate_matrix_result_hash": "b65430dafba68218eb334fc756c4c0d50fb96f0ef146d30d817e66fc9c22e882",
+    "leaf_inventory_hash": "ef64d152ac71323210d6798ccac7e52559b8ff19260336e930418a1f106071e3",
+    "legacy_leaf_path_count": 10206,
+    "mapping_count": 65,
+    "mapping_coverage_pct": 100.0,
+    "storage": {
+      "naive_377_pair_projection_bytes": 1636117154,
+      "single_pair_max_bytes": 7261667,
+      "single_pair_median_bytes": 5316087,
+      "single_pair_min_bytes": 735861,
+      "target_snapshot_bytes": 3325864,
+      "ten_candidate_payload_bytes": 43398333
+    },
+    "top3_sku_codes": [
+      "TV00027801",
+      "TV00028909",
+      "TV00029936"
+    ]
+  }
+}

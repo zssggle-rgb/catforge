@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import load_only
 
 from app.models import entities
@@ -175,18 +175,61 @@ _ALGORITHM_FACT_FIELDS_BY_MODULE = {
     },
     "M11D": {"dimension_code", "allocation_role"},
     "M12C": {
+        "analysis_population",
+        "attribution_confidence",
+        "brand_name",
         "claim_code",
+        "claim_dimension",
+        "claim_evidence_strength",
+        "claim_name",
         "claim_value_role",
         "claim_role",
+        "comment_support_strength",
+        "context_name",
         "allocation_role",
         "context_type",
         "context_code",
+        "contribution_share_in_sku",
+        "estimated_price_premium_abs",
+        "estimated_weekly_sales_amount_lift_abs",
+        "estimated_weekly_sales_lift_abs",
+        "market_window",
+        "model_name",
+        "param_support_strength",
+        "price_band_group",
+        "quality_flags_json",
+        "reason_cn",
+        "semantic_support_strength",
+        "size_tier",
+        "supporting_dimensions_json",
     },
     "M12D": {
         "brand_name",
+        "claim_fact_status",
+        "claim_value_status",
+        "comment_profile_status",
+        "comparison_limitations_json",
+        "confidence_level",
         "model_name",
+        "display_name_cn",
         "core_reasons_json",
         "core_payment_anchors_json",
+        "evidence_summary_json",
+        "input_quality_json",
+        "input_status_json",
+        "market_profile_status",
+        "missing_input_reasons_json",
+        "param_profile_status",
+        "pressure_summary_json",
+        "profile_confidence",
+        "review_reason_json",
+        "role_downgrade_reasons_json",
+        "semantic_market_status",
+        "semantic_profile_status",
+        "source_batch_ids_json",
+        "source_merge_strategy",
+        "source_refs_json",
+        "status",
         "supporting_anchors_json",
         "weak_expression_anchors_json",
         "risk_drag_anchors_json",
@@ -240,6 +283,15 @@ class _ModuleSpec:
     @property
     def profile_version(self) -> str:
         return self.rule_version
+
+
+@dataclass(frozen=True)
+class _M12CJoinedSource:
+    claim_value: entities.Core3SkuClaimValueQuantification
+    context_pool: entities.Core3ClaimValueContextPool
+    pool_metric: entities.Core3ClaimValuePoolMetric | None
+    attribution: entities.Core3SkuClaimContributionAttribution | None
+    result_hash: str
 
 
 class CompetitorProfileInputProvider(Core3BaseRepository):
@@ -321,6 +373,10 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
         self._assert_request_scope(request)
         specs = _module_specs(request.category_code, request)
         rows_by_module: dict[str, list[Any]] = {}
+        prebuilt_modules: dict[
+            str,
+            tuple[SourceAuthorityRef, list[UpstreamRecordSnapshot]],
+        ] = {}
 
         market_spec = specs["M07"]
         market_rows = self._load_generic_rows(request, market_spec)
@@ -330,6 +386,14 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
 
         for module_code, spec in specs.items():
             if module_code == "M07":
+                continue
+            if module_code == "M12C":
+                prebuilt_modules[module_code] = self._load_m12c_snapshots(
+                    request,
+                    spec,
+                    sku_codes=sku_codes,
+                )
+                rows_by_module[module_code] = []
                 continue
             rows = self._load_generic_rows(
                 request,
@@ -359,6 +423,9 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
                     for row in m12d_rows
                 ]
                 hard_required = False
+            elif module_code in prebuilt_modules:
+                authority, snapshots = prebuilt_modules[module_code]
+                hard_required = specs[module_code].hard_required_for_target
             else:
                 spec = specs[module_code]
                 authority = _generic_authority(request, spec, rows_by_module[module_code])
@@ -593,6 +660,119 @@ class CompetitorProfileInputProvider(Core3BaseRepository):
                 )
             ).scalars()
         )
+
+    def _load_m12c_snapshots(
+        self,
+        request: CompetitorProfileInputRequest,
+        spec: _ModuleSpec,
+        *,
+        sku_codes: Sequence[str],
+    ) -> tuple[SourceAuthorityRef, list[UpstreamRecordSnapshot]]:
+        claim_value = entities.Core3SkuClaimValueQuantification
+        context_pool = entities.Core3ClaimValueContextPool
+        pool_metric = entities.Core3ClaimValuePoolMetric
+        attribution = entities.Core3SkuClaimContributionAttribution
+        stmt = (
+            select(claim_value, context_pool, pool_metric, attribution)
+            .join(
+                context_pool,
+                and_(
+                    context_pool.pool_id == claim_value.pool_id,
+                    context_pool.project_id == claim_value.project_id,
+                    context_pool.category_code == claim_value.category_code,
+                    context_pool.batch_id == claim_value.batch_id,
+                    context_pool.product_category == claim_value.product_category,
+                    context_pool.market_window == claim_value.market_window,
+                    context_pool.analysis_population
+                    == claim_value.analysis_population,
+                    context_pool.rule_version == claim_value.rule_version,
+                    context_pool.is_current.is_(True),
+                ),
+            )
+            .outerjoin(
+                pool_metric,
+                and_(
+                    pool_metric.metric_id == claim_value.metric_id,
+                    pool_metric.project_id == claim_value.project_id,
+                    pool_metric.category_code == claim_value.category_code,
+                    pool_metric.batch_id == claim_value.batch_id,
+                    pool_metric.product_category == claim_value.product_category,
+                    pool_metric.market_window == claim_value.market_window,
+                    pool_metric.analysis_population == claim_value.analysis_population,
+                    pool_metric.rule_version == claim_value.rule_version,
+                    pool_metric.is_current.is_(True),
+                ),
+            )
+            .outerjoin(
+                attribution,
+                and_(
+                    attribution.project_id == claim_value.project_id,
+                    attribution.category_code == claim_value.category_code,
+                    attribution.batch_id == claim_value.batch_id,
+                    attribution.product_category == claim_value.product_category,
+                    attribution.market_window == claim_value.market_window,
+                    attribution.analysis_population == claim_value.analysis_population,
+                    attribution.sku_code == claim_value.sku_code,
+                    attribution.context_type == claim_value.context_type,
+                    attribution.context_code == claim_value.context_code,
+                    attribution.size_tier == claim_value.size_tier,
+                    attribution.price_band_group == claim_value.price_band_group,
+                    attribution.rule_version == claim_value.rule_version,
+                    attribution.is_current.is_(True),
+                ),
+            )
+            .where(claim_value.project_id == request.project_id)
+            .where(claim_value.category_code == request.category_code)
+            .where(claim_value.batch_id.in_(request.source_batch_ids))
+            .where(claim_value.product_category == request.product_category)
+            .where(claim_value.market_window == request.market_window)
+            .where(
+                claim_value.analysis_population
+                == request.claim_value_analysis_population
+            )
+            .where(claim_value.rule_version == spec.rule_version)
+            .where(claim_value.sku_code.in_(sku_codes))
+            .where(claim_value.sku_code.like(f"{request.category_code}%"))
+            .where(claim_value.is_current.is_(True))
+            .order_by(
+                claim_value.sku_code,
+                claim_value.batch_id,
+                claim_value.sku_claim_value_id,
+            )
+        )
+        joined = []
+        for value_row, pool_row, metric_row, attribution_row in self.db.execute(
+            stmt
+        ).all():
+            component_hashes = {
+                "claim_value": str(value_row.result_hash),
+                "context_pool": str(pool_row.pool_hash),
+                "pool_metric": (
+                    str(metric_row.result_hash) if metric_row is not None else None
+                ),
+                "attribution": (
+                    str(attribution_row.result_hash)
+                    if attribution_row is not None
+                    else None
+                ),
+            }
+            joined.append(
+                _M12CJoinedSource(
+                    claim_value=value_row,
+                    context_pool=pool_row,
+                    pool_metric=metric_row,
+                    attribution=attribution_row,
+                    result_hash=stable_hash(
+                        component_hashes,
+                        version="competitor_profile_m12c_joined_source_v1",
+                    ),
+                )
+            )
+        authority = _m12c_authority(request, spec, joined)
+        snapshots = [
+            _record_snapshot_from_m12c(row, authority) for row in joined
+        ]
+        return authority, snapshots
 
     def _load_m12d(
         self,
@@ -964,6 +1144,43 @@ def _generic_authority(
     )
 
 
+def _m12c_authority(
+    request: CompetitorProfileInputRequest,
+    spec: _ModuleSpec,
+    rows: Sequence[_M12CJoinedSource],
+) -> SourceAuthorityRef:
+    refs = [
+        {
+            "record_id": str(row.claim_value.sku_claim_value_id),
+            "sku_code": str(row.claim_value.sku_code),
+            "source_batch_id": str(row.claim_value.batch_id),
+            "result_hash": row.result_hash,
+        }
+        for row in rows
+    ]
+    source_batch_ids = sorted(
+        {str(row.claim_value.batch_id) for row in rows}
+    )
+    available = bool(rows)
+    return SourceAuthorityRef(
+        module_code="M12C",
+        project_id=request.project_id,
+        category_code=request.category_code,
+        product_category=request.product_category,
+        profile_version=spec.profile_version,
+        schema_version=spec.schema_version,
+        rule_version=spec.rule_version,
+        taxonomy_version=spec.taxonomy_version,
+        release_status="published" if available else "unavailable",
+        is_current=available,
+        source_batch_ids=source_batch_ids or request.source_batch_ids,
+        result_hash=stable_hash(
+            refs,
+            version="competitor_profile_m12c_authority_v2",
+        ),
+    )
+
+
 def _record_snapshot(
     row: Any,
     spec: _ModuleSpec,
@@ -986,6 +1203,114 @@ def _record_snapshot(
         result_hash=str(getattr(row, spec.result_hash_attr)),
         facts=_row_facts(row, spec.module_code),
     )
+
+
+def _record_snapshot_from_m12c(
+    row: _M12CJoinedSource,
+    authority: SourceAuthorityRef,
+) -> UpstreamRecordSnapshot:
+    source = row.claim_value
+    facts = _row_facts(source, "M12C")
+    facts["pool_effect"] = _m12c_pool_effect(
+        row.pool_metric,
+        row.context_pool,
+    )
+    facts["context_pool_result_hash"] = str(row.context_pool.pool_hash)
+    if row.pool_metric is not None:
+        facts["pool_metric_result_hash"] = str(row.pool_metric.result_hash)
+    if row.attribution is not None:
+        facts["claim_contribution_attribution"] = _m12c_attribution_payload(
+            row.attribution
+        )
+        facts["claim_contribution_result_hash"] = str(row.attribution.result_hash)
+    missing_components = []
+    if row.pool_metric is None:
+        missing_components.append("pool_metric")
+    if row.attribution is None:
+        missing_components.append("claim_contribution_attribution")
+    if missing_components:
+        facts["review_required"] = True
+        facts["review_reason_json"] = {
+            "reason_code": "m12c_typed_component_missing",
+            "missing_components": missing_components,
+        }
+    facts["claim_value_result_hash"] = str(source.result_hash)
+    return UpstreamRecordSnapshot(
+        module_code="M12C",
+        record_type=source.__tablename__,
+        record_id=str(source.sku_claim_value_id),
+        sku_code=str(source.sku_code),
+        project_id=str(source.project_id),
+        category_code=str(source.category_code),
+        product_category=str(source.product_category),
+        source_batch_id=str(source.batch_id),
+        profile_version=authority.profile_version,
+        schema_version=authority.schema_version,
+        rule_version=str(source.rule_version),
+        taxonomy_version=authority.taxonomy_version,
+        result_hash=row.result_hash,
+        facts=facts,
+    )
+
+
+def _m12c_pool_effect(
+    row: entities.Core3ClaimValuePoolMetric | None,
+    pool: entities.Core3ClaimValueContextPool,
+) -> dict[str, Any]:
+    return {
+        "pool_claim_price_delta_abs": (
+            str(row.price_premium_abs) if row is not None else None
+        ),
+        "pool_claim_weekly_sales_delta_abs": (
+            str(row.weekly_sales_lift_abs) if row is not None else None
+        ),
+        "pool_claim_weekly_sales_amount_delta_abs": (
+            str(row.weekly_sales_amount_lift_abs) if row is not None else None
+        ),
+        "with_claim_sku_count": pool.with_claim_sku_count,
+        "without_claim_sku_count": pool.without_claim_sku_count,
+        "effect_confidence": (
+            str(row.effect_confidence) if row is not None else None
+        ),
+        "business_summary_cn": row.business_summary_cn if row is not None else None,
+    }
+
+
+def _m12c_attribution_payload(
+    row: entities.Core3SkuClaimContributionAttribution,
+) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "context_type": row.context_type,
+        "context_code": row.context_code,
+        "context_name": row.context_name,
+        "size_tier": row.size_tier,
+        "price_band_group": row.price_band_group,
+        "baseline": {
+            "price": str(row.baseline_price),
+            "weekly_sales_volume": str(row.baseline_weekly_sales_volume),
+            "weekly_sales_amount": str(row.baseline_weekly_sales_amount),
+        },
+        "sku_observed": {
+            "price": str(row.sku_price),
+            "weekly_sales_volume": str(row.sku_weekly_sales_volume),
+            "weekly_sales_amount": str(row.sku_weekly_sales_amount),
+        },
+        "sku_gap_vs_baseline": {
+            "price_premium_abs": str(row.sku_price_premium_abs),
+            "weekly_sales_lift_abs": str(row.sku_weekly_sales_lift_abs),
+            "weekly_sales_amount_lift_abs": str(
+                row.sku_weekly_sales_amount_lift_abs
+            ),
+        },
+        "positive_claims": row.positive_claims_json or [],
+        "drag_claims": row.drag_claims_json or [],
+        "opportunity_claims": row.opportunity_claims_json or [],
+        "attribution_summary_cn": row.attribution_summary_cn,
+        "confidence": str(row.confidence),
+    }
 
 
 def _record_snapshot_from_m12d(
@@ -1170,7 +1495,6 @@ def _row_facts(row: Any, module_code: str) -> dict[str, Any]:
     facts = {
         name: getattr(row, name)
         for name in sorted(allowed & columns)
-        if getattr(row, name) is not None
     }
     trace_payload = {
         name: getattr(row, name)

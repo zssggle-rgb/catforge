@@ -1,0 +1,249 @@
+{
+  "fixtures": [
+    {
+      "canonical_json_bytes": 105797407,
+      "canonical_json_sha256": "048d0314b3c18d72279fe03a37f1149342911f7c5e4e844a5ad0bd7754edd86a",
+      "gzip_bytes": 5435282,
+      "load_benchmark": {
+        "cold_ms": 1736.252,
+        "max_ms": 2233.505,
+        "median_ms": 2122.073,
+        "min_ms": 1736.252,
+        "p95_ms": 2222.362,
+        "peak_memory_mib": 1042.749,
+        "repeats": 3,
+        "samples_ms": [
+          1736.252,
+          2233.505,
+          2122.073
+        ],
+        "warm_ms": {
+          "max": 2233.505,
+          "p50": 2177.789,
+          "p95": 2227.934,
+          "samples": [
+            2233.505,
+            2122.073
+          ]
+        }
+      },
+      "path": "G28_65e7q_legacy_analysis_default20_205_20260715.json.gz"
+    },
+    {
+      "canonical_json_bytes": 12936521,
+      "canonical_json_sha256": "92f183cbe8043faab347c053a98cbea661653e496db2a4a4ee019589513ddb1a",
+      "gzip_bytes": 1674060,
+      "path": "G28_ac_complete_legacy_analysis_default20_205_20260715.json.gz"
+    },
+    {
+      "canonical_json_bytes": 13329788,
+      "canonical_json_sha256": "1d0f5c129edaa85cde5c220642f11d961075974ee2308f860de8e2888129b553",
+      "gzip_bytes": 1758368,
+      "path": "G28_ac_partial_legacy_analysis_default20_205_20260715.json.gz"
+    },
+    {
+      "canonical_json_bytes": 42987980,
+      "canonical_json_sha256": "ad4fe69647682e24da43b834bfd8a6e7c372a37f5b5a2b34ed2c8a49a2b045f5",
+      "gzip_bytes": 2581696,
+      "path": "G28_tv_partial_legacy_analysis_default20_205_20260715.json.gz"
+    }
+  ],
+  "legacy_runtime_benchmark": {
+    "actual_candidate_count": 20,
+    "code_path": "build_competitor_answer(with_report=none)",
+    "default_candidate_limit": 20,
+    "deterministic_rerun_hash": "198af4ff753192749b6e06b443ee339ffe9430f97a7a48bbeb14f75597c4faa0",
+    "single_pair": {
+      "cold_ms": 213.87,
+      "max_ms": 238.175,
+      "median_ms": 222.033,
+      "min_ms": 213.87,
+      "p95_ms": 236.561,
+      "peak_memory_mib": 22.322,
+      "repeats": 3,
+      "result": {
+        "analysis_hash": "838dd43571bba7f28840810af5e65241b9eddc160f1f77fc31648854c86409d5",
+        "candidate_count": 1,
+        "top_sku_codes": [
+          "TV00029020"
+        ]
+      },
+      "samples_ms": [
+        213.87,
+        222.033,
+        238.175
+      ],
+      "warm_ms": {
+        "max": 238.175,
+        "p50": 230.104,
+        "p95": 237.368,
+        "samples": [
+          222.033,
+          238.175
+        ]
+      }
+    },
+    "single_sku_default20_candidates": {
+      "cold_ms": 1900.847,
+      "max_ms": 1900.847,
+      "median_ms": 1889.321,
+      "min_ms": 1858.928,
+      "p95_ms": 1899.694,
+      "peak_memory_mib": 352.51,
+      "repeats": 3,
+      "result": {
+        "analysis_hash": "198af4ff753192749b6e06b443ee339ffe9430f97a7a48bbeb14f75597c4faa0",
+        "candidate_count": 20,
+        "top_sku_codes": [
+          "TV00027801",
+          "TV00028909",
+          "TV00029936"
+        ]
+      },
+      "samples_ms": [
+        1900.847,
+        1889.321,
+        1858.928
+      ],
+      "warm_ms": {
+        "max": 1889.321,
+        "p50": 1874.125,
+        "p95": 1887.802,
+        "samples": [
+          1889.321,
+          1858.928
+        ]
+      }
+    }
+  },
+  "machine": {
+    "logical_cpu_count": 10,
+    "machine": "arm64",
+    "physical_memory_bytes": 17179869184,
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.5"
+  },
+  "status": "passed",
+  "validation": {
+    "candidate_count": 20,
+    "full_v1_universe": {
+      "candidate_code_hash": "096a20500fc0d8b39da0ee3c187c85bd144d369144ed43f584d4cf759ebf0238",
+      "candidate_count": 352,
+      "candidate_universe_fingerprint": "sha256:competitor_profile_candidate_universe_v1:f247555e5fcd52cceb218e9e6fe2743a45c2e292f50429d0bce935282a478366",
+      "fixture_hash": "fe72006cefb8e1034cea15eef2d171e2f62b9e9e176e075de1bb2dec3a23845b",
+      "legacy_candidate_subset_count": 20,
+      "legacy_default20_subset_complete": true,
+      "legacy_top3_full_count": 3,
+      "legacy_top3_relation_count": 21,
+      "pair_status_counts": {
+        "eligible": 2,
+        "limited": 23,
+        "reference_only": 9,
+        "review_required": 318
+      },
+      "relation_index_hash": "169d0c4a7c60c6fdd790f5a0ccfe3a8bf10d77f7647edbf3592007e8e44b9209",
+      "relation_status_counts": {
+        "failed": 162,
+        "limited": 23,
+        "passed": 4,
+        "review_required": 2226,
+        "unassessable": 49
+      },
+      "selection_count": 1,
+      "target_relation_count": 2464,
+      "version_result_hash": "sha256:competitor_profile_version_result_v1:3331f446b4b86704b8d1a59829fcbdd4e25ddc1eac14abd69fed9eafe9ef108d"
+    },
+    "gate_case_result_hashes": {
+      "ac_complete": "4a7c6095e696fc09f4eb166338c6519270885025cd18f0f773ce611c3818b4f4",
+      "ac_partial": "372e4a125f32cbb4aabf4e48d9ebca5e0a90e461917d5867059100c1bf1c762e",
+      "tv_battlefield_conflict": "0c375bbd07fe3109399b00bc42873bd85805ca3432a72734c4639dba2ca407aa",
+      "tv_complete": "9f4f749ed7e6be68a0473f24be4d6b2a1fdac38f4b091ca68143b14c67fc4329",
+      "tv_configuration_only": "00e3c44196a033cb4dcdaedc17937dd1d85aff48c965cc2195b67b59915b514d",
+      "tv_m05c_review": "012ee0baf3cd871dbd6e70157f5460c38a6f6ba15bf1f4be316d46bd0a1fd28c",
+      "tv_m12d_missing": "de5adb0d8fa5403700a01d7048fcfd92060d8b3848c3c84c007d8834caa22670",
+      "tv_market_only": "5176314231735c682caa4e6eaf54223ea90ab4fad3ac77cbaa5bdddf31cc0d90"
+    },
+    "gate_fixture_case_count": 8,
+    "gate_matrix_result_hash": "adb46dc6f7a21e01c4b913e6de455b68e19355896862720986ae01c27ffcc63e",
+    "leaf_inventory_hash": "34be0aa0fdf42437ec3a5d96bf5325e30164a2aa25dd09ee5eb7a3dc71639381",
+    "legacy_empty_container_path_count": 915,
+    "legacy_observed_path_count": 13756,
+    "legacy_value_leaf_path_count": 12841,
+    "mapping_count": 65,
+    "mapping_coverage_pct": 100.0,
+    "real_fixture_count": 4,
+    "real_fixtures": [
+      {
+        "candidate_count": 20,
+        "canonical_result_hash": "048d0314b3c18d72279fe03a37f1149342911f7c5e4e844a5ad0bd7754edd86a",
+        "category_code": "TV",
+        "fixture": "G28_65e7q_legacy_analysis_default20_205_20260715.json.gz",
+        "m12d_consumption_state": "published_ready",
+        "m12d_downstream_action": "normal_pair_scoring",
+        "target_sku_code": "TV00029112",
+        "top3_sku_codes": [
+          "TV00027801",
+          "TV00028909",
+          "TV00029936"
+        ]
+      },
+      {
+        "candidate_count": 16,
+        "canonical_result_hash": "92f183cbe8043faab347c053a98cbea661653e496db2a4a4ee019589513ddb1a",
+        "category_code": "AC",
+        "fixture": "G28_ac_complete_legacy_analysis_default20_205_20260715.json.gz",
+        "m12d_consumption_state": "published_ready",
+        "m12d_downstream_action": "normal_pair_scoring",
+        "target_sku_code": "AC00026378",
+        "top3_sku_codes": [
+          "AC00034712",
+          "AC00039161",
+          "AC00038373"
+        ]
+      },
+      {
+        "candidate_count": 20,
+        "canonical_result_hash": "1d0f5c129edaa85cde5c220642f11d961075974ee2308f860de8e2888129b553",
+        "category_code": "AC",
+        "fixture": "G28_ac_partial_legacy_analysis_default20_205_20260715.json.gz",
+        "m12d_consumption_state": "published_degraded",
+        "m12d_downstream_action": "degraded_pair_scoring",
+        "target_sku_code": "AC00034959",
+        "top3_sku_codes": [
+          "AC00038748",
+          "AC00038751",
+          "AC00038686"
+        ]
+      },
+      {
+        "candidate_count": 13,
+        "canonical_result_hash": "ad4fe69647682e24da43b834bfd8a6e7c372a37f5b5a2b34ed2c8a49a2b045f5",
+        "category_code": "TV",
+        "fixture": "G28_tv_partial_legacy_analysis_default20_205_20260715.json.gz",
+        "m12d_consumption_state": "published_degraded",
+        "m12d_downstream_action": "degraded_pair_scoring",
+        "target_sku_code": "TV00009549",
+        "top3_sku_codes": [
+          "TV00030337",
+          "TV00026886",
+          "TV00029031"
+        ]
+      }
+    ],
+    "storage": {
+      "default20_candidate_payload_bytes": 93247154,
+      "naive_377_pair_projection_bytes": 1757708853,
+      "single_pair_max_bytes": 7316335,
+      "single_pair_median_bytes": 5753986,
+      "single_pair_min_bytes": 562355,
+      "target_snapshot_bytes": 3327949
+    },
+    "target_alias_group_count": 3624,
+    "top3_sku_codes": [
+      "TV00027801",
+      "TV00028909",
+      "TV00029936"
+    ]
+  }
+}

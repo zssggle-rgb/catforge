@@ -1,13 +1,21 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
+from pydantic import BaseModel
+
 from app.services.core3_real_data.hash_utils import (
     canonicalize_json,
     hash_records,
     normalize_for_hash,
     stable_hash,
     stable_hash_json,
+    stable_hash_streaming,
 )
+
+
+class _HashFixture(BaseModel):
+    sku_code: str
+    score: float
 
 
 def test_canonicalize_json_sorts_dict_keys_and_preserves_chinese():
@@ -86,6 +94,20 @@ def test_stable_hash_json_matches_normalized_json_payload_contract():
     assert stable_hash_json(value, version="normalized-json-v1") == stable_hash(
         value,
         version="normalized-json-v1",
+    )
+
+
+def test_stable_hash_streaming_matches_contract_and_dumps_models_incrementally():
+    model = _HashFixture(sku_code="TV00029112", score=1.0)
+    raw = {
+        "model": model.model_dump(mode="json"),
+        "values": [Decimal("1.2300"), ("a", 1), {"b", "a"}],
+    }
+    typed = {"model": model, "values": raw["values"]}
+
+    assert stable_hash_streaming(typed, version="stream-v1") == stable_hash(
+        raw,
+        version="stream-v1",
     )
 
 

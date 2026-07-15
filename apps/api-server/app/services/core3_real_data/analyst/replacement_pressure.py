@@ -34,6 +34,13 @@ PRESSURE_TYPE_CN: dict[PressureType, str] = {
     "low_pressure_review": "低替代压力复核",
 }
 
+REPLACEMENT_PRESSURE_CLASSIFIER_METHOD_VERSION = (
+    "replacement_pressure_classifier_v1"
+)
+REPLACEMENT_PRESSURE_CLASSIFIER_CONFIG_VERSION = (
+    "replacement_pressure_score_10_v1"
+)
+
 
 @dataclass(frozen=True)
 class ReplacementPressureBreakdown:
@@ -522,6 +529,8 @@ def _decimal_to_number(value: Decimal) -> int | float:
 __all__ = [
     "PRESSURE_TYPE_CN",
     "PressureTypeCandidate",
+    "REPLACEMENT_PRESSURE_CLASSIFIER_CONFIG_VERSION",
+    "REPLACEMENT_PRESSURE_CLASSIFIER_METHOD_VERSION",
     "ReplacementPressureBreakdown",
     "ReplacementPressureClassifier",
     "ReplacementPressureInput",

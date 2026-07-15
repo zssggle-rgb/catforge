@@ -30,6 +30,7 @@ from app.services.core3_real_data.analyst.analyst_service import (
     SOP_COMMANDS,
     CatForgeAnalystError,
     CatForgeAnalystService,
+    route_question,
 )
 from app.services.core3_real_data.analyst.competitor_profile_consumption import (
     CompetitorProfileConsumptionService,
@@ -247,6 +248,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                     compare_profile_version=getattr(
                         args, "compare_profile_version", None
                     ),
+                    profile_access_mode=getattr(
+                        args, "profile_access_mode", None
+                    ),
+                    competitor_profile_version_id=getattr(
+                        args, "competitor_profile_version_id", None
+                    ),
+                    competitor_profile_release_scope_key=getattr(
+                        args, "competitor_profile_release_scope_key", None
+                    ),
+                    allow_draft_preview=getattr(
+                        args, "allow_competitor_profile_draft_preview", False
+                    ),
+                    legacy_live_analysis=getattr(
+                        args, "legacy_competitor_live_analysis", False
+                    ),
                 )
                 attach_feishu_card_delivery(result, args)
     except (
@@ -401,6 +417,8 @@ def build_parser() -> argparse.ArgumentParser:
         add_dimension_args(command_parser)
         command_parser.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
         add_answer_args(command_parser)
+        if command == "competitor-set":
+            add_competitor_profile_agent_args(command_parser)
         if command == "sellpoint-value-profile-ask":
             command_parser.add_argument(
                 "--question",
@@ -444,6 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_dimension_args(ask)
     ask.add_argument("--limit", type=int, default=DEFAULT_CANDIDATE_LIMIT)
     add_answer_args(ask)
+    add_competitor_profile_agent_args(ask)
     ask.add_argument("question", nargs="+", help="Natural-language question.")
     add_format_arg(ask)
     return parser
@@ -579,6 +598,28 @@ def add_answer_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--feishu-reply-in-thread", action="store_true", help="Send the Feishu card as a thread reply.")
     parser.add_argument("--feishu-card-idempotency-key", help="Optional idempotency key for Feishu card reply.")
     parser.add_argument("--feishu-card-only", action="store_true", help="For text output, print only Feishu card delivery status.")
+
+
+def add_competitor_profile_agent_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--competitor-profile-mode",
+        dest="profile_access_mode",
+        choices=("formal", "preview"),
+        default="formal",
+        help="Read current published V1.1 by default, or explicitly preview one draft.",
+    )
+    parser.add_argument("--competitor-profile-version-id")
+    parser.add_argument("--competitor-profile-release-scope-key")
+    parser.add_argument(
+        "--allow-competitor-profile-draft-preview",
+        action="store_true",
+        help="Explicitly opt in to the selected V1.1 draft preview.",
+    )
+    parser.add_argument(
+        "--legacy-competitor-live-analysis",
+        action="store_true",
+        help="Operations-only fallback to the retired live-analysis path.",
+    )
 
 
 def run_competitor_profile_generation(
@@ -1413,6 +1454,11 @@ def competitor_set(
     top_n: int = 3,
     max_chat_chars: int = 600,
     report_title: str | None = None,
+    profile_access_mode: str = "formal",
+    competitor_profile_version_id: str | None = None,
+    competitor_profile_release_scope_key: str | None = None,
+    allow_draft_preview: bool = False,
+    legacy_live_analysis: bool = False,
 ) -> dict[str, Any]:
     return run_analyst_command(
         db,
@@ -1432,6 +1478,13 @@ def competitor_set(
         top_n=top_n,
         max_chat_chars=max_chat_chars,
         report_title=report_title,
+        profile_access_mode=profile_access_mode,
+        competitor_profile_version_id=competitor_profile_version_id,
+        competitor_profile_release_scope_key=(
+            competitor_profile_release_scope_key
+        ),
+        allow_draft_preview=allow_draft_preview,
+        legacy_live_analysis=legacy_live_analysis,
     )
 
 
@@ -1690,6 +1743,11 @@ def answer_natural_language(
     top_n: int = 3,
     max_chat_chars: int = 600,
     report_title: str | None = None,
+    profile_access_mode: str = "formal",
+    competitor_profile_version_id: str | None = None,
+    competitor_profile_release_scope_key: str | None = None,
+    allow_draft_preview: bool = False,
+    legacy_live_analysis: bool = False,
 ) -> dict[str, Any]:
     return run_analyst_command(
         db,
@@ -1722,6 +1780,13 @@ def answer_natural_language(
         top_n=top_n,
         max_chat_chars=max_chat_chars,
         report_title=report_title,
+        profile_access_mode=profile_access_mode,
+        competitor_profile_version_id=competitor_profile_version_id,
+        competitor_profile_release_scope_key=(
+            competitor_profile_release_scope_key
+        ),
+        allow_draft_preview=allow_draft_preview,
+        legacy_live_analysis=legacy_live_analysis,
     )
 
 
@@ -1743,12 +1808,31 @@ def run_analyst_command(
     product_category = _infer_product_category(product_category, kwargs)
     category_code = _infer_category_code(category_code, product_category, kwargs)
     service = CatForgeAnalystService(db, project_id=project_id, category_code=category_code)
+    profile_competitor_read = (
+        command == "competitor-set"
+        and not bool(kwargs.get("legacy_live_analysis"))
+        and bool(str(kwargs.get("sku_code") or "").strip())
+    )
+    if command == "ask" and not bool(kwargs.get("legacy_live_analysis")):
+        route = route_question(
+            str(kwargs.get("question") or ""),
+            explicit_params=kwargs,
+        )
+        routed_sku_code = (
+            kwargs.get("sku_code") or route.extracted_params.get("sku_code")
+        )
+        profile_competitor_read = (
+            route.command == "competitor-set"
+            and bool(str(routed_sku_code or "").strip())
+        )
     context = service.build_context(
         batch_id=batch_id,
         product_category=product_category,
         market_window=market_window,
         analysis_population=analysis_population,
-        resolve_latest=command != "list-abilities",
+        resolve_latest=(
+            command != "list-abilities" and not profile_competitor_read
+        ),
     )
     if command == "list-abilities":
         return service.list_abilities(context, ability_type=kwargs.get("ability_type"))

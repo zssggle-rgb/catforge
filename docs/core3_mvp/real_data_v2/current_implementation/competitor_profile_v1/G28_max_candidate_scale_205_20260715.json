@@ -1,0 +1,24 @@
+{
+  "fixture_version": "competitor_profile_v1_1_g28_real_max_candidate_scale_v1",
+  "source_environment": "205-read-only",
+  "transaction_mode": "BEGIN READ ONLY",
+  "grouping": "candidate pair count by competitor_profile_version_id and target_sku_code",
+  "categories": {
+    "TV": {
+      "competitor_profile_version_id": "c45c0002-9b8a-4b0d-8b12-344dee020e15",
+      "max_candidate_count": 359,
+      "tied_target_count": 151,
+      "canonical_target_sku_code": "TV00025784",
+      "canonical_target_name": "红米 l75ma-ra"
+    },
+    "AC": {
+      "competitor_profile_version_id": "45725326-720c-45c8-9a3b-e86fb6cc1f0b",
+      "max_candidate_count": 151,
+      "tied_target_count": 49,
+      "canonical_target_sku_code": "AC00028642",
+      "canonical_target_name": "小米 kfr-35gw/n1a1"
+    }
+  },
+  "database_write": false,
+  "remote_file_write": false
+}

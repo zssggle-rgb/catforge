@@ -12,6 +12,12 @@ from app.services.core3_real_data.analyst.ability_registry import get_ability, l
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_reader import (
+    CompetitorProfileV11Reader,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
+    CompetitorProfileV11Repository,
+)
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
@@ -74,16 +80,23 @@ class CatForgeAnalystService:
     def __init__(self, db: Session, *, project_id: str, category_code: str) -> None:
         self.repository = AnalystRepository(db, project_id=project_id, category_code=category_code)
         self.atomic_handlers = AtomicAnalystHandlers(self.repository)
+        repository_context = Core3RepositoryContext(
+            db=db,
+            project_id=project_id,
+            category_code=Core3CategoryCode(category_code),
+        )
         self.sellpoint_value_profile_repository = SellpointValueProfileRepository(
-            Core3RepositoryContext(
-                db=db,
-                project_id=project_id,
-                category_code=Core3CategoryCode(category_code),
-            )
+            repository_context
+        )
+        self.competitor_profile_v1_1_repository = CompetitorProfileV11Repository(
+            repository_context
         )
         self.sop_orchestrators = SopOrchestrators(
             self.atomic_handlers,
             sellpoint_value_profile_repository=self.sellpoint_value_profile_repository,
+            competitor_profile_v1_1_reader=CompetitorProfileV11Reader(
+                self.competitor_profile_v1_1_repository
+            ),
         )
         self.project_id = project_id
         self.category_code = category_code
@@ -173,6 +186,15 @@ class CatForgeAnalystService:
         if routed_command not in {"competitor-set", "sku-claim-value", "low-sales-diagnosis", "sellpoint-value-pm"}:
             for presentation_key in ("answer_style", "with_report", "top_n", "max_chat_chars", "report_title"):
                 merged_kwargs.pop(presentation_key, None)
+        if routed_command != "competitor-set":
+            for profile_key in (
+                "profile_access_mode",
+                "competitor_profile_version_id",
+                "competitor_profile_release_scope_key",
+                "allow_draft_preview",
+                "legacy_live_analysis",
+            ):
+                merged_kwargs.pop(profile_key, None)
         result = self.dispatch(routed_command, context, **merged_kwargs)
         explicit_param_keys = sorted(key for key, value in kwargs.items() if value not in (None, ""))
         applied_param_keys = sorted(set(route.extracted_params) | set(explicit_param_keys))

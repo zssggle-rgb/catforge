@@ -6,6 +6,7 @@ and a detailed report payload. It is deterministic and does not call an LLM.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -21,6 +22,12 @@ from app.services.core3_real_data.analyst.competitor_pm_report import (
     build_pm_comparison_payload,
     pm_business_output_issue,
     render_pm_comparison_report,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
+    AgentCandidateAnalysis,
+    CompetitorProfileAdapterContract,
+    DimensionAnalysisResult,
+    VersionSkuAnalysisSnapshot,
 )
 
 
@@ -246,6 +253,44 @@ ROLE_CN = {
     "uptrade_alternative": "上探替代竞品",
     "scenario_alternative": "场景替代竞品",
     "excluded": "排除候选",
+}
+
+PROFILE_V11_ROLE_CN = {
+    "direct_competitor": "直接竞争产品",
+    "price_adjacent": "同价位竞争产品",
+    "downtrade_diversion": "低价分流产品",
+    "uptrade_alternative": "升级替代产品",
+    "same_brand_ladder": "同品牌产品线参照",
+    "scenario_alternative": "场景替代产品",
+    "value_substitute": "用户价值替代产品",
+    "configuration_benchmark": "配置对标产品",
+    "market_reference": "市场表现参照产品",
+}
+
+PROFILE_V11_PRESSURE_CN = {
+    "value_substitution": "价值替代压力",
+    "price_suppression": "价格压制压力",
+    "scenario_mindshare": "场景心智压力",
+    "brand_ecosystem": "品牌与生态压力",
+    "downtrade_diversion": "低价分流压力",
+    "uptrade_alternative": "升级替代压力",
+    "configuration_benchmark": "配置对标压力",
+    "low_pressure_review": "有限竞争压力",
+    "unknown": "竞争压力尚不明确",
+}
+
+PROFILE_V11_DIMENSION_CN = {
+    "purchase_pool": "购买池",
+    "battlefield_overlap": "价值战场",
+    "user_task_overlap": "用户任务",
+    "target_group_overlap": "目标客群",
+    "parameter_comparison": "参数配置",
+    "claim_comparison": "卖点表达",
+    "user_realization_comparison": "用户实际感知",
+    "purchase_reason_comparison": "购买理由",
+    "value_anchor": "价值锚点",
+    "replacement_pressure": "替代压力",
+    "market_validation": "市场量价验证",
 }
 
 DEFAULT_PRODUCT_ENCYCLOPEDIA_URL = "https://hisense2.avc-mr.com/"
@@ -609,6 +654,636 @@ def build_competitor_answer(
         },
         "all_candidates": enriched,
     }
+
+
+def render_competitor_answer_from_profile(
+    *,
+    profile: CompetitorProfileAdapterContract,
+    max_chat_chars: int = 600,
+    with_report: Literal["none", "markdown"] = "none",
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    """Render an already-calculated V1.1 profile without any analysis calls."""
+
+    if max_chat_chars < 1:
+        raise ValueError("max_chat_chars must be at least 1")
+    if with_report not in {"none", "markdown"}:
+        raise ValueError("with_report must be none or markdown")
+
+    frozen = CompetitorProfileAdapterContract.model_validate(
+        profile.model_dump(mode="json")
+    )
+    target = _profile_v11_identity(frozen.target_snapshot)
+    target_fact_brief = _profile_v11_target_fact_brief(frozen.target_snapshot)
+    display_by_code = {
+        row.candidate_sku_code: _profile_v11_candidate_display(row)
+        for row in frozen.candidates
+    }
+    all_candidates = sorted(
+        display_by_code.values(),
+        key=lambda row: int(row["recall_rank"]),
+    )
+    top_competitors = [display_by_code[code] for code in frozen.priority_order]
+    summary_cn = _profile_v11_summary_cn(frozen, display_by_code)
+    dashboard_payload = build_competitor_dashboard_payload(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=None,
+    )
+    dashboard_payload.update(
+        {
+            "source": "competitor_profile_v1_1",
+            "summary_cn": summary_cn,
+            "profile_quality": _profile_v11_quality_payload(frozen),
+        }
+    )
+    title = report_title or f"{_display_name(target)} 重点竞品识别与分析依据报告"
+    markdown = (
+        _profile_v11_report_markdown(
+            title=title,
+            profile=frozen,
+            dashboard_payload=dashboard_payload,
+            all_candidates=all_candidates,
+        )
+        if with_report == "markdown"
+        else None
+    )
+    short_answer = _profile_v11_short_answer(
+        profile=frozen,
+        display_by_code=display_by_code,
+        max_chars=max_chat_chars,
+    )
+    excluded_audit = [
+        {
+            "candidate": _profile_v11_identity(row.candidate_snapshot),
+            "recall_rank": row.recall_rank,
+            "recall_sources": row.recall_sources,
+            "exclusion_reason_code": row.exclusion_reason_code,
+            "selection_reason_code": row.selection_assessment.selection_reason_code,
+            "selection_reason_cn": row.selection_assessment.selection_reason_cn,
+            "conclusion_strength": row.overall_conclusion.strength,
+            "limitations": row.limitations,
+            "pair_result_hash": row.pair_result_hash,
+        }
+        for row in frozen.excluded_candidates
+    ]
+    return {
+        "source": "competitor_profile_v1_1",
+        "short_answer": short_answer,
+        "report_url": None,
+        "evidence_report_url": None,
+        "report_status": "markdown" if with_report == "markdown" else "disabled",
+        "report_message_cn": None,
+        "report_payload": {
+            "title": title,
+            "markdown": markdown,
+            "url": None,
+            "status": "markdown" if with_report == "markdown" else "disabled",
+        },
+        "pm_comparison_report_url": None,
+        "pm_comparison_report_status": "disabled",
+        "pm_comparison_report_message_cn": "画像纯展示入口不创建外部文档。",
+        "pm_comparison_report_payload": {
+            "title": None,
+            "markdown": None,
+            "url": None,
+            "status": "disabled",
+            "comparison": None,
+        },
+        "dashboard_payload": dashboard_payload,
+        "feishu_card_payload": render_feishu_card_payload(dashboard_payload),
+        "top_competitors": top_competitors,
+        "candidate_buckets": _profile_v11_candidate_buckets(all_candidates),
+        "selection_policy_cn": [
+            "重点名单与先后顺序直接采用已保存画像，不在展示时重新排序。",
+            "未进入重点名单的产品仍保留完整比较结果和具体原因。",
+            "单个维度证据不足只影响该维度，不会抹掉其他已形成的结论。",
+        ],
+        "display_policy": {
+            "send_short_answer_as_is": True,
+            "prefer_feishu_card": True,
+            "card_delivery_stdout": True,
+            "fallback_to_short_answer": False,
+            "report_as_evidence": True,
+            "max_chat_chars": max_chat_chars,
+            "hide_internal_fields": True,
+        },
+        "all_candidates": all_candidates,
+        "excluded_candidate_audit": excluded_audit,
+        "previous_priority_diffs": [
+            row.model_dump(mode="json") for row in frozen.previous_priority_diffs
+        ],
+        "profile_source_receipt": frozen.source_receipt.model_dump(mode="json"),
+    }
+
+
+def publish_rendered_competitor_profile_report(
+    *,
+    answer: dict[str, Any],
+) -> dict[str, Any]:
+    """Publish an already-rendered profile report without invoking analysis."""
+
+    frozen = copy.deepcopy(answer)
+    if frozen.get("source") != "competitor_profile_v1_1":
+        raise ValueError("profile report publishing requires a V1.1 rendered answer")
+    report_payload = frozen.get("report_payload")
+    if not isinstance(report_payload, dict):
+        raise ValueError("profile rendered answer has no report payload")
+    title = str(report_payload.get("title") or "").strip()
+    markdown = str(report_payload.get("markdown") or "").strip()
+    if not title or not markdown:
+        raise ValueError("profile report publishing requires rendered markdown")
+    publish_result = _publish_report(
+        title=title,
+        markdown=markdown,
+        with_report="feishu-doc",
+    )
+    frozen.update(
+        {
+            "report_url": publish_result.url,
+            "evidence_report_url": publish_result.url,
+            "report_status": publish_result.status,
+            "report_message_cn": publish_result.message_cn,
+        }
+    )
+    frozen["report_payload"] = {
+        "title": title,
+        "markdown": None,
+        "url": publish_result.url,
+        "status": publish_result.status,
+    }
+    dashboard = copy.deepcopy(frozen.get("dashboard_payload") or {})
+    dashboard["report_evidence_links"] = _dashboard_report_links(publish_result.url)
+    for row in dashboard.get("competitors") or []:
+        if isinstance(row, dict):
+            row["action_links"] = _dashboard_action_links(publish_result.url)
+    frozen["dashboard_payload"] = dashboard
+    frozen["feishu_card_payload"] = render_feishu_card_payload(dashboard)
+    return frozen
+
+
+def _profile_v11_identity(snapshot: VersionSkuAnalysisSnapshot) -> dict[str, Any]:
+    identity = snapshot.identity_market
+    return {
+        "sku_code": identity.sku_code,
+        "brand_name": identity.brand_name,
+        "model_name": identity.model_name,
+        "product_category": identity.product_category,
+        "category_code": snapshot.category_code,
+        "screen_size_inch": identity.screen_size_inch,
+        "size_tier": identity.size_tier,
+        "price_band_in_size_tier": identity.price_band_in_size_tier,
+        "weighted_price": identity.weighted_price,
+        "price_wavg": identity.weighted_price,
+        "avg_weekly_sales_volume": identity.avg_weekly_sales_volume,
+        "sales_volume_total": identity.total_sales_volume,
+        "total_sales_amount": identity.total_sales_amount,
+    }
+
+
+def _profile_v11_target_fact_brief(
+    snapshot: VersionSkuAnalysisSnapshot,
+) -> dict[str, Any]:
+    identity = snapshot.identity_market
+    return {
+        "sections": {
+            "market": {
+                "market_position": {
+                    "screen_size_inch": identity.screen_size_inch,
+                    "price_band_in_size_tier": identity.price_band_in_size_tier,
+                },
+                "market_metrics": {
+                    "price_wavg": identity.weighted_price,
+                    "avg_weekly_sales_volume": identity.avg_weekly_sales_volume,
+                    "sales_volume_total": identity.total_sales_volume,
+                },
+            },
+            "user_task": _profile_v11_semantic_section(
+                snapshot.fact_sections.task_items,
+                "primary_user_task_code",
+            ),
+            "target_group": _profile_v11_semantic_section(
+                snapshot.fact_sections.audience_items,
+                "primary_target_group_code",
+            ),
+            "value_battlefield": _profile_v11_semantic_section(
+                snapshot.fact_sections.battlefield_items,
+                "primary_battlefield_code",
+            ),
+        }
+    }
+
+
+def _profile_v11_semantic_section(items: list[Any], primary_key: str) -> dict[str, Any]:
+    primary = next(
+        (
+            row.code
+            for row in items
+            if any("primary" in str(role) for role in row.roles)
+        ),
+        None,
+    )
+    return {primary_key: primary} if primary else {}
+
+
+def _profile_v11_candidate_display(
+    row: AgentCandidateAnalysis,
+) -> dict[str, Any]:
+    dimensions = row.dimension_results
+    battlefield = dimensions.battlefield_overlap
+    user_task = dimensions.user_task_overlap
+    target_group = dimensions.target_group_overlap
+    primary_role = str(row.primary_role)
+    role_cn = PROFILE_V11_ROLE_CN.get(primary_role, primary_role)
+    selection = row.selection_assessment
+    score = row.score_breakdown.ranking_score
+    market_strength = str(row.market_validation.market_validation_strength)
+    return {
+        "rank": row.recall_rank,
+        "recall_rank": row.recall_rank,
+        "recall_sources": row.recall_sources,
+        "candidate": _profile_v11_identity(row.candidate_snapshot),
+        "candidate_fact_brief": _profile_v11_target_fact_brief(row.candidate_snapshot),
+        "business_score": score,
+        "competitor_score": score,
+        "purchase_pool": {
+            "level": row.purchase_pool.level,
+            "score": row.purchase_pool.score.normalized_score,
+            "summary_cn": row.purchase_pool.conclusion.audit_summary_cn,
+            "conclusion_strength": row.purchase_pool.conclusion.strength,
+        },
+        "weighted_overlap": {
+            "battlefield": battlefield.score.normalized_score,
+            "user_task": user_task.score.normalized_score,
+            "target_group": target_group.score.normalized_score,
+        },
+        "saved_score_dimensions": [
+            {
+                "dimension_cn": "购买池",
+                "score": row.purchase_pool.score.normalized_score,
+            },
+            {
+                "dimension_cn": "价值战场",
+                "score": battlefield.score.normalized_score,
+            },
+            {
+                "dimension_cn": "用户任务",
+                "score": user_task.score.normalized_score,
+            },
+            {
+                "dimension_cn": "目标客群",
+                "score": target_group.score.normalized_score,
+            },
+            {
+                "dimension_cn": "价值锚点",
+                "score": row.value_anchor_analysis.score.normalized_score,
+            },
+            {
+                "dimension_cn": "替代压力",
+                "score": row.replacement_pressure_analysis.score.normalized_score,
+            },
+        ],
+        "matched_dimensions": {
+            "battlefield": _profile_v11_item_names(
+                battlefield,
+                BATTLEFIELD_NAMES,
+            ),
+            "user_task": _profile_v11_item_names(user_task, TASK_NAMES),
+            "target_group": _profile_v11_item_names(target_group, {}),
+        },
+        "shared_business_context": _profile_v11_shared_context(
+            battlefield,
+            user_task,
+            target_group,
+        ),
+        "semantic_overlap": {
+            "value_battlefield": _profile_v11_overlap_structure(battlefield),
+            "user_task": _profile_v11_overlap_structure(user_task),
+            "target_group": _profile_v11_overlap_structure(target_group),
+        },
+        "value_anchor": _profile_v11_value_anchor(row),
+        "anchor_substitutability": _profile_v11_value_anchor(row),
+        "replacement_pressure": _profile_v11_replacement_pressure(row),
+        "purchase_pressure_comparison": {
+            "comparison_allowed": row.purchase_pressure_comparison.comparison_allowed,
+            "target_highest_pressure_level": (
+                row.purchase_pressure_comparison.target_highest_pressure_level
+            ),
+            "candidate_highest_pressure_level": (
+                row.purchase_pressure_comparison.candidate_highest_pressure_level
+            ),
+            "summary_cn": (
+                row.purchase_pressure_comparison.conclusion.audit_summary_cn
+            ),
+            "conclusion_strength": (
+                row.purchase_pressure_comparison.conclusion.strength
+            ),
+        },
+        "market_validation": {
+            "level": _profile_v11_market_level(market_strength),
+            "strength": market_strength,
+            "summary_cn": row.market_validation.conclusion.audit_summary_cn,
+            "target_weighted_price": row.market_validation.target_weighted_price,
+            "candidate_weighted_price": row.market_validation.candidate_weighted_price,
+            "price_gap": row.market_validation.price_gap,
+            "price_ratio": row.market_validation.price_ratio,
+            "sales_overlap_snapshot": (
+                row.market_validation.sales_overlap_snapshot.model_dump(mode="json")
+            ),
+        },
+        "role": primary_role,
+        "role_cn": role_cn,
+        "comparison_roles": [str(role) for role in row.comparison_roles],
+        "selection_gate": {
+            "eligible": selection.selection_eligible,
+            "selected": selection.selected,
+            "selection_rank": selection.selection_rank,
+            "selection_reason_code": selection.selection_reason_code,
+            "selection_reason_cn": selection.selection_reason_cn,
+            "conclusion_strength": selection.selection_conclusion_strength,
+            "primary_direct_eligible": primary_role == "direct_competitor",
+            "strong_pressure_allowed": (
+                row.replacement_pressure_analysis.conclusion_strength != "unknown"
+            ),
+        },
+        "ranking_trace": {
+            "ranking_score": row.score_breakdown.ranking_score,
+            "raw_total": row.score_breakdown.raw_total,
+            "available_weight": row.score_breakdown.available_weight,
+            "coverage": row.score_breakdown.coverage,
+            "components": [
+                component.model_dump(mode="json")
+                for component in row.score_breakdown.components
+            ],
+            "selection_reason_code": selection.selection_reason_code,
+            "selection_reason_cn": selection.selection_reason_cn,
+        },
+        "top3_eligible": selection.selection_eligible,
+        "ranking_gate_reasons": (
+            [] if selection.selected else [selection.selection_reason_code]
+        ),
+        "exclusion_reason_cn": (
+            None if selection.selected else selection.selection_reason_cn
+        ),
+        "overall_conclusion": row.overall_conclusion.model_dump(mode="json"),
+        "relation_assessments": [
+            item.model_dump(mode="json") for item in row.relation_assessments
+        ],
+        "business_questions": [
+            item.model_dump(mode="json") for item in row.business_questions
+        ],
+        "review_required": row.review_required,
+        "review_items": [item.model_dump(mode="json") for item in row.review_items],
+        "limitations": row.limitations,
+        "pair_result_hash": row.pair_result_hash,
+    }
+
+
+def _profile_v11_item_names(
+    dimension: DimensionAnalysisResult,
+    labels: dict[str, str],
+) -> list[str]:
+    return [labels.get(item.code, item.code) for item in dimension.shared_items]
+
+
+def _profile_v11_shared_context(
+    battlefield: DimensionAnalysisResult,
+    user_task: DimensionAnalysisResult,
+    target_group: DimensionAnalysisResult,
+) -> list[str]:
+    values = [
+        *_profile_v11_item_names(battlefield, BATTLEFIELD_NAMES),
+        *_profile_v11_item_names(user_task, TASK_NAMES),
+        *_profile_v11_item_names(target_group, {}),
+    ]
+    return list(dict.fromkeys(values))
+
+
+def _profile_v11_overlap_structure(
+    dimension: DimensionAnalysisResult,
+) -> dict[str, Any]:
+    components = {
+        row.component_code: row.value
+        for row in dimension.calculation_components
+        if row.known
+    }
+    return {
+        "availability": dimension.availability,
+        "weighted_overlap_score": dimension.score.normalized_score,
+        "positive_weighted_intersection": components.get(
+            "positive_weighted_intersection"
+        ),
+        "positive_weighted_union": components.get("positive_weighted_union"),
+        "risk_overlap_score": components.get("risk_overlap"),
+        "target_items": [
+            {"code": item.code, "roles": item.roles} for item in dimension.target_items
+        ],
+        "candidate_items": [
+            {"code": item.code, "roles": item.roles}
+            for item in dimension.candidate_items
+        ],
+        "shared_items": [item.code for item in dimension.shared_items],
+        "target_only_items": [item.code for item in dimension.target_only_items],
+        "candidate_only_items": [item.code for item in dimension.candidate_only_items],
+        "summary_cn": dimension.conclusion.audit_summary_cn,
+        "conclusion_strength": dimension.conclusion_strength,
+    }
+
+
+def _profile_v11_value_anchor(row: AgentCandidateAnalysis) -> dict[str, Any]:
+    anchor = row.value_anchor_analysis
+    return {
+        "shared_anchors": anchor.shared_anchors,
+        "target_stronger_anchors": anchor.target_stronger_anchors,
+        "candidate_stronger_anchors": anchor.candidate_stronger_anchors,
+        "weak_expression_anchors": anchor.weak_expression_anchors,
+        "proposition_only_anchors": anchor.proposition_only_anchors,
+        "anchor_substitutability_score": anchor.anchor_substitutability_score,
+        "anchor_substitutability_level": anchor.anchor_substitutability_level,
+        "score": anchor.score.normalized_score,
+        "summary_cn": anchor.conclusion.audit_summary_cn,
+        "conclusion_strength": anchor.conclusion_strength,
+        "requires_review": anchor.review_required,
+        "primary_direct_eligible": str(row.primary_role) == "direct_competitor",
+    }
+
+
+def _profile_v11_replacement_pressure(
+    row: AgentCandidateAnalysis,
+) -> dict[str, Any]:
+    pressure = row.replacement_pressure_analysis
+    pressure_type = pressure.primary_pressure_type
+    return {
+        "type": pressure_type,
+        "type_cn": PROFILE_V11_PRESSURE_CN.get(pressure_type, pressure_type),
+        "auxiliary_pressure_types": [
+            {
+                "type": code,
+                "type_cn": PROFILE_V11_PRESSURE_CN.get(code, code),
+            }
+            for code in pressure.auxiliary_pressure_types
+        ],
+        "replacement_pressure_score": pressure.replacement_pressure_score,
+        "replacement_pressure_level": pressure.replacement_pressure_level,
+        "score": pressure.score.normalized_score,
+        "affected_purchase_reasons": pressure.affected_purchase_reasons,
+        "reason_cn": pressure.conclusion.audit_summary_cn,
+        "conclusion_strength": pressure.conclusion_strength,
+        "requires_review": pressure.review_required,
+        "strong_pressure_allowed": pressure.conclusion_strength != "unknown",
+    }
+
+
+def _profile_v11_market_level(strength: str) -> str:
+    if strength == "strong":
+        return "strong"
+    if strength in {"supported", "directional"}:
+        return "medium"
+    return "weak"
+
+
+def _profile_v11_summary_cn(
+    profile: CompetitorProfileAdapterContract,
+    display_by_code: dict[str, dict[str, Any]],
+) -> str:
+    target_name = _display_name(_profile_v11_identity(profile.target_snapshot))
+    if not profile.priority_order:
+        return (
+            f"{target_name}已完成{len(profile.candidates)}款产品比较，"
+            "当前证据尚未形成稳定的重点竞品名单；可继续查看各产品已成立的专项比较。"
+        )
+    first = display_by_code[profile.priority_order[0]]
+    selection = first["selection_gate"]
+    first_name = _display_name(first["candidate"])
+    tail = ""
+    if len(profile.priority_order) > 1:
+        others = "、".join(
+            _display_name(display_by_code[code]["candidate"])
+            for code in profile.priority_order[1:]
+        )
+        tail = f"；同时关注{others}的不同竞争作用"
+    return (
+        f"{target_name}应优先关注{first_name}，其画像角色是{first['role_cn']}，"
+        f"主要依据是{str(selection['selection_reason_cn']).rstrip('。；;')}{tail}。"
+    )
+
+
+def _profile_v11_short_answer(
+    *,
+    profile: CompetitorProfileAdapterContract,
+    display_by_code: dict[str, dict[str, Any]],
+    max_chars: int,
+) -> str:
+    text = _profile_v11_summary_cn(profile, display_by_code)
+    for code in profile.priority_order:
+        item = display_by_code[code]
+        text += (
+            f"{_display_name(item['candidate'])}：{item['role_cn']}，"
+            f"{str(item['selection_gate']['selection_reason_cn']).rstrip('。；;')}。"
+        )
+    review_count = sum(item.review_required for item in profile.candidates)
+    if review_count:
+        text += f"另有{review_count}款产品存在局部证据待复核，其他已知维度仍可使用。"
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 1)] + "。"
+
+
+def _profile_v11_quality_payload(
+    profile: CompetitorProfileAdapterContract,
+) -> dict[str, Any]:
+    summary = profile.sku_competition_summary
+    return {
+        "analysis_candidate_count": summary.analysis_candidate_count,
+        "analyzable_candidate_count": summary.analyzable_candidate_count,
+        "excluded_candidate_count": summary.excluded_candidate_count,
+        "unknown_dimensions": [
+            PROFILE_V11_DIMENSION_CN.get(str(value), str(value))
+            for value in summary.unknown_dimensions
+        ],
+        "review_item_count": len(summary.review_items),
+        "limitations": summary.limitations,
+    }
+
+
+def _profile_v11_candidate_buckets(
+    candidates: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    buckets: dict[str, list[dict[str, Any]]] = {
+        role: [] for role in PROFILE_V11_ROLE_CN
+    }
+    for item in candidates:
+        candidate = item["candidate"]
+        buckets.setdefault(item["role"], []).append(
+            {
+                "sku_code": candidate.get("sku_code"),
+                "brand_name": candidate.get("brand_name"),
+                "model_name": candidate.get("model_name"),
+                "role_cn": item["role_cn"],
+                "business_score": item["business_score"],
+                "purchase_pool": item["purchase_pool"],
+                "replacement_pressure": item["replacement_pressure"],
+                "selection_reason_cn": item["selection_gate"]["selection_reason_cn"],
+            }
+        )
+    return buckets
+
+
+def _profile_v11_report_markdown(
+    *,
+    title: str,
+    profile: CompetitorProfileAdapterContract,
+    dashboard_payload: dict[str, Any],
+    all_candidates: list[dict[str, Any]],
+) -> str:
+    lines = [f"# {title}", "", *render_competitor_dashboard_markdown(dashboard_payload)]
+    lines.extend(["", "## 一、重点名单为什么这样排", ""])
+    if profile.priority_order:
+        by_code = {item["candidate"]["sku_code"]: item for item in all_candidates}
+        for code in profile.priority_order:
+            item = by_code[code]
+            lines.append(
+                f"- **{_display_name(item['candidate'])}**：{item['role_cn']}；"
+                f"{str(item['selection_gate']['selection_reason_cn']).rstrip('。；;')}。"
+            )
+    else:
+        lines.append("当前没有形成稳定重点名单，但各候选已成立的专项结论仍保留。")
+    lines.extend(["", "## 二、全部候选比较结果", ""])
+    for item in all_candidates:
+        selected = (
+            f"重点第{item['selection_gate']['selection_rank']}位"
+            if item["selection_gate"]["selected"]
+            else "未进入重点名单"
+        )
+        conclusion = item["overall_conclusion"]["audit_summary_cn"]
+        lines.append(
+            f"- **{_display_name(item['candidate'])}**｜{item['role_cn']}｜{selected}："
+            f"{conclusion} {item['selection_gate']['selection_reason_cn']}"
+        )
+    if profile.excluded_candidates:
+        lines.extend(["", "## 三、未进入分析的硬排除记录", ""])
+        for row in profile.excluded_candidates:
+            lines.append(
+                f"- **{_display_name(_profile_v11_identity(row.candidate_snapshot))}**："
+                f"{row.selection_assessment.selection_reason_cn}。"
+            )
+    lines.extend(["", "## 四、证据边界", ""])
+    if profile.sku_competition_summary.unknown_dimensions:
+        unknown = "、".join(
+            PROFILE_V11_DIMENSION_CN.get(str(value), str(value))
+            for value in profile.sku_competition_summary.unknown_dimensions
+        )
+        lines.append(f"- 当前全体候选均不足的维度：{unknown}。")
+    if profile.sku_competition_summary.limitations:
+        lines.extend(
+            f"- {value}" for value in profile.sku_competition_summary.limitations
+        )
+    if not profile.sku_competition_summary.unknown_dimensions and not (
+        profile.sku_competition_summary.limitations
+    ):
+        lines.append("- 当前画像未记录全局性证据缺口；局部限制见各候选比较结果。")
+    return "\n".join(lines)
 
 
 def weighted_overlap_from_roles(overlap: dict[str, Any]) -> dict[str, Any]:
@@ -6716,6 +7391,16 @@ def _dashboard_overlap_row(
 
 
 def _dashboard_score_dimensions(item: dict[str, Any]) -> list[dict[str, Any]]:
+    saved_dimensions = item.get("saved_score_dimensions")
+    if isinstance(saved_dimensions, list):
+        return [
+            {
+                "dimension_cn": str(row.get("dimension_cn") or ""),
+                "score": _dashboard_score_value(row.get("score")),
+            }
+            for row in saved_dimensions
+            if isinstance(row, dict) and row.get("dimension_cn")
+        ]
     overlap = item.get("weighted_overlap") or {}
     return [
         {
@@ -7101,6 +7786,10 @@ def _dashboard_conclusion_markdown(
 ) -> str:
     target = dashboard_payload.get("target") or {}
     target_name = str(target.get("display_name") or "目标 SKU")
+    if dashboard_payload.get("source") == "competitor_profile_v1_1":
+        summary = str(dashboard_payload.get("summary_cn") or "").strip()
+        if summary:
+            return f"**结论：{target_name}的重点竞品判断**\n{summary}"
     if not competitors:
         return f"**结论：{target_name} 当前没有稳定重点竞品**\n缺少可支撑看板的 Top 3 竞品结果，请查看报告证据缺口。"
     first = competitors[0]

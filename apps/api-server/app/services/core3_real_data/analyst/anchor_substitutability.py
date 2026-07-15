@@ -51,6 +51,9 @@ EVIDENCE_STRENGTH_SCORE = {
     M12DEvidenceStrength.STRONG.value: Decimal("3"),
 }
 
+VALUE_ANCHOR_MATCHER_METHOD_VERSION = "value_anchor_matcher_v1"
+VALUE_ANCHOR_MATCHER_CONFIG_VERSION = "value_anchor_matcher_score_15_v1"
+
 
 @dataclass(frozen=True)
 class AnchorSubstitutabilityBreakdown:
@@ -878,5 +881,7 @@ __all__ = [
     "AnchorMatchDetail",
     "AnchorSubstitutabilityBreakdown",
     "AnchorSubstitutabilityResult",
+    "VALUE_ANCHOR_MATCHER_CONFIG_VERSION",
+    "VALUE_ANCHOR_MATCHER_METHOD_VERSION",
     "ValueAnchorMatcher",
 ]

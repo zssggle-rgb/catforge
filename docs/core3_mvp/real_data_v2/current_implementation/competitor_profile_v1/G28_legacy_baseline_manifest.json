@@ -1,0 +1,1089 @@
+{
+  "capture_contract": {
+    "answer_style": "xiaoao",
+    "cli_default_candidate_limit": 20,
+    "command": "competitor-set",
+    "default_limit_code_evidence": [
+      "apps/api-server/app/cli/catforge_analyst.py:96",
+      "apps/api-server/app/services/core3_real_data/analyst/sop_orchestrators.py:665"
+    ],
+    "execution_receipt": {
+      "bytes": 8051,
+      "file": "G28_legacy_capture_receipts.json",
+      "sha256": "7215ee764ebb8a767c6633eb9c56b27fde196a80f78f481a490732eac34ba0de"
+    },
+    "execution_receipt_hash": "add7b0e550406b0e5638f97c8045a3d8b7770cfe1d896b6793407ddd9106e9ce",
+    "limit_argument_was_omitted": true,
+    "presentation_fields_removed_after_capture": true,
+    "top_n": 3,
+    "with_report": "none"
+  },
+  "capture_date": "2026-07-15",
+  "full_v1_universe": {
+    "candidate_code_hash": "096a20500fc0d8b39da0ee3c187c85bd144d369144ed43f584d4cf759ebf0238",
+    "candidate_count": 352,
+    "candidate_universe_fingerprint": "sha256:competitor_profile_candidate_universe_v1:f247555e5fcd52cceb218e9e6fe2743a45c2e292f50429d0bce935282a478366",
+    "file": {
+      "bytes": 399222,
+      "canonical_json_bytes": 4442367,
+      "canonical_json_sha256": "43505a05017b61021ad6f9949889bc1f9a11eefb60c94d33a41b35888d444ad5",
+      "file": "G28_65e7q_v1_full_universe_205_20260715.json.gz",
+      "sha256": "35931f65373c82fb36029f02258db115cf6fbbd9345fa0f66cf177ffc4659b9b"
+    },
+    "fixture_hash": "fe72006cefb8e1034cea15eef2d171e2f62b9e9e176e075de1bb2dec3a23845b",
+    "legacy_candidate_subset_count": 20,
+    "legacy_default20_subset_complete": true,
+    "legacy_top3_full_count": 3,
+    "legacy_top3_relation_count": 21,
+    "pair_status_counts": {
+      "eligible": 2,
+      "limited": 23,
+      "reference_only": 9,
+      "review_required": 318
+    },
+    "relation_index_hash": "169d0c4a7c60c6fdd790f5a0ccfe3a8bf10d77f7647edbf3592007e8e44b9209",
+    "relation_status_counts": {
+      "failed": 162,
+      "limited": 23,
+      "passed": 4,
+      "review_required": 2226,
+      "unassessable": 49
+    },
+    "remote_file_write": false,
+    "selection_count": 1,
+    "target_relation_count": 2464,
+    "transaction_mode": "READ ONLY",
+    "version_result_hash": "sha256:competitor_profile_version_result_v1:3331f446b4b86704b8d1a59829fcbdd4e25ddc1eac14abd69fed9eafe9ef108d"
+  },
+  "gate_contract": {
+    "case_count": 8,
+    "fixture_file": {
+      "bytes": 14874,
+      "file": "G28_gate_fixture_matrix.json",
+      "sha256": "e0bc7313dda1b9c70f505b10ec89b28525c60983cf10ba30f275c1931b6cf974"
+    },
+    "foundational_feature_scope": "downstream behavior after an externally supplied foundational status; prevalence classification and threshold remain G29 work",
+    "hard_exclusion_property_count": 5,
+    "implementation_goal": "G34",
+    "matrix_result_hash": "adb46dc6f7a21e01c4b913e6de455b68e19355896862720986ae01c27ffcc63e",
+    "oracle_version": "g28-v1.1-future-g34-contract-oracle-v2",
+    "runtime_behavior_proven": false,
+    "semantic_content_sensitivity": {
+      "aligned_result_hash": "7f053a5d85def01e8133b1d1b86d082aee81d1623484a57d7f2b9dedd7aa4763",
+      "availability_unchanged": true,
+      "direct_choice_after": "directional",
+      "direct_choice_before": "supported",
+      "divergent_result_hash": "587c71d778294355f9e4ff71dad84a36d7db31b657eea78126aa800905a9e8fe",
+      "mutation": "replace_candidate_task_group_battlefield_codes",
+      "result_hash": "390a069903d090c7fbd7eddd0bc9c90be1171a0a795d33e63e06fae48cf17ba3"
+    }
+  },
+  "local_performance_baseline": {
+    "g29_budget_inputs": {
+      "categories": {
+        "AC": {
+          "candidate_pipeline_wall_time_ms": 2800,
+          "materialization_wall_time_ms": 10600,
+          "peak_memory_mib": 304,
+          "provider_select_count": 11,
+          "serialized_draft_bytes": 33371334,
+          "serialized_draft_leaf_value_count": 978632
+        },
+        "TV": {
+          "candidate_pipeline_wall_time_ms": 6900,
+          "materialization_wall_time_ms": 25200,
+          "peak_memory_mib": 720,
+          "provider_select_count": 11,
+          "serialized_draft_bytes": 81154326,
+          "serialized_draft_leaf_value_count": 2379932
+        }
+      },
+      "derivation_rule": "For G29 schema-budget inputs only: ceil(max(cold,p95) * 1.25) to 100ms for latency, ceil(max peak MiB * 1.25) to 16MiB, fixed provider SELECT count equals the measured count, and storage uses actual canonical JSON bytes without compression. G39/G41 set release gates after implementation and 205 readback."
+    },
+    "legacy_artifact": {
+      "bytes": 8514,
+      "file": "G28_legacy_runtime_benchmark.json",
+      "sha256": "71649a190b28b297bfb769303ffbd018ede62d9d23dea7e77b7524dd8dc55741"
+    },
+    "legacy_single_pair": {
+      "cold_ms": 213.87,
+      "max_ms": 238.175,
+      "median_ms": 222.033,
+      "min_ms": 213.87,
+      "p95_ms": 236.561,
+      "peak_memory_mib": 22.322,
+      "repeats": 3,
+      "result": {
+        "analysis_hash": "838dd43571bba7f28840810af5e65241b9eddc160f1f77fc31648854c86409d5",
+        "candidate_count": 1,
+        "top_sku_codes": [
+          "TV00029020"
+        ]
+      },
+      "samples_ms": [
+        213.87,
+        222.033,
+        238.175
+      ],
+      "warm_ms": {
+        "max": 238.175,
+        "p50": 230.104,
+        "p95": 237.368,
+        "samples": [
+          222.033,
+          238.175
+        ]
+      }
+    },
+    "legacy_single_sku_default20": {
+      "cold_ms": 1900.847,
+      "max_ms": 1900.847,
+      "median_ms": 1889.321,
+      "min_ms": 1858.928,
+      "p95_ms": 1899.694,
+      "peak_memory_mib": 352.51,
+      "repeats": 3,
+      "result": {
+        "analysis_hash": "198af4ff753192749b6e06b443ee339ffe9430f97a7a48bbeb14f75597c4faa0",
+        "candidate_count": 20,
+        "top_sku_codes": [
+          "TV00027801",
+          "TV00028909",
+          "TV00029936"
+        ]
+      },
+      "samples_ms": [
+        1900.847,
+        1889.321,
+        1858.928
+      ],
+      "warm_ms": {
+        "max": 1889.321,
+        "p50": 1874.125,
+        "p95": 1887.802,
+        "samples": [
+          1889.321,
+          1858.928
+        ]
+      }
+    },
+    "machine": {
+      "logical_cpu_count": 10,
+      "machine": "arm64",
+      "physical_memory_bytes": 17179869184,
+      "platform": "macOS-26.5-arm64-arm-64bit-Mach-O",
+      "processor": "arm",
+      "python": "3.13.5"
+    },
+    "real_205_max_candidate_skus": {
+      "AC": {
+        "candidate_count": 151,
+        "display_name_cn": "小米 kfr-35gw/n1a1",
+        "source_environment": "205-read-only",
+        "target_sku_code": "AC00028642",
+        "tied_max_target_count": 49,
+        "version_id": "45725326-720c-45c8-9a3b-e86fb6cc1f0b"
+      },
+      "TV": {
+        "candidate_count": 359,
+        "display_name_cn": "红米 l75ma-ra",
+        "source_environment": "205-read-only",
+        "target_sku_code": "TV00025784",
+        "tied_max_target_count": 151,
+        "version_id": "c45c0002-9b8a-4b0d-8b12-344dee020e15"
+      }
+    },
+    "real_max_scale_artifact": {
+      "bytes": 863,
+      "file": "G28_max_candidate_scale_205_20260715.json",
+      "sha256": "726251856d7a9721175886df4efe15266c37b81d2dab095d6b14043031c1dcb4"
+    },
+    "scale_artifact": {
+      "bytes": 14118,
+      "file": "G28_profile_scale_benchmark.json",
+      "sha256": "fd58b6b590ae8ba8df6e549625d36ab06947562bab56a73e6f2eeb3149f76244"
+    },
+    "synthetic_upper_bound_cases": {
+      "AC": {
+        "benchmark_target_sku_code": "AC000001",
+        "candidate_count": 155,
+        "candidate_pipeline": {
+          "all_runs": {
+            "peak_memory_mib": {
+              "max": 16.991,
+              "p50": 16.991,
+              "p95": 16.991,
+              "samples": [
+                16.927,
+                16.991,
+                16.991
+              ]
+            },
+            "wall_time_ms": {
+              "max": 2245.012,
+              "p50": 2165.249,
+              "p95": 2237.036,
+              "samples": [
+                2008.905,
+                2165.249,
+                2245.012
+              ]
+            }
+          },
+          "cold_run": {
+            "candidate_count": 155,
+            "peak_memory_mib": 16.927,
+            "result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a44601c3a0263a84b38677c5002e73c7a6e93c951e45f13e9c6b42ff5d8be6ac",
+            "run_kind": "cold",
+            "run_number": 1,
+            "wall_time_ms": 2008.905
+          },
+          "deterministic_result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a44601c3a0263a84b38677c5002e73c7a6e93c951e45f13e9c6b42ff5d8be6ac",
+          "repeats": 3,
+          "warm_runs": {
+            "peak_memory_mib": {
+              "max": 16.991,
+              "p50": 16.991,
+              "p95": 16.991,
+              "samples": [
+                16.991,
+                16.991
+              ]
+            },
+            "wall_time_ms": {
+              "max": 2245.012,
+              "p50": 2205.131,
+              "p95": 2241.024,
+              "samples": [
+                2165.249,
+                2245.012
+              ]
+            }
+          }
+        },
+        "category_code": "AC",
+        "full_v1_materializer": {
+          "all_runs": {
+            "materialization_ms": {
+              "max": 8463.851,
+              "p50": 8439.545,
+              "p95": 8461.421,
+              "samples": [
+                8315.163,
+                8439.545,
+                8463.851
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 231.761,
+              "p50": 231.759,
+              "p95": 231.761,
+              "samples": [
+                231.645,
+                231.759,
+                231.761
+              ]
+            },
+            "serialization_ms": {
+              "max": 1535.998,
+              "p50": 1326.41,
+              "p95": 1515.039,
+              "samples": [
+                1535.998,
+                1326.41,
+                1301.61
+              ]
+            }
+          },
+          "cold_run": {
+            "materialization_ms": 8315.163,
+            "pair_count": 155,
+            "peak_memory_mib": 231.645,
+            "relation_count": 1085,
+            "result_hash": "8477ede9e8eb857288d7aff19f78abd1824b1626c131bb1de68af54fbb220f32",
+            "run_kind": "cold",
+            "run_number": 1,
+            "serialization_ms": 1535.998
+          },
+          "deterministic_result_hash": "8477ede9e8eb857288d7aff19f78abd1824b1626c131bb1de68af54fbb220f32",
+          "pair_count": 155,
+          "relation_count": 1085,
+          "repeats": 3,
+          "storage": {
+            "serialized_draft_bytes": 33371334,
+            "serialized_draft_leaf_value_count": 978632,
+            "single_pair_bytes": {
+              "max": 211235,
+              "min": 211192,
+              "p50": 211198,
+              "p95": 211230
+            },
+            "single_pair_leaf_value_count": {
+              "max": 6193,
+              "min": 6192,
+              "p50": 6192,
+              "p95": 6193
+            }
+          },
+          "warm_runs": {
+            "materialization_ms": {
+              "max": 8463.851,
+              "p50": 8451.698,
+              "p95": 8462.636,
+              "samples": [
+                8439.545,
+                8463.851
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 231.761,
+              "p50": 231.76,
+              "p95": 231.761,
+              "samples": [
+                231.759,
+                231.761
+              ]
+            },
+            "serialization_ms": {
+              "max": 1326.41,
+              "p50": 1314.01,
+              "p95": 1325.17,
+              "samples": [
+                1326.41,
+                1301.61
+              ]
+            }
+          }
+        },
+        "provider_sql": {
+          "category_bundle_select_count": 11,
+          "database": "ephemeral_in_memory_sqlite_fixture",
+          "scale_behavior": "fixed_query_count; no_target_n_plus_one",
+          "target_incremental_select_count": 0,
+          "total_select_count": 11
+        }
+      },
+      "TV": {
+        "benchmark_target_sku_code": "TV000001",
+        "candidate_count": 377,
+        "candidate_pipeline": {
+          "all_runs": {
+            "peak_memory_mib": {
+              "max": 41.181,
+              "p50": 41.181,
+              "p95": 41.181,
+              "samples": [
+                41.158,
+                41.181,
+                41.181
+              ]
+            },
+            "wall_time_ms": {
+              "max": 5519.811,
+              "p50": 5355.94,
+              "p95": 5503.424,
+              "samples": [
+                5519.811,
+                5285.866,
+                5355.94
+              ]
+            }
+          },
+          "cold_run": {
+            "candidate_count": 377,
+            "peak_memory_mib": 41.158,
+            "result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a58e7f61343fb63651cc868c652503b3c88351d2a5a76b7bfbc5ef30e83e98f8",
+            "run_kind": "cold",
+            "run_number": 1,
+            "wall_time_ms": 5519.811
+          },
+          "deterministic_result_hash": "sha256:competitor_profile_candidate_determinism_result_v1:a58e7f61343fb63651cc868c652503b3c88351d2a5a76b7bfbc5ef30e83e98f8",
+          "repeats": 3,
+          "warm_runs": {
+            "peak_memory_mib": {
+              "max": 41.181,
+              "p50": 41.181,
+              "p95": 41.181,
+              "samples": [
+                41.181,
+                41.181
+              ]
+            },
+            "wall_time_ms": {
+              "max": 5355.94,
+              "p50": 5320.903,
+              "p95": 5352.436,
+              "samples": [
+                5285.866,
+                5355.94
+              ]
+            }
+          }
+        },
+        "category_code": "TV",
+        "full_v1_materializer": {
+          "all_runs": {
+            "materialization_ms": {
+              "max": 20155.993,
+              "p50": 20136.05,
+              "p95": 20153.999,
+              "samples": [
+                20155.993,
+                19888.686,
+                20136.05
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 563.242,
+              "p50": 563.238,
+              "p95": 563.241,
+              "samples": [
+                563.242,
+                563.236,
+                563.238
+              ]
+            },
+            "serialization_ms": {
+              "max": 3910.687,
+              "p50": 3654.938,
+              "p95": 3885.112,
+              "samples": [
+                3910.687,
+                3654.938,
+                3530.915
+              ]
+            }
+          },
+          "cold_run": {
+            "materialization_ms": 20155.993,
+            "pair_count": 377,
+            "peak_memory_mib": 563.242,
+            "relation_count": 2639,
+            "result_hash": "69da40d50f5862752fe30164669c383af971c487cc65a8a20a451d2235183699",
+            "run_kind": "cold",
+            "run_number": 1,
+            "serialization_ms": 3910.687
+          },
+          "deterministic_result_hash": "69da40d50f5862752fe30164669c383af971c487cc65a8a20a451d2235183699",
+          "pair_count": 377,
+          "relation_count": 2639,
+          "repeats": 3,
+          "storage": {
+            "serialized_draft_bytes": 81154326,
+            "serialized_draft_leaf_value_count": 2379932,
+            "single_pair_bytes": {
+              "max": 211237,
+              "min": 211192,
+              "p50": 211198,
+              "p95": 211232
+            },
+            "single_pair_leaf_value_count": {
+              "max": 6193,
+              "min": 6192,
+              "p50": 6192,
+              "p95": 6193
+            }
+          },
+          "warm_runs": {
+            "materialization_ms": {
+              "max": 20136.05,
+              "p50": 20012.368,
+              "p95": 20123.682,
+              "samples": [
+                19888.686,
+                20136.05
+              ]
+            },
+            "peak_memory_mib": {
+              "max": 563.238,
+              "p50": 563.237,
+              "p95": 563.238,
+              "samples": [
+                563.236,
+                563.238
+              ]
+            },
+            "serialization_ms": {
+              "max": 3654.938,
+              "p50": 3592.927,
+              "p95": 3648.737,
+              "samples": [
+                3654.938,
+                3530.915
+              ]
+            }
+          }
+        },
+        "provider_sql": {
+          "category_bundle_select_count": 11,
+          "database": "ephemeral_in_memory_sqlite_fixture",
+          "scale_behavior": "fixed_query_count; no_target_n_plus_one",
+          "target_incremental_select_count": 0,
+          "total_select_count": 11
+        }
+      }
+    },
+    "workstation_note": "Observed G28 baseline and G29 budget input, not a release gate."
+  },
+  "manifest_version": "competitor_profile_v1_1_g28_legacy_baseline_manifest_v4",
+  "observed_field_coverage": {
+    "alias_value_conflict_count": 0,
+    "coverage_pct_of_observed_paths": 100.0,
+    "empty_container_path_count": 915,
+    "inventory_file": {
+      "bytes": 1902469,
+      "file": "G28_legacy_leaf_mapping_inventory.json.gz",
+      "sha256": "8c6adbd4440f45e72a9e1446ddc3b4860c813260d998e14e7225c26a9671b85a"
+    },
+    "inventory_hash": "34be0aa0fdf42437ec3a5d96bf5325e30164a2aa25dd09ee5eb7a3dc71639381",
+    "known_to_unknown_allowed": false,
+    "mapping_file": {
+      "bytes": 10477,
+      "file": "G28_legacy_to_v11_field_mapping.json",
+      "sha256": "7f4ce8f6271feeba3c8c080fcef5373f76f7e2879c8c2bb1285b01c6982daadd"
+    },
+    "mapping_rule_count": 65,
+    "observed_path_count": 13756,
+    "source_fixture_count": 4,
+    "target_alias_group_count": 3624,
+    "typed_schema_complete": false,
+    "typed_schema_completion_goal": "G29",
+    "value_leaf_path_count": 12841
+  },
+  "primary_65e7q": {
+    "analysis_hash": "198af4ff753192749b6e06b443ee339ffe9430f97a7a48bbeb14f75597c4faa0",
+    "candidate_count": 20,
+    "candidates_in_recall_order": [
+      {
+        "anchor_score": 11,
+        "business_score": 0.8226144852941176,
+        "competitor_score": 0.9289077475736948,
+        "name": "小米 L65MC-SP",
+        "recall_rank": 1,
+        "replacement_score": 7,
+        "role": "strong_direct",
+        "sku_code": "TV00029020"
+      },
+      {
+        "anchor_score": 10,
+        "business_score": 0.828625549669143,
+        "competitor_score": 0.9180482190066285,
+        "name": "创维 65A7H PRO",
+        "recall_rank": 2,
+        "replacement_score": 7,
+        "role": "strong_direct",
+        "sku_code": "TV00029936"
+      },
+      {
+        "anchor_score": 13,
+        "business_score": 0.9241811052246985,
+        "competitor_score": 0.9189499315062543,
+        "name": "TCL 65Q9L PRO",
+        "recall_rank": 3,
+        "replacement_score": 8,
+        "role": "primary_direct",
+        "sku_code": "TV00027801"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.9268764192343604,
+        "competitor_score": 0.9238772951548977,
+        "name": "华为 VISION智慧屏 5 PRO 65",
+        "recall_rank": 4,
+        "replacement_score": 10,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028909"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.9268764192343604,
+        "competitor_score": 0.8588354358877801,
+        "name": "海信 65E5Q-PRO",
+        "recall_rank": 5,
+        "replacement_score": 10,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00027912"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.9008458848832154,
+        "competitor_score": 0.8610611298813546,
+        "name": "TCL 65T7L ULTRA",
+        "recall_rank": 6,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028166"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.8414638241708897,
+        "competitor_score": 0.9219072757308051,
+        "name": "创维 65A6F ULTRA",
+        "recall_rank": 7,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028829"
+      },
+      {
+        "anchor_score": 11,
+        "business_score": 0.7922924789915966,
+        "competitor_score": 0.9103847402246121,
+        "name": "华为 VISION智慧屏 5 65",
+        "recall_rank": 8,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00027861"
+      },
+      {
+        "anchor_score": 12,
+        "business_score": 0.885089605734767,
+        "competitor_score": 0.8746599560651199,
+        "name": "海信 65E5Q",
+        "recall_rank": 9,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00027541"
+      },
+      {
+        "anchor_score": 13,
+        "business_score": 0.900824529206626,
+        "competitor_score": 0.9178846895723257,
+        "name": "索尼 K-65XR50",
+        "recall_rank": 10,
+        "replacement_score": 9,
+        "role": "uptrade_alternative",
+        "sku_code": "TV00027899"
+      },
+      {
+        "anchor_score": 10,
+        "business_score": 0.7614738241708897,
+        "competitor_score": 0.9197941818325074,
+        "name": "小米 L65MB-SP",
+        "recall_rank": 11,
+        "replacement_score": 8,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00027027"
+      },
+      {
+        "anchor_score": 13,
+        "business_score": 0.8014738241708897,
+        "competitor_score": 0.9081139595249581,
+        "name": "小米 L65MB-S",
+        "recall_rank": 12,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028099"
+      },
+      {
+        "anchor_score": 12,
+        "business_score": 0.5910714915546499,
+        "competitor_score": 0.7603948551346491,
+        "name": "海信 65D30QD",
+        "recall_rank": 13,
+        "replacement_score": 8,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028546"
+      },
+      {
+        "anchor_score": 11,
+        "business_score": 0.7535039789340393,
+        "competitor_score": 0.9078027280824724,
+        "name": "VIDDA 65VX3S",
+        "recall_rank": 14,
+        "replacement_score": 8,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00030053"
+      },
+      {
+        "anchor_score": 13,
+        "business_score": 0.8014738241708897,
+        "competitor_score": 0.9226751423269555,
+        "name": "小米 L65MA-SPL",
+        "recall_rank": 15,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00026065"
+      },
+      {
+        "anchor_score": 13,
+        "business_score": 0.7994967368558471,
+        "competitor_score": 0.9094625535440083,
+        "name": "创维 65A5F MINI",
+        "recall_rank": 16,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028423"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.805604710421363,
+        "competitor_score": 0.8646600869780752,
+        "name": "海信 65E52Q",
+        "recall_rank": 17,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00029169"
+      },
+      {
+        "anchor_score": 11,
+        "business_score": 0.6921238119828266,
+        "competitor_score": 0.8735529665358365,
+        "name": "华为 VISION智慧屏 5 SE 65",
+        "recall_rank": 18,
+        "replacement_score": 8,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00028082"
+      },
+      {
+        "anchor_score": 9,
+        "business_score": 0.6607064407064407,
+        "competitor_score": 0.897709539513617,
+        "name": "雷鸟 65R69A",
+        "recall_rank": 19,
+        "replacement_score": 8,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00029120"
+      },
+      {
+        "anchor_score": 12,
+        "business_score": 0.6771275252525253,
+        "competitor_score": 0.829781073183739,
+        "name": "海信 65E3S-PRO+",
+        "recall_rank": 20,
+        "replacement_score": 9,
+        "role": "downtrade_diversion",
+        "sku_code": "TV00030137"
+      }
+    ],
+    "capture_execution": {
+      "actual_candidate_count": 20,
+      "application_argv": [
+        "python",
+        "-m",
+        "app.cli.catforge_analyst",
+        "competitor-set",
+        "--project-id",
+        "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "--category-code",
+        "TV",
+        "--batch-id",
+        "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+        "--product-category",
+        "tv",
+        "--sku-code",
+        "TV00029112",
+        "--top-n",
+        "3",
+        "--answer-style",
+        "xiaoao",
+        "--with-report",
+        "none",
+        "--format",
+        "json"
+      ],
+      "canonical_json_sha256": "048d0314b3c18d72279fe03a37f1149342911f7c5e4e844a5ad0bd7754edd86a",
+      "gzip_sha256": "41d2351bbe151d5fcd373db7ce20d89cdb5d40e5c11f1bcabf26fb8ce2657559",
+      "matches_frozen_fixture": true,
+      "source_stdout_sha256": "5fc56fca077586b540b0f5f0c621caffb791e44bacc34a0e2104129ffcc7a496",
+      "top3_sku_codes": [
+        "TV00027801",
+        "TV00028909",
+        "TV00029936"
+      ]
+    },
+    "local_analysis_rerun_hash_equal": true,
+    "top3": [
+      {
+        "anchor_score": 13,
+        "business_score": 0.9241811052246985,
+        "competitor_score": 0.9189499315062543,
+        "name": "TCL 65Q9L PRO",
+        "recall_rank": 3,
+        "replacement_score": 8,
+        "role": "primary_direct",
+        "selection_rank": 1,
+        "sku_code": "TV00027801"
+      },
+      {
+        "anchor_score": 14,
+        "business_score": 0.9268764192343604,
+        "competitor_score": 0.9238772951548977,
+        "name": "华为 VISION智慧屏 5 PRO 65",
+        "recall_rank": 4,
+        "replacement_score": 10,
+        "role": "downtrade_diversion",
+        "selection_rank": 2,
+        "sku_code": "TV00028909"
+      },
+      {
+        "anchor_score": 10,
+        "business_score": 0.828625549669143,
+        "competitor_score": 0.9180482190066285,
+        "name": "创维 65A7H PRO",
+        "recall_rank": 2,
+        "replacement_score": 7,
+        "role": "strong_direct",
+        "selection_rank": 3,
+        "sku_code": "TV00029936"
+      }
+    ]
+  },
+  "provenance": {
+    "code_hashes": {
+      "anchor_substitutability.py": "64ac4a69a796aea678a09e3578f73959b5d7c38d20dc8afbf24d3c1e70a2c7ba",
+      "catforge_analyst.py": "49e686830052d9cd3b2bd4ef516fdcd7a94807d70d63e2a27f47e8ac2a240b6f",
+      "competitor_answer.py": "886dac26215cee23266e80481ec79f7cf5ba291294a50b79d43022f48050a8e7",
+      "purchase_pressure_comparison.py": "e3f46886bea703eefb7ae4281dba230a2b319d2f5de7300788295b23bdd98379",
+      "replacement_pressure.py": "f432ed809a86af610fddb4f730590a896ecaa4eb1c8038138d5b77464a8e98ae",
+      "sop_orchestrators.py": "26556a8bafc7e786b069f0a6dd56d68e4ab6cb0851f0bfc3d2d1a70c1674c6de"
+    },
+    "remote_api_image": "sha256:62fc2c560070a47bfdbdbba57043b379a8db2e6fee46c09fb7d14dc1477092ff",
+    "remote_commit": "3341f45c1cd33bdbcaa5a6eb342e744aaf9e9a4e"
+  },
+  "real_legacy_fixtures": [
+    {
+      "application_argv": [
+        "python",
+        "-m",
+        "app.cli.catforge_analyst",
+        "competitor-set",
+        "--project-id",
+        "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "--category-code",
+        "TV",
+        "--batch-id",
+        "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+        "--product-category",
+        "tv",
+        "--sku-code",
+        "TV00029112",
+        "--top-n",
+        "3",
+        "--answer-style",
+        "xiaoao",
+        "--with-report",
+        "none",
+        "--format",
+        "json"
+      ],
+      "candidate_count": 20,
+      "canonical_json_bytes": 105797407,
+      "canonical_json_sha256": "048d0314b3c18d72279fe03a37f1149342911f7c5e4e844a5ad0bd7754edd86a",
+      "canonical_result_hash": "048d0314b3c18d72279fe03a37f1149342911f7c5e4e844a5ad0bd7754edd86a",
+      "category_code": "TV",
+      "contains_display_payload": false,
+      "default_candidate_limit": 20,
+      "fixture": "G28_65e7q_legacy_analysis_default20_205_20260715.json.gz",
+      "gzip_bytes": 5435282,
+      "gzip_sha256": "41d2351bbe151d5fcd373db7ce20d89cdb5d40e5c11f1bcabf26fb8ce2657559",
+      "invocation_omitted_limit_argument": true,
+      "m12d_consumption_state": "published_ready",
+      "m12d_downstream_action": "normal_pair_scoring",
+      "role": "TV complete/default-limit golden",
+      "source_batch_id": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+      "source_stdout_sha256": "5fc56fca077586b540b0f5f0c621caffb791e44bacc34a0e2104129ffcc7a496",
+      "target_sku_code": "TV00029112",
+      "top3_sku_codes": [
+        "TV00027801",
+        "TV00028909",
+        "TV00029936"
+      ]
+    },
+    {
+      "application_argv": [
+        "python",
+        "-m",
+        "app.cli.catforge_analyst",
+        "competitor-set",
+        "--project-id",
+        "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "--category-code",
+        "AC",
+        "--batch-id",
+        "m00_20260624000202_1150a669",
+        "--product-category",
+        "ac",
+        "--sku-code",
+        "AC00026378",
+        "--top-n",
+        "3",
+        "--answer-style",
+        "xiaoao",
+        "--with-report",
+        "none",
+        "--format",
+        "json"
+      ],
+      "candidate_count": 16,
+      "canonical_json_bytes": 12936521,
+      "canonical_json_sha256": "92f183cbe8043faab347c053a98cbea661653e496db2a4a4ee019589513ddb1a",
+      "canonical_result_hash": "92f183cbe8043faab347c053a98cbea661653e496db2a4a4ee019589513ddb1a",
+      "category_code": "AC",
+      "contains_display_payload": false,
+      "default_candidate_limit": 20,
+      "fixture": "G28_ac_complete_legacy_analysis_default20_205_20260715.json.gz",
+      "gzip_bytes": 1674060,
+      "gzip_sha256": "e2ee32106694b8c8f864743ec46d61ab8e248fb9bfc15714aafa1a9579e201a2",
+      "invocation_omitted_limit_argument": true,
+      "m12d_consumption_state": "published_ready",
+      "m12d_downstream_action": "normal_pair_scoring",
+      "role": "AC published-ready real compatibility",
+      "source_batch_id": "m00_20260624000202_1150a669",
+      "source_stdout_sha256": "169c594a6960000a27278ae14e76dfff26d5b1afdcf57178bbf16a544f02816e",
+      "target_sku_code": "AC00026378",
+      "top3_sku_codes": [
+        "AC00034712",
+        "AC00039161",
+        "AC00038373"
+      ]
+    },
+    {
+      "application_argv": [
+        "python",
+        "-m",
+        "app.cli.catforge_analyst",
+        "competitor-set",
+        "--project-id",
+        "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "--category-code",
+        "AC",
+        "--batch-id",
+        "m00_20260624000202_1150a669",
+        "--product-category",
+        "ac",
+        "--sku-code",
+        "AC00034959",
+        "--top-n",
+        "3",
+        "--answer-style",
+        "xiaoao",
+        "--with-report",
+        "none",
+        "--format",
+        "json"
+      ],
+      "candidate_count": 20,
+      "canonical_json_bytes": 13329788,
+      "canonical_json_sha256": "1d0f5c129edaa85cde5c220642f11d961075974ee2308f860de8e2888129b553",
+      "canonical_result_hash": "1d0f5c129edaa85cde5c220642f11d961075974ee2308f860de8e2888129b553",
+      "category_code": "AC",
+      "contains_display_payload": false,
+      "default_candidate_limit": 20,
+      "fixture": "G28_ac_partial_legacy_analysis_default20_205_20260715.json.gz",
+      "gzip_bytes": 1758368,
+      "gzip_sha256": "6788909da6752aaa5608edd890b2934d84bc5765097a56140e37c6670b85e227",
+      "invocation_omitted_limit_argument": true,
+      "m12d_consumption_state": "published_degraded",
+      "m12d_downstream_action": "degraded_pair_scoring",
+      "role": "AC published-degraded real compatibility",
+      "source_batch_id": "m00_20260624000202_1150a669",
+      "source_stdout_sha256": "375932cc050bfe505928b66c3aa95b15a4dcffc03b79b618cf02d9dbbf41d0f1",
+      "target_sku_code": "AC00034959",
+      "top3_sku_codes": [
+        "AC00038748",
+        "AC00038751",
+        "AC00038686"
+      ]
+    },
+    {
+      "application_argv": [
+        "python",
+        "-m",
+        "app.cli.catforge_analyst",
+        "competitor-set",
+        "--project-id",
+        "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "--category-code",
+        "TV",
+        "--batch-id",
+        "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+        "--product-category",
+        "tv",
+        "--sku-code",
+        "TV00009549",
+        "--top-n",
+        "3",
+        "--answer-style",
+        "xiaoao",
+        "--with-report",
+        "none",
+        "--format",
+        "json"
+      ],
+      "candidate_count": 13,
+      "canonical_json_bytes": 42987980,
+      "canonical_json_sha256": "ad4fe69647682e24da43b834bfd8a6e7c372a37f5b5a2b34ed2c8a49a2b045f5",
+      "canonical_result_hash": "ad4fe69647682e24da43b834bfd8a6e7c372a37f5b5a2b34ed2c8a49a2b045f5",
+      "category_code": "TV",
+      "contains_display_payload": false,
+      "default_candidate_limit": 20,
+      "fixture": "G28_tv_partial_legacy_analysis_default20_205_20260715.json.gz",
+      "gzip_bytes": 2581696,
+      "gzip_sha256": "500a15f1ddafbe88fba00f3644c7288eae72ba43d2242b07ba196e6ada225c8d",
+      "invocation_omitted_limit_argument": true,
+      "m12d_consumption_state": "published_degraded",
+      "m12d_downstream_action": "degraded_pair_scoring",
+      "role": "TV published-degraded real compatibility",
+      "source_batch_id": "serving-scope:TV:m00_20260623014631_c8630747,m00_20260619084551_857df63b,m00_20260613004311_d548f6dc",
+      "source_stdout_sha256": "089c8676aae5c5a1a8fd5d486855b46df13b0fcbde6bdf615d2d5805f9f00762",
+      "target_sku_code": "TV00009549",
+      "top3_sku_codes": [
+        "TV00030337",
+        "TV00026886",
+        "TV00029031"
+      ]
+    }
+  ],
+  "reproduction_scripts": {
+    "G28_build_manifest.py": {
+      "bytes": 15428,
+      "file": "G28_build_manifest.py",
+      "sha256": "3d451c131e22d5e10a72334868b03ad4ba896ab0006d1d7f61b3e4c694d810f2"
+    },
+    "G28_capture_legacy_fixture.py": {
+      "bytes": 6496,
+      "file": "G28_capture_legacy_fixture.py",
+      "sha256": "6689083531e65b580116f98fe7fb758e3986d625d6ba28f25097c5e38282ccf5"
+    },
+    "G28_capture_legacy_suite.py": {
+      "bytes": 9049,
+      "file": "G28_capture_legacy_suite.py",
+      "sha256": "97975deedb3bcdb733715f76faae68e92c7c5eaa56edef6d772708d36519c01e"
+    },
+    "G28_export_v1_universe_readonly.py": {
+      "bytes": 8921,
+      "file": "G28_export_v1_universe_readonly.py",
+      "sha256": "2e420dcc7f51a4494a65852c28ab919ae8009b22d7e6b79c3fa684fae3934455"
+    },
+    "G28_store_deterministic_gzip.py": {
+      "bytes": 1317,
+      "file": "G28_store_deterministic_gzip.py",
+      "sha256": "9b7f893dd4e3fbc8517a2285f6da419e02cd1d7cb5744d31f7c0a1ed81516edd"
+    },
+    "G28_verify_legacy_baseline.py": {
+      "bytes": 70553,
+      "file": "G28_verify_legacy_baseline.py",
+      "sha256": "a8efe32644a25600939adcd37e0c442b0c280a9d18531c434d6290bee8c9807e"
+    }
+  },
+  "scope": {
+    "algorithm_change": false,
+    "database_write": false,
+    "feishu_publish": false,
+    "objective": "Freeze the current competitor-analysis machine contract before V1.1 schema or algorithm changes.",
+    "remote_file_write": false,
+    "schema_change": false,
+    "source_environment": "205-read-only"
+  },
+  "storage_baseline": {
+    "default20_candidate_payload_bytes": 93247154,
+    "design_consequence": "V1.1 must share SKU snapshots and persist compact pair calculations instead of duplicating legacy fact trees per pair.",
+    "naive_377_pair_projection_bytes": 1757708853,
+    "single_pair_max_bytes": 7316335,
+    "single_pair_median_bytes": 5753986,
+    "single_pair_min_bytes": 562355,
+    "target_snapshot_bytes": 3327949,
+    "v1_ac_155_serialized_draft_bytes": 33371334,
+    "v1_tv_377_serialized_draft_bytes": 81154326
+  }
+}
