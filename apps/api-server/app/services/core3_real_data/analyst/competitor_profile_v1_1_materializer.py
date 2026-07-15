@@ -56,10 +56,10 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
     assert_competitor_selection_result_integrity,
     assert_pair_selection_integrity,
 )
-from app.services.core3_real_data.hash_utils import stable_hash, stable_hash_streaming
+from app.services.core3_real_data.hash_utils import stable_hash
 
 
-COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v1"
+COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v2"
 
 _SUMMARY_BUCKET_BY_QUESTION = {
     "purchase_choice": "competitive_advantages",
@@ -125,6 +125,7 @@ class CompetitorProfileV11Materializer:
         selection_result: CompetitorSelectionResult,
         hard_excluded_inputs: Sequence[HardExcludedPairMaterializationInput] = (),
         release_inputs: bool = False,
+        verify_source_hashes: bool = True,
     ) -> MaterializedCompetitorProfileV11:
         snapshots = _unique_by_sku(candidate_snapshots, label="candidate snapshots")
         assemblies = _unique_by_candidate(pair_assemblies, label="G33 assemblies")
@@ -143,6 +144,7 @@ class CompetitorProfileV11Materializer:
             assemblies=assemblies,
             gates=gates,
             selection=selection_result,
+            verify_snapshot_hashes=verify_source_hashes,
         )
         assembly_hashes = {code: row.result_hash for code, row in assemblies.items()}
         gate_hashes = {code: row.result_hash for code, row in gates.items()}
@@ -183,6 +185,7 @@ class CompetitorProfileV11Materializer:
                 decision,
                 assembly=assembly,
                 gate=gate,
+                verify_assembly_hash=verify_source_hashes,
             )
             pair_analyses.append(
                 _materialize_pair(
@@ -257,22 +260,49 @@ class CompetitorProfileV11Materializer:
                 *pair_analyses,
             ]
         )
-        result_payload = {
-            "profile_version": profile_version,
-            "generation_receipt": generation_receipt,
-            "target_snapshot": target_snapshot,
-            "candidate_snapshots": persisted_candidate_snapshots,
-            "sku_summary": summary,
-            "priority_selections": priority,
-            "pair_analyses": pair_analyses,
-            "full_pair_index": pair_index,
-            "fact_index": fact_index,
-            "evidence_index": evidence_index,
+        result_manifest = {
+            "materializer_version": COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
+            "profile_version": stable_hash(
+                profile_version.model_dump(mode="json"),
+                version="competitor_profile_v1_1_profile_context_v1",
+            ),
+            "generation_receipt": generation_receipt.result_hash,
+            "target_snapshot": target_snapshot.result_hash,
+            "candidate_snapshots": {
+                row.identity_market.sku_code: row.result_hash
+                for row in persisted_candidate_snapshots
+            },
+            "sku_summary": summary.result_hash,
+            "priority_selections": [row.result_hash for row in priority],
+            "pair_analyses": {
+                row.candidate_sku_code: row.result_hash for row in pair_analyses
+            },
+            "full_pair_index": {
+                row.candidate_sku_code: stable_hash(
+                    row.model_dump(mode="json"),
+                    version="competitor_profile_v1_1_pair_index_v1",
+                )
+                for row in pair_index
+            },
+            "fact_index": {
+                key: stable_hash(
+                    row.model_dump(mode="json"),
+                    version="competitor_profile_v1_1_fact_index_entry_v1",
+                )
+                for key, row in fact_index.items()
+            },
+            "evidence_index": {
+                key: stable_hash(
+                    row.model_dump(mode="json"),
+                    version="competitor_profile_v1_1_evidence_index_entry_v1",
+                )
+                for key, row in evidence_index.items()
+            },
             "input_fingerprint": input_fingerprint,
         }
-        profile_result_hash = stable_hash_streaming(
-            result_payload,
-            version="competitor_profile_v1_1_profile_result_v1",
+        profile_result_hash = stable_hash(
+            result_manifest,
+            version="competitor_profile_v1_1_profile_result_manifest_v2",
         )
         dto = CompetitorProfileAnalysisDTO(
             profile_version=profile_version,
@@ -452,8 +482,24 @@ def _materialize_pair(
             "input_fingerprint": input_fingerprint,
         }
     result_hash = stable_hash(
-        payload,
-        version="competitor_profile_v1_1_pair_snapshot_result_v1",
+        {
+            "materializer_version": COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
+            "target_sku_code": decision.target_sku_code,
+            "candidate_sku_code": candidate_code,
+            "assembly_result_hash": assembly.result_hash if assembly else None,
+            "gate_result_hash": gate.result_hash,
+            "selection_result_hash": decision.result_hash,
+            "excluded_input_hash": (
+                stable_hash(
+                    excluded_input.model_dump(mode="json"),
+                    version="competitor_profile_v1_1_excluded_pair_input_v1",
+                )
+                if excluded_input is not None
+                else None
+            ),
+            "input_fingerprint": input_fingerprint,
+        },
+        version="competitor_profile_v1_1_pair_snapshot_manifest_v2",
     )
     return PairAnalysisSnapshot(**payload, result_hash=result_hash)
 
@@ -720,10 +766,12 @@ def _assert_authority(
     assemblies: Mapping[str, PairAnalysisAssembly],
     gates: Mapping[str, PairGateEvaluation],
     selection: CompetitorSelectionResult,
+    verify_snapshot_hashes: bool,
 ) -> None:
-    _assert_snapshot_hash(target_snapshot)
-    for snapshot in candidate_snapshots.values():
-        _assert_snapshot_hash(snapshot)
+    if verify_snapshot_hashes:
+        _assert_snapshot_hash(target_snapshot)
+        for snapshot in candidate_snapshots.values():
+            _assert_snapshot_hash(snapshot)
     scope = (
         profile_version.project_id,
         profile_version.category_code,
@@ -872,12 +920,7 @@ def _build_indexes(
     fact_states: dict[str, dict[str, set[str]]] = {}
     unique_evidence_payloads: dict[str, dict[str, Any]] = {}
     for source in sources:
-        payload = (
-            source.model_dump(mode="json")
-            if callable(getattr(source, "model_dump", None))
-            else source
-        )
-        for record in _collect_fact_records(payload):
+        for record in _iter_fact_records(source):
             fact_id = str(record["fact_id"])
             state = fact_states.setdefault(
                 fact_id,
@@ -888,7 +931,7 @@ def _build_indexes(
             state["evidence"].update(
                 _canonical_json(raw) for raw in _fact_evidence_payloads(record)
             )
-        for raw in _collect_evidence_payloads(payload):
+        for raw in _iter_evidence_payloads(source):
             unique_evidence_payloads.setdefault(_canonical_json(raw), raw)
 
     evidence_index: dict[str, EvidenceRef] = {}
@@ -924,41 +967,61 @@ def _build_indexes(
     return dict(sorted(fact_index.items())), dict(sorted(evidence_index.items()))
 
 
-def _collect_fact_records(value: Any) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    if isinstance(value, dict):
+def _iter_fact_records(value: Any) -> Iterable[Mapping[str, Any]]:
+    if isinstance(value, AnalysisItem):
+        yield value.model_dump(mode="json")
+        return
+    if isinstance(value, Mapping):
         if {"fact_id", "code", "values"}.issubset(value) and isinstance(
             value["values"], list
         ):
-            records.append(value)
+            yield value
         for child in value.values():
-            records.extend(_collect_fact_records(child))
-    elif isinstance(value, list):
+            yield from _iter_fact_records(child)
+        return
+    if isinstance(value, (list, tuple)):
         for child in value:
-            records.extend(_collect_fact_records(child))
-    return records
+            yield from _iter_fact_records(child)
+        return
+    for child in _typed_model_values(value):
+        yield from _iter_fact_records(child)
 
 
-def _collect_evidence_payloads(value: Any) -> list[dict[str, Any]]:
-    payloads: list[dict[str, Any]] = []
-    if isinstance(value, dict):
-        required = {
-            "module_code",
-            "profile_version",
-            "rule_version",
-            "taxonomy_version",
-            "record_type",
-            "record_id",
-            "result_hash",
-        }
-        if required.issubset(value):
-            payloads.append(value)
+def _iter_evidence_payloads(value: Any) -> Iterable[dict[str, Any]]:
+    if isinstance(value, EvidenceRef):
+        yield value.model_dump(mode="json")
+        return
+    if isinstance(value, Mapping):
+        if _EVIDENCE_PAYLOAD_FIELDS.issubset(value):
+            yield dict(value)
         for child in value.values():
-            payloads.extend(_collect_evidence_payloads(child))
-    elif isinstance(value, list):
+            yield from _iter_evidence_payloads(child)
+        return
+    if isinstance(value, (list, tuple)):
         for child in value:
-            payloads.extend(_collect_evidence_payloads(child))
-    return payloads
+            yield from _iter_evidence_payloads(child)
+        return
+    for child in _typed_model_values(value):
+        yield from _iter_evidence_payloads(child)
+
+
+_EVIDENCE_PAYLOAD_FIELDS = {
+    "module_code",
+    "profile_version",
+    "rule_version",
+    "taxonomy_version",
+    "record_type",
+    "record_id",
+    "result_hash",
+}
+
+
+def _typed_model_values(value: Any) -> Iterable[Any]:
+    model_fields = getattr(type(value), "model_fields", None)
+    if not isinstance(model_fields, dict):
+        return
+    for field_name in model_fields:
+        yield getattr(value, field_name)
 
 
 def _fact_evidence_payloads(record: Mapping[str, Any]) -> list[dict[str, Any]]:

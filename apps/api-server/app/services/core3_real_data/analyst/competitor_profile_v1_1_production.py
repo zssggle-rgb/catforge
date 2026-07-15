@@ -353,6 +353,10 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         selection_result = CompetitorProfileV11Selector().select(
             selection_inputs,
             legacy_top3=stage.legacy_top3,
+            # G33 assemblies were created immediately above and never crossed
+            # a persistence or trust boundary. Re-expanding every large pair
+            # solely to recompute the same hash can exceed the worker budget.
+            verify_assembly_hashes=False,
         )
         scope = stage.serving_scope
         profile_context = ProfileVersionAnalysisContext(
@@ -443,6 +447,7 @@ class CompetitorProfileV11ProductionService:
                 selection_result=item.selection_result,
                 hard_excluded_inputs=item.hard_excluded_inputs,
                 release_inputs=True,
+                verify_source_hashes=False,
             )
             del item
             _release_memory()

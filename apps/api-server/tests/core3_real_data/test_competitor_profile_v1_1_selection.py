@@ -578,6 +578,18 @@ def test_selection_is_deterministic_and_input_order_independent() -> None:
     assert first.result_hash == second.result_hash
 
 
+def test_fresh_assembly_path_matches_strict_hash_verification() -> None:
+    pair = _pair()
+
+    strict = CompetitorProfileV11Selector().select([pair])
+    fresh = CompetitorProfileV11Selector().select(
+        [pair],
+        verify_assembly_hashes=False,
+    )
+
+    assert fresh == strict
+
+
 def test_equal_strength_and_score_use_recall_rank_then_sku_code() -> None:
     base = _pair()
     pairs = [

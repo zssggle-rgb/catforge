@@ -482,6 +482,7 @@ def test_release_inputs_preserves_result_and_consumes_pair_stage_lists() -> None
         gate_evaluations=streaming_item.gate_evaluations,
         selection_result=streaming_item.selection_result,
         release_inputs=True,
+        verify_source_hashes=False,
     )
 
     assert streaming == baseline

@@ -330,6 +330,7 @@ class CompetitorProfileV11Selector:
         pair_inputs: Sequence[PairSelectionInput],
         *,
         legacy_top3: Sequence[LegacyTopCompetitorReference] = (),
+        verify_assembly_hashes: bool = True,
     ) -> CompetitorSelectionResult:
         if not pair_inputs:
             raise CompetitorSelectionInputError(
@@ -346,6 +347,7 @@ class CompetitorProfileV11Selector:
                 legacy_reference=legacy_by_sku.get(
                     row.gate_evaluation.candidate_sku_code or ""
                 ),
+                verify_assembly_hash=verify_assembly_hashes,
             )
             for row in pair_inputs
         ]
@@ -443,6 +445,7 @@ def _analyze_pair(
     *,
     score_policy: ScorePolicyContract,
     legacy_reference: LegacyTopCompetitorReference | None,
+    verify_assembly_hash: bool,
 ) -> _CandidateDraft:
     gate = source.gate_evaluation
     if gate.scope.scope_status == "excluded":
@@ -478,7 +481,8 @@ def _analyze_pair(
         raise CompetitorSelectionInputError(
             "analyzable selection input is missing its G33 assembly"
         )
-    _assert_assembly_hash(assembly)
+    if verify_assembly_hash:
+        _assert_assembly_hash(assembly)
     _assert_assembly_gate_authority(assembly, gate)
     _assert_gate_hash(gate, assembly=assembly)
     score = _score_pair(assembly, gate)
@@ -1131,14 +1135,14 @@ def assert_pair_selection_integrity(
     *,
     assembly: PairAnalysisAssembly | None,
     gate: PairGateEvaluation,
+    verify_assembly_hash: bool = True,
 ) -> None:
     """Validate a frozen G33/G34/G35 chain without rerunning analysis."""
 
     if (
         decision.project_id != gate.project_id
         or decision.category_code != gate.category_code
-        or decision.competitor_profile_version_id
-        != gate.competitor_profile_version_id
+        or decision.competitor_profile_version_id != gate.competitor_profile_version_id
         or decision.release_scope_key != gate.release_scope_key
         or decision.target_sku_code != gate.target_sku_code
         or decision.candidate_sku_code != gate.candidate_sku_code
@@ -1152,7 +1156,8 @@ def assert_pair_selection_integrity(
             "G35 decision authority must match its G33/G34 source chain"
         )
     if assembly is not None:
-        _assert_assembly_hash(assembly)
+        if verify_assembly_hash:
+            _assert_assembly_hash(assembly)
         _assert_assembly_gate_authority(assembly, gate)
     _assert_gate_hash(gate, assembly=assembly)
     expected_decision_hash = stable_hash(
@@ -1160,7 +1165,9 @@ def assert_pair_selection_integrity(
         version="competitor_profile_v1_1_pair_selection_result_v1",
     )
     if decision.result_hash != expected_decision_hash:
-        raise CompetitorSelectionInputError("G35 pair decision result hash does not close")
+        raise CompetitorSelectionInputError(
+            "G35 pair decision result hash does not close"
+        )
 
 
 def assert_competitor_selection_result_integrity(
@@ -1209,18 +1216,18 @@ def assert_competitor_selection_result_integrity(
                 row.candidate_sku_code or "": row.result_hash
                 for row in result.pair_decisions
             },
-            "priority_hashes": [
-                row.result_hash for row in result.priority_competitors
-            ],
+            "priority_hashes": [row.result_hash for row in result.priority_competitors],
             "role_buckets": result.role_buckets,
             "legacy_selection_diffs": [
-                row.model_dump(mode="json")
-                for row in result.legacy_selection_diffs
+                row.model_dump(mode="json") for row in result.legacy_selection_diffs
             ],
         },
         version="competitor_profile_v1_1_selection_result_v1",
     )
-    if result.input_fingerprint != expected_input or result.result_hash != expected_result:
+    if (
+        result.input_fingerprint != expected_input
+        or result.result_hash != expected_result
+    ):
         raise CompetitorSelectionInputError("G35 selection result hash does not close")
 
 

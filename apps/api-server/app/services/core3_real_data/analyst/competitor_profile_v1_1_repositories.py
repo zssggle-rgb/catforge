@@ -42,7 +42,7 @@ class CompetitorProfileV11IntegrityError(RuntimeError):
 
 
 ReadMode = Literal["full", "compact", "question_specific"]
-_V11_PERSISTENCE_BATCH_SIZE = 8
+_V11_PERSISTENCE_BATCH_SIZE = 1
 
 
 class CompetitorProfileV11Repository(CompetitorProfileRepository):
@@ -440,9 +440,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 rule_version=version.rule_version,
                 method_version=version.method_version,
                 snapshot_json=payload,
-                module_availability_json=_json(snapshot.module_availability),
-                evidence_refs_json=_json(snapshot.evidence_refs),
-                source_lineage_json=_json(snapshot.source_lineage),
+                module_availability_json=payload["module_availability"],
+                evidence_refs_json=payload["evidence_refs"],
+                source_lineage_json=payload["source_lineage"],
                 limitations_json=list(snapshot.limitations),
                 input_fingerprint=snapshot.input_fingerprint,
                 result_hash=snapshot.result_hash,
@@ -576,6 +576,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
             primary_relation = _primary_relation(pair)
             score = pair.score_breakdown
             selection_question = _question(pair, QuestionCode.KEY_COMPETITOR_SELECTION)
+            pair_payload = _json(pair)
             pair_id = entities.new_id()
             row = entities.Core3SkuCompetitorProfilePair(
                 sku_competitor_profile_pair_id=pair_id,
@@ -594,7 +595,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 candidate_sku_code=pair.candidate_sku_code,
                 candidate_identity_json=_json(candidate_snapshot.identity_market),
                 recall_sources_json=list(pair.recall_sources),
-                recall_facts_json=_json(pair.recall_facts),
+                recall_facts_json=pair_payload["recall_facts"],
                 competitor_member=_enum_value(pair.scope_status) == "analyzable",
                 reference_member=False,
                 candidate_status=(
@@ -609,14 +610,10 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                 purchase_pool_level=(
                     pair.purchase_pool.level if pair.purchase_pool else "unknown"
                 ),
-                purchase_pool_json=_json(pair.purchase_pool)
-                if pair.purchase_pool
-                else {},
+                purchase_pool_json=pair_payload["purchase_pool"] or {},
                 evidence_family_json=[],
-                market_comparison_json=_json(pair.market_validation)
-                if pair.market_validation
-                else {},
-                question_eligibility_json=_json(pair.business_questions),
+                market_comparison_json=pair_payload["market_validation"] or {},
+                question_eligibility_json=pair_payload["business_questions"],
                 reference_purposes_json=[],
                 primary_relation_code=(
                     _enum_value(primary_relation.relation_code)
@@ -645,11 +642,11 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                     if score and score.ranking_score is not None
                     else Decimal("0")
                 ),
-                evidence_refs_json=_json(pair.evidence_refs),
+                evidence_refs_json=pair_payload["evidence_refs"],
                 limitations_json=list(pair.limitations),
                 risk_flags_json=[],
                 pair_payload_json={},
-                analysis_snapshot_json=_json(pair),
+                analysis_snapshot_json=pair_payload,
                 analysis_conclusion_strength=_enum_value(
                     pair.overall_conclusion_strength
                 ),
@@ -678,7 +675,7 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
                         or item.get("reason_code")
                         or "review_required"
                     )
-                    for item in _json(pair.review_items)
+                    for item in pair_payload["review_items"]
                 ],
             )
             self.db.add(row)
