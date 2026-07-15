@@ -63,6 +63,12 @@ from app.services.core3_real_data.analyst.competitor_profile_repositories import
 from app.services.core3_real_data.analyst.competitor_profile_request_builder import (
     build_production_generation_request,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_production import (
+    CompetitorProfileV11ProductionService,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
+    CompetitorProfileV11Repository,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_input_provider import (
     AnalystSellpointValueMaterializationInputProvider,
     SellpointValueProfileInputError,
@@ -131,6 +137,7 @@ SOP_COMMAND_ORDER = (
 PROFILE_WRITE_COMMANDS = (
     "competitor-profile-batch-generate",
     "competitor-profile-generate",
+    "competitor-profile-v1-1-generate",
     "sellpoint-value-profile-generate",
     "sellpoint-value-profile-batch-generate",
 )
@@ -138,6 +145,7 @@ PROFILE_WRITE_COMMANDS = (
 COMPETITOR_PROFILE_WRITE_COMMANDS = (
     "competitor-profile-batch-generate",
     "competitor-profile-generate",
+    "competitor-profile-v1-1-generate",
 )
 
 
@@ -172,7 +180,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     try:
         with SessionLocal() as db:
-            if args.command in COMPETITOR_PROFILE_WRITE_COMMANDS:
+            if args.command == "competitor-profile-v1-1-generate":
+                result = run_competitor_profile_v1_1_generation(db, args)
+            elif args.command in COMPETITOR_PROFILE_WRITE_COMMANDS:
                 result = run_competitor_profile_generation(db, args)
             elif args.command == "competitor-profile-build-request":
                 result = run_competitor_profile_build_request(db, args)
@@ -338,6 +348,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate competitor-profile drafts for one authoritative category scope.",
     )
     add_competitor_profile_generation_args(competitor_profile_batch, batch=True)
+
+    competitor_profile_v11_generate = subparsers.add_parser(
+        "competitor-profile-v1-1-generate",
+        help="Generate and persist one production V1.1 competitor-profile draft.",
+    )
+    competitor_profile_v11_generate.add_argument("--project-id", required=True)
+    competitor_profile_v11_generate.add_argument(
+        "--category-code", choices=("TV", "AC"), required=True
+    )
+    competitor_profile_v11_generate.add_argument("--sku-code", required=True)
+    competitor_profile_v11_generate.add_argument("--profile-version", required=True)
+    competitor_profile_v11_generate.add_argument("--generated-by", required=True)
+    competitor_profile_v11_generate.add_argument(
+        "--enable-profile-write",
+        action="store_true",
+        help="Explicitly allow this immutable V1.1 draft write.",
+    )
+    add_format_arg(competitor_profile_v11_generate)
 
     competitor_profile_request = subparsers.add_parser(
         "competitor-profile-build-request",
@@ -620,6 +648,46 @@ def add_competitor_profile_agent_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Operations-only fallback to the retired live-analysis path.",
     )
+
+
+def run_competitor_profile_v1_1_generation(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=args.project_id,
+        category_code=Core3CategoryCode(args.category_code),
+    )
+    result = CompetitorProfileV11ProductionService(
+        repository=CompetitorProfileV11Repository(context),
+        input_provider=CompetitorProfileInputProvider(context),
+    ).generate_single_draft(
+        target_sku_code=args.sku_code,
+        profile_version=args.profile_version,
+        generated_by=args.generated_by,
+    )
+    dto = result.materialized.dto
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "generation": {
+            "status": result.status,
+            "competitor_profile_version_id": (
+                result.version.competitor_profile_version_id
+            ),
+            "profile_version": result.version.profile_version,
+            "release_scope_key": result.version.release_scope_key,
+            "release_status": str(result.version.release_status),
+            "is_current": result.version.is_current,
+            "processing_status": result.version.processing_status,
+            "target_sku_code": dto.sku_summary.target_sku_code,
+            "candidate_count": result.candidate_count,
+            "selected_sku_codes": list(result.selected_sku_codes),
+            "profile_result_hash": dto.profile_result_hash,
+            "stage_result_hashes": result.materialized.stage_result_hashes,
+        },
+    }
 
 
 def run_competitor_profile_generation(

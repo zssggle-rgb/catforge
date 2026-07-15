@@ -1,0 +1,580 @@
+"""Production orchestration from one frozen category input to one V1.1 draft."""
+
+from __future__ import annotations
+
+import gc
+from collections import Counter
+from dataclasses import dataclass
+from typing import Literal
+
+from sqlalchemy import func, select
+
+from app.models import entities
+from app.services.core3_real_data.analyst.competitor_profile_candidate_determinism import (
+    CandidatePipelineDeterminismGuard,
+    CandidatePipelineRun,
+)
+from app.services.core3_real_data.analyst.competitor_profile_config import (
+    build_production_materialization_config,
+)
+from app.services.core3_real_data.analyst.competitor_profile_input_provider import (
+    CompetitorProfileInputProvider,
+)
+from app.services.core3_real_data.analyst.competitor_profile_input_schemas import (
+    CompetitorProfileCategoryInputBundle,
+    CompetitorProfileTargetInputBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_key_competitor_selection import (
+    KeyCompetitorSelector,
+)
+from app.services.core3_real_data.analyst.competitor_profile_key_competitor_selection_schemas import (
+    KeyCompetitorSelectionBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_materializer_schemas import (
+    CompetitorProfileMaterializationConfig,
+)
+from app.services.core3_real_data.analyst.competitor_profile_pair_feature import (
+    PairFeatureBuilder,
+)
+from app.services.core3_real_data.analyst.competitor_profile_pair_feature_schemas import (
+    PairFeatureBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas import (
+    CompetitorProfileVersionDraftCreate,
+    CompetitorProfileVersionRecord,
+)
+from app.services.core3_real_data.analyst.competitor_profile_price_volume_pressure import (
+    PriceVolumePressureEvaluator,
+)
+from app.services.core3_real_data.analyst.competitor_profile_price_volume_pressure_schemas import (
+    PriceVolumePressureBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_purchase_pool import (
+    PurchasePoolSemanticEvaluator,
+)
+from app.services.core3_real_data.analyst.competitor_profile_purchase_pool_schemas import (
+    PurchasePoolSemanticBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_relation_evaluation import (
+    CompetitorRelationEvaluator,
+)
+from app.services.core3_real_data.analyst.competitor_profile_relation_evaluation_schemas import (
+    CompetitorRelationEvaluationBundle,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_gate_evaluation import (
+    COMPETITOR_PROFILE_V1_1_GATE_CONFIG_VERSION,
+    COMPETITOR_PROFILE_V1_1_GATE_METHOD_VERSION,
+    COMPETITOR_PROFILE_V1_1_RELATION_CALCULATOR_METHOD_VERSION,
+    CandidateScopeClassifier,
+    PairGateEvaluation,
+    PairGateEvaluator,
+    V11RelationEvidenceCalculator,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_generation import (
+    CompetitorProfileV11GenerationService,
+    CompetitorProfileV11GenerationWorkItem,
+    RepositoryCompetitorProfileV11DraftStore,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_materializer import (
+    COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
+    MaterializedCompetitorProfileV11,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
+    PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
+    PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION,
+    PairAnalysisAssembler,
+    PairAnalysisAssembly,
+    PairAnalysisCalculator,
+    PairAnalysisCalculatorInput,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
+    CompetitorProfileV11Repository,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
+    COMPETITOR_PROFILE_V1_1_METHOD_VERSION,
+    COMPETITOR_PROFILE_V1_1_RULE_VERSION,
+    COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
+    G29PerformanceStorageBudget,
+    ProfileVersionAnalysisContext,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection import (
+    COMPETITOR_PROFILE_V1_1_SELECTION_CONFIG_VERSION,
+    COMPETITOR_PROFILE_V1_1_SELECTION_METHOD_VERSION,
+    CompetitorProfileV11Selector,
+    LegacyTopCompetitorReference,
+    PairSelectionInput,
+)
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_snapshot_builder import (
+    SNAPSHOT_BUILDER_VERSION,
+    VersionSkuAnalysisSnapshotBuilder,
+)
+from app.services.core3_real_data.analyst.competitor_profile_value_substitution import (
+    ValueSubstitutionEvidenceEvaluator,
+)
+from app.services.core3_real_data.analyst.competitor_profile_value_substitution_schemas import (
+    ValueSubstitutionEvidenceBundle,
+)
+from app.services.core3_real_data.hash_utils import stable_hash
+
+
+PRODUCTION_ORCHESTRATOR_VERSION = "competitor_profile_v1_1_production_v1"
+
+
+@dataclass(frozen=True)
+class CompetitorProfileV11PreparedStages:
+    category_bundle: CompetitorProfileCategoryInputBundle
+    target_bundle: CompetitorProfileTargetInputBundle
+    config: CompetitorProfileMaterializationConfig
+    pipeline: CandidatePipelineRun
+    pair_features: PairFeatureBundle
+    purchase_pool: PurchasePoolSemanticBundle
+    value_substitution: ValueSubstitutionEvidenceBundle
+    price_volume_pressure: PriceVolumePressureBundle
+    legacy_relations: CompetitorRelationEvaluationBundle
+    legacy_selection: KeyCompetitorSelectionBundle
+
+
+@dataclass(frozen=True)
+class CompetitorProfileV11ProductionGenerationResult:
+    status: Literal["generated", "reused"]
+    version: CompetitorProfileVersionRecord
+    materialized: MaterializedCompetitorProfileV11
+    candidate_count: int
+    selected_sku_codes: tuple[str, ...]
+
+
+class CompetitorProfileV11ProductionWorkItemBuilder:
+    """Run the frozen V1 facts and V1.1 calculation chain without persistence."""
+
+    def prepare(
+        self,
+        category_bundle: CompetitorProfileCategoryInputBundle,
+        target_bundle: CompetitorProfileTargetInputBundle,
+        config: CompetitorProfileMaterializationConfig,
+    ) -> CompetitorProfileV11PreparedStages:
+        pipeline = CandidatePipelineDeterminismGuard().run(
+            category_bundle,
+            target_bundle,
+            recall_config=config.recall,
+            eligibility_config=config.eligibility,
+        )
+        pair_features = PairFeatureBuilder().build(pipeline)
+        purchase_pool = PurchasePoolSemanticEvaluator().evaluate(
+            pair_features,
+            config.purchase_pool,
+        )
+        value_substitution = ValueSubstitutionEvidenceEvaluator().evaluate(
+            pair_features,
+            purchase_pool,
+            config.value_substitution,
+        )
+        price_volume_pressure = PriceVolumePressureEvaluator().evaluate(
+            pair_features,
+            purchase_pool,
+            value_substitution,
+            config.price_volume,
+        )
+        legacy_relations = CompetitorRelationEvaluator().evaluate(
+            pair_features,
+            purchase_pool,
+            value_substitution,
+            price_volume_pressure,
+            config.relation,
+        )
+        legacy_selection = KeyCompetitorSelector().select(
+            legacy_relations,
+            config.key_selection,
+        )
+        return CompetitorProfileV11PreparedStages(
+            category_bundle=pipeline.category_bundle,
+            target_bundle=pipeline.target_bundle,
+            config=config,
+            pipeline=pipeline,
+            pair_features=pair_features,
+            purchase_pool=purchase_pool,
+            value_substitution=value_substitution,
+            price_volume_pressure=price_volume_pressure,
+            legacy_relations=legacy_relations,
+            legacy_selection=legacy_selection,
+        )
+
+    def build_work_item(
+        self,
+        prepared: CompetitorProfileV11PreparedStages,
+        *,
+        competitor_profile_version_id: str,
+    ) -> CompetitorProfileV11GenerationWorkItem:
+        target_code = prepared.target_bundle.target_sku_code
+        candidate_codes = [
+            row.candidate.sku_code for row in prepared.pair_features.pairs
+        ]
+        snapshots = VersionSkuAnalysisSnapshotBuilder().build_many(
+            prepared.category_bundle,
+            competitor_profile_version_id=competitor_profile_version_id,
+            sku_codes=[target_code, *candidate_codes],
+        )
+        snapshot_by_sku = {row.identity_market.sku_code: row for row in snapshots}
+        target_snapshot = snapshot_by_sku[target_code]
+        recalled_by_sku = {
+            row.candidate.sku_code: row
+            for row in prepared.pipeline.recall_manifest.candidates
+        }
+        recall_rank_by_sku = {
+            row.candidate.sku_code: rank
+            for rank, row in enumerate(
+                prepared.pipeline.recall_manifest.candidates,
+                start=1,
+            )
+        }
+        feature_by_sku = _pairs_by_sku(prepared.pair_features.pairs)
+        pool_by_sku = _pairs_by_sku(prepared.purchase_pool.pairs)
+        value_by_sku = _pairs_by_sku(prepared.value_substitution.pairs)
+        pressure_by_sku = _pairs_by_sku(prepared.price_volume_pressure.pairs)
+
+        assemblies: list[PairAnalysisAssembly] = []
+        gates: list[PairGateEvaluation] = []
+        selection_inputs: list[PairSelectionInput] = []
+        relation_calculator = V11RelationEvidenceCalculator()
+        pair_calculator = PairAnalysisCalculator()
+        pair_assembler = PairAnalysisAssembler()
+        scope_classifier = CandidateScopeClassifier()
+        gate_evaluator = PairGateEvaluator()
+        for candidate_code in candidate_codes:
+            candidate_snapshot = snapshot_by_sku[candidate_code]
+            scope = scope_classifier.classify(
+                target_snapshot=target_snapshot,
+                candidate_snapshot=candidate_snapshot,
+                authoritative_manifest_sku_codes=(
+                    prepared.category_bundle.authoritative_sku_codes
+                ),
+            )
+            source = PairAnalysisCalculatorInput(
+                competitor_profile_version_id=competitor_profile_version_id,
+                pair_feature=feature_by_sku[candidate_code],
+                purchase_pool=pool_by_sku[candidate_code],
+                value_substitution=value_by_sku[candidate_code],
+                price_volume_pressure=pressure_by_sku[candidate_code],
+                target_snapshot=target_snapshot,
+                candidate_snapshot=candidate_snapshot,
+                recalled_candidate=recalled_by_sku[candidate_code],
+                recall_rank=recall_rank_by_sku[candidate_code],
+            )
+            assembly = pair_assembler.assemble(pair_calculator.calculate(source))
+            gate = gate_evaluator.evaluate(
+                scope=scope,
+                assembly=assembly,
+                legacy_relation_assessments=relation_calculator.calculate(
+                    pair_feature=feature_by_sku[candidate_code],
+                    purchase_pool=pool_by_sku[candidate_code],
+                    value_substitution=value_by_sku[candidate_code],
+                    price_volume_pressure=pressure_by_sku[candidate_code],
+                    config=prepared.config.relation,
+                ),
+            )
+            assemblies.append(assembly)
+            gates.append(gate)
+            selection_inputs.append(
+                PairSelectionInput(assembly=assembly, gate_evaluation=gate)
+            )
+
+        legacy_top3 = [
+            LegacyTopCompetitorReference(
+                candidate_sku_code=row.candidate_sku_code,
+                legacy_rank=row.selection_rank,
+                legacy_role=str(row.primary_relation_code),
+            )
+            for row in prepared.legacy_selection.selections
+        ]
+        selection_result = CompetitorProfileV11Selector().select(
+            selection_inputs,
+            legacy_top3=legacy_top3,
+        )
+        scope = prepared.category_bundle.serving_scope
+        profile_context = ProfileVersionAnalysisContext(
+            competitor_profile_version_id=competitor_profile_version_id,
+            project_id=scope.project_id,
+            category_code=scope.category_code,
+            product_category=scope.product_category,
+            release_scope_key=scope.release_scope_key,
+            source_batch_ids=scope.source_batch_ids,
+            market_window=scope.market_window,
+            analysis_population=scope.analysis_population,
+            score_policy=selection_result.score_policy,
+            performance_storage_budget=production_performance_storage_budget(),
+            legacy_recall_policy=prepared.config.recall.model_dump(mode="json"),
+            legacy_audit_summary={
+                "legacy_candidate_count": len(candidate_codes),
+                "legacy_top3": [row.model_dump(mode="json") for row in legacy_top3],
+                "legacy_selection_result_hash": prepared.legacy_selection.result_hash,
+            },
+        )
+        return CompetitorProfileV11GenerationWorkItem(
+            profile_version=profile_context,
+            target_snapshot=target_snapshot,
+            candidate_snapshots=[snapshot_by_sku[code] for code in candidate_codes],
+            pair_assemblies=assemblies,
+            gate_evaluations=gates,
+            selection_result=selection_result,
+        )
+
+
+class CompetitorProfileV11ProductionService:
+    """Create/reuse one V1.1 version and persist one immutable target draft."""
+
+    def __init__(
+        self,
+        *,
+        repository: CompetitorProfileV11Repository,
+        input_provider: CompetitorProfileInputProvider,
+        work_item_builder: CompetitorProfileV11ProductionWorkItemBuilder | None = None,
+    ) -> None:
+        self.repository = repository
+        self.input_provider = input_provider
+        self.work_item_builder = (
+            work_item_builder or CompetitorProfileV11ProductionWorkItemBuilder()
+        )
+
+    def generate_single_draft(
+        self,
+        *,
+        target_sku_code: str,
+        profile_version: str,
+        generated_by: str,
+    ) -> CompetitorProfileV11ProductionGenerationResult:
+        input_request = self.input_provider.build_production_input_request()
+        category = self.input_provider.load_category_input_bundle(input_request)
+        target_code = target_sku_code.strip().upper()
+        target = self.input_provider.load_target_input(category, target_code)
+        config = build_production_materialization_config(category)
+        prepared = self.work_item_builder.prepare(category, target, config)
+        del category, target
+        gc.collect()
+        version = self._ensure_version(
+            prepared,
+            profile_version=profile_version,
+            generated_by=generated_by,
+        )
+        try:
+            item = self.work_item_builder.build_work_item(
+                prepared,
+                competitor_profile_version_id=version.competitor_profile_version_id,
+            )
+            del prepared
+            gc.collect()
+            status, materialized = CompetitorProfileV11GenerationService(
+                draft_store=RepositoryCompetitorProfileV11DraftStore(self.repository)
+            ).generate_draft(item)
+        except Exception as exc:
+            self._refresh_version_state(
+                version.competitor_profile_version_id,
+                failure_code=type(exc).__name__,
+                failed_target_sku_code=target_code,
+            )
+            raise
+        version = self._refresh_version_state(version.competitor_profile_version_id)
+        return CompetitorProfileV11ProductionGenerationResult(
+            status=status,
+            version=version,
+            materialized=materialized,
+            candidate_count=len(materialized.dto.pair_analyses),
+            selected_sku_codes=tuple(
+                row.candidate_sku_code for row in materialized.dto.priority_selections
+            ),
+        )
+
+    def _ensure_version(
+        self,
+        prepared: CompetitorProfileV11PreparedStages,
+        *,
+        profile_version: str,
+        generated_by: str,
+    ) -> CompetitorProfileVersionRecord:
+        category = prepared.category_bundle
+        scope = category.serving_scope
+        method_versions = {
+            **_legacy_method_versions(prepared.config),
+            "v1_1_gate": COMPETITOR_PROFILE_V1_1_GATE_METHOD_VERSION,
+            "v1_1_gate_config": COMPETITOR_PROFILE_V1_1_GATE_CONFIG_VERSION,
+            "v1_1_materializer": COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
+            "v1_1_pair_assembler": PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
+            "v1_1_pair_calculator": PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION,
+            "v1_1_relation_calculator": (
+                COMPETITOR_PROFILE_V1_1_RELATION_CALCULATOR_METHOD_VERSION
+            ),
+            "v1_1_selector": COMPETITOR_PROFILE_V1_1_SELECTION_METHOD_VERSION,
+            "v1_1_selector_config": (COMPETITOR_PROFILE_V1_1_SELECTION_CONFIG_VERSION),
+            "v1_1_snapshot_builder": SNAPSHOT_BUILDER_VERSION,
+            "v1_1_orchestrator": PRODUCTION_ORCHESTRATOR_VERSION,
+        }
+        version_input_fingerprint = stable_hash(
+            {
+                "category_input_fingerprint": category.input_fingerprint,
+                "serving_scope": scope.model_dump(mode="json"),
+                "config": prepared.config.model_dump(mode="json"),
+                "method_versions": method_versions,
+            },
+            version="competitor_profile_v1_1_version_input_v1",
+        )
+        version = self.repository.create_version(
+            CompetitorProfileVersionDraftCreate(
+                project_id=scope.project_id,
+                category_code=scope.category_code,
+                product_category=scope.product_category,
+                storage_batch_id=scope.storage_batch_id,
+                release_scope_key=scope.release_scope_key,
+                profile_version=profile_version,
+                schema_version=COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
+                rule_version=COMPETITOR_PROFILE_V1_1_RULE_VERSION,
+                method_version=COMPETITOR_PROFILE_V1_1_METHOD_VERSION,
+                method_versions_json=dict(sorted(method_versions.items())),
+                serving_scope=scope,
+                generated_by=generated_by,
+                sku_count=len(category.authoritative_sku_codes),
+                input_fingerprint=version_input_fingerprint,
+                candidate_universe_fingerprint=stable_hash(
+                    {
+                        "authoritative_sku_codes": category.authoritative_sku_codes,
+                        "category_input_fingerprint": category.input_fingerprint,
+                    },
+                    version="competitor_profile_v1_1_candidate_universe_v1",
+                ),
+                result_hash=stable_hash(
+                    {
+                        "profile_version": profile_version,
+                        "release_scope_key": scope.release_scope_key,
+                        "version_input_fingerprint": version_input_fingerprint,
+                    },
+                    version="competitor_profile_v1_1_version_result_v1",
+                ),
+                processing_status="running",
+            )
+        )
+        self.repository.db.commit()
+        return version
+
+    def _refresh_version_state(
+        self,
+        competitor_profile_version_id: str,
+        *,
+        failure_code: str | None = None,
+        failed_target_sku_code: str | None = None,
+    ) -> CompetitorProfileVersionRecord:
+        db = self.repository.db
+        profile_rows = list(
+            db.execute(
+                select(entities.Core3SkuCompetitorProfile.analysis_state)
+                .where(
+                    entities.Core3SkuCompetitorProfile.competitor_profile_version_id
+                    == competitor_profile_version_id
+                )
+                .where(
+                    entities.Core3SkuCompetitorProfile.schema_version
+                    == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+                )
+            ).scalars()
+        )
+        states = Counter(profile_rows)
+        pair_count = _version_row_count(
+            db,
+            entities.Core3SkuCompetitorProfilePair,
+            competitor_profile_version_id,
+        )
+        relation_count = _version_row_count(
+            db,
+            entities.Core3SkuCompetitorProfileRelation,
+            competitor_profile_version_id,
+        )
+        selection_count = _version_row_count(
+            db,
+            entities.Core3SkuCompetitorProfileSelection,
+            competitor_profile_version_id,
+        )
+        version = self.repository.update_draft_generation_state(
+            competitor_profile_version_id,
+            ready_count=states.get("ready", 0),
+            partial_count=states.get("partial", 0),
+            blocked_count=states.get("blocked", 0),
+            failed_count=1 if failure_code else 0,
+            pair_count=pair_count,
+            relation_count=relation_count,
+            selection_count=selection_count,
+            processing_status="failed" if failure_code else "running",
+            safe_error_summary=(
+                {
+                    "failures": {
+                        failed_target_sku_code or "unknown": failure_code,
+                    }
+                }
+                if failure_code
+                else {}
+            ),
+        )
+        self.repository.db.commit()
+        return version
+
+
+def production_performance_storage_budget() -> G29PerformanceStorageBudget:
+    return G29PerformanceStorageBudget.model_validate(
+        {
+            "categories": [
+                {
+                    "category_code": "TV",
+                    "maximum_candidate_count": 377,
+                    "maximum_generation_p95_ms": 60_000,
+                    "maximum_peak_memory_mib": 1_200,
+                    "maximum_serialized_draft_bytes": 536_870_912,
+                },
+                {
+                    "category_code": "AC",
+                    "maximum_candidate_count": 155,
+                    "maximum_generation_p95_ms": 30_000,
+                    "maximum_peak_memory_mib": 600,
+                    "maximum_serialized_draft_bytes": 268_435_456,
+                },
+            ]
+        }
+    )
+
+
+def _pairs_by_sku(rows):
+    result = {row.candidate.sku_code: row for row in rows}
+    if len(result) != len(rows):
+        raise ValueError("pair stage contains duplicate candidate SKU codes")
+    return result
+
+
+def _legacy_method_versions(
+    config: CompetitorProfileMaterializationConfig,
+) -> dict[str, str]:
+    return {
+        "candidate_eligibility": config.eligibility.config_version,
+        "candidate_recall": config.recall.config_version,
+        "key_selection": config.key_selection.config_version,
+        "materializer": config.config_version,
+        "price_volume": config.price_volume.config_version,
+        "purchase_pool": config.purchase_pool.config_version,
+        "relation": config.relation.config_version,
+        "value_substitution": config.value_substitution.config_version,
+    }
+
+
+def _version_row_count(db, model, version_id: str) -> int:
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(model)
+            .where(model.competitor_profile_version_id == version_id)
+            .where(model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+        )
+        or 0
+    )
+
+
+__all__ = [
+    "CompetitorProfileV11PreparedStages",
+    "CompetitorProfileV11ProductionGenerationResult",
+    "CompetitorProfileV11ProductionService",
+    "CompetitorProfileV11ProductionWorkItemBuilder",
+    "PRODUCTION_ORCHESTRATOR_VERSION",
+    "production_performance_storage_budget",
+]
