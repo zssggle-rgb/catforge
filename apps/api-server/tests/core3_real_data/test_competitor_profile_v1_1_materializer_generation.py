@@ -378,9 +378,7 @@ def _max_candidate_work_item(
         )
         assemblies.append(assembly)
         gates.append(gate)
-        pair_inputs.append(
-            PairSelectionInput(assembly=assembly, gate_evaluation=gate)
-        )
+        pair_inputs.append(PairSelectionInput(assembly=assembly, gate_evaluation=gate))
     legacy = [
         LegacyTopCompetitorReference(
             candidate_sku_code=row.assembly.candidate_sku_code,
@@ -414,9 +412,7 @@ def _max_candidate_work_item(
     return CompetitorProfileV11GenerationWorkItem(
         profile_version=context,
         target_snapshot=snapshots[resolved_target_sku_code],
-        candidate_snapshots=[
-            snapshots[code] for code in sorted(decision_codes)
-        ],
+        candidate_snapshots=[snapshots[code] for code in sorted(decision_codes)],
         pair_assemblies=assemblies,
         gate_evaluations=gates,
         selection_result=selection,
@@ -435,7 +431,9 @@ def _twenty_candidate_65e7q_item() -> CompetitorProfileV11GenerationWorkItem:
 
 
 @pytest.mark.parametrize("category", ["TV", "AC"])
-def test_materializer_preserves_frozen_pair_process_and_selection(category: str) -> None:
+def test_materializer_preserves_frozen_pair_process_and_selection(
+    category: str,
+) -> None:
     item = _work_item(category)
     materialized = CompetitorProfileV11Materializer().materialize(
         profile_version=item.profile_version,
@@ -450,13 +448,46 @@ def test_materializer_preserves_frozen_pair_process_and_selection(category: str)
     assert len(materialized.dto.pair_analyses) == 1
     pair = materialized.dto.pair_analyses[0]
     assert pair.analysis_process is not None
-    assert pair.analysis_process.aligned_features == item.pair_assemblies[0].aligned_features
+    assert (
+        pair.analysis_process.aligned_features
+        == item.pair_assemblies[0].aligned_features
+    )
     assert pair.selection_assessment is not None
     assert pair.selection_assessment.selection_reason_code
-    assert materialized.dto.sku_summary.legacy_selection_diffs[0].diff_status == "retained"
+    assert (
+        materialized.dto.sku_summary.legacy_selection_diffs[0].diff_status == "retained"
+    )
     assert materialized.dto.full_pair_index[0].pair_result_hash == pair.result_hash
     assert materialized.dto.fact_index
     assert materialized.dto.evidence_index
+
+
+def test_release_inputs_preserves_result_and_consumes_pair_stage_lists() -> None:
+    baseline_item = _work_item()
+    baseline = CompetitorProfileV11Materializer().materialize(
+        profile_version=baseline_item.profile_version,
+        target_snapshot=baseline_item.target_snapshot,
+        candidate_snapshots=baseline_item.candidate_snapshots,
+        pair_assemblies=baseline_item.pair_assemblies,
+        gate_evaluations=baseline_item.gate_evaluations,
+        selection_result=baseline_item.selection_result,
+    )
+    streaming_item = _work_item()
+
+    streaming = CompetitorProfileV11Materializer().materialize(
+        profile_version=streaming_item.profile_version,
+        target_snapshot=streaming_item.target_snapshot,
+        candidate_snapshots=streaming_item.candidate_snapshots,
+        pair_assemblies=streaming_item.pair_assemblies,
+        gate_evaluations=streaming_item.gate_evaluations,
+        selection_result=streaming_item.selection_result,
+        release_inputs=True,
+    )
+
+    assert streaming == baseline
+    assert streaming_item.pair_assemblies == []
+    assert streaming_item.gate_evaluations == []
+    assert streaming_item.selection_result.pair_decisions == []
 
 
 def test_single_generation_is_idempotent_and_never_overwrites() -> None:
@@ -482,7 +513,9 @@ def test_single_generation_is_idempotent_and_never_overwrites() -> None:
         service.generate_draft(changed)
 
 
-def test_market_only_priority_preserves_null_pair_score_and_zero_selection_score() -> None:
+def test_market_only_priority_preserves_null_pair_score_and_zero_selection_score() -> (
+    None
+):
     source = _source()
     _, base = _assemble(source)
     assembly = _valid_market_only_assembly(base)
@@ -648,14 +681,18 @@ def test_resume_does_not_skip_changed_inputs_for_the_same_version_and_sku() -> N
 
 def test_repository_store_commits_success_and_rolls_back_failure() -> None:
     materialized_item = _work_item()
-    dto = CompetitorProfileV11Materializer().materialize(
-        profile_version=materialized_item.profile_version,
-        target_snapshot=materialized_item.target_snapshot,
-        candidate_snapshots=materialized_item.candidate_snapshots,
-        pair_assemblies=materialized_item.pair_assemblies,
-        gate_evaluations=materialized_item.gate_evaluations,
-        selection_result=materialized_item.selection_result,
-    ).dto
+    dto = (
+        CompetitorProfileV11Materializer()
+        .materialize(
+            profile_version=materialized_item.profile_version,
+            target_snapshot=materialized_item.target_snapshot,
+            candidate_snapshots=materialized_item.candidate_snapshots,
+            pair_assemblies=materialized_item.pair_assemblies,
+            gate_evaluations=materialized_item.gate_evaluations,
+            selection_result=materialized_item.selection_result,
+        )
+        .dto
+    )
 
     class FakeDb:
         commits = 0
@@ -685,10 +722,13 @@ def test_repository_store_commits_success_and_rolls_back_failure() -> None:
     repository = FakeRepository()
     store = RepositoryCompetitorProfileV11DraftStore(repository)
 
-    assert store.get_draft(
-        competitor_profile_version_id=dto.profile_version.competitor_profile_version_id,
-        target_sku_code=dto.sku_summary.target_sku_code,
-    ) == dto
+    assert (
+        store.get_draft(
+            competitor_profile_version_id=dto.profile_version.competitor_profile_version_id,
+            target_sku_code=dto.sku_summary.target_sku_code,
+        )
+        == dto
+    )
     assert store.write_draft(dto) == dto
     assert repository.db.commits == 2
 

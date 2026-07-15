@@ -7,6 +7,8 @@ lossless persistence DTO introduced in G29/G31.
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
@@ -57,9 +59,7 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
 from app.services.core3_real_data.hash_utils import stable_hash, stable_hash_streaming
 
 
-COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = (
-    "competitor_profile_v1_1_materializer_v1"
-)
+COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v1"
 
 _SUMMARY_BUCKET_BY_QUESTION = {
     "purchase_choice": "competitive_advantages",
@@ -124,14 +124,12 @@ class CompetitorProfileV11Materializer:
         gate_evaluations: Sequence[PairGateEvaluation],
         selection_result: CompetitorSelectionResult,
         hard_excluded_inputs: Sequence[HardExcludedPairMaterializationInput] = (),
+        release_inputs: bool = False,
     ) -> MaterializedCompetitorProfileV11:
         snapshots = _unique_by_sku(candidate_snapshots, label="candidate snapshots")
         assemblies = _unique_by_candidate(pair_assemblies, label="G33 assemblies")
         gates = _unique_by_candidate(gate_evaluations, label="G34 gates")
-        excluded = {
-            row.candidate_sku_code: row
-            for row in hard_excluded_inputs
-        }
+        excluded = {row.candidate_sku_code: row for row in hard_excluded_inputs}
         if len(excluded) != len(hard_excluded_inputs):
             raise CompetitorProfileV11MaterializationError(
                 "hard-excluded inputs must be unique by candidate SKU"
@@ -146,16 +144,41 @@ class CompetitorProfileV11Materializer:
             gates=gates,
             selection=selection_result,
         )
+        assembly_hashes = {code: row.result_hash for code, row in assemblies.items()}
+        gate_hashes = {code: row.result_hash for code, row in gates.items()}
+        legacy_candidate_count = int(
+            profile_version.legacy_audit_summary.get(
+                "legacy_candidate_count",
+                sum(
+                    row.legacy_rank is not None
+                    for row in selection_result.pair_decisions
+                ),
+            )
+        )
 
         decisions = {
             _required_candidate_code(row): row
             for row in selection_result.pair_decisions
         }
+        decision_codes = set(decisions)
+        unused_excluded = sorted(set(excluded) - decision_codes)
+        if unused_excluded:
+            raise CompetitorProfileV11MaterializationError(
+                f"hard-excluded inputs are outside the selection universe: {unused_excluded}"
+            )
+        if release_inputs:
+            if isinstance(pair_assemblies, list):
+                pair_assemblies.clear()
+            if isinstance(gate_evaluations, list):
+                gate_evaluations.clear()
+            if isinstance(hard_excluded_inputs, list):
+                hard_excluded_inputs.clear()
+            selection_result.pair_decisions.clear()
         pair_analyses: list[PairAnalysisSnapshot] = []
-        for candidate_code in sorted(decisions):
-            decision = decisions[candidate_code]
-            gate = gates[candidate_code]
-            assembly = assemblies.get(candidate_code)
+        for index, candidate_code in enumerate(sorted(decisions), start=1):
+            decision = decisions.pop(candidate_code)
+            gate = gates.pop(candidate_code)
+            assembly = assemblies.pop(candidate_code, None)
             assert_pair_selection_integrity(
                 decision,
                 assembly=assembly,
@@ -166,18 +189,20 @@ class CompetitorProfileV11Materializer:
                     decision=decision,
                     gate=gate,
                     assembly=assembly,
-                    excluded_input=excluded.get(candidate_code),
+                    excluded_input=excluded.pop(candidate_code, None),
                 )
             )
-        unused_excluded = sorted(set(excluded) - set(decisions))
-        if unused_excluded:
-            raise CompetitorProfileV11MaterializationError(
-                f"hard-excluded inputs are outside the selection universe: {unused_excluded}"
-            )
+            if release_inputs and index % 8 == 0:
+                _release_memory()
 
         pair_by_code = {row.candidate_sku_code: row for row in pair_analyses}
         priority = _priority_selections(selection_result, pair_by_code)
-        summary = _summary(selection_result, pair_analyses, priority)
+        summary = _summary(
+            selection_result,
+            pair_analyses,
+            priority,
+            legacy_candidate_count=legacy_candidate_count,
+        )
         pair_index = [
             PairIndexItem(
                 candidate_sku_code=row.candidate_sku_code,
@@ -202,10 +227,8 @@ class CompetitorProfileV11Materializer:
                 "candidate_snapshot_hashes": {
                     code: row.result_hash for code, row in snapshots.items()
                 },
-                "assembly_hashes": {
-                    code: row.result_hash for code, row in assemblies.items()
-                },
-                "gate_hashes": {code: row.result_hash for code, row in gates.items()},
+                "assembly_hashes": assembly_hashes,
+                "gate_hashes": gate_hashes,
                 "selection_result_hash": selection_result.result_hash,
             },
             version="competitor_profile_v1_1_materializer_input_v1",
@@ -472,6 +495,8 @@ def _summary(
     selection: CompetitorSelectionResult,
     pairs: Sequence[PairAnalysisSnapshot],
     priority: Sequence[PriorityCompetitorSelection],
+    *,
+    legacy_candidate_count: int,
 ) -> SkuCompetitionAnalysisSummary:
     availability_counts: dict[str, int] = {}
     conclusion_counts: dict[str, int] = {}
@@ -556,9 +581,7 @@ def _summary(
         "excluded_candidate_count": sum(
             row.scope_status == PairScopeStatus.EXCLUDED.value for row in pairs
         ),
-        "legacy_candidate_count": sum(
-            row.legacy_rank is not None for row in selection.pair_decisions
-        ),
+        "legacy_candidate_count": legacy_candidate_count,
         "dimension_availability_counts": dict(sorted(availability_counts.items())),
         "conclusion_strength_counts": dict(sorted(conclusion_counts.items())),
         "priority_competitors": list(priority),
@@ -665,12 +688,8 @@ def _dimension_result_facts(gate: PairGateEvaluation) -> list[AnalysisItem]:
                         value=(
                             {
                                 "availability": str(state.availability),
-                                "conclusion_strength": str(
-                                    state.conclusion_strength
-                                ),
-                                "conclusion_direction": str(
-                                    state.conclusion_direction
-                                ),
+                                "conclusion_strength": str(state.conclusion_strength),
+                                "conclusion_direction": str(state.conclusion_direction),
                             }
                             if known
                             else None
@@ -752,12 +771,16 @@ def _assert_authority(
             "G35 analyzable candidate count is stale"
         )
     for code, snapshot in candidate_snapshots.items():
-        if snapshot.identity_market.sku_code != code or (
-            snapshot.project_id,
-            snapshot.category_code,
-            snapshot.competitor_profile_version_id,
-            snapshot.release_scope_key,
-        ) != scope:
+        if (
+            snapshot.identity_market.sku_code != code
+            or (
+                snapshot.project_id,
+                snapshot.category_code,
+                snapshot.competitor_profile_version_id,
+                snapshot.release_scope_key,
+            )
+            != scope
+        ):
             raise CompetitorProfileV11MaterializationError(
                 f"candidate snapshot authority mismatch: {code}"
             )
@@ -796,9 +819,7 @@ def _unique_by_sku(
 ) -> dict[str, VersionSkuAnalysisSnapshot]:
     result = {row.identity_market.sku_code: row for row in rows}
     if len(result) != len(rows):
-        raise CompetitorProfileV11MaterializationError(
-            f"{label} must be unique by SKU"
-        )
+        raise CompetitorProfileV11MaterializationError(f"{label} must be unique by SKU")
     return dict(sorted(result.items()))
 
 
@@ -827,10 +848,7 @@ def _required_candidate_code(decision: PairSelectionDecision) -> str:
 
 
 def _dedupe_models(rows: Iterable[ReviewItem]) -> list[ReviewItem]:
-    keyed = {
-        _canonical_json(row.model_dump(mode="json")): row
-        for row in rows
-    }
+    keyed = {_canonical_json(row.model_dump(mode="json")): row for row in rows}
     return [keyed[key] for key in sorted(keyed)]
 
 
@@ -895,10 +913,7 @@ def _build_indexes(
                 f"{fact_id}"
             )
         evidence_keys = sorted(
-            {
-                payload_to_key[canonical]
-                for canonical in state["evidence"]
-            }
+            {payload_to_key[canonical] for canonical in state["evidence"]}
         )
         fact_index[fact_id] = FactIndexEntry(
             fact_id=fact_id,
@@ -947,15 +962,11 @@ def _collect_evidence_payloads(value: Any) -> list[dict[str, Any]]:
 
 
 def _fact_evidence_payloads(record: Mapping[str, Any]) -> list[dict[str, Any]]:
-    payloads = [
-        row for row in record.get("evidence_refs", []) if isinstance(row, dict)
-    ]
+    payloads = [row for row in record.get("evidence_refs", []) if isinstance(row, dict)]
     for value in record.get("values", []):
         if isinstance(value, dict):
             payloads.extend(
-                row
-                for row in value.get("evidence_refs", [])
-                if isinstance(row, dict)
+                row for row in value.get("evidence_refs", []) if isinstance(row, dict)
             )
     return payloads
 
@@ -981,6 +992,15 @@ def _canonical_json(value: Any) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _release_memory() -> None:
+    gc.collect()
+    try:
+        malloc_trim = ctypes.CDLL(None).malloc_trim
+    except (AttributeError, OSError):
+        return
+    malloc_trim(0)
 
 
 __all__ = [

@@ -278,20 +278,18 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         candidate_codes = [row.candidate.sku_code for row in stage.pair_features.pairs]
         snapshot_by_sku = {row.identity_market.sku_code: row for row in stage.snapshots}
         target_snapshot = snapshot_by_sku[target_code]
-        recalled_by_sku = {
-            row.candidate.sku_code: row for row in stage.recall_manifest.candidates
-        }
-        recall_rank_by_sku = {
-            row.candidate.sku_code: rank
-            for rank, row in enumerate(
-                stage.recall_manifest.candidates,
-                start=1,
-            )
-        }
-        feature_by_sku = _pairs_by_sku(stage.pair_features.pairs)
-        pool_by_sku = _pairs_by_sku(stage.purchase_pool.pairs)
-        value_by_sku = _pairs_by_sku(stage.value_substitution.pairs)
-        pressure_by_sku = _pairs_by_sku(stage.price_volume_pressure.pairs)
+        stage_rows = (
+            stage.recall_manifest.candidates,
+            stage.pair_features.pairs,
+            stage.purchase_pool.pairs,
+            stage.value_substitution.pairs,
+            stage.price_volume_pressure.pairs,
+        )
+        stage_candidate_orders = [
+            [row.candidate.sku_code for row in rows] for rows in stage_rows
+        ]
+        if any(order != candidate_codes for order in stage_candidate_orders):
+            raise ValueError("pair stages do not preserve the recalled candidate order")
 
         assemblies: list[PairAnalysisAssembly] = []
         gates: list[PairGateEvaluation] = []
@@ -301,7 +299,12 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         pair_assembler = PairAnalysisAssembler()
         scope_classifier = CandidateScopeClassifier()
         gate_evaluator = PairGateEvaluator()
-        for candidate_code in candidate_codes:
+        for recall_rank, candidate_code in enumerate(candidate_codes, start=1):
+            recalled_candidate = stage.recall_manifest.candidates.pop(0)
+            pair_feature = stage.pair_features.pairs.pop(0)
+            purchase_pool = stage.purchase_pool.pairs.pop(0)
+            value_substitution = stage.value_substitution.pairs.pop(0)
+            price_volume_pressure = stage.price_volume_pressure.pairs.pop(0)
             candidate_snapshot = snapshot_by_sku[candidate_code]
             scope = scope_classifier.classify(
                 target_snapshot=target_snapshot,
@@ -310,24 +313,24 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             )
             source = PairAnalysisCalculatorInput(
                 competitor_profile_version_id=competitor_profile_version_id,
-                pair_feature=feature_by_sku[candidate_code],
-                purchase_pool=pool_by_sku[candidate_code],
-                value_substitution=value_by_sku[candidate_code],
-                price_volume_pressure=pressure_by_sku[candidate_code],
+                pair_feature=pair_feature,
+                purchase_pool=purchase_pool,
+                value_substitution=value_substitution,
+                price_volume_pressure=price_volume_pressure,
                 target_snapshot=target_snapshot,
                 candidate_snapshot=candidate_snapshot,
-                recalled_candidate=recalled_by_sku[candidate_code],
-                recall_rank=recall_rank_by_sku[candidate_code],
+                recalled_candidate=recalled_candidate,
+                recall_rank=recall_rank,
             )
             assembly = pair_assembler.assemble(pair_calculator.calculate(source))
             gate = gate_evaluator.evaluate(
                 scope=scope,
                 assembly=assembly,
                 legacy_relation_assessments=relation_calculator.calculate(
-                    pair_feature=feature_by_sku[candidate_code],
-                    purchase_pool=pool_by_sku[candidate_code],
-                    value_substitution=value_by_sku[candidate_code],
-                    price_volume_pressure=pressure_by_sku[candidate_code],
+                    pair_feature=pair_feature,
+                    purchase_pool=purchase_pool,
+                    value_substitution=value_substitution,
+                    price_volume_pressure=price_volume_pressure,
                     config=stage.config.relation,
                 ),
             )
@@ -336,6 +339,16 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             selection_inputs.append(
                 PairSelectionInput(assembly=assembly, gate_evaluation=gate)
             )
+            del (
+                source,
+                recalled_candidate,
+                pair_feature,
+                purchase_pool,
+                value_substitution,
+                price_volume_pressure,
+            )
+            if recall_rank % 8 == 0:
+                _release_memory()
 
         selection_result = CompetitorProfileV11Selector().select(
             selection_inputs,
@@ -429,6 +442,7 @@ class CompetitorProfileV11ProductionService:
                 gate_evaluations=item.gate_evaluations,
                 selection_result=item.selection_result,
                 hard_excluded_inputs=item.hard_excluded_inputs,
+                release_inputs=True,
             )
             del item
             _release_memory()
