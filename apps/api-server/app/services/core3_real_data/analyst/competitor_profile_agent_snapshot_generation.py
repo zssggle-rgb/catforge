@@ -894,23 +894,32 @@ def _identity(
         product_category=category_code,
         size_tier=row.get("size_tier"),
         price_band_in_size_tier=row.get("price_band_in_size_tier"),
-        screen_size_inch=row.get("screen_size_inch"),
-        weighted_price=(
+        screen_size_inch=_canonical_decimal(row.get("screen_size_inch")),
+        weighted_price=_canonical_decimal(
             row.get("weighted_price")
             if row.get("weighted_price") is not None
             else row.get("price_wavg", market_metrics.get("price_wavg"))
         ),
-        avg_weekly_sales_volume=(
+        avg_weekly_sales_volume=_canonical_decimal(
             row.get("avg_weekly_sales_volume")
             if row.get("avg_weekly_sales_volume") is not None
             else market_metrics.get("avg_weekly_sales_volume")
         ),
-        sales_volume_total=(
+        sales_volume_total=_canonical_decimal(
             row.get("sales_volume_total")
             if row.get("sales_volume_total") is not None
             else market_metrics.get("sales_volume_total")
         ),
     )
+
+
+def _canonical_decimal(value: Any) -> Decimal | None:
+    """Make equal source numerics produce one stable snapshot/hash value."""
+
+    if value is None:
+        return None
+    normalized = Decimal(str(value)).normalize()
+    return Decimal("0") if normalized == 0 else normalized
 
 
 def _sku_snapshot(

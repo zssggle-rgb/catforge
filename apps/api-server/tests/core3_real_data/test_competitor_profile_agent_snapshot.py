@@ -21,6 +21,7 @@ from app.services.core3_real_data.analyst.competitor_answer import (
 from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_generation import (
     CompetitorProfileAgentSnapshotGenerationService,
     _build_agent_snapshot,
+    _identity,
 )
 from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_repository import (
     CompetitorProfileAgentSnapshotRepository,
@@ -369,6 +370,33 @@ def test_zero_candidate_snapshot_roundtrip_and_business_answer(
     ).scalar_one()
     assert saved.conclusion_state == "no_priority_competitor"
     assert saved.no_conclusion_reason_json["reason_code"] == "no_market_candidates"
+
+
+def test_agent_sku_identity_canonicalizes_equal_decimal_scales() -> None:
+    first = _identity(
+        {
+            "sku_code": "TV00000001",
+            "screen_size_inch": "65.0",
+            "weighted_price": "5949.00",
+            "avg_weekly_sales_volume": "156.5",
+            "sales_volume_total": "6260.000",
+        },
+        "TV",
+        fact_brief={},
+    )
+    second = _identity(
+        {
+            "sku_code": "TV00000001",
+            "screen_size_inch": "65.0000",
+            "weighted_price": "5949",
+            "avg_weekly_sales_volume": "156.5000",
+            "sales_volume_total": "6260",
+        },
+        "TV",
+        fact_brief={},
+    )
+    assert first == second
+    assert first.model_dump(mode="json") == second.model_dump(mode="json")
 
 
 def test_batch_generation_resumes_failures_and_reuses_completed_profiles(
