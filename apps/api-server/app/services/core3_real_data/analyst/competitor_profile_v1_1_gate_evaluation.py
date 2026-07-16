@@ -1434,9 +1434,13 @@ def _merge_evidence_refs(*groups: Sequence[EvidenceRef]) -> list[EvidenceRef]:
             current.profile_version != row.profile_version
             or current.rule_version != row.rule_version
             or current.taxonomy_version != row.taxonomy_version
-            or current.confidence != row.confidence
         ):
             raise PairGateInputError("duplicate evidence reference metadata conflicts")
+        confidence = (
+            None
+            if current.confidence is None or row.confidence is None
+            else min(current.confidence, row.confidence)
+        )
         result[key] = current.model_copy(
             update={
                 "evidence_ids": sorted({*current.evidence_ids, *row.evidence_ids}),
@@ -1444,6 +1448,7 @@ def _merge_evidence_refs(*groups: Sequence[EvidenceRef]) -> list[EvidenceRef]:
                     {*current.source_file_ids, *row.source_file_ids}
                 ),
                 "raw_row_ids": sorted({*current.raw_row_ids, *row.raw_row_ids}),
+                "confidence": confidence,
             }
         )
     return [result[key] for key in sorted(result)]

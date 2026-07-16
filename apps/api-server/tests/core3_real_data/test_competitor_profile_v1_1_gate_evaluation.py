@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from app.services.core3_real_data.analyst import (
+    competitor_profile_v1_1_gate_evaluation as gate_module,
+)
 from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     GateResult,
     RelationAssessment as LegacyRelationAssessment,
@@ -138,6 +141,31 @@ def _relation_config(category: str = "TV") -> CompetitorRelationConfig:
             "same_value_substitute",
         ],
     )
+
+
+def test_duplicate_evidence_confidence_uses_conservative_metadata() -> None:
+    evidence = _source().target_snapshot.evidence_refs[0]
+    lower_confidence = evidence.model_copy(update={"confidence": Decimal("0.25")})
+
+    merged = gate_module._merge_evidence_refs([evidence], [lower_confidence])
+
+    assert len(merged) == 1
+    assert merged[0].confidence == (
+        None
+        if evidence.confidence is None
+        else min(evidence.confidence, Decimal("0.25"))
+    )
+
+
+def test_duplicate_evidence_lineage_conflict_still_fails_closed() -> None:
+    evidence = _source().target_snapshot.evidence_refs[0]
+    mismatched = evidence.model_copy(update={"rule_version": "different-rule"})
+
+    with pytest.raises(
+        PairGateInputError,
+        match="duplicate evidence reference metadata conflicts",
+    ):
+        gate_module._merge_evidence_refs([evidence], [mismatched])
 
 
 def _unknown_dimension(value, code: str):
