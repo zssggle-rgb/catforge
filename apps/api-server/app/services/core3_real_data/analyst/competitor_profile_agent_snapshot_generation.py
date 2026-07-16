@@ -6,7 +6,7 @@ import gc
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 
 from sqlalchemy import func, select, text
@@ -894,32 +894,34 @@ def _identity(
         product_category=category_code,
         size_tier=row.get("size_tier"),
         price_band_in_size_tier=row.get("price_band_in_size_tier"),
-        screen_size_inch=_canonical_decimal(row.get("screen_size_inch")),
+        screen_size_inch=_canonical_decimal(row.get("screen_size_inch"), "0.01"),
         weighted_price=_canonical_decimal(
             row.get("weighted_price")
             if row.get("weighted_price") is not None
-            else row.get("price_wavg", market_metrics.get("price_wavg"))
+            else row.get("price_wavg", market_metrics.get("price_wavg")),
+            "0.0001",
         ),
         avg_weekly_sales_volume=_canonical_decimal(
             row.get("avg_weekly_sales_volume")
             if row.get("avg_weekly_sales_volume") is not None
-            else market_metrics.get("avg_weekly_sales_volume")
+            else market_metrics.get("avg_weekly_sales_volume"),
+            "0.000001",
         ),
         sales_volume_total=_canonical_decimal(
             row.get("sales_volume_total")
             if row.get("sales_volume_total") is not None
-            else market_metrics.get("sales_volume_total")
+            else market_metrics.get("sales_volume_total"),
+            "0.0001",
         ),
     )
 
 
-def _canonical_decimal(value: Any) -> Decimal | None:
+def _canonical_decimal(value: Any, quantum: str) -> Decimal | None:
     """Make equal source numerics produce one stable snapshot/hash value."""
 
     if value is None:
         return None
-    normalized = Decimal(str(value)).normalize()
-    return Decimal("0") if normalized == 0 else normalized
+    return Decimal(str(value)).quantize(Decimal(quantum), rounding=ROUND_HALF_UP)
 
 
 def _sku_snapshot(

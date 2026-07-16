@@ -397,6 +397,23 @@ def test_agent_sku_identity_canonicalizes_equal_decimal_scales() -> None:
     )
     assert first == second
     assert first.model_dump(mode="json") == second.model_dump(mode="json")
+    assert first.avg_weekly_sales_volume == second.avg_weekly_sales_volume
+    assert str(first.avg_weekly_sales_volume) == "156.500000"
+    rounded_float = _identity(
+        {"sku_code": "TV00000002", "avg_weekly_sales_volume": 404.4583333333333},
+        "TV",
+        fact_brief={},
+    )
+    exact_decimal = _identity(
+        {
+            "sku_code": "TV00000002",
+            "avg_weekly_sales_volume": "404.4583333333333333333333333",
+        },
+        "TV",
+        fact_brief={},
+    )
+    assert rounded_float == exact_decimal
+    assert str(rounded_float.avg_weekly_sales_volume) == "404.458333"
 
 
 def test_batch_generation_resumes_failures_and_reuses_completed_profiles(
