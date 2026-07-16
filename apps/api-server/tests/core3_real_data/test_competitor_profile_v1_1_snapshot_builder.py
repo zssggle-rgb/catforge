@@ -41,6 +41,17 @@ def _build(
     )
 
 
+def _build_authoritative(
+    bundle: CompetitorProfileCategoryInputBundle,
+    sku_code: str,
+):
+    return VersionSkuAnalysisSnapshotBuilder().build_authoritative(
+        bundle,
+        competitor_profile_version_id="competitor-profile-v11-test",
+        sku_code=sku_code,
+    )
+
+
 def test_tv_snapshot_is_deterministic_shared_and_domain_typed() -> None:
     def add_claims(payload: dict) -> None:
         payload["modules"]["M04C"]["records_by_sku"]["TV000001"][0]["facts"].update(
@@ -143,6 +154,38 @@ def test_authoritative_projection_keeps_typed_facts_without_raw_duplicates() -> 
     assert [row.fact_id for row in retained.source_facts] == [
         full.source_facts[0].fact_id
     ]
+
+
+def test_direct_authoritative_snapshot_avoids_raw_source_tree_materialization() -> None:
+    def add_large_unused_raw_bag(payload: dict) -> None:
+        payload["modules"]["M12D"]["records_by_sku"]["TV000001"][0][
+            "facts"
+        ]["legacy_category_payload"] = {"blob": "raw-sentinel-" * 10_000}
+
+    bundle = _rebuilt(_category_bundle(), add_large_unused_raw_bag)
+
+    direct = _build_authoritative(bundle, "TV000001")
+    narrowed = build_authoritative_snapshot_projection(
+        direct,
+        retained_fact_ids={direct.source_facts[0].fact_id},
+    )
+
+    assert direct.storage_projection_mode == "authoritative_typed"
+    assert direct.source_full_result_hash
+    assert direct.semantic_profiles == {}
+    assert direct.fact_sections.parameter_items
+    assert direct.fact_sections.battlefield_items
+    assert direct.fact_sections.purchase_reason_anchors
+    assert direct.result_hash == snapshot_expected_result_hash(direct)
+    assert direct.source_facts
+    assert {row.source_path for row in direct.source_facts} == {
+        "record_result_hash"
+    }
+    assert [row.fact_id for row in narrowed.source_facts] == [
+        direct.source_facts[0].fact_id
+    ]
+    assert narrowed.source_full_result_hash == direct.source_full_result_hash
+    assert "raw-sentinel" not in direct.model_dump_json()
 
 
 def test_unknown_null_empty_false_and_zero_are_losslessly_distinct() -> None:

@@ -122,6 +122,37 @@ class VersionSkuAnalysisSnapshotBuilder:
         competitor_profile_version_id: str,
         sku_code: str,
     ) -> VersionSkuAnalysisSnapshot:
+        return self._build(
+            category_bundle,
+            competitor_profile_version_id=competitor_profile_version_id,
+            sku_code=sku_code,
+            authoritative_only=False,
+        )
+
+    def build_authoritative(
+        self,
+        category_bundle: CompetitorProfileCategoryInputBundle,
+        *,
+        competitor_profile_version_id: str,
+        sku_code: str,
+    ) -> VersionSkuAnalysisSnapshot:
+        """Build the typed production projection without materializing raw bags."""
+
+        return self._build(
+            category_bundle,
+            competitor_profile_version_id=competitor_profile_version_id,
+            sku_code=sku_code,
+            authoritative_only=True,
+        )
+
+    def _build(
+        self,
+        category_bundle: CompetitorProfileCategoryInputBundle,
+        *,
+        competitor_profile_version_id: str,
+        sku_code: str,
+        authoritative_only: bool,
+    ) -> VersionSkuAnalysisSnapshot:
         normalized_sku = sku_code.strip().upper()
         if not competitor_profile_version_id.strip():
             raise ValueError("competitor profile version ID cannot be empty")
@@ -155,7 +186,11 @@ class VersionSkuAnalysisSnapshotBuilder:
                 for limitation in _module_limitations(row)
             }
         )
-        source_facts = _normalized_source_facts(normalized_sku, records)
+        source_facts = (
+            _normalized_source_record_facts(normalized_sku, records)
+            if authoritative_only
+            else _normalized_source_facts(normalized_sku, records)
+        )
         identity_market, market_snapshot = _market_snapshots(
             category_bundle,
             normalized_sku,
@@ -173,15 +208,23 @@ class VersionSkuAnalysisSnapshotBuilder:
             records["M12C"],
         )
         purchase_reason, purchase_limitations = _purchase_reason_snapshot(
-            records["M12D"]
+            records["M12D"],
+            include_legacy_payload=not authoritative_only,
         )
         limitations = sorted(
             set(limitations) | set(claim_limitations) | set(purchase_limitations)
         )
-        semantic_profiles = {
-            module_code: [row.model_dump(mode="json")["facts"] for row in records[module_code]]
-            for module_code in ("M09C", "M10C", "M11C", "M11D")
-        }
+        semantic_profiles = (
+            {}
+            if authoritative_only
+            else {
+                module_code: [
+                    row.model_dump(mode="json")["facts"]
+                    for row in records[module_code]
+                ]
+                for module_code in ("M09C", "M10C", "M11C", "M11D")
+            }
+        )
         source_lineage = _source_lineage(category_bundle, records)
         input_fingerprint = stable_hash(
             {
@@ -235,6 +278,39 @@ class VersionSkuAnalysisSnapshotBuilder:
             "limitations": limitations,
             "input_fingerprint": input_fingerprint,
         }
+        if authoritative_only:
+            _strip_snapshot_duplicate_payloads(payload)
+            fact_sections_payload = payload.get("fact_sections")
+            if isinstance(fact_sections_payload, dict):
+                fact_sections_payload.update(
+                    {
+                        "evidence_sources": [],
+                        "sections": {},
+                        "sku": {},
+                        "legacy_payload": {},
+                    }
+                )
+            payload.update(
+                {
+                    "storage_projection_mode": "authoritative_typed",
+                    "source_full_result_hash": stable_hash(
+                        {
+                            "builder_version": SNAPSHOT_BUILDER_VERSION,
+                            "input_fingerprint": input_fingerprint,
+                            "snapshot_ref": snapshot_ref,
+                            "record_result_hashes": {
+                                module_code: [
+                                    row.result_hash for row in records[module_code]
+                                ]
+                                for module_code in sorted(records)
+                            },
+                        },
+                        version=(
+                            "competitor_profile_v1_1_sku_snapshot_source_authority_v1"
+                        ),
+                    ),
+                }
+            )
         return VersionSkuAnalysisSnapshot.model_validate(
             {
                 **payload,
@@ -274,10 +350,6 @@ def build_authoritative_snapshot_projection(
 ) -> VersionSkuAnalysisSnapshot:
     """Retain typed SKU facts and lineage without legacy/raw duplicate bags."""
 
-    if snapshot.storage_projection_mode != "full":
-        raise VersionSkuAnalysisSnapshotBuildError(
-            "only a full G32 snapshot can create an authoritative projection"
-        )
     payload = snapshot.model_dump(
         mode="json",
         exclude={
@@ -302,7 +374,11 @@ def build_authoritative_snapshot_projection(
     payload.update(
         {
             "storage_projection_mode": "authoritative_typed",
-            "source_full_result_hash": snapshot.result_hash,
+            "source_full_result_hash": (
+                snapshot.result_hash
+                if snapshot.storage_projection_mode == "full"
+                else snapshot.source_full_result_hash
+            ),
         }
     )
     return VersionSkuAnalysisSnapshot.model_validate(
@@ -493,7 +569,7 @@ def _fact_sections(
 def _parameter_items(records: Sequence[UpstreamRecordSnapshot]) -> list[AnalysisItem]:
     observations: dict[str, list[tuple[Any, EvidenceRef, str]]] = defaultdict(list)
     for row in records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         code = _known_text(facts.get("param_code"))
         value = _first_not_none(
@@ -538,7 +614,7 @@ def _claim_items(
         "unsupported_claim_codes": "unsupported",
     }
     for row in claim_records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         for field_name, role in mappings.items():
             for code in _text_values(facts.get(field_name)):
@@ -559,7 +635,7 @@ def _claim_items(
         "unmentioned_claim_codes": ("user_unmentioned", "unknown"),
     }
     for row in realization_records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         for field_name, (role, status) in realization_map.items():
             for code in _text_values(facts.get(field_name)):
@@ -620,14 +696,14 @@ def _semantic_items(
         },
     }
     for row in primary_records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         for field_name, role in key_maps[kind].items():
             for code in _text_values(facts.get(field_name)):
                 observations[code].append((role, ref, f"facts.{field_name}"))
                 roles[code].add(role)
     for row in secondary_records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         code = _known_text(facts.get("dimension_code"))
         role = _known_text(facts.get("allocation_role"))
@@ -645,7 +721,7 @@ def _claim_value_items(
 ) -> list[ClaimValueFactItem]:
     result = []
     for row in records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         code = _known_text(facts.get("claim_code"))
         if not code:
             continue
@@ -681,7 +757,7 @@ def _purchase_reason_items(
 ) -> list[PurchaseReasonAnchorFact]:
     result = []
     for row in records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         ref = _evidence_ref(row)
         for field_name, default_role in _ANCHOR_LIST_ROLES.items():
             for index, raw in enumerate(_as_list(facts.get(field_name))):
@@ -778,10 +854,7 @@ def _claim_snapshots(
 ]:
     if not records:
         return None, None, []
-    rows = [
-        _project_m12c_row(row.model_dump(mode="json")["facts"])
-        for row in records
-    ]
+    rows = [_project_m12c_row(dict(row.facts)) for row in records]
     claim_values = [
         _claim_value_record(row)
         for row in rows
@@ -1510,10 +1583,16 @@ def _sku_level_claim_values(
 
 def _purchase_reason_snapshot(
     records: Sequence[UpstreamRecordSnapshot],
+    *,
+    include_legacy_payload: bool = True,
 ) -> tuple[PurchaseReasonSnapshot | None, list[str]]:
     if not records:
         return None, []
-    facts = records[0].model_dump(mode="json")["facts"]
+    facts = (
+        records[0].model_dump(mode="json")["facts"]
+        if include_legacy_payload
+        else records[0].facts
+    )
     confidence = _decimal(facts.get("profile_confidence"))
     status = _known_text(facts.get("status"))
     raw_anchors = []
@@ -1527,7 +1606,11 @@ def _purchase_reason_snapshot(
     pressure_reasons = []
     incomplete_anchor_count = 0
     for payload, default_role in raw_anchors:
-        anchor = _parse_m12d_anchor(payload, default_role)
+        anchor = _parse_m12d_anchor(
+            payload,
+            default_role,
+            include_raw_details=include_legacy_payload,
+        )
         if anchor is None:
             incomplete_anchor_count += 1
             continue
@@ -1538,7 +1621,7 @@ def _purchase_reason_snapshot(
                     anchor_cn=anchor.anchor_cn,
                     pressure_level=anchor.pressure_level,
                     pressure_summary_cn=anchor.pressure_summary_cn,
-                    raw_details=payload,
+                    raw_details=payload if include_legacy_payload else {},
                 )
             )
     by_role: dict[str, list[str]] = defaultdict(list)
@@ -1567,7 +1650,7 @@ def _purchase_reason_snapshot(
                 pressure_reasons,
                 key=lambda row: row.anchor_cn,
             ),
-            legacy_payload=facts,
+            legacy_payload=facts if include_legacy_payload else {},
         ),
         (
             ["m12d_typed_purchase_reason_incomplete"]
@@ -1598,6 +1681,8 @@ def _m12d_has_incomplete_typed_anchor(
 def _parse_m12d_anchor(
     payload: Mapping[str, Any],
     default_role: str,
+    *,
+    include_raw_details: bool = True,
 ) -> PurchaseReasonAnchorRecord | None:
     required = {
         "core_eligible",
@@ -1641,7 +1726,7 @@ def _parse_m12d_anchor(
                 "role": _known_text(payload.get("role")) or default_role,
                 "core_eligible": payload["core_eligible"],
                 "evidence_domains": _text_values(payload.get("evidence_domains")),
-                "raw_details": dict(payload),
+                "raw_details": dict(payload) if include_raw_details else {},
             }
         )
     except ValueError:
@@ -1702,6 +1787,72 @@ def _module_limitations(row: ModuleAvailabilitySnapshot) -> list[str]:
     if row.availability == "partial":
         return [f"{row.module_code.lower()}_review_required"]
     return []
+
+
+def _normalized_source_record_facts(
+    sku_code: str,
+    records: Mapping[str, Sequence[UpstreamRecordSnapshot]],
+) -> list[NormalizedSourceFact]:
+    """Represent source authority once per record without copying its raw JSON tree."""
+
+    result: list[NormalizedSourceFact] = []
+    source_path = "record_result_hash"
+    for module_code in sorted(records):
+        for record in records[module_code]:
+            ref = _evidence_ref(record)
+            raw_value = record.result_hash
+            occurrence_key = f"{record.record_id}:{source_path}#0"
+            typed = _typed_value(raw_value, source_path, [ref])
+            occurrence = NormalizedSourceOccurrence(
+                occurrence_key=occurrence_key,
+                ordinal=0,
+                raw_value=raw_value,
+                typed_value=typed,
+            )
+            entity_key = f"{sku_code}:{record.record_id}"
+            hash_payload = [
+                {"occurrence_key": occurrence_key, "raw_value": raw_value}
+            ]
+            fact_payload = {
+                "entity_key": entity_key,
+                "source_atom": module_code,
+                "source_path": source_path,
+                "occurrences": hash_payload,
+                "record_result_hashes": [record.result_hash],
+            }
+            result.append(
+                NormalizedSourceFact(
+                    fact_id=stable_hash(
+                        fact_payload,
+                        version=(
+                            "competitor_profile_v1_1_normalized_source_fact_v1"
+                        ),
+                    ),
+                    code=f"{module_code}.{source_path}",
+                    roles=["normalized_upstream_source"],
+                    values=[typed],
+                    support_status="unknown",
+                    confidence=ref.confidence,
+                    evidence_refs=[ref],
+                    entity_key=entity_key,
+                    source_atom=module_code,
+                    source_path=source_path,
+                    normalized_target_path=(
+                        f"sku_snapshots[{sku_code}].source_facts["
+                        f"{entity_key}.{module_code}.{source_path}]"
+                    ),
+                    source_occurrences=[occurrence],
+                    occurrence_count=1,
+                    resolved_value=typed,
+                    source_value_hash=hashlib.sha256(
+                        _canonical_json(hash_payload).encode("utf-8")
+                    ).hexdigest(),
+                )
+            )
+    return sorted(
+        result,
+        key=lambda row: (row.source_atom, row.entity_key, row.fact_id),
+    )
 
 
 def _normalized_source_facts(
@@ -2025,7 +2176,7 @@ def _parameter_map(
 ) -> dict[str, list[str]]:
     result: dict[str, set[str]] = defaultdict(set)
     for row in records:
-        facts = row.model_dump(mode="json")["facts"]
+        facts = row.facts
         code = _known_text(facts.get("param_code"))
         value = _known_text(
             _first_not_none(

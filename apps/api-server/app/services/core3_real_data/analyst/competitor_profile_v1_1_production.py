@@ -279,7 +279,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         category_bundle = stage.snapshot_sources.pop()
         trace_competitor_profile_memory("work_item_after_source_pop")
         snapshot_builder = VersionSkuAnalysisSnapshotBuilder()
-        target_snapshot = snapshot_builder.build(
+        target_snapshot = snapshot_builder.build_authoritative(
             category_bundle,
             competitor_profile_version_id=competitor_profile_version_id,
             sku_code=target_code,
@@ -316,7 +316,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             purchase_pool = stage.purchase_pool.pairs.pop(0)
             value_substitution = stage.value_substitution.pairs.pop(0)
             price_volume_pressure = stage.price_volume_pressure.pairs.pop(0)
-            candidate_snapshot = snapshot_builder.build(
+            candidate_snapshot = snapshot_builder.build_authoritative(
                 category_bundle,
                 competitor_profile_version_id=competitor_profile_version_id,
                 sku_code=candidate_code,
