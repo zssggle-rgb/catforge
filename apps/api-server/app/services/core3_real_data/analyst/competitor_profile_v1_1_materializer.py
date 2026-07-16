@@ -59,7 +59,7 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
 from app.services.core3_real_data.hash_utils import stable_hash
 
 
-COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v2"
+COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v3"
 
 _SUMMARY_BUCKET_BY_QUESTION = {
     "purchase_choice": "competitive_advantages",
@@ -127,6 +127,7 @@ class CompetitorProfileV11Materializer:
         release_inputs: bool = False,
         verify_source_hashes: bool = True,
     ) -> MaterializedCompetitorProfileV11:
+        preserve_source_references = not verify_source_hashes
         snapshots = _unique_by_sku(candidate_snapshots, label="candidate snapshots")
         assemblies = _unique_by_candidate(pair_assemblies, label="G33 assemblies")
         gates = _unique_by_candidate(gate_evaluations, label="G34 gates")
@@ -193,6 +194,7 @@ class CompetitorProfileV11Materializer:
                     gate=gate,
                     assembly=assembly,
                     excluded_input=excluded.pop(candidate_code, None),
+                    preserve_source_references=preserve_source_references,
                 )
             )
             if release_inputs and index % 8 == 0:
@@ -304,19 +306,24 @@ class CompetitorProfileV11Materializer:
             result_manifest,
             version="competitor_profile_v1_1_profile_result_manifest_v2",
         )
-        dto = CompetitorProfileAnalysisDTO(
-            profile_version=profile_version,
-            generation_receipt=generation_receipt,
-            target_snapshot=target_snapshot,
-            candidate_snapshots=candidate_snapshot_rows,
-            sku_summary=summary,
-            priority_selections=priority,
-            full_pair_index=pair_index,
-            pair_analyses=pair_analyses,
-            fact_index=fact_index,
-            evidence_index=evidence_index,
-            profile_result_hash=profile_result_hash,
-        )
+        dto_payload = {
+            "profile_version": profile_version,
+            "generation_receipt": generation_receipt,
+            "target_snapshot": target_snapshot,
+            "candidate_snapshots": candidate_snapshot_rows,
+            "sku_summary": summary,
+            "priority_selections": priority,
+            "full_pair_index": pair_index,
+            "pair_analyses": pair_analyses,
+            "fact_index": fact_index,
+            "evidence_index": evidence_index,
+            "profile_result_hash": profile_result_hash,
+        }
+        if preserve_source_references:
+            dto = CompetitorProfileAnalysisDTO.model_construct(**dto_payload)
+            dto.validate_dto()
+        else:
+            dto = CompetitorProfileAnalysisDTO(**dto_payload)
         return MaterializedCompetitorProfileV11(
             target_sku_code=selection_result.target_sku_code,
             dto=dto,
@@ -337,6 +344,7 @@ def _materialize_pair(
     gate: PairGateEvaluation,
     assembly: PairAnalysisAssembly | None,
     excluded_input: HardExcludedPairMaterializationInput | None,
+    preserve_source_references: bool,
 ) -> PairAnalysisSnapshot:
     candidate_code = _required_candidate_code(decision)
     assessment = PairSelectionAssessment(
@@ -428,6 +436,33 @@ def _materialize_pair(
                 f"analyzable candidate {candidate_code} cannot have exclusion metadata"
             )
         overall = _overall_conclusion(gate)
+        dimension_gates = [
+            _materialize_dimension_gate(
+                row,
+                preserve_source_references=preserve_source_references,
+            )
+            for row in gate.dimension_states
+        ]
+        if preserve_source_references:
+            analysis_process = PairAnalysisProcessSnapshot.model_construct(
+                aligned_features=assembly.aligned_features,
+                purchase_reason_assessments=assembly.purchase_reason_assessments,
+                value_assessments=assembly.value_assessments,
+                price_volume_process=assembly.price_volume_process,
+                calculator_versions=assembly.calculator_versions,
+                assembly_result_hash=assembly.result_hash,
+                gate_result_hash=gate.result_hash,
+            )
+        else:
+            analysis_process = PairAnalysisProcessSnapshot(
+                aligned_features=assembly.aligned_features,
+                purchase_reason_assessments=assembly.purchase_reason_assessments,
+                value_assessments=assembly.value_assessments,
+                price_volume_process=assembly.price_volume_process,
+                calculator_versions=assembly.calculator_versions,
+                assembly_result_hash=assembly.result_hash,
+                gate_result_hash=gate.result_hash,
+            )
         payload = {
             "project_id": assembly.project_id,
             "category_code": assembly.category_code,
@@ -442,10 +477,7 @@ def _materialize_pair(
             "recall_facts": {"items": assembly.recall_facts},
             "recall_rank": assembly.recall_rank,
             "legacy_basis": assembly.legacy_basis,
-            "dimension_gates": [
-                PairDimensionGateSnapshot.model_validate(row.model_dump(mode="json"))
-                for row in gate.dimension_states
-            ],
+            "dimension_gates": dimension_gates,
             "purchase_pool": assembly.purchase_pool,
             "dimensions": assembly.dimensions,
             "value_anchor_analysis": assembly.value_anchor_analysis,
@@ -455,15 +487,7 @@ def _materialize_pair(
             "comparison_roles": decision.comparison_roles,
             "primary_role": decision.primary_role,
             "score_breakdown": decision.score_breakdown,
-            "analysis_process": PairAnalysisProcessSnapshot(
-                aligned_features=assembly.aligned_features,
-                purchase_reason_assessments=assembly.purchase_reason_assessments,
-                value_assessments=assembly.value_assessments,
-                price_volume_process=assembly.price_volume_process,
-                calculator_versions=assembly.calculator_versions,
-                assembly_result_hash=assembly.result_hash,
-                gate_result_hash=gate.result_hash,
-            ),
+            "analysis_process": analysis_process,
             "selection_assessment": assessment,
             "relation_assessments": gate.relation_assessments,
             "business_questions": gate.business_questions,
@@ -501,7 +525,34 @@ def _materialize_pair(
         },
         version="competitor_profile_v1_1_pair_snapshot_manifest_v2",
     )
+    if preserve_source_references and assembly is not None:
+        pair = PairAnalysisSnapshot.model_construct(
+            **payload,
+            result_hash=result_hash,
+        )
+        return pair.validate_pair()
     return PairAnalysisSnapshot(**payload, result_hash=result_hash)
+
+
+def _materialize_dimension_gate(
+    source: Any,
+    *,
+    preserve_source_references: bool,
+) -> PairDimensionGateSnapshot:
+    if not preserve_source_references:
+        return PairDimensionGateSnapshot.model_validate(source.model_dump(mode="json"))
+    gate = PairDimensionGateSnapshot.model_construct(
+        dimension_code=source.dimension_code,
+        availability=source.availability,
+        conclusion_strength=source.conclusion_strength,
+        conclusion_direction=source.conclusion_direction,
+        review_required=source.review_required,
+        review_items=source.review_items,
+        evidence_refs=source.evidence_refs,
+        limitations=source.limitations,
+        source_result_hash=source.source_result_hash,
+    )
+    return gate.validate_gate()
 
 
 def _priority_selections(

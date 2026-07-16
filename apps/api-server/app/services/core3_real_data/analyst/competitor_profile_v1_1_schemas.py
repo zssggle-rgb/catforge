@@ -2270,33 +2270,35 @@ class CompetitorProfileAnalysisDTO(CompetitorProfileV11BaseModel):
                 raise ValueError(
                     "DTO compact pair index must match the full pair analysis"
                 )
-        embedded_payload = {
-            "profile_version": self.profile_version.model_dump(mode="json"),
-            "generation_receipt": self.generation_receipt.model_dump(mode="json"),
-            "target_snapshot": self.target_snapshot.model_dump(mode="json"),
-            "candidate_snapshots": [
-                row.model_dump(mode="json")
+        embedded_sources = (
+            self.profile_version,
+            self.generation_receipt,
+            self.target_snapshot,
+            *(
+                row
                 for row in self.candidate_snapshots
                 if row.snapshot_ref != self.target_snapshot.snapshot_ref
-            ],
-            "sku_summary": self.sku_summary.model_dump(mode="json"),
-            "priority_selections": [
-                row.model_dump(mode="json") for row in self.priority_selections
-            ],
-            "pair_analyses": [
-                row.model_dump(mode="json") for row in self.pair_analyses
-            ],
-        }
-        conclusion_fact_refs = set(
-            _collect_list_field_values(embedded_payload, "supporting_fact_refs")
+            ),
+            self.sku_summary,
+            *self.priority_selections,
+            *self.pair_analyses,
         )
-        saved_fact_ids = set(_collect_scalar_field_values(embedded_payload, "fact_id"))
+        conclusion_fact_refs = set(
+            _collect_typed_list_field_values(
+                embedded_sources,
+                "supporting_fact_refs",
+            )
+        )
+        saved_fact_ids = {
+            str(record["fact_id"])
+            for record in _iter_typed_fact_records(embedded_sources)
+        }
         if not conclusion_fact_refs.issubset(saved_fact_ids):
             raise ValueError(
                 "DTO conclusions must reference facts embedded in the profile"
             )
-        _validate_fact_evidence_closure(
-            embedded_payload=embedded_payload,
+        _validate_typed_fact_evidence_closure(
+            embedded_sources=embedded_sources,
             fact_index=self.fact_index,
             evidence_index=self.evidence_index,
             label="DTO",
@@ -3738,6 +3740,122 @@ def _validate_fact_evidence_closure(
             raise ValueError(
                 f"{label} fact-index evidence must exactly match embedded facts"
             )
+
+
+def _validate_typed_fact_evidence_closure(
+    *,
+    embedded_sources: Any,
+    fact_index: dict[str, FactIndexEntry],
+    evidence_index: dict[str, EvidenceRef],
+    label: str,
+) -> None:
+    """Validate the same closure without expanding the whole typed graph to JSON."""
+
+    fact_states: dict[str, dict[str, set[str]]] = {}
+    for record in _iter_typed_fact_records(embedded_sources):
+        fact_id = str(record["fact_id"])
+        state = fact_states.setdefault(
+            fact_id,
+            {"codes": set(), "paths": set(), "evidence": set()},
+        )
+        state["codes"].add(str(record["code"]))
+        source_path = _fact_source_path(record)
+        if source_path is not None:
+            state["paths"].add(source_path)
+        state["evidence"].update(
+            _canonical_json_bytes(payload).decode("utf-8")
+            for payload in _fact_evidence_payloads(record)
+        )
+
+    if set(fact_states) != set(fact_index):
+        raise ValueError(f"{label} embedded facts must exactly match the fact index")
+
+    evidence_payload_to_keys: dict[str, list[str]] = {}
+    for key, evidence in evidence_index.items():
+        canonical = _canonical_json_bytes(
+            evidence.model_dump(mode="json")
+        ).decode("utf-8")
+        evidence_payload_to_keys.setdefault(canonical, []).append(key)
+
+    for fact_id, state in fact_states.items():
+        entry = fact_index[fact_id]
+        if fact_id != entry.fact_id:
+            raise ValueError(f"{label} fact-index keys must equal stable fact IDs")
+        if len(state["codes"]) != 1 or len(state["paths"]) != 1:
+            raise ValueError(
+                f"{label} embedded fact IDs must be globally unique per fact identity"
+            )
+        if entry.fact_code != next(iter(state["codes"])):
+            raise ValueError(f"{label} fact-index codes must match embedded facts")
+        if entry.source_path != next(iter(state["paths"])):
+            raise ValueError(f"{label} fact-index paths must match embedded facts")
+        expected_evidence_keys: list[str] = []
+        for canonical in state["evidence"]:
+            matches = evidence_payload_to_keys.get(canonical, [])
+            if len(matches) != 1:
+                raise ValueError(
+                    f"{label} embedded fact evidence must resolve uniquely"
+                )
+            expected_evidence_keys.append(matches[0])
+        if entry.evidence_keys != sorted(set(expected_evidence_keys)):
+            raise ValueError(
+                f"{label} fact-index evidence must exactly match embedded facts"
+            )
+
+
+def _iter_typed_fact_records(value: Any):
+    if isinstance(value, (AnalysisItem, AgentDimensionGateFact)):
+        yield value.model_dump(mode="json")
+        return
+    if isinstance(value, dict):
+        typed_fact = value.get("fact_type") == "dimension_gate" and {
+            "fact_id",
+            "code",
+            "availability",
+            "conclusion_strength",
+            "conclusion_direction",
+        }.issubset(value)
+        if typed_fact or (
+            {"fact_id", "code", "values"}.issubset(value)
+            and isinstance(value["values"], list)
+        ):
+            yield value
+        for child in value.values():
+            yield from _iter_typed_fact_records(child)
+        return
+    if isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _iter_typed_fact_records(child)
+        return
+    model_fields = getattr(type(value), "model_fields", None)
+    if isinstance(model_fields, dict):
+        for field_name in model_fields:
+            yield from _iter_typed_fact_records(getattr(value, field_name))
+
+
+def _collect_typed_list_field_values(value: Any, field_name: str) -> list[str]:
+    values: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == field_name and isinstance(child, list):
+                values.extend(str(item) for item in child)
+            else:
+                values.extend(_collect_typed_list_field_values(child, field_name))
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            values.extend(_collect_typed_list_field_values(child, field_name))
+    else:
+        model_fields = getattr(type(value), "model_fields", None)
+        if isinstance(model_fields, dict):
+            for current_name in model_fields:
+                child = getattr(value, current_name)
+                if current_name == field_name and isinstance(child, list):
+                    values.extend(str(item) for item in child)
+                else:
+                    values.extend(
+                        _collect_typed_list_field_values(child, field_name)
+                    )
+    return values
 
 
 def _collect_list_field_values(value: JsonValue, field_name: str) -> list[str]:

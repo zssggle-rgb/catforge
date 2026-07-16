@@ -473,6 +473,7 @@ def test_release_inputs_preserves_result_and_consumes_pair_stage_lists() -> None
         selection_result=baseline_item.selection_result,
     )
     streaming_item = _work_item()
+    streaming_assembly = streaming_item.pair_assemblies[0]
 
     streaming = CompetitorProfileV11Materializer().materialize(
         profile_version=streaming_item.profile_version,
@@ -489,6 +490,19 @@ def test_release_inputs_preserves_result_and_consumes_pair_stage_lists() -> None
     assert streaming_item.pair_assemblies == []
     assert streaming_item.gate_evaluations == []
     assert streaming_item.selection_result.pair_decisions == []
+    streaming_pair = streaming.dto.pair_analyses[0]
+    assert streaming_pair.purchase_pool is streaming_assembly.purchase_pool
+    assert streaming_pair.dimensions is streaming_assembly.dimensions
+    assert streaming_pair.analysis_process is not None
+    assert (
+        streaming_pair.analysis_process.aligned_features
+        is streaming_assembly.aligned_features
+    )
+    assert (
+        streaming_pair.analysis_process.purchase_reason_assessments
+        is streaming_assembly.purchase_reason_assessments
+    )
+    assert streaming_pair.recall_facts["items"] is streaming_assembly.recall_facts
 
 
 def test_single_generation_is_idempotent_and_never_overwrites() -> None:
