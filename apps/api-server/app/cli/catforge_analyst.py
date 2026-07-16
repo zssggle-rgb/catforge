@@ -63,11 +63,11 @@ from app.services.core3_real_data.analyst.competitor_profile_repositories import
 from app.services.core3_real_data.analyst.competitor_profile_request_builder import (
     build_production_generation_request,
 )
-from app.services.core3_real_data.analyst.competitor_profile_v1_1_production import (
-    CompetitorProfileV11ProductionService,
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_generation import (
+    CompetitorProfileAgentSnapshotGenerationService,
 )
-from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
-    CompetitorProfileV11Repository,
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_repository import (
+    CompetitorProfileAgentSnapshotRepository,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_input_provider import (
     AnalystSellpointValueMaterializationInputProvider,
@@ -659,15 +659,15 @@ def run_competitor_profile_v1_1_generation(
         project_id=args.project_id,
         category_code=Core3CategoryCode(args.category_code),
     )
-    result = CompetitorProfileV11ProductionService(
-        repository=CompetitorProfileV11Repository(context),
+    result = CompetitorProfileAgentSnapshotGenerationService(
+        repository=CompetitorProfileAgentSnapshotRepository(context),
         input_provider=CompetitorProfileInputProvider(context),
     ).generate_single_draft(
         target_sku_code=args.sku_code,
         profile_version=args.profile_version,
         generated_by=args.generated_by,
     )
-    dto = result.materialized.dto
+    profile = result.profile
     return {
         "status": AnalystStatus.OK.value,
         "command": args.command,
@@ -681,11 +681,13 @@ def run_competitor_profile_v1_1_generation(
             "release_status": str(result.version.release_status),
             "is_current": result.version.is_current,
             "processing_status": result.version.processing_status,
-            "target_sku_code": dto.sku_summary.target_sku_code,
+            "target_sku_code": profile.target.sku_code,
             "candidate_count": result.candidate_count,
             "selected_sku_codes": list(result.selected_sku_codes),
-            "profile_result_hash": dto.profile_result_hash,
-            "stage_result_hashes": result.materialized.stage_result_hashes,
+            "profile_result_hash": profile.result_hash,
+            "source_analysis_result_hash": profile.source_analysis_result_hash,
+            "candidate_pool_order": profile.candidate_pool_order,
+            "analysis_order": profile.analysis_order,
         },
     }
 

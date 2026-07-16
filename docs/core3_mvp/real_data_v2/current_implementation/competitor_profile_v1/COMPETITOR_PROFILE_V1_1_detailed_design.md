@@ -4,9 +4,45 @@
 
 日期：2026-07-15
 
+## 0. 2026-07-16 架构纠偏（优先级最高）
+
+本节覆盖本文后续与之冲突的旧设计。旧设计错误地把“保存现有竞品智能体结果”扩成了 category-wide recall 和七维关系重算，65E7Q 因此从现有智能体的 20 款实际候选膨胀为 353 款，偏离原需求且不具备可接受的单 SKU 生成性能。
+
+纠偏后的唯一生成链路为：
+
+```text
+current published upstream scope
+             |
+             v
+existing competitor-set live analysis
+(same_size_price_candidates -> existing atoms -> M12D -> enrich -> role -> Top 3)
+             |
+             v
+AgentSnapshotTypedWrapper
+(只校验、分离 candidate pool order / analysis order / priority order、生成 hash)
+             |
+             v
+Version + shared SKU Snapshot + Profile + Pair + Selection
+(当前不人为生成 7 × relation rows)
+             |
+             v
+AgentSnapshotReader -> no-score Adapter -> Pure Renderer
+```
+
+实现合同：
+
+- `competitor_profile_agent_snapshot_schemas.py`：对现有智能体完成后的目标、候选和逐款分析结果建立 typed contract；嵌套成熟结果保真保存，不重新解释。
+- `competitor_profile_agent_snapshot_generation.py`：只运行一次现有智能体，包装并落盘；不得调用 `CandidateRecallEngine`、`PairFeatureBuilder`、`PairAnalysisCalculator`、V1.1 selector。
+- `competitor_profile_agent_snapshot_repository.py`：复用 0047 表和版本状态机，原子保存 shared snapshots、profile、20 个实际 pair 和最多 3 个 selection；compact 只读 header/index，不读取 `analysis_snapshot_json`。
+- `CompetitorProfileV11Reader`：先识别 agent snapshot method；命中后返回已保存结果，旧 V1.1 method 继续走原 reader，二者互不篡改。
+- `sop_orchestrators.py`：agent snapshot 命中后直接进入 saved renderer；读取路径的召回、分析、打分、角色分配、排序、选择调用数必须为 0。
+- `competitor_answer.py`：saved renderer 只按 `analysis_order` 展示全部候选、按 `priority_order` 取重点竞品；不调用 `_enrich_competitor`、`_sort_key`、`_assign_top_roles` 或 `_select_top_competitors`。
+
+幂等合同：同 version、target 和相同 profile hash 返回 reused；同一键不同结果必须 fail-closed，不能覆盖已保存草稿。正式读取仍只允许 current published；draft 必须显式 version + scope + preview opt-in。
+
 ## 1. 设计结论
 
-V1.1 复用 V1 的输入、召回、pair feature、购买池、价值替代、量价压力、七类关系、版本、Repository 和批量生成能力，不另建一套竞品算法。
+V1.1 复用现有竞品分析智能体的完整分析结果以及 V1 的版本、Repository 和批量生成能力，不另建一套竞品算法。生成方法以第 0 节为准。
 
 改造点只有三层：
 

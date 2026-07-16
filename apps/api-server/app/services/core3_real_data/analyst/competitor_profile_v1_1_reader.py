@@ -6,6 +6,12 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_repository import (
+    CompetitorProfileAgentSnapshotRepository,
+)
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_schemas import (
+    AgentCompetitorProfileReadResult,
+)
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_persistence_schemas import (
     CompetitorProfileV11ReadResult,
 )
@@ -61,11 +67,24 @@ class CompetitorProfileV11Reader:
     def read(
         self,
         request: CompetitorProfileV11ReadRequest,
-    ) -> CompetitorProfileV11ReadResult:
+    ) -> CompetitorProfileV11ReadResult | AgentCompetitorProfileReadResult:
         if request.project_id != self.repository.project_id:
             raise ValueError("reader project scope does not match repository")
         if request.category_code != self.repository.category_code.value:
             raise ValueError("reader category scope does not match repository")
+        if isinstance(self.repository, CompetitorProfileAgentSnapshotRepository):
+            if request.read_mode in {"full", "compact"}:
+                agent_result = self.repository.read_agent_snapshot(
+                    target_sku_code=request.target_sku_code,
+                    read_mode=request.read_mode,
+                    access_mode=request.access_mode,
+                    competitor_profile_version_id=(
+                        request.competitor_profile_version_id
+                    ),
+                    release_scope_key=request.release_scope_key,
+                )
+                if agent_result.status == "available":
+                    return agent_result
         if request.access_mode == "formal":
             if request.release_scope_key is None:
                 result = self.repository.get_serving_current_published_profile(

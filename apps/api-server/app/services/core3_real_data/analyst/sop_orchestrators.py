@@ -38,7 +38,12 @@ from app.services.core3_real_data.analyst.claim_value_pm_v4_schemas import (
 from app.services.core3_real_data.analyst.competitor_answer import (
     build_competitor_answer,
     publish_rendered_competitor_profile_report,
+    render_competitor_answer_from_saved_agent_analysis,
     render_competitor_answer_from_profile,
+)
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_schemas import (
+    AgentCompetitorProfileSnapshot,
+    CompetitorProfileAgentSnapshotAdapter,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_adapter import (
     CompetitorProfileAgentAdapter,
@@ -788,6 +793,22 @@ class SopOrchestrators:
                     "草稿必须显式指定版本并开启预览。"
                 ),
             )
+        if isinstance(read_result.full, AgentCompetitorProfileSnapshot):
+            return self._competitor_set_from_saved_agent_snapshot(
+                context=context,
+                source=read_result.full,
+                resolver_result=resolver_result,
+                profile_access_mode=profile_access_mode,
+                competitor_profile_version_id=competitor_profile_version_id,
+                competitor_profile_release_scope_key=(
+                    competitor_profile_release_scope_key
+                ),
+                answer_style=answer_style,
+                with_report=with_report,
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+                requested_top_n=requested_top_n,
+            )
         adapted = CompetitorProfileAgentAdapter().adapt(read_result)
         if adapted.status != "available" or adapted.full is None:
             raise ValueError("available competitor profile could not be adapted")
@@ -865,6 +886,140 @@ class SopOrchestrators:
                 ),
             ]
         )
+        return base_result(
+            status=AnalystStatus.OK,
+            command="competitor-set",
+            context=context,
+            target=target_identity,
+            result=result_payload,
+            sop_steps=[
+                {
+                    "step_code": "resolve-sku",
+                    "status": "ok" if resolver_result is not None else "skipped",
+                    "run_count": resolver_steps,
+                },
+                {
+                    "step_code": "competitor-profile-read",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+                {
+                    "step_code": "competitor-profile-adapter",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+                {
+                    "step_code": "competitor-profile-render",
+                    "status": "ok",
+                    "run_count": 1,
+                },
+            ],
+            atoms_used=(
+                [{"ability_code": "resolve-sku", "status": "ok"}]
+                if resolver_result is not None
+                else []
+            ),
+            evidence=[
+                {
+                    "source_module": "competitor_profile_v1_1",
+                    "profile_version": profile.competitor_profile_version_id,
+                    "result_hash": profile.profile_result_hash,
+                }
+            ],
+            limitations=limitations,
+            answer_outline=[answer["short_answer"]],
+        )
+
+    def _competitor_set_from_saved_agent_snapshot(
+        self,
+        *,
+        context: AnalystContext,
+        source: AgentCompetitorProfileSnapshot,
+        resolver_result: dict[str, Any] | None,
+        profile_access_mode: Literal["formal", "preview"],
+        competitor_profile_version_id: str | None,
+        competitor_profile_release_scope_key: str | None,
+        answer_style: str,
+        with_report: str,
+        max_chat_chars: int,
+        report_title: str | None,
+        requested_top_n: int,
+    ) -> dict[str, Any]:
+        profile = CompetitorProfileAgentSnapshotAdapter().adapt(source)
+        if (
+            profile.target.sku_code != source.target.sku_code
+            or profile.competitor_profile_version_id
+            != source.competitor_profile_version_id
+        ):
+            raise ValueError("saved competitor profile adapter changed source identity")
+        if (
+            competitor_profile_version_id is not None
+            and profile.competitor_profile_version_id
+            != competitor_profile_version_id
+        ):
+            raise ValueError("competitor profile reader returned a different version")
+        if (
+            competitor_profile_release_scope_key is not None
+            and profile.release_scope_key != competitor_profile_release_scope_key
+        ):
+            raise ValueError("competitor profile reader returned the wrong scope")
+        render_mode: Literal["none", "markdown"] = (
+            "markdown" if with_report in {"markdown", "feishu-doc"} else "none"
+        )
+        answer = render_competitor_answer_from_saved_agent_analysis(
+            target=profile.target.model_dump(mode="json"),
+            target_fact_brief=profile.target_fact_brief,
+            target_claim_value=profile.target_claim_value,
+            target_claim_contribution=profile.target_claim_contribution,
+            candidates=[row.model_dump(mode="json") for row in profile.candidates],
+            priority_order=profile.priority_order,
+            max_chat_chars=max_chat_chars,
+            with_report=render_mode,
+            report_title=report_title,
+        )
+        if with_report == "feishu-doc":
+            answer = publish_rendered_competitor_profile_report(answer=answer)
+        target_identity = profile.target.model_dump(mode="json")
+        target_identity.update(
+            {
+                "category_code": source.category_code,
+                "price_wavg": target_identity.get("weighted_price"),
+            }
+        )
+        limitations = _dedupe_strings(
+            [
+                *profile.limitations,
+                *(
+                    ["请求的 top_n 不改变画像保存的重点竞品顺序。"]
+                    if requested_top_n != 3
+                    else []
+                ),
+            ]
+        )
+        result_payload: dict[str, Any] = {
+            "competitor_set": {
+                "source": "competitor_profile_v1_1",
+                "profile_access_mode": profile_access_mode,
+                "competitor_profile_version_id": (
+                    profile.competitor_profile_version_id
+                ),
+                "competitor_profile_release_scope_key": profile.release_scope_key,
+                "profile_result_hash": profile.profile_result_hash,
+                "source_analysis_result_hash": source.source_analysis_result_hash,
+                "ranking_policy": ["saved_agent_analysis_priority_order"],
+                "candidate_count": len(profile.candidates),
+                "excluded_candidate_count": 0,
+                "requested_top_n": requested_top_n,
+                "candidate_pool_order": profile.candidate_pool_order,
+                "analysis_order": profile.analysis_order,
+                "saved_priority_order": profile.priority_order,
+                "candidates": answer["all_candidates"],
+                "excluded_candidate_audit": [],
+            }
+        }
+        if answer_style == "xiaoao" or with_report != "none":
+            result_payload["competitor_answer"] = answer
+        resolver_steps = int(resolver_result is not None)
         return base_result(
             status=AnalystStatus.OK,
             command="competitor-set",

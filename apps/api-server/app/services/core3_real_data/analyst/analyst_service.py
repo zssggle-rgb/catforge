@@ -12,11 +12,11 @@ from app.services.core3_real_data.analyst.ability_registry import get_ability, l
 from app.services.core3_real_data.analyst.analyst_repository import AnalystRepository
 from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext, AnalystStatus, base_result
 from app.services.core3_real_data.analyst.atomic_handlers import AtomicAnalystHandlers
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_repository import (
+    CompetitorProfileAgentSnapshotRepository,
+)
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_reader import (
     CompetitorProfileV11Reader,
-)
-from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
-    CompetitorProfileV11Repository,
 )
 from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
@@ -88,7 +88,7 @@ class CatForgeAnalystService:
         self.sellpoint_value_profile_repository = SellpointValueProfileRepository(
             repository_context
         )
-        self.competitor_profile_v1_1_repository = CompetitorProfileV11Repository(
+        self.competitor_profile_v1_1_repository = CompetitorProfileAgentSnapshotRepository(
             repository_context
         )
         self.sop_orchestrators = SopOrchestrators(

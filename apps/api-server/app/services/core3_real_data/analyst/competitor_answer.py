@@ -656,6 +656,143 @@ def build_competitor_answer(
     }
 
 
+def render_competitor_answer_from_saved_agent_analysis(
+    *,
+    target: dict[str, Any],
+    target_fact_brief: dict[str, Any],
+    target_claim_value: dict[str, Any] | None,
+    target_claim_contribution: dict[str, Any] | None,
+    candidates: list[dict[str, Any]],
+    priority_order: list[str],
+    max_chat_chars: int = 600,
+    with_report: str = "none",
+    report_title: str | None = None,
+) -> dict[str, Any]:
+    """Render a saved agent result without recall, scoring, sorting, or selection."""
+
+    if max_chat_chars < 1:
+        raise ValueError("max_chat_chars must be at least 1")
+    if with_report not in {"none", "markdown", "feishu-doc"}:
+        raise ValueError("with_report must be none, markdown, or feishu-doc")
+    frozen = copy.deepcopy(candidates)
+    candidate_codes = [
+        str((row.get("candidate") or {}).get("sku_code") or "") for row in frozen
+    ]
+    if any(not code for code in candidate_codes):
+        raise ValueError("saved candidate analysis requires candidate SKU codes")
+    if len(candidate_codes) != len(set(candidate_codes)):
+        raise ValueError("saved candidate analysis cannot contain duplicates")
+    if len(priority_order) > 3 or not set(priority_order).issubset(candidate_codes):
+        raise ValueError("saved priority order must reference at most three candidates")
+    by_code = {
+        str((row.get("candidate") or {}).get("sku_code")): row for row in frozen
+    }
+    top_competitors = [by_code[sku_code] for sku_code in priority_order]
+    buckets = _bucket_competitors(frozen)
+    target_name = _display_name(target)
+    title = report_title or f"{target_name} 重点竞品识别与分析依据报告"
+    pm_report_title = f"{target_name} 与重点竞品的用户选择对比报告"
+    dashboard_payload_for_report = build_competitor_dashboard_payload(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=None,
+    )
+    markdown = render_competitor_report(
+        title=title,
+        target=target,
+        target_fact_brief=target_fact_brief,
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
+        top_competitors=top_competitors,
+        all_competitors=frozen,
+        dashboard_payload=dashboard_payload_for_report,
+    )
+    publish_result = _publish_report(
+        title=title, markdown=markdown, with_report=with_report
+    )
+    pm_comparison_payload = build_pm_competitor_comparison_payload(
+        title=pm_report_title,
+        target=target,
+        target_fact_brief=target_fact_brief,
+        target_claim_value=target_claim_value,
+        target_claim_contribution=target_claim_contribution,
+        top_competitors=top_competitors,
+        evidence_report_url=publish_result.url,
+    )
+    pm_markdown = render_pm_comparison_report(
+        title=pm_report_title, payload=pm_comparison_payload
+    )
+    pm_output_issue = pm_business_output_issue(pm_markdown)
+    pm_publish_result = (
+        ReportPublishResult(status="failed", message_cn=pm_output_issue)
+        if pm_output_issue
+        else _publish_report(
+            title=pm_report_title, markdown=pm_markdown, with_report=with_report
+        )
+    )
+    short_answer = render_short_answer(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=publish_result.url,
+        max_chat_chars=max_chat_chars,
+    )
+    dashboard_payload = build_competitor_dashboard_payload(
+        target=target,
+        target_fact_brief=target_fact_brief,
+        top_competitors=top_competitors,
+        report_url=publish_result.url,
+    )
+    feishu_card_payload = render_feishu_card_payload(dashboard_payload)
+    return {
+        "source": "competitor_profile_v1_1",
+        "short_answer": short_answer,
+        "report_url": publish_result.url,
+        "evidence_report_url": publish_result.url,
+        "report_status": publish_result.status,
+        "report_message_cn": publish_result.message_cn,
+        "report_payload": {
+            "title": title,
+            "markdown": markdown if with_report == "markdown" else None,
+            "url": publish_result.url,
+            "status": publish_result.status,
+        },
+        "pm_comparison_report_url": pm_publish_result.url,
+        "pm_comparison_report_status": pm_publish_result.status,
+        "pm_comparison_report_message_cn": pm_publish_result.message_cn,
+        "pm_comparison_report_payload": {
+            "title": pm_report_title,
+            "markdown": (
+                pm_markdown
+                if with_report == "markdown" and not pm_output_issue
+                else None
+            ),
+            "url": pm_publish_result.url,
+            "status": pm_publish_result.status,
+            "comparison": pm_comparison_payload,
+        },
+        "dashboard_payload": dashboard_payload,
+        "feishu_card_payload": feishu_card_payload,
+        "top_competitors": top_competitors,
+        "candidate_buckets": buckets,
+        "selection_policy_cn": [
+            "重点竞品顺序直接读取已保存的竞品分析结果。",
+            "本次展现没有重新召回、打分、排序或选择竞品。",
+        ],
+        "display_policy": {
+            "send_short_answer_as_is": True,
+            "prefer_feishu_card": True,
+            "card_delivery_stdout": True,
+            "fallback_to_short_answer": False,
+            "report_as_evidence": True,
+            "max_chat_chars": max_chat_chars,
+            "hide_internal_fields": True,
+        },
+        "all_candidates": frozen,
+    }
+
+
 def render_competitor_answer_from_profile(
     *,
     profile: CompetitorProfileAdapterContract,

@@ -4,6 +4,12 @@
 
 日期：2026-07-16
 
+## 0. 2026-07-16 G41A 执行纠偏
+
+本节覆盖后续与之冲突的调度门禁。G28 已冻结的现有竞品智能体结果才是兼容基线；G41A 不再执行 category-wide recall、353 候选、七类 relation 重算或“新旧算法差异”验收。
+
+G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选池（当前 default20）、逐款完整结果、原始顺序、分析顺序、角色和 Top 3；Repository/Reader/Adapter/智能体 preview 精确回读；读取端现场召回、打分、排序、选择均为 0。单 SKU 时延按“现有智能体分析 + 一次落盘”验收，不再接受全品类多模块预加载。
+
 授权范围：V1.1 需求、设计、开发、测试、精确提交、205 代码与 migration 部署、65E7Q 单 SKU draft 验收、AC 单 SKU draft 验收、双品类通过后的 TV/AC 全量 draft 生成。
 
 不含授权：review、publish、current、deprecated 状态切换；修改或覆盖 V1 草稿；修改旧 M12/M13/M14；重跑 M03B—M12D；重新设计卡片、报告或问答。
@@ -252,13 +258,14 @@
 
 只写一个明确版本的 V1.1 draft。验收：
 
-- 共享 SKU snapshot；
-- 完整 pair 多维结果；
-- 原 Top 3 全部参与；
-- 新旧差异报告；
-- 画像 Reader/Adapter/智能体读取一致；
-- AtomicHandlers=0；
+- 现有智能体的实际候选集合、原始 rank、分析顺序、角色、业务得分和 Top 3 与落盘结果逐项一致；
+- 共享 SKU snapshot 只覆盖目标与这批实际候选，不展开 377 个 TV SKU；
+- pair 保存现有智能体已经完成的多维过程和结论，不生成虚构的 `7 × pair` relation；
+- 画像 Reader/Adapter/智能体 preview 读取一致；
+- 画像读取端现场 recall/enrichment/score/role/sort/select 调用均为 0；
+- 单 SKU 生成时延接近现有智能体单次分析（65E7Q 205 基线约 4—5 秒）加一次事务落盘，不得出现 10 分钟级全品类装载；
 - 205 compact readback 不高于 2 秒且无 N+1；
+- 幂等重跑返回 reused 或通过相同 hash 的只读等价验证；
 - 旧 V1 和其他画像不变。
 
 失败时停止，不创建 G41B。
