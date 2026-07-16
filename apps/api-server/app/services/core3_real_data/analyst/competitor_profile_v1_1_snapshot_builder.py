@@ -50,7 +50,7 @@ from app.services.core3_real_data.hash_utils import stable_hash
 
 SNAPSHOT_BUILDER_VERSION = "competitor_profile_v1_1_sku_snapshot_builder_v1"
 SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION = (
-    "competitor_profile_v1_1_sku_snapshot_authoritative_projection_v1"
+    "competitor_profile_v1_1_sku_snapshot_authoritative_projection_v2"
 )
 
 _REVIEW_STATUSES = {
@@ -269,6 +269,8 @@ class VersionSkuAnalysisSnapshotBuilder:
 
 def build_authoritative_snapshot_projection(
     snapshot: VersionSkuAnalysisSnapshot,
+    *,
+    retained_fact_ids: Iterable[str] = (),
 ) -> VersionSkuAnalysisSnapshot:
     """Retain typed SKU facts and lineage without legacy/raw duplicate bags."""
 
@@ -287,6 +289,12 @@ def build_authoritative_snapshot_projection(
     )
     _strip_snapshot_duplicate_payloads(payload)
     payload["semantic_profiles"] = {}
+    retained = {str(value) for value in retained_fact_ids}
+    payload["source_facts"] = [
+        row
+        for row in payload.get("source_facts", [])
+        if isinstance(row, dict) and str(row.get("fact_id")) in retained
+    ]
     fact_sections = payload.get("fact_sections")
     if isinstance(fact_sections, dict):
         for key in ("evidence_sources", "sections", "sku", "legacy_payload"):

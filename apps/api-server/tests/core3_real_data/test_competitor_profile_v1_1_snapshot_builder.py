@@ -93,7 +93,7 @@ def test_authoritative_projection_keeps_typed_facts_without_raw_duplicates() -> 
 
     projected = build_authoritative_snapshot_projection(full)
 
-    assert SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION.endswith("projection_v1")
+    assert SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION.endswith("projection_v2")
     assert projected.storage_projection_mode == "authoritative_typed"
     assert projected.source_full_result_hash == full.result_hash
     assert projected.snapshot_ref == full.snapshot_ref
@@ -113,7 +113,7 @@ def test_authoritative_projection_keeps_typed_facts_without_raw_duplicates() -> 
         assert len(getattr(projected.fact_sections, field_name)) == len(
             getattr(full.fact_sections, field_name)
         )
-    assert projected.source_facts
+    assert projected.source_facts == []
     assert projected.module_availability == full.module_availability
     assert projected.evidence_refs == full.evidence_refs
     assert projected.semantic_profiles == {}
@@ -135,6 +135,14 @@ def test_authoritative_projection_keeps_typed_facts_without_raw_duplicates() -> 
 
     assert_no_nonempty_raw_bags(projected.model_dump(mode="json"))
     assert len(projected.model_dump_json()) < len(full.model_dump_json())
+
+    retained = build_authoritative_snapshot_projection(
+        full,
+        retained_fact_ids={full.source_facts[0].fact_id},
+    )
+    assert [row.fact_id for row in retained.source_facts] == [
+        full.source_facts[0].fact_id
+    ]
 
 
 def test_unknown_null_empty_false_and_zero_are_losslessly_distinct() -> None:

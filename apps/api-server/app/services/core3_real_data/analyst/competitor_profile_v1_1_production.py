@@ -304,6 +304,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         pair_assembler = PairAnalysisAssembler()
         scope_classifier = CandidateScopeClassifier()
         gate_evaluator = PairGateEvaluator()
+        target_fact_refs: set[str] = set()
         for recall_rank, candidate_code in enumerate(candidate_codes, start=1):
             recalled_candidate = stage.recall_manifest.candidates.pop(0)
             pair_feature = stage.pair_features.pairs.pop(0)
@@ -348,8 +349,13 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             selection_inputs.append(
                 PairSelectionInput(assembly=assembly, gate_evaluation=gate)
             )
+            pair_fact_refs = _collect_fact_references((assembly, gate))
+            target_fact_refs.update(pair_fact_refs)
             snapshot_by_sku[candidate_code] = (
-                build_authoritative_snapshot_projection(candidate_snapshot)
+                build_authoritative_snapshot_projection(
+                    candidate_snapshot,
+                    retained_fact_ids=pair_fact_refs,
+                )
             )
             del (
                 source,
@@ -393,7 +399,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             },
         )
         projected_target_snapshot = build_authoritative_snapshot_projection(
-            target_snapshot
+            target_snapshot,
+            retained_fact_ids=target_fact_refs,
         )
         snapshot_by_sku[target_code] = projected_target_snapshot
         return CompetitorProfileV11GenerationWorkItem(
@@ -661,6 +668,34 @@ def _pairs_by_sku(rows):
     if len(result) != len(rows):
         raise ValueError("pair stage contains duplicate candidate SKU codes")
     return result
+
+
+def _collect_fact_references(value) -> set[str]:
+    references: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in {"supporting_fact_refs", "input_fact_refs"} and isinstance(
+                child, list
+            ):
+                references.update(str(item) for item in child)
+            else:
+                references.update(_collect_fact_references(child))
+        return references
+    if isinstance(value, (list, tuple)):
+        for child in value:
+            references.update(_collect_fact_references(child))
+        return references
+    model_fields = getattr(type(value), "model_fields", None)
+    if isinstance(model_fields, dict):
+        for field_name in model_fields:
+            child = getattr(value, field_name)
+            if field_name in {"supporting_fact_refs", "input_fact_refs"} and isinstance(
+                child, list
+            ):
+                references.update(str(item) for item in child)
+            else:
+                references.update(_collect_fact_references(child))
+    return references
 
 
 def _legacy_method_versions(
