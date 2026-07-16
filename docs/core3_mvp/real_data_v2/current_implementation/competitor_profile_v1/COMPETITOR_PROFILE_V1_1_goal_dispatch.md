@@ -1,6 +1,6 @@
 # CatForge 竞品画像 V1.1 串行 Goal 调度
 
-状态：G27—G41C completed；G42 approval-only
+状态：G27—G42 completed
 
 日期：2026-07-16
 
@@ -57,7 +57,7 @@ G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选�
 | G41A | 只生成并验收 65E7Q V1.1 draft | 多维数据完整、新旧差异可解释、智能体零重算 | 单 SKU draft |
 | G41B | 只生成并验收 AC 单 SKU V1.1 draft | AC taxonomy/能力段/语义/量价无 TV 串线 | 单 SKU draft |
 | G41C | 生成 TV/AC 全量 V1.1 draft 并只读复核 | 532 SKU 完整、无截断/串线/重复/失败 | 全量 draft |
-| G42 | 单独评审是否 review/publish/current | 必须重新获得明确批准 | 未授权 |
+| G42 | 完成 release quality review、review/publish/current、正式消费与回退验收 | 用户明确批准；`G42_closure_receipt.md` 验收通过 | review/publish/current |
 
 ## 3. G27：需求与设计冻结
 
@@ -298,7 +298,7 @@ G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选�
 
 ## 11. G42：发布审批边界
 
-G42 不自动创建。只有用户在看过 G41C 结果后明确批准，才允许设计和执行：
+G42 已在用户明确回复“同意切换”后串行完成：
 
 1. release quality review；
 2. draft→review；
@@ -307,7 +307,7 @@ G42 不自动创建。只有用户在看过 G41C 结果后明确批准，才允�
 5. 正式智能体默认切换；
 6. 回退演练。
 
-上述步骤仍需拆分，不能一次性越过。
+各步骤均独立执行并回读，未跨状态；结果见 `G42_closure_receipt.md`。
 
 ## 12. Heartbeat 提示词
 
