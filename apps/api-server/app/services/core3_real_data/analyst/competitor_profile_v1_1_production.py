@@ -6,6 +6,8 @@ import ctypes
 import gc
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 from sqlalchemy import func, select
@@ -98,6 +100,7 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import
     COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
     G29PerformanceStorageBudget,
     ProfileVersionAnalysisContext,
+    VersionSkuAnalysisSnapshot,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection import (
     COMPETITOR_PROFILE_V1_1_SELECTION_CONFIG_VERSION,
@@ -299,6 +302,28 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         if any(order != candidate_codes for order in stage_candidate_orders):
             raise ValueError("pair stages do not preserve the recalled candidate order")
 
+        snapshot_spool = TemporaryDirectory(prefix="catforge-v11-snapshot-")
+        snapshot_spool_root = Path(snapshot_spool.name)
+        candidate_snapshot_paths: list[Path] = []
+        for recall_rank, candidate_code in enumerate(candidate_codes, start=1):
+            candidate_snapshot = snapshot_builder.build_authoritative(
+                category_bundle,
+                competitor_profile_version_id=competitor_profile_version_id,
+                sku_code=candidate_code,
+            )
+            candidate_path = snapshot_spool_root / f"{recall_rank:04d}.json"
+            candidate_path.write_text(
+                candidate_snapshot.model_dump_json(),
+                encoding="utf-8",
+            )
+            candidate_snapshot_paths.append(candidate_path)
+            del candidate_snapshot
+            if recall_rank % 8 == 0:
+                _release_memory()
+        del category_bundle, snapshot_builder
+        _release_memory()
+        trace_competitor_profile_memory("work_item_after_snapshot_spool")
+
         assemblies: list[PairAnalysisAssembly] = []
         gates: list[PairGateEvaluation] = []
         selection_inputs: list[PairSelectionInput] = []
@@ -316,10 +341,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             purchase_pool = stage.purchase_pool.pairs.pop(0)
             value_substitution = stage.value_substitution.pairs.pop(0)
             price_volume_pressure = stage.price_volume_pressure.pairs.pop(0)
-            candidate_snapshot = snapshot_builder.build_authoritative(
-                category_bundle,
-                competitor_profile_version_id=competitor_profile_version_id,
-                sku_code=candidate_code,
+            candidate_snapshot = VersionSkuAnalysisSnapshot.model_validate_json(
+                candidate_snapshot_paths[recall_rank - 1].read_bytes()
             )
             if recall_rank == 1:
                 trace_competitor_profile_memory("work_item_pair_1_after_snapshot")
@@ -386,7 +409,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             if recall_rank % 8 == 0:
                 _release_memory()
 
-        del category_bundle, snapshot_builder
+        snapshot_spool.cleanup()
+        del candidate_snapshot_paths, snapshot_spool
         _release_memory()
 
         selection_result = CompetitorProfileV11Selector().select(
