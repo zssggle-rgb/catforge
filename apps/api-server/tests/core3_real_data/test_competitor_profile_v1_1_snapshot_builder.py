@@ -161,6 +161,14 @@ def test_direct_authoritative_snapshot_avoids_raw_source_tree_materialization() 
         payload["modules"]["M12D"]["records_by_sku"]["TV000001"][0][
             "facts"
         ]["legacy_category_payload"] = {"blob": "raw-sentinel-" * 10_000}
+        payload["modules"]["M12C"]["records_by_sku"]["TV000001"][0][
+            "facts"
+        ].update(
+            {
+                "estimated_price_premium_abs": Decimal("1.25"),
+                "comment_support_strength": Decimal("0.45"),
+            }
+        )
 
     bundle = _rebuilt(_category_bundle(), add_large_unused_raw_bag)
 

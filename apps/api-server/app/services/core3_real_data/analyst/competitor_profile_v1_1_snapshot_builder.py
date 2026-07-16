@@ -206,6 +206,7 @@ class VersionSkuAnalysisSnapshotBuilder:
             category_bundle,
             normalized_sku,
             records["M12C"],
+            authoritative_only=authoritative_only,
         )
         purchase_reason, purchase_limitations = _purchase_reason_snapshot(
             records["M12D"],
@@ -847,6 +848,8 @@ def _claim_snapshots(
     bundle: CompetitorProfileCategoryInputBundle,
     sku_code: str,
     records: Sequence[UpstreamRecordSnapshot],
+    *,
+    authoritative_only: bool = False,
 ) -> tuple[
     ClaimValueSnapshot | None,
     ClaimContributionSnapshot | None,
@@ -854,7 +857,19 @@ def _claim_snapshots(
 ]:
     if not records:
         return None, None, []
-    rows = [_project_m12c_row(dict(row.facts)) for row in records]
+    rows = []
+    for record in records:
+        source = (
+            dict(record.facts)
+            if authoritative_only
+            else record.model_dump(mode="json")["facts"]
+        )
+        projected = _project_m12c_row(source)
+        if authoritative_only:
+            projected["raw_details"] = {}
+            _strip_snapshot_duplicate_payloads(projected)
+            projected = _json_compatible(projected)
+        rows.append(projected)
     claim_values = [
         _claim_value_record(row)
         for row in rows
@@ -2223,7 +2238,7 @@ def _parameter_scalar(value: Any) -> Any:
 
 def _claim_market_summary(facts: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        key: facts[key]
+        key: _json_decimal(_decimal(facts[key]))
         for key in (
             "estimated_price_premium_abs",
             "estimated_weekly_sales_lift_abs",
@@ -2236,7 +2251,7 @@ def _claim_market_summary(facts: Mapping[str, Any]) -> dict[str, Any]:
 
 def _claim_user_realization(facts: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        key: facts[key]
+        key: _json_decimal(_decimal(facts[key]))
         for key in (
             "claim_evidence_strength",
             "param_support_strength",
@@ -2569,6 +2584,16 @@ def _dedupe_refs(refs: Iterable[EvidenceRef]) -> list[EvidenceRef]:
         for row in refs
     }
     return [by_key[key] for key in sorted(by_key)]
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_compatible(child) for child in value]
+    return value
 
 
 def _canonical_json(value: Any) -> str:
