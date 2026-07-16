@@ -98,7 +98,6 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import
     COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
     G29PerformanceStorageBudget,
     ProfileVersionAnalysisContext,
-    VersionSkuAnalysisSnapshot,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection import (
     COMPETITOR_PROFILE_V1_1_SELECTION_CONFIG_VERSION,
@@ -152,7 +151,7 @@ class CompetitorProfileV11SnapshotStage:
     price_volume_pressure: PriceVolumePressureBundle
     legacy_top3: tuple[LegacyTopCompetitorReference, ...]
     legacy_selection_result_hash: str
-    snapshots: list[VersionSkuAnalysisSnapshot]
+    snapshot_sources: list[CompetitorProfileCategoryInputBundle]
 
 
 @dataclass(frozen=True)
@@ -233,16 +232,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         *,
         competitor_profile_version_id: str,
     ) -> CompetitorProfileV11SnapshotStage:
-        candidate_codes = tuple(
-            row.candidate.sku_code for row in prepared.pair_features.pairs
-        )
-        snapshots = list(
-            VersionSkuAnalysisSnapshotBuilder().build_many(
-                prepared.category_bundle,
-                competitor_profile_version_id=competitor_profile_version_id,
-                sku_codes=[prepared.target_sku_code, *candidate_codes],
-            )
-        )
+        if not competitor_profile_version_id.strip():
+            raise ValueError("competitor profile version ID cannot be empty")
         return CompetitorProfileV11SnapshotStage(
             target_sku_code=prepared.target_sku_code,
             authoritative_sku_codes=tuple(
@@ -257,7 +248,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             price_volume_pressure=prepared.price_volume_pressure,
             legacy_top3=prepared.legacy_top3,
             legacy_selection_result_hash=prepared.legacy_selection_result_hash,
-            snapshots=snapshots,
+            snapshot_sources=[prepared.category_bundle],
         )
 
     def build_work_item(
@@ -283,9 +274,16 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
     ) -> CompetitorProfileV11GenerationWorkItem:
         target_code = stage.target_sku_code
         candidate_codes = [row.candidate.sku_code for row in stage.pair_features.pairs]
-        snapshot_by_sku = {row.identity_market.sku_code: row for row in stage.snapshots}
-        stage.snapshots.clear()
-        target_snapshot = snapshot_by_sku[target_code]
+        if len(stage.snapshot_sources) != 1:
+            raise ValueError("snapshot stage source must be consumed exactly once")
+        category_bundle = stage.snapshot_sources.pop()
+        snapshot_builder = VersionSkuAnalysisSnapshotBuilder()
+        target_snapshot = snapshot_builder.build(
+            category_bundle,
+            competitor_profile_version_id=competitor_profile_version_id,
+            sku_code=target_code,
+        )
+        snapshot_by_sku = {target_code: target_snapshot}
         stage_rows = (
             stage.recall_manifest.candidates,
             stage.pair_features.pairs,
@@ -314,7 +312,11 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             purchase_pool = stage.purchase_pool.pairs.pop(0)
             value_substitution = stage.value_substitution.pairs.pop(0)
             price_volume_pressure = stage.price_volume_pressure.pairs.pop(0)
-            candidate_snapshot = snapshot_by_sku[candidate_code]
+            candidate_snapshot = snapshot_builder.build(
+                category_bundle,
+                competitor_profile_version_id=competitor_profile_version_id,
+                sku_code=candidate_code,
+            )
             scope = scope_classifier.classify(
                 target_snapshot=target_snapshot,
                 candidate_snapshot=candidate_snapshot,
@@ -371,6 +373,9 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             )
             if recall_rank % 8 == 0:
                 _release_memory()
+
+        del category_bundle, snapshot_builder
+        _release_memory()
 
         selection_result = CompetitorProfileV11Selector().select(
             selection_inputs,

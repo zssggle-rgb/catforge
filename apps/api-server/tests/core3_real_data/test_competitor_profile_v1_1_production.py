@@ -122,11 +122,13 @@ def test_production_work_item_preserves_the_full_candidate_universe() -> None:
         competitor_profile_version_id="competitor-profile-v11-production-test",
     )
     assert not hasattr(snapshot_stage, "category_bundle")
+    assert len(snapshot_stage.snapshot_sources) == 1
     expected = [row.candidate.sku_code for row in prepared.pair_features.pairs]
     item = builder.build_work_item_from_snapshot_stage(
         snapshot_stage,
         competitor_profile_version_id="competitor-profile-v11-production-test",
     )
+    assert snapshot_stage.snapshot_sources == []
 
     assert [row.candidate_sku_code for row in item.pair_assemblies] == expected
     assert [row.candidate_sku_code for row in item.gate_evaluations] == expected
