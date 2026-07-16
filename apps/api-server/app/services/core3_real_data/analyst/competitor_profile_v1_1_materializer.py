@@ -59,7 +59,7 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
 from app.services.core3_real_data.hash_utils import stable_hash
 
 
-COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v3"
+COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION = "competitor_profile_v1_1_materializer_v4"
 
 _SUMMARY_BUCKET_BY_QUESTION = {
     "purchase_choice": "competitive_advantages",
@@ -450,6 +450,8 @@ def _materialize_pair(
                 value_assessments=assembly.value_assessments,
                 price_volume_process=assembly.price_volume_process,
                 calculator_versions=assembly.calculator_versions,
+                process_projection_mode=assembly.process_projection_mode,
+                source_full_result_hash=assembly.source_full_result_hash,
                 assembly_result_hash=assembly.result_hash,
                 gate_result_hash=gate.result_hash,
             )
@@ -460,6 +462,8 @@ def _materialize_pair(
                 value_assessments=assembly.value_assessments,
                 price_volume_process=assembly.price_volume_process,
                 calculator_versions=assembly.calculator_versions,
+                process_projection_mode=assembly.process_projection_mode,
+                source_full_result_hash=assembly.source_full_result_hash,
                 assembly_result_hash=assembly.result_hash,
                 gate_result_hash=gate.result_hash,
             )

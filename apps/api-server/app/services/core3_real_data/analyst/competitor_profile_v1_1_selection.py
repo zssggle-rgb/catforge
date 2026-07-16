@@ -17,8 +17,8 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_gate_evaluatio
     PairGateEvaluation,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
-    PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
     PairAnalysisAssembly,
+    pair_analysis_assembly_expected_hash,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
     PRIMARY_DIMENSION_WEIGHTS,
@@ -1020,13 +1020,7 @@ def _assert_assembly_gate_authority(
 
 
 def _assert_assembly_hash(assembly: PairAnalysisAssembly) -> None:
-    expected = stable_hash(
-        {
-            "assembler_method_version": PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
-            **assembly.model_dump(mode="json", exclude={"result_hash"}),
-        },
-        version=PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
-    )
+    expected = pair_analysis_assembly_expected_hash(assembly)
     if assembly.result_hash != expected:
         raise CompetitorSelectionInputError("G33 assembly result hash does not close")
 

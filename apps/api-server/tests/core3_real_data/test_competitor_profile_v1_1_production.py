@@ -136,6 +136,14 @@ def test_production_work_item_preserves_the_full_candidate_universe() -> None:
     assert len(item.candidate_snapshots) == len(expected)
     assert item.selection_result.analysis_candidate_count == len(expected)
     assert item.selection_result.selected_count == 3
+    assert all(
+        row.process_projection_mode == "authoritative_typed"
+        for row in item.pair_assemblies
+    )
+    assert all(row.source_full_result_hash for row in item.pair_assemblies)
+    assert all(not row.aligned_features for row in item.pair_assemblies)
+    assert all(not row.purchase_reason_assessments for row in item.pair_assemblies)
+    assert all(not row.value_assessments for row in item.pair_assemblies)
 
 
 def test_production_service_persists_once_and_reuses_the_same_draft(
@@ -178,6 +186,12 @@ def test_production_service_persists_once_and_reuses_the_same_draft(
     assert second.version.pair_count == first.candidate_count
     assert second.version.relation_count == first.candidate_count * 7
     assert second.version.selection_count == len(first.selected_sku_codes)
+    assert all(
+        row.analysis_process is not None
+        and row.analysis_process.process_projection_mode == "authoritative_typed"
+        and row.analysis_process.source_full_result_hash
+        for row in first.materialized.dto.pair_analyses
+    )
     assert (
         session.scalar(
             select(func.count()).select_from(entities.Core3CompetitorProfileSkuSnapshot)

@@ -77,12 +77,14 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_materializer i
     MaterializedCompetitorProfileV11,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
+    PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
     PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
     PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION,
     PairAnalysisAssembler,
     PairAnalysisAssembly,
     PairAnalysisCalculator,
     PairAnalysisCalculatorInput,
+    build_authoritative_pair_projection,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_repositories import (
     CompetitorProfileV11Repository,
@@ -322,7 +324,11 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
                 recalled_candidate=recalled_candidate,
                 recall_rank=recall_rank,
             )
-            assembly = pair_assembler.assemble(pair_calculator.calculate(source))
+            full_assembly = pair_assembler.assemble(
+                pair_calculator.calculate(source)
+            )
+            assembly = build_authoritative_pair_projection(full_assembly)
+            del full_assembly
             gate = gate_evaluator.evaluate(
                 scope=scope,
                 assembly=assembly,
@@ -493,6 +499,9 @@ class CompetitorProfileV11ProductionService:
             "v1_1_materializer": COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
             "v1_1_pair_assembler": PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
             "v1_1_pair_calculator": PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION,
+            "v1_1_pair_projection": (
+                PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION
+            ),
             "v1_1_relation_calculator": (
                 COMPETITOR_PROFILE_V1_1_RELATION_CALCULATOR_METHOD_VERSION
             ),

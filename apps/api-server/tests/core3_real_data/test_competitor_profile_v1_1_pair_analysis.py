@@ -32,12 +32,15 @@ from app.services.core3_real_data.analyst.competitor_profile_purchase_pool impor
     PurchasePoolSemanticEvaluator,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
+    PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
     PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
     PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION,
     PairAnalysisAssembler,
     PairAnalysisCalculator,
     PairAnalysisCalculatorInput,
     PairAnalysisInputError,
+    build_authoritative_pair_projection,
+    pair_analysis_assembly_expected_hash,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
     LegacyScoreBasis,
@@ -294,6 +297,72 @@ def test_complete_tv_pair_calls_mature_algorithms_and_preserves_full_payloads() 
     assert {
         evidence_key(row) for row in source.recalled_candidate.evidence_refs
     }.issubset({evidence_key(row) for row in assembly.evidence_refs})
+
+
+def test_authoritative_projection_preserves_typed_graph_without_raw_duplicates() -> None:
+    _calculation, full = _assemble(_source())
+
+    projected = build_authoritative_pair_projection(full)
+
+    assert projected.process_projection_mode == "authoritative_typed"
+    assert projected.source_full_result_hash == full.result_hash
+    assert projected.aligned_features == []
+    assert projected.purchase_reason_assessments == []
+    assert projected.value_assessments == []
+    assert projected.price_volume_process == {
+        "projection_version": PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
+        "source_full_result_hash": full.result_hash,
+    }
+    assert projected.result_hash == pair_analysis_assembly_expected_hash(projected)
+
+    def strip_raw_duplicates(value):
+        if isinstance(value, dict):
+            return {
+                key: (
+                    {}
+                    if key == "raw_details"
+                    or key == "legacy_payload"
+                    or (key.startswith("legacy_") and key.endswith("_payload"))
+                    else strip_raw_duplicates(child)
+                )
+                for key, child in value.items()
+            }
+        if isinstance(value, list):
+            return [strip_raw_duplicates(child) for child in value]
+        return value
+
+    for field_name in (
+        "purchase_pool",
+        "dimensions",
+        "value_anchor_analysis",
+        "replacement_pressure_analysis",
+        "purchase_pressure_comparison",
+        "market_validation",
+        "legacy_basis",
+        "source_lineage",
+        "evidence_refs",
+        "limitations",
+        "calculator_versions",
+    ):
+        assert projected.model_dump(mode="json", include={field_name})[
+            field_name
+        ] == strip_raw_duplicates(
+            full.model_dump(mode="json", include={field_name})[field_name]
+        )
+
+    def assert_no_nonempty_raw_bags(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key == "raw_details" or key == "legacy_payload" or (
+                    key.startswith("legacy_") and key.endswith("_payload")
+                ):
+                    assert child == {}
+                assert_no_nonempty_raw_bags(child)
+        elif isinstance(value, list):
+            for child in value:
+                assert_no_nonempty_raw_bags(child)
+
+    assert_no_nonempty_raw_bags(projected.model_dump(mode="json"))
 
 
 def test_every_mature_calculator_version_is_explicit_and_frozen() -> None:

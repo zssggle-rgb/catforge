@@ -1629,8 +1629,38 @@ class PairAnalysisProcessSnapshot(CompetitorProfileV11BaseModel):
     value_assessments: list[JsonObject] = Field(default_factory=list)
     price_volume_process: JsonObject = Field(default_factory=dict)
     calculator_versions: dict[str, str] = Field(default_factory=dict)
+    process_projection_mode: Literal["full", "authoritative_typed"] = "full"
+    source_full_result_hash: str | None = None
     assembly_result_hash: str = Field(min_length=1)
     gate_result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_projection(self) -> "PairAnalysisProcessSnapshot":
+        if self.process_projection_mode == "full":
+            if self.source_full_result_hash is not None:
+                raise ValueError(
+                    "full process snapshots cannot reference a projected source"
+                )
+            return self
+        if not self.source_full_result_hash:
+            raise ValueError(
+                "authoritative typed process snapshots require the full source hash"
+            )
+        if (
+            self.aligned_features
+            or self.purchase_reason_assessments
+            or self.value_assessments
+        ):
+            raise ValueError(
+                "authoritative typed snapshots cannot duplicate raw process lists"
+            )
+        if self.price_volume_process.get("source_full_result_hash") != (
+            self.source_full_result_hash
+        ):
+            raise ValueError(
+                "authoritative typed process receipt must close to its full source hash"
+            )
+        return self
 
 
 class PairSelectionAssessment(CompetitorProfileV11BaseModel):

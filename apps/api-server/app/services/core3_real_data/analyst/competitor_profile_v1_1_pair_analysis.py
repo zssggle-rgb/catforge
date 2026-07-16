@@ -74,7 +74,7 @@ from app.services.core3_real_data.analyst.replacement_pressure import (
     ReplacementPressureInput,
     ReplacementPressureResult,
 )
-from app.services.core3_real_data.hash_utils import stable_hash
+from app.services.core3_real_data.hash_utils import stable_hash, stable_hash_json
 from app.services.core3_real_data.purchase_reason_profile_contract import (
     derive_consumption_capabilities,
 )
@@ -87,6 +87,9 @@ from app.services.core3_real_data.purchase_reason_profile_schemas import (
 
 PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION = "competitor_profile_pair_calculator_v1_1"
 PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION = "competitor_profile_pair_assembler_v1_1"
+PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION = (
+    "competitor_profile_pair_authoritative_projection_v1"
+)
 LEGACY_WEIGHTED_OVERLAP_CONFIG_VERSION = "legacy_weighted_role_overlap_v1"
 SUPPORTING_DIMENSION_WEIGHT = Decimal("0.10")
 
@@ -233,6 +236,8 @@ class PairAnalysisAssembly(CompetitorProfileV11BaseModel):
     audit_summary_cn: str = Field(min_length=1)
     input_fingerprint: str = Field(min_length=1)
     calculation_result_hash: str = Field(min_length=1)
+    process_projection_mode: Literal["full", "authoritative_typed"] = "full"
+    source_full_result_hash: str | None = None
     result_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -267,6 +272,32 @@ class PairAnalysisAssembly(CompetitorProfileV11BaseModel):
             raise ValueError("assembly evidence closure is missing child evidence refs")
         if self.limitations != sorted(set(self.limitations)):
             raise ValueError("assembly limitations must be sorted and unique")
+        if self.process_projection_mode == "full":
+            if self.source_full_result_hash is not None:
+                raise ValueError("full assemblies cannot reference another source result")
+        else:
+            if not self.source_full_result_hash:
+                raise ValueError(
+                    "authoritative projections require the full source result hash"
+                )
+            if (
+                self.aligned_features
+                or self.purchase_reason_assessments
+                or self.value_assessments
+            ):
+                raise ValueError(
+                    "authoritative projections cannot duplicate raw process lists"
+                )
+            expected_process = {
+                "projection_version": (
+                    PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION
+                ),
+                "source_full_result_hash": self.source_full_result_hash,
+            }
+            if self.price_volume_process != expected_process:
+                raise ValueError(
+                    "authoritative projection process receipt is inconsistent"
+                )
         return self
 
 
@@ -549,6 +580,106 @@ class PairAnalysisAssembler:
                 ),
             }
         )
+
+
+def build_authoritative_pair_projection(
+    assembly: PairAnalysisAssembly,
+) -> PairAnalysisAssembly:
+    """Keep the typed decision graph while removing forbidden legacy raw bags."""
+
+    if assembly.process_projection_mode != "full":
+        raise PairAnalysisInputError(
+            "only a full G33 assembly can create an authoritative projection"
+        )
+    payload = assembly.model_dump(
+        mode="json",
+        exclude={
+            "process_projection_mode",
+            "source_full_result_hash",
+            "result_hash",
+        },
+    )
+    _strip_non_authoritative_payloads(payload)
+    payload.update(
+        {
+            "aligned_features": [],
+            "purchase_reason_assessments": [],
+            "value_assessments": [],
+            "price_volume_process": {
+                "projection_version": (
+                    PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION
+                ),
+                "source_full_result_hash": assembly.result_hash,
+            },
+            "process_projection_mode": "authoritative_typed",
+            "source_full_result_hash": assembly.result_hash,
+        }
+    )
+    projected = PairAnalysisAssembly.model_validate(
+        {
+            **payload,
+            "result_hash": _authoritative_projection_hash(payload),
+        }
+    )
+    if projected.result_hash != pair_analysis_assembly_expected_hash(projected):
+        raise PairAnalysisInputError(
+            "authoritative G33 projection hash does not close"
+        )
+    return projected
+
+
+def pair_analysis_assembly_expected_hash(
+    assembly: PairAnalysisAssembly,
+) -> str:
+    if assembly.process_projection_mode == "authoritative_typed":
+        return _authoritative_projection_hash(
+            assembly.model_dump(mode="json", exclude={"result_hash"})
+        )
+    payload = assembly.model_dump(
+        mode="json",
+        exclude={
+            "process_projection_mode",
+            "source_full_result_hash",
+            "result_hash",
+        },
+    )
+    return stable_hash(
+        {
+            "assembler_method_version": PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
+            **payload,
+        },
+        version=PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
+    )
+
+
+def _authoritative_projection_hash(payload: dict[str, Any]) -> str:
+    return stable_hash_json(
+        {
+            "projection_version": PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
+            "source_full_result_hash": payload.get("source_full_result_hash"),
+            "authoritative_payload": payload,
+        },
+        version=PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
+    )
+
+
+def _strip_non_authoritative_payloads(value: Any) -> None:
+    if isinstance(value, dict):
+        for key, child in list(value.items()):
+            normalized = str(key).lower()
+            if normalized == "raw_details" or (
+                normalized == "legacy_payload"
+                or (
+                    normalized.startswith("legacy_")
+                    and normalized.endswith("_payload")
+                )
+            ):
+                value[key] = {}
+            else:
+                _strip_non_authoritative_payloads(child)
+    elif isinstance(value, list):
+        for child in value:
+            _strip_non_authoritative_payloads(child)
 
 
 def _validate_source(source: PairAnalysisCalculatorInput) -> None:
@@ -2576,6 +2707,7 @@ def _assert_evidence_order(values: Sequence[EvidenceRef]) -> None:
 
 __all__ = [
     "LEGACY_WEIGHTED_OVERLAP_CONFIG_VERSION",
+    "PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION",
     "PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION",
     "PAIR_ANALYSIS_CALCULATOR_METHOD_VERSION",
     "DimensionCalculation",
@@ -2585,4 +2717,6 @@ __all__ = [
     "PairAnalysisCalculator",
     "PairAnalysisCalculatorInput",
     "PairAnalysisInputError",
+    "build_authoritative_pair_projection",
+    "pair_analysis_assembly_expected_hash",
 ]

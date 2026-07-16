@@ -21,7 +21,7 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_gate_evaluatio
     V11RelationEvidenceCalculator,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
-    PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
+    pair_analysis_assembly_expected_hash,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
     ALL_QUESTION_CODES,
@@ -57,19 +57,9 @@ def _scope(source, *, candidate_snapshot=None, manifest=None, token=None):
 
 
 def _rehash_assembly(assembly):
-    payload = assembly.model_dump(mode="json", exclude={"result_hash"})
-    return assembly.model_copy(
-        update={
-            "result_hash": stable_hash(
-                {
-                    "assembler_method_version": (
-                        PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION
-                    ),
-                    **payload,
-                },
-                version=PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
-            )
-        }
+    pending = assembly.model_copy(update={"result_hash": "pending-rehash"})
+    return pending.model_copy(
+        update={"result_hash": pair_analysis_assembly_expected_hash(pending)}
     )
 
 

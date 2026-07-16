@@ -42,8 +42,8 @@ from app.services.core3_real_data.analyst.competitor_profile_value_substitution_
     ValueSubstitutionEvidencePair,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
-    PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
     PairAnalysisAssembly,
+    pair_analysis_assembly_expected_hash,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
     ALL_QUESTION_CODES,
@@ -699,13 +699,7 @@ def _assert_scope_assembly(
         or scope.candidate_snapshot_ref != assembly.candidate_snapshot_ref
     ):
         raise PairGateInputError("scope and G33 assembly authority chain must match")
-    expected_hash = stable_hash(
-        {
-            "assembler_method_version": PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
-            **assembly.model_dump(mode="json", exclude={"result_hash"}),
-        },
-        version=PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
-    )
+    expected_hash = pair_analysis_assembly_expected_hash(assembly)
     if assembly.result_hash != expected_hash:
         raise PairGateInputError("G33 assembly result hash does not close")
 
