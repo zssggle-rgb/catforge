@@ -897,7 +897,6 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
         project = self.db.execute(
             select(entities.CategoryProject.project_id)
             .where(entities.CategoryProject.project_id == self.project_id)
-            .where(entities.CategoryProject.category_code == self.category_code.value)
             .with_for_update()
         ).scalar_one_or_none()
         if project is None:

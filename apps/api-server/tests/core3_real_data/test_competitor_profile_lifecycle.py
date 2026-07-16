@@ -109,6 +109,18 @@ def _lifecycle(session: Session) -> CompetitorProfileLifecycleService:
     )
 
 
+def test_release_scope_lock_supports_tv_ac_shared_project(session: Session) -> None:
+    lifecycle = CompetitorProfileLifecycleService(
+        Core3RepositoryContext(
+            db=session,
+            project_id="project-tv",
+            category_code=Core3CategoryCode.AC,
+        )
+    )
+
+    lifecycle._lock_release_scope("project-tv:AC:shared-project-fixture")
+
+
 def _version_and_bundle(
     session: Session,
     *,
