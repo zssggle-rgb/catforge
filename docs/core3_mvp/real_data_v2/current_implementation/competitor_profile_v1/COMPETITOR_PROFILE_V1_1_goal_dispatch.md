@@ -1,6 +1,6 @@
 # CatForge 竞品画像 V1.1 串行 Goal 调度
 
-状态：G27—G41A completed；G41B pending；G41C gated；G42 approval-only
+状态：G27—G41B completed；G41C pending；G42 approval-only
 
 日期：2026-07-16
 
@@ -275,6 +275,8 @@ G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选�
 失败时停止，不创建 G41B。
 
 ### G41B AC
+
+完成状态：completed；关闭回执：`G41B_closure_receipt.md`。
 
 只选择一个 AC SKU，验证 AC product form、能力段、任务、客群、价值锚点、量价和参数不存在 TV 假设，并在 205 验证 compact readback 不高于 2 秒且无 N+1。失败时停止，不创建 G41C。
 
