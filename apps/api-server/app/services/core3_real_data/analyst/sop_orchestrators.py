@@ -43,6 +43,7 @@ from app.services.core3_real_data.analyst.competitor_answer import (
 )
 from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_schemas import (
     AgentCompetitorProfileSnapshot,
+    AgentSkuSnapshot,
     CompetitorProfileAgentSnapshotAdapter,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_adapter import (
@@ -797,6 +798,7 @@ class SopOrchestrators:
             return self._competitor_set_from_saved_agent_snapshot(
                 context=context,
                 source=read_result.full,
+                sku_snapshots=read_result.sku_snapshots,
                 resolver_result=resolver_result,
                 profile_access_mode=profile_access_mode,
                 competitor_profile_version_id=competitor_profile_version_id,
@@ -935,6 +937,7 @@ class SopOrchestrators:
         *,
         context: AnalystContext,
         source: AgentCompetitorProfileSnapshot,
+        sku_snapshots: list[AgentSkuSnapshot],
         resolver_result: dict[str, Any] | None,
         profile_access_mode: Literal["formal", "preview"],
         competitor_profile_version_id: str | None,
@@ -945,7 +948,10 @@ class SopOrchestrators:
         report_title: str | None,
         requested_top_n: int,
     ) -> dict[str, Any]:
-        profile = CompetitorProfileAgentSnapshotAdapter().adapt(source)
+        profile = CompetitorProfileAgentSnapshotAdapter().adapt(
+            source,
+            sku_snapshots,
+        )
         if (
             profile.target.sku_code != source.target.sku_code
             or profile.competitor_profile_version_id

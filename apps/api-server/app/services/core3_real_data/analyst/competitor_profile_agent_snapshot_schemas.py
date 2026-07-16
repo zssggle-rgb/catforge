@@ -8,7 +8,13 @@ but must never repeat those analytical steps.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import gzip
+import json
+import zlib
 from decimal import Decimal
+from io import BytesIO
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
@@ -20,11 +26,14 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import
 from app.services.core3_real_data.hash_utils import stable_hash
 
 
-AGENT_SNAPSHOT_METHOD_VERSION = "competitor_profile_agent_snapshot_v1"
-AGENT_SNAPSHOT_RULE_VERSION = "competitor_profile_agent_snapshot_rule_v1"
+AGENT_SNAPSHOT_METHOD_VERSION = "competitor_profile_agent_snapshot_v2"
+AGENT_SNAPSHOT_RULE_VERSION = "competitor_profile_agent_snapshot_rule_v2"
 AGENT_SNAPSHOT_SOURCE_VERSION = "competitor_set_legacy_analysis_v1"
 AGENT_SNAPSHOT_CANDIDATE_LIMIT = 20
 AGENT_SNAPSHOT_PRIORITY_LIMIT = 3
+AGENT_SNAPSHOT_SKU_PAYLOAD_CODEC = "gzip+base64+json"
+AGENT_SNAPSHOT_MAX_COMPRESSED_PAYLOAD_CHARS = 48_000_000
+AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES = 64_000_000
 
 
 class AgentSkuIdentity(CompetitorProfileV11BaseModel):
@@ -38,6 +47,13 @@ class AgentSkuIdentity(CompetitorProfileV11BaseModel):
     weighted_price: Decimal | None = Field(default=None, ge=0)
     avg_weekly_sales_volume: Decimal | None = Field(default=None, ge=0)
     sales_volume_total: Decimal | None = Field(default=None, ge=0)
+
+
+class AgentSkuSourcePayload(CompetitorProfileV11BaseModel):
+    fact_brief: dict[str, Any]
+    claim_value: dict[str, Any]
+    claim_contribution: dict[str, Any]
+    purchase_reason_profile: dict[str, Any]
 
 
 class AgentCandidateMarket(CompetitorProfileV11BaseModel):
@@ -113,6 +129,7 @@ class AgentEvidenceReceipt(CompetitorProfileV11BaseModel):
 class AgentCandidateAnalysisRecord(CompetitorProfileV11BaseModel):
     candidate_sku_code: str = Field(min_length=1)
     candidate_snapshot_ref: str = Field(min_length=1)
+    candidate_snapshot_result_hash: str = Field(min_length=1)
     source_rank: int = Field(ge=1)
     selected_rank: int | None = Field(
         default=None,
@@ -132,7 +149,7 @@ class AgentCandidateAnalysisRecord(CompetitorProfileV11BaseModel):
             raise ValueError("candidate record and analysis rank must match")
         expected = stable_hash(
             self.model_dump(mode="json", exclude={"result_hash"}),
-            version="competitor_profile_agent_candidate_result_v1",
+            version="competitor_profile_agent_candidate_result_v2",
         )
         if self.result_hash != expected:
             raise ValueError("candidate result hash is inconsistent")
@@ -143,7 +160,7 @@ class AgentSkuSnapshot(CompetitorProfileV11BaseModel):
     schema_version: Literal["sku_competitor_decision_profile_v1_1"] = (
         COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
     )
-    method_version: Literal["competitor_profile_agent_snapshot_v1"] = (
+    method_version: Literal["competitor_profile_agent_snapshot_v2"] = (
         AGENT_SNAPSHOT_METHOD_VERSION
     )
     competitor_profile_version_id: str = Field(min_length=1)
@@ -151,10 +168,12 @@ class AgentSkuSnapshot(CompetitorProfileV11BaseModel):
     category_code: Literal["TV", "AC"]
     release_scope_key: str = Field(min_length=1)
     identity: AgentSkuIdentity
-    fact_brief: dict[str, Any]
-    claim_value: dict[str, Any]
-    claim_contribution: dict[str, Any]
-    purchase_reason_profile: dict[str, Any]
+    payload_codec: Literal["gzip+base64+json"] = AGENT_SNAPSHOT_SKU_PAYLOAD_CODEC
+    payload_b64: str = Field(
+        min_length=1,
+        max_length=AGENT_SNAPSHOT_MAX_COMPRESSED_PAYLOAD_CHARS,
+    )
+    available_modules: list[str] = Field(default_factory=list)
     evidence: list[AgentEvidenceReceipt] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     snapshot_ref: str = Field(min_length=1)
@@ -165,9 +184,11 @@ class AgentSkuSnapshot(CompetitorProfileV11BaseModel):
     def validate_snapshot(self) -> "AgentSkuSnapshot":
         if self.identity.product_category != self.category_code:
             raise ValueError("snapshot category and identity category must match")
+        if len(self.available_modules) != len(set(self.available_modules)):
+            raise ValueError("snapshot available modules must be unique")
         expected = stable_hash(
             self.model_dump(mode="json", exclude={"result_hash"}),
-            version="competitor_profile_agent_sku_snapshot_result_v1",
+            version="competitor_profile_agent_sku_snapshot_result_v2",
         )
         if self.result_hash != expected:
             raise ValueError("SKU snapshot result hash is inconsistent")
@@ -179,7 +200,7 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
     schema_version: Literal["sku_competitor_decision_profile_v1_1"] = (
         COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
     )
-    method_version: Literal["competitor_profile_agent_snapshot_v1"] = (
+    method_version: Literal["competitor_profile_agent_snapshot_v2"] = (
         AGENT_SNAPSHOT_METHOD_VERSION
     )
     source_analysis_version: Literal["competitor_set_legacy_analysis_v1"] = (
@@ -194,6 +215,7 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
     source_batch_ids: list[str] = Field(min_length=1)
     target: AgentSkuIdentity
     target_snapshot_ref: str = Field(min_length=1)
+    target_snapshot_result_hash: str = Field(min_length=1)
     target_fact_brief: dict[str, Any]
     target_claim_value: dict[str, Any]
     target_claim_contribution: dict[str, Any]
@@ -222,6 +244,20 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
             raise ValueError("profile candidates must be unique")
         if self.target.sku_code in candidate_set:
             raise ValueError("profile cannot contain a self candidate")
+        if self.target_fact_brief != {"storage_ref": self.target_snapshot_ref}:
+            raise ValueError("target fact brief must reference its shared snapshot")
+        if self.target_claim_value != {"storage_ref": self.target_snapshot_ref}:
+            raise ValueError("target claim value must reference its shared snapshot")
+        if self.target_claim_contribution != {"storage_ref": self.target_snapshot_ref}:
+            raise ValueError("target claim contribution must reference its shared snapshot")
+        for row in self.candidates:
+            expected_ref = {"storage_ref": row.candidate_snapshot_ref}
+            if (
+                row.analysis.candidate_fact_brief != expected_ref
+                or row.analysis.candidate_claim_value != expected_ref
+                or row.analysis.candidate_claim_contribution != expected_ref
+            ):
+                raise ValueError("candidate heavy payloads must reference one shared snapshot")
         if (
             len(self.candidate_pool_order) != len(candidate_codes)
             or len(set(self.candidate_pool_order)) != len(candidate_codes)
@@ -254,7 +290,7 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
             raise ValueError("saved candidate ranks must match priority order")
         expected = stable_hash(
             self.model_dump(mode="json", exclude={"result_hash"}),
-            version="competitor_profile_agent_profile_result_v1",
+            version="competitor_profile_agent_profile_result_v2",
         )
         if self.result_hash != expected:
             raise ValueError("profile result hash is inconsistent")
@@ -276,7 +312,7 @@ class AgentPairIndexItem(CompetitorProfileV11BaseModel):
 
 class AgentCompetitorProfileCompact(CompetitorProfileV11BaseModel):
     source: Literal["competitor_profile_v1_1"] = "competitor_profile_v1_1"
-    method_version: Literal["competitor_profile_agent_snapshot_v1"] = (
+    method_version: Literal["competitor_profile_agent_snapshot_v2"] = (
         AGENT_SNAPSHOT_METHOD_VERSION
     )
     competitor_profile_version_id: str = Field(min_length=1)
@@ -311,12 +347,17 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
     competitor_profile_version_id: str | None = None
     full: AgentCompetitorProfileSnapshot | None = None
     compact: AgentCompetitorProfileCompact | None = None
+    sku_snapshots: list[AgentSkuSnapshot] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_read(self) -> "AgentCompetitorProfileReadResult":
         populated = int(self.full is not None) + int(self.compact is not None)
         if self.status == "profile_unavailable":
-            if self.competitor_profile_version_id is not None or populated:
+            if (
+                self.competitor_profile_version_id is not None
+                or populated
+                or self.sku_snapshots
+            ):
                 raise ValueError("unavailable reads cannot expose profile data")
             return self
         expected = self.full if self.read_mode == "full" else self.compact
@@ -324,13 +365,40 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
             raise ValueError("available reads require the requested projection")
         if expected.competitor_profile_version_id != self.competitor_profile_version_id:
             raise ValueError("read projection must lock one version")
+        if self.read_mode == "compact" and self.sku_snapshots:
+            raise ValueError("compact reads cannot load shared SKU payloads")
+        if self.read_mode == "full":
+            if self.full is None:
+                raise ValueError("full reads require a full profile payload")
+            expected_codes = {
+                self.full.target.sku_code,
+                *(row.candidate_sku_code for row in self.full.candidates),
+            }
+            actual_codes = {row.identity.sku_code for row in self.sku_snapshots}
+            if len(self.sku_snapshots) != len(actual_codes) or actual_codes != expected_codes:
+                raise ValueError("full reads require one shared snapshot per saved SKU")
+            snapshots = {row.identity.sku_code: row for row in self.sku_snapshots}
+            if (
+                snapshots[self.full.target.sku_code].snapshot_ref
+                != self.full.target_snapshot_ref
+                or snapshots[self.full.target.sku_code].result_hash
+                != self.full.target_snapshot_result_hash
+            ):
+                raise ValueError("target snapshot identity differs from the profile")
+            for row in self.full.candidates:
+                snapshot = snapshots[row.candidate_sku_code]
+                if (
+                    snapshot.snapshot_ref != row.candidate_snapshot_ref
+                    or snapshot.result_hash != row.candidate_snapshot_result_hash
+                ):
+                    raise ValueError("candidate snapshot identity differs from the profile")
         return self
 
 
 class AgentCompetitorRuntimeProjection(CompetitorProfileV11BaseModel):
     source: Literal["competitor_profile_v1_1"] = "competitor_profile_v1_1"
-    adapter_version: Literal["competitor_profile_agent_snapshot_adapter_v1"] = (
-        "competitor_profile_agent_snapshot_adapter_v1"
+    adapter_version: Literal["competitor_profile_agent_snapshot_adapter_v2"] = (
+        "competitor_profile_agent_snapshot_adapter_v2"
     )
     competitor_profile_version_id: str = Field(min_length=1)
     profile_version: str = Field(min_length=1)
@@ -354,20 +422,56 @@ class CompetitorProfileAgentSnapshotAdapter:
     def adapt(
         self,
         source: AgentCompetitorProfileSnapshot,
+        sku_snapshots: list[AgentSkuSnapshot],
     ) -> AgentCompetitorRuntimeProjection:
         frozen = AgentCompetitorProfileSnapshot.model_validate(
             source.model_dump(mode="json")
         )
         by_code = {row.candidate_sku_code: row for row in frozen.candidates}
+        snapshots = {
+            row.identity.sku_code: AgentSkuSnapshot.model_validate(
+                row.model_dump(mode="json")
+            )
+            for row in sku_snapshots
+        }
+        expected_codes = {frozen.target.sku_code, *by_code}
+        if set(snapshots) != expected_codes:
+            raise ValueError("saved profile and shared SKU snapshots do not match")
+        source_payloads = {
+            sku_code: decode_agent_sku_payload(snapshot)
+            for sku_code, snapshot in snapshots.items()
+        }
+        target_payload = source_payloads[frozen.target.sku_code]
+        candidates = []
+        for code in frozen.analysis_order:
+            record = by_code[code]
+            payload = source_payloads[code]
+            candidate_data = record.analysis.model_dump(mode="json")
+            candidate_data.update(
+                {
+                    "candidate_fact_brief": payload.fact_brief,
+                    "candidate_claim_value": payload.claim_value,
+                    "candidate_claim_contribution": payload.claim_contribution,
+                    "target_purchase_reason_profile": (
+                        target_payload.purchase_reason_profile
+                    ),
+                    "candidate_purchase_reason_profile": (
+                        payload.purchase_reason_profile
+                    ),
+                }
+            )
+            candidates.append(
+                AgentCandidateAnalysisPayload.model_validate(candidate_data)
+            )
         return AgentCompetitorRuntimeProjection(
             competitor_profile_version_id=frozen.competitor_profile_version_id,
             profile_version=frozen.profile_version,
             release_scope_key=frozen.release_scope_key,
             target=frozen.target,
-            target_fact_brief=frozen.target_fact_brief,
-            target_claim_value=frozen.target_claim_value,
-            target_claim_contribution=frozen.target_claim_contribution,
-            candidates=[by_code[code].analysis for code in frozen.analysis_order],
+            target_fact_brief=target_payload.fact_brief,
+            target_claim_value=target_payload.claim_value,
+            target_claim_contribution=target_payload.claim_contribution,
+            candidates=candidates,
             candidate_pool_order=frozen.candidate_pool_order,
             analysis_order=frozen.analysis_order,
             priority_order=frozen.priority_order,
@@ -377,11 +481,62 @@ class CompetitorProfileAgentSnapshotAdapter:
         )
 
 
+def encode_agent_sku_payload(payload: AgentSkuSourcePayload) -> str:
+    frozen = AgentSkuSourcePayload.model_validate(payload.model_dump(mode="json"))
+    raw = json.dumps(
+        frozen.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if len(raw) > AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES:
+        raise ValueError("agent SKU source payload exceeds the storage boundary")
+    buffer = BytesIO()
+    with gzip.GzipFile(
+        fileobj=buffer,
+        mode="wb",
+        compresslevel=1,
+        mtime=0,
+    ) as stream:
+        stream.write(raw)
+    compressed = buffer.getvalue()
+    encoded = base64.b64encode(compressed).decode("ascii")
+    if len(encoded) > AGENT_SNAPSHOT_MAX_COMPRESSED_PAYLOAD_CHARS:
+        raise ValueError("compressed agent SKU payload exceeds the storage boundary")
+    return encoded
+
+
+def decode_agent_sku_payload(snapshot: AgentSkuSnapshot) -> AgentSkuSourcePayload:
+    frozen = AgentSkuSnapshot.model_validate(snapshot.model_dump(mode="json"))
+    try:
+        compressed = base64.b64decode(frozen.payload_b64, validate=True)
+        decoder = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        raw = decoder.decompress(
+            compressed,
+            AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES + 1,
+        )
+    except (ValueError, binascii.Error, zlib.error) as exc:
+        raise ValueError("saved agent SKU payload is not valid compressed JSON") from exc
+    if (
+        len(raw) > AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES
+        or not decoder.eof
+        or decoder.unconsumed_tail
+        or decoder.unused_data
+    ):
+        raise ValueError("decompressed agent SKU payload exceeds the read boundary")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("saved agent SKU payload is not valid JSON") from exc
+    return AgentSkuSourcePayload.model_validate(payload)
+
+
 __all__ = [
     "AGENT_SNAPSHOT_METHOD_VERSION",
     "AGENT_SNAPSHOT_CANDIDATE_LIMIT",
     "AGENT_SNAPSHOT_PRIORITY_LIMIT",
     "AGENT_SNAPSHOT_RULE_VERSION",
+    "AGENT_SNAPSHOT_SKU_PAYLOAD_CODEC",
     "AGENT_SNAPSHOT_SOURCE_VERSION",
     "AgentCandidateAnalysisPayload",
     "AgentCandidateAnalysisRecord",
@@ -392,6 +547,9 @@ __all__ = [
     "AgentEvidenceReceipt",
     "AgentPairIndexItem",
     "AgentSkuIdentity",
+    "AgentSkuSourcePayload",
     "AgentSkuSnapshot",
     "CompetitorProfileAgentSnapshotAdapter",
+    "decode_agent_sku_payload",
+    "encode_agent_sku_payload",
 ]

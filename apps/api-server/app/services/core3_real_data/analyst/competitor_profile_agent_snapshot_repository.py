@@ -177,12 +177,14 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             )
         full = self._read_agent_profile_row(profile_row)
         self._verify_pair_index(profile_row, full)
+        sku_snapshots = self._read_agent_sku_snapshots(full)
         return AgentCompetitorProfileReadResult(
             status="available",
             read_mode="full",
             preview=access_mode == "preview",
             competitor_profile_version_id=version.competitor_profile_version_id,
             full=full,
+            sku_snapshots=sku_snapshots,
         )
 
     def _resolve_agent_version(
@@ -304,7 +306,7 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                     rule_version=AGENT_SNAPSHOT_RULE_VERSION,
                     method_version=AGENT_SNAPSHOT_METHOD_VERSION,
                     snapshot_json=snapshot.model_dump(mode="json"),
-                    module_availability_json=_snapshot_modules(snapshot),
+                    module_availability_json=snapshot.available_modules,
                     evidence_refs_json=_json([row.raw for row in snapshot.evidence]),
                     source_lineage_json={
                         "source_analysis_version": "competitor_set_legacy_analysis_v1",
@@ -488,6 +490,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                     "profile_result_hash": profile.result_hash,
                     "candidate_sku_code": record.candidate_sku_code,
                     "candidate_result_hash": record.result_hash,
+                    "candidate_snapshot_result_hash": (
+                        record.candidate_snapshot_result_hash
+                    ),
                 },
                 analysis_conclusion_strength="supported" if selected else "directional",
                 analysis_score=analysis.business_score,
@@ -631,6 +636,46 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             )
         return profile
 
+    def _read_agent_sku_snapshots(
+        self,
+        profile: AgentCompetitorProfileSnapshot,
+    ) -> list[AgentSkuSnapshot]:
+        model = entities.Core3CompetitorProfileSkuSnapshot
+        expected_codes = {
+            profile.target.sku_code,
+            *(row.candidate_sku_code for row in profile.candidates),
+        }
+        rows = list(
+            self.db.execute(
+                select(model)
+                .where(
+                    model.competitor_profile_version_id
+                    == profile.competitor_profile_version_id
+                )
+                .where(model.sku_code.in_(sorted(expected_codes)))
+                .where(model.method_version == AGENT_SNAPSHOT_METHOD_VERSION)
+            ).scalars()
+        )
+        snapshots = []
+        for row in rows:
+            snapshot = AgentSkuSnapshot.model_validate(row.snapshot_json)
+            if (
+                snapshot.identity.sku_code != row.sku_code
+                or snapshot.snapshot_ref != row.competitor_profile_sku_snapshot_id
+                or snapshot.result_hash != row.result_hash
+                or snapshot.competitor_profile_version_id
+                != profile.competitor_profile_version_id
+            ):
+                raise CompetitorProfileV11IntegrityError(
+                    "saved agent SKU snapshot differs from its row identity"
+                )
+            snapshots.append(snapshot)
+        if {row.identity.sku_code for row in snapshots} != expected_codes:
+            raise CompetitorProfileV11IntegrityError(
+                "saved agent profile is missing shared SKU snapshots"
+            )
+        return snapshots
+
     def _verify_pair_index(
         self,
         profile_row: entities.Core3SkuCompetitorProfile,
@@ -727,19 +772,6 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             pair_index=index,
             profile_result_hash=str(profile_row.analysis_result_hash),
         )
-
-
-def _snapshot_modules(snapshot: AgentSkuSnapshot) -> list[str]:
-    modules = {row.source_module for row in snapshot.evidence}
-    if snapshot.fact_brief:
-        modules.add("sku_fact_brief")
-    if snapshot.claim_value:
-        modules.add("sku_claim_value")
-    if snapshot.claim_contribution:
-        modules.add("claim_contribution")
-    if snapshot.purchase_reason_profile:
-        modules.add("M12D")
-    return sorted(modules)
 
 
 def _purchase_pool_level(payload: dict[str, Any]) -> str:

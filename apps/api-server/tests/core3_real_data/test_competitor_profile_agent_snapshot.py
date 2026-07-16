@@ -27,6 +27,7 @@ from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_repo
 from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_schemas import (
     AGENT_SNAPSHOT_METHOD_VERSION,
     AGENT_SNAPSHOT_RULE_VERSION,
+    CompetitorProfileAgentSnapshotAdapter,
 )
 from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas import (
     CompetitorProfileVersionDraftCreate,
@@ -301,6 +302,7 @@ def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:
         source_result=_source_result(),
         version=version,
     )
+    assert all(not row.evidence and not row.limitations for row in snapshots)
 
     assert repository.write_agent_snapshot_draft(
         profile=profile,
@@ -326,6 +328,22 @@ def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:
     )
     assert full.status == "available"
     assert full.full == profile
+    assert len(full.sku_snapshots) == 3
+    assert full.full.target_fact_brief == {
+        "storage_ref": full.full.target_snapshot_ref
+    }
+    runtime = CompetitorProfileAgentSnapshotAdapter().adapt(
+        full.full,
+        full.sku_snapshots,
+    )
+    assert runtime.target_fact_brief == _source_result()["result"]["competitor_set"][
+        "target_fact_brief"
+    ]
+    assert [row.candidate.sku_code for row in runtime.candidates] == [
+        "TV00000003",
+        "TV00000002",
+    ]
+    assert runtime.candidates[0].candidate_fact_brief["sections"]["market"]
     compact = reader.read(
         CompetitorProfileV11ReadRequest(
             project_id="project-1",

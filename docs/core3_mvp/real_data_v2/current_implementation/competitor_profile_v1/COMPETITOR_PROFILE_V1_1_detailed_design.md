@@ -38,6 +38,14 @@ AgentSnapshotReader -> no-score Adapter -> Pure Renderer
 - `sop_orchestrators.py`：agent snapshot 命中后直接进入 saved renderer；读取路径的召回、分析、打分、角色分配、排序、选择调用数必须为 0。
 - `competitor_answer.py`：saved renderer 只按 `analysis_order` 展示全部候选、按 `priority_order` 取重点竞品；不调用 `_enrich_competitor`、`_sort_key`、`_assign_top_roles` 或 `_select_top_competitors`。
 
+性能与存储合同（agent snapshot method v2）：
+
+- 每个 SKU 的 fact brief、claim value、claim contribution 和采购理由只进入一份 `gzip+base64+json` shared snapshot；编码固定 `mtime=0`，保证 hash 可重复。
+- profile 中目标 SKU 的重资产字段只保存 `target_snapshot_ref`；pair 中候选重资产字段只保存 `candidate_snapshot_ref` 和 snapshot result hash。
+- profile 继续保存购买池、语义/参数/销量重合、价值锚点、替代压力、市场验证、业务得分、角色、门槛结果和三个顺序，不能以压缩为由删除分析结论。
+- full Reader 一次批量读取目标与候选 shared snapshots 并校验引用/hash，Adapter 解压还原成熟智能体 payload；compact Reader 不读取或解压 shared payload。
+- 不允许为每个 pair 重复保存同一 SKU 的 2—3MB 卖点价值原始结构，也不允许在 profile 与 snapshot 各复制一份。
+
 幂等合同：同 version、target 和相同 profile hash 返回 reused；同一键不同结果必须 fail-closed，不能覆盖已保存草稿。正式读取仍只允许 current published；draft 必须显式 version + scope + preview opt-in。
 
 ## 1. 设计结论

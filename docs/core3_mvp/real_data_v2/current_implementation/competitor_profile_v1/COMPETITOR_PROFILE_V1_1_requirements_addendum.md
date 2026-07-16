@@ -21,6 +21,8 @@
 5. 已完成的 V1.1 version、SKU snapshot、profile、pair、selection、Reader 和状态机可以复用；旧 category-wide recall、PairAnalysisCalculator、七类 relation 生成不是本需求的生成路径。
 6. `relation` 行只有在现有智能体实际产出独立关系 assessment 时才保存；当前智能体已保存的竞争角色直接存入 pair/selection，不得为了填满“每 pair 七条”而制造关系结果。
 7. 验收以同一权威输入下现有智能体结果为 golden baseline：候选集合、候选原始 rank、逐款结果 hash、角色、业务得分和 Top 3 必须一致；画像生成时间应接近现有智能体单次分析时间加一次事务落盘，不允许重新装载全品类多模块后再逐 pair 计算。
+8. “原样结构化落盘”指分析信息保真，不等于把同一份大 JSON 在 profile、pair 和每个 SKU snapshot 中重复复制。SKU 级事实、卖点价值和采购理由必须在同一版本内只存一份压缩快照；pair/profile 只保存引用和已算出的双边过程、结论、角色、分数与顺序，读取时无损还原给智能体。
+9. 65E7Q 单 SKU 生成若因重复序列化导致明显偏离“原分析耗时 + 一次落盘”，不得以“已经比全市场方案快”为由通过验收；必须先消除重复 payload、重复 hash 和重复校验。
 
 ## 1. 修改目标
 

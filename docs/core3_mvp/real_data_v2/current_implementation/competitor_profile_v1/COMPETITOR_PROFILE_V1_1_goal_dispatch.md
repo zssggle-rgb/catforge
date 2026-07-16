@@ -10,6 +10,8 @@
 
 G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选池（当前 default20）、逐款完整结果、原始顺序、分析顺序、角色和 Top 3；Repository/Reader/Adapter/智能体 preview 精确回读；读取端现场召回、打分、排序、选择均为 0。单 SKU 时延按“现有智能体分析 + 一次落盘”验收，不再接受全品类多模块预加载。
 
+2026-07-16 首次 agent snapshot v1 虽得到正确 20 款候选与 Top 3，但因把约 40MB 成熟分析 payload 同时复制进 profile 和 21 份 snapshot，总耗时 42.15 秒，G41A 不通过。后续必须使用 method v2 的共享压缩 SKU snapshot + profile/pair 引用结构重新生成新草稿；旧 v1 草稿保持不可变且不得发布。
+
 授权范围：V1.1 需求、设计、开发、测试、精确提交、205 代码与 migration 部署、65E7Q 单 SKU draft 验收、AC 单 SKU draft 验收、双品类通过后的 TV/AC 全量 draft 生成。
 
 不含授权：review、publish、current、deprecated 状态切换；修改或覆盖 V1 草稿；修改旧 M12/M13/M14；重跑 M03B—M12D；重新设计卡片、报告或问答。

@@ -27,7 +27,9 @@ from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_sche
     AgentCompetitorProfileSnapshot,
     AgentEvidenceReceipt,
     AgentSkuIdentity,
+    AgentSkuSourcePayload,
     AgentSkuSnapshot,
+    encode_agent_sku_payload,
 )
 from app.services.core3_real_data.analyst.competitor_profile_input_provider import (
     CompetitorProfileInputProvider,
@@ -441,8 +443,8 @@ def _build_agent_snapshot(
         claim_value=source_set.get("target_claim_value") or {},
         claim_contribution=source_set.get("target_claim_contribution") or {},
         purchase_reason_profile=target_purchase_reason,
-        evidence=_evidence_for_sku(evidence, target.sku_code),
-        limitations=limitations,
+        evidence=[],
+        limitations=[],
         snapshot_ref=snapshot_refs[target.sku_code],
     )
     candidate_snapshots: list[AgentSkuSnapshot] = []
@@ -462,33 +464,42 @@ def _build_agent_snapshot(
             candidate_identity.sku_code,
             target_sku_code=target.sku_code,
         )
-        candidate_snapshots.append(
-            _sku_snapshot(
-                version=version,
-                identity=candidate_identity,
-                fact_brief=analysis.candidate_fact_brief,
-                claim_value=analysis.candidate_claim_value,
-                claim_contribution=analysis.candidate_claim_contribution,
-                purchase_reason_profile=analysis.candidate_purchase_reason_profile,
-                evidence=candidate_evidence,
-                limitations=[],
-                snapshot_ref=snapshot_refs[candidate_identity.sku_code],
-            )
+        candidate_snapshot = _sku_snapshot(
+            version=version,
+            identity=candidate_identity,
+            fact_brief=analysis.candidate_fact_brief,
+            claim_value=analysis.candidate_claim_value,
+            claim_contribution=analysis.candidate_claim_contribution,
+            purchase_reason_profile=analysis.candidate_purchase_reason_profile,
+            evidence=[],
+            limitations=[],
+            snapshot_ref=snapshot_refs[candidate_identity.sku_code],
+        )
+        candidate_snapshots.append(candidate_snapshot)
+        storage_ref = {"storage_ref": candidate_snapshot.snapshot_ref}
+        stored_analysis = analysis.model_copy(
+            update={
+                "candidate_fact_brief": storage_ref,
+                "candidate_claim_value": storage_ref,
+                "candidate_claim_contribution": storage_ref,
+            }
         )
         record_input = stable_hash(
             {
                 "target_sku_code": target.sku_code,
-                "candidate_analysis": analysis.model_dump(mode="json"),
-                "candidate_snapshot_ref": snapshot_refs[candidate_identity.sku_code],
+                "candidate_analysis": stored_analysis.model_dump(mode="json"),
+                "candidate_snapshot_ref": candidate_snapshot.snapshot_ref,
+                "candidate_snapshot_result_hash": candidate_snapshot.result_hash,
             },
-            version="competitor_profile_agent_candidate_input_v1",
+            version="competitor_profile_agent_candidate_input_v2",
         )
         record_data = {
             "candidate_sku_code": candidate_identity.sku_code,
-            "candidate_snapshot_ref": snapshot_refs[candidate_identity.sku_code],
+            "candidate_snapshot_ref": candidate_snapshot.snapshot_ref,
+            "candidate_snapshot_result_hash": candidate_snapshot.result_hash,
             "source_rank": analysis.rank,
             "selected_rank": selected_ranks.get(candidate_identity.sku_code),
-            "analysis": analysis,
+            "analysis": stored_analysis,
             "evidence": candidate_evidence,
             "input_fingerprint": record_input,
         }
@@ -497,7 +508,7 @@ def _build_agent_snapshot(
                 **record_data,
                 result_hash=stable_hash(
                     _model_json(record_data),
-                    version="competitor_profile_agent_candidate_result_v1",
+                    version="competitor_profile_agent_candidate_result_v2",
                 ),
             )
         )
@@ -524,7 +535,7 @@ def _build_agent_snapshot(
             "target_sku_code": target.sku_code,
             "method_version": AGENT_SNAPSHOT_METHOD_VERSION,
         },
-        version="competitor_profile_agent_profile_input_v1",
+        version="competitor_profile_agent_profile_input_v2",
     )
     profile_data = {
         "source": "competitor_profile_v1_1",
@@ -540,10 +551,10 @@ def _build_agent_snapshot(
         "source_batch_ids": version.serving_scope.source_batch_ids,
         "target": target,
         "target_snapshot_ref": target_snapshot.snapshot_ref,
-        "target_fact_brief": fact_brief,
-        "target_claim_value": source_set.get("target_claim_value") or {},
-        "target_claim_contribution": source_set.get("target_claim_contribution")
-        or {},
+        "target_snapshot_result_hash": target_snapshot.result_hash,
+        "target_fact_brief": {"storage_ref": target_snapshot.snapshot_ref},
+        "target_claim_value": {"storage_ref": target_snapshot.snapshot_ref},
+        "target_claim_contribution": {"storage_ref": target_snapshot.snapshot_ref},
         "m12d_consumption": source_set.get("m12d_consumption") or {},
         "candidate_pool_policy": source_set.get("ranking_policy")
         or ["same_size_price_pool"],
@@ -560,7 +571,7 @@ def _build_agent_snapshot(
         **profile_data,
         result_hash=stable_hash(
             _model_json(profile_data),
-            version="competitor_profile_agent_profile_result_v1",
+            version="competitor_profile_agent_profile_result_v2",
         ),
     )
     return profile, [target_snapshot, *candidate_snapshots]
@@ -616,15 +627,29 @@ def _sku_snapshot(
     limitations: list[str],
     snapshot_ref: str,
 ) -> AgentSkuSnapshot:
+    source_payload = AgentSkuSourcePayload(
+        fact_brief=fact_brief,
+        claim_value=claim_value,
+        claim_contribution=claim_contribution,
+        purchase_reason_profile=purchase_reason_profile,
+    )
+    payload_b64 = encode_agent_sku_payload(source_payload)
+    available_modules = []
+    if fact_brief:
+        available_modules.append("sku_fact_brief")
+    if claim_value:
+        available_modules.append("sku_claim_value")
+    if claim_contribution:
+        available_modules.append("claim_contribution")
+    if purchase_reason_profile:
+        available_modules.append("M12D")
     input_fingerprint = stable_hash(
         {
             "identity": identity.model_dump(mode="json"),
-            "fact_brief": fact_brief,
-            "claim_value": claim_value,
-            "claim_contribution": claim_contribution,
-            "purchase_reason_profile": purchase_reason_profile,
+            "payload_codec": "gzip+base64+json",
+            "payload_b64": payload_b64,
         },
-        version="competitor_profile_agent_sku_snapshot_input_v1",
+        version="competitor_profile_agent_sku_snapshot_input_v2",
     )
     data = {
         "schema_version": COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
@@ -634,10 +659,9 @@ def _sku_snapshot(
         "category_code": version.category_code,
         "release_scope_key": version.release_scope_key,
         "identity": identity,
-        "fact_brief": fact_brief,
-        "claim_value": claim_value,
-        "claim_contribution": claim_contribution,
-        "purchase_reason_profile": purchase_reason_profile,
+        "payload_codec": "gzip+base64+json",
+        "payload_b64": payload_b64,
+        "available_modules": available_modules,
         "evidence": evidence,
         "limitations": limitations,
         "snapshot_ref": snapshot_ref,
@@ -647,7 +671,7 @@ def _sku_snapshot(
         **data,
         result_hash=stable_hash(
             _model_json(data),
-            version="competitor_profile_agent_sku_snapshot_result_v1",
+            version="competitor_profile_agent_sku_snapshot_result_v2",
         ),
     )
 
