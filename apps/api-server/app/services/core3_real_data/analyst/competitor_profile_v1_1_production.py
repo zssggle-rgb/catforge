@@ -277,12 +277,14 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         if len(stage.snapshot_sources) != 1:
             raise ValueError("snapshot stage source must be consumed exactly once")
         category_bundle = stage.snapshot_sources.pop()
+        trace_competitor_profile_memory("work_item_after_source_pop")
         snapshot_builder = VersionSkuAnalysisSnapshotBuilder()
         target_snapshot = snapshot_builder.build(
             category_bundle,
             competitor_profile_version_id=competitor_profile_version_id,
             sku_code=target_code,
         )
+        trace_competitor_profile_memory("work_item_after_target_snapshot")
         snapshot_by_sku = {target_code: target_snapshot}
         stage_rows = (
             stage.recall_manifest.candidates,
@@ -307,6 +309,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         gate_evaluator = PairGateEvaluator()
         target_fact_refs: set[str] = set()
         for recall_rank, candidate_code in enumerate(candidate_codes, start=1):
+            if recall_rank == 1:
+                trace_competitor_profile_memory("work_item_pair_1_before_snapshot")
             recalled_candidate = stage.recall_manifest.candidates.pop(0)
             pair_feature = stage.pair_features.pairs.pop(0)
             purchase_pool = stage.purchase_pool.pairs.pop(0)
@@ -317,6 +321,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
                 competitor_profile_version_id=competitor_profile_version_id,
                 sku_code=candidate_code,
             )
+            if recall_rank == 1:
+                trace_competitor_profile_memory("work_item_pair_1_after_snapshot")
             scope = scope_classifier.classify(
                 target_snapshot=target_snapshot,
                 candidate_snapshot=candidate_snapshot,
@@ -336,8 +342,12 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             full_assembly = pair_assembler.assemble(
                 pair_calculator.calculate(source)
             )
+            if recall_rank == 1:
+                trace_competitor_profile_memory("work_item_pair_1_after_assembly")
             assembly = build_authoritative_pair_projection(full_assembly)
             del full_assembly
+            if recall_rank == 1:
+                trace_competitor_profile_memory("work_item_pair_1_after_projection")
             gate = gate_evaluator.evaluate(
                 scope=scope,
                 assembly=assembly,
@@ -362,6 +372,8 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
                     retained_fact_ids=pair_fact_refs,
                 )
             )
+            if recall_rank == 1:
+                trace_competitor_profile_memory("work_item_pair_1_after_gate_projection")
             del (
                 source,
                 recalled_candidate,
