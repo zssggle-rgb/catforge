@@ -31,6 +31,10 @@ from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_sche
     AGENT_SNAPSHOT_RULE_VERSION,
     CompetitorProfileAgentSnapshotAdapter,
 )
+from app.services.core3_real_data.analyst.competitor_profile_lifecycle import (
+    CompetitorProfileLifecycleService,
+    CompetitorProfileReviewNotAllowedError,
+)
 from app.services.core3_real_data.analyst.competitor_profile_persistence_schemas import (
     CompetitorProfileVersionDraftCreate,
 )
@@ -40,6 +44,9 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_reader import 
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import (
     COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION,
+)
+from app.services.core3_real_data.analyst.competitor_profile_schemas import (
+    ReleaseQualityStatus,
 )
 from app.services.core3_real_data.constants import Core3CategoryCode
 from app.services.core3_real_data.repositories import Core3RepositoryContext
@@ -497,6 +504,102 @@ def test_batch_generation_resumes_failures_and_reuses_completed_profiles(
         )
         == 0
     )
+
+
+def _completed_agent_snapshot_version(
+    session: Session,
+) -> tuple[CompetitorProfileAgentSnapshotRepository, str]:
+    repository = _repository(session)
+    version = _version(repository)
+    for index, target in enumerate(("TV00000001", "TV00000004", "TV00000005")):
+        source = _source_result_for_target(target)
+        if index == 0:
+            source["limitations"] = ["fixture evidence limitation"]
+        profile, snapshots = _build_agent_snapshot(
+            source_result=source,
+            version=version,
+        )
+        repository.write_agent_snapshot_draft(
+            profile=profile,
+            sku_snapshots=snapshots,
+        )
+    repository.update_draft_generation_state(
+        version.competitor_profile_version_id,
+        ready_count=2,
+        partial_count=1,
+        blocked_count=0,
+        failed_count=0,
+        pair_count=6,
+        relation_count=0,
+        selection_count=6,
+        processing_status="success",
+    )
+    return repository, version.competitor_profile_version_id
+
+
+def test_agent_snapshot_limited_release_uses_method_specific_integrity_gate(
+    session: Session,
+) -> None:
+    repository, version_id = _completed_agent_snapshot_version(session)
+    lifecycle = CompetitorProfileLifecycleService(repository.context)
+
+    reviewed = lifecycle.review_version(
+        competitor_profile_version_id=version_id,
+        reviewed_by="competitor-profile-reviewer",
+        release_quality_status=ReleaseQualityStatus.LIMITED,
+    )
+    assert reviewed.release_status == "review"
+    assert reviewed.release_quality_status == "limited"
+
+    published = lifecycle.publish_version(
+        competitor_profile_version_id=version_id,
+        published_by="competitor-profile-publisher",
+        allow_limited=True,
+        release_note_cn="Agent snapshot V2 limited release fixture.",
+    )
+    assert published.release_status == "published"
+    assert published.is_current is False
+
+    current = lifecycle.set_current_version(
+        competitor_profile_version_id=version_id,
+        current_by="competitor-profile-approver",
+        expected_current_version_id=None,
+    )
+    assert current.is_current is True
+    formal = repository.read_agent_snapshot(
+        target_sku_code="TV00000001",
+        read_mode="compact",
+        access_mode="formal",
+    )
+    assert formal.status == "available"
+    assert formal.preview is False
+
+
+def test_agent_snapshot_release_gate_detects_selection_hash_tampering(
+    session: Session,
+) -> None:
+    repository, version_id = _completed_agent_snapshot_version(session)
+    selection = session.execute(
+        select(entities.Core3SkuCompetitorProfileSelection)
+        .where(
+            entities.Core3SkuCompetitorProfileSelection.competitor_profile_version_id
+            == version_id
+        )
+        .limit(1)
+    ).scalar_one()
+    selection.result_hash = "tampered-selection-hash"
+    session.flush()
+    lifecycle = CompetitorProfileLifecycleService(repository.context)
+
+    with pytest.raises(
+        CompetitorProfileReviewNotAllowedError,
+        match="agent_selection_index_mismatch",
+    ):
+        lifecycle.review_version(
+            competitor_profile_version_id=version_id,
+            reviewed_by="competitor-profile-reviewer",
+            release_quality_status=ReleaseQualityStatus.LIMITED,
+        )
 
 
 def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:

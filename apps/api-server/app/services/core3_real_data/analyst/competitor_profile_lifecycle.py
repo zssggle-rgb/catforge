@@ -12,6 +12,9 @@ from app.models import entities
 from app.services.core3_real_data.analyst.competitor_profile_diff import (
     CompetitorProfileDiffService,
 )
+from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_schemas import (
+    AGENT_SNAPSHOT_METHOD_VERSION,
+)
 from app.services.core3_real_data.analyst.competitor_profile_materializer_schemas import (
     TargetMaterializationStatus,
 )
@@ -31,6 +34,7 @@ from app.services.core3_real_data.analyst.competitor_profile_repositories import
     CompetitorProfileNotFoundError,
     CompetitorProfileRepository,
     CompetitorProfileVersionNotFoundError,
+    _version_record,
 )
 from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     ReleaseQualityStatus,
@@ -184,7 +188,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
                 version.release_quality_status == quality
                 and version.reviewed_by == actor
             ):
-                return self.repository.get_version_by_id(competitor_profile_version_id)
+                return self._version_record_by_id(competitor_profile_version_id)
             raise CompetitorProfileReviewNotAllowedError(
                 "reviewed versions are immutable"
             )
@@ -228,7 +232,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             is_current=False,
         )
         self.db.flush()
-        return self.repository.get_version_by_id(competitor_profile_version_id)
+        return self._version_record_by_id(competitor_profile_version_id)
 
     def publish_version(
         self,
@@ -249,7 +253,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             if version.published_by == actor and (
                 release_note_cn is None or release_note_cn == version.release_note_cn
             ):
-                return self.repository.get_version_by_id(competitor_profile_version_id)
+                return self._version_record_by_id(competitor_profile_version_id)
             raise CompetitorProfilePublishNotAllowedError(
                 "published version metadata is immutable"
             )
@@ -282,7 +286,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             is_current=False,
         )
         self.db.flush()
-        return self.repository.get_version_by_id(competitor_profile_version_id)
+        return self._version_record_by_id(competitor_profile_version_id)
 
     def set_current_version(
         self,
@@ -310,7 +314,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             current.competitor_profile_version_id
             == version.competitor_profile_version_id
         ):
-            return self.repository.get_version_by_id(competitor_profile_version_id)
+            return self._version_record_by_id(competitor_profile_version_id)
         actual_current_id = (
             current.competitor_profile_version_id if current is not None else None
         )
@@ -350,7 +354,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
                 is_current=True,
             )
             self.db.flush()
-        return self.repository.get_version_by_id(competitor_profile_version_id)
+        return self._version_record_by_id(competitor_profile_version_id)
 
     def deprecate_version(
         self,
@@ -372,7 +376,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             if version.deprecated_by == actor and reason_note in (
                 version.release_note_cn or ""
             ):
-                return self.repository.get_version_by_id(competitor_profile_version_id)
+                return self._version_record_by_id(competitor_profile_version_id)
             raise CompetitorProfileDeprecateNotAllowedError(
                 "deprecated version metadata is immutable"
             )
@@ -392,7 +396,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             is_current=False,
         )
         self.db.flush()
-        return self.repository.get_version_by_id(competitor_profile_version_id)
+        return self._version_record_by_id(competitor_profile_version_id)
 
     def _review_integrity_violations(
         self,
@@ -400,7 +404,12 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
     ) -> list[str]:
         version_id = version.competitor_profile_version_id
         violations: list[str] = []
-        if version.processing_status != "completed":
+        expected_processing_status = (
+            "success"
+            if version.method_version == AGENT_SNAPSHOT_METHOD_VERSION
+            else "completed"
+        )
+        if version.processing_status != expected_processing_status:
             violations.append("generation_not_completed")
         if version.sku_count <= 0:
             violations.append("authoritative_sku_count_empty")
@@ -452,7 +461,12 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
         if sum(state_counts.values()) + version.failed_count != version.sku_count:
             violations.append("status_count_mismatch")
 
-        for model, payload_column in INTEGRITY_PAYLOAD_COLUMNS:
+        payload_columns = (
+            ((entities.Core3SkuCompetitorProfilePair, "pair_payload_json"),)
+            if version.method_version == AGENT_SNAPSHOT_METHOD_VERSION
+            else INTEGRITY_PAYLOAD_COLUMNS
+        )
+        for model, payload_column in payload_columns:
             violations.extend(
                 self._row_integrity_violations(
                     model,
@@ -460,7 +474,9 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
                     version,
                 )
             )
-        if self._invalid_relation_group_count(version_id):
+        if version.method_version == AGENT_SNAPSHOT_METHOD_VERSION:
+            violations.extend(self._agent_snapshot_integrity_violations(version))
+        elif self._invalid_relation_group_count(version_id):
             violations.append("pair_relation_cardinality_invalid")
         if self._invalid_selection_ranks(version_id):
             violations.append("selection_rank_sequence_invalid")
@@ -525,11 +541,13 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
                 model.input_fingerprint,
                 model.result_hash,
                 getattr(model, payload_column),
-            ).where(
+            )
+            .where(
                 model.competitor_profile_version_id
                 == version.competitor_profile_version_id
             )
-        ).all()
+            .execution_options(yield_per=50)
+        )
         expected_scope = (
             version.project_id,
             version.category_code,
@@ -548,7 +566,8 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             if tuple(row[:9]) != expected_scope:
                 scope_mismatch = True
             payload = row[11] or {}
-            if row[10] != payload.get("result_hash"):
+            payload_result_hash = payload.get("result_hash")
+            if row[10] != payload_result_hash:
                 hash_mismatch = True
             payload_input = payload.get("input_fingerprint")
             if payload_input is not None and row[9] != payload_input:
@@ -563,6 +582,204 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
         if input_mismatch:
             violations.append(f"{prefix}_input_fingerprint_mismatch")
         return violations
+
+    def _agent_snapshot_integrity_violations(
+        self,
+        version: entities.Core3CompetitorProfileVersion,
+    ) -> list[str]:
+        """Validate agent-aligned graph indexes without loading analytical JSON."""
+
+        version_id = version.competitor_profile_version_id
+        violations: set[str] = set()
+        if version.relation_count != 0 or self._count(
+            entities.Core3SkuCompetitorProfileRelation, version_id
+        ):
+            violations.add("agent_snapshot_relation_rows_present")
+
+        snapshot_model = entities.Core3CompetitorProfileSkuSnapshot
+        snapshot_rows = self.db.execute(
+            select(
+                snapshot_model.competitor_profile_sku_snapshot_id,
+                snapshot_model.sku_code,
+                snapshot_model.project_id,
+                snapshot_model.category_code,
+                snapshot_model.release_scope_key,
+                snapshot_model.profile_version,
+                snapshot_model.schema_version,
+                snapshot_model.rule_version,
+                snapshot_model.method_version,
+                snapshot_model.result_hash,
+                snapshot_model.snapshot_json["snapshot_ref"].as_string(),
+                snapshot_model.snapshot_json["identity"]["sku_code"].as_string(),
+                snapshot_model.snapshot_json[
+                    "competitor_profile_version_id"
+                ].as_string(),
+                snapshot_model.snapshot_json["result_hash"].as_string(),
+            )
+            .where(snapshot_model.competitor_profile_version_id == version_id)
+            .execution_options(yield_per=100)
+        )
+        expected_scope = (
+            version.project_id,
+            version.category_code,
+            version.release_scope_key,
+            version.profile_version,
+            version.schema_version,
+            version.rule_version,
+            version.method_version,
+        )
+        for row in snapshot_rows:
+            if tuple(row[2:9]) != expected_scope:
+                violations.add("agent_snapshot_scope_mismatch")
+            if (
+                row[10] != row[0]
+                or row[11] != row[1]
+                or row[12] != version_id
+                or row[13] != row[9]
+            ):
+                violations.add("agent_snapshot_payload_mismatch")
+
+        profile_model = entities.Core3SkuCompetitorProfile
+        profile_rows = self.db.execute(
+            select(
+                profile_model.sku_competitor_profile_id,
+                profile_model.target_sku_code,
+                profile_model.analysis_candidate_count,
+                profile_model.result_hash,
+                profile_model.analysis_result_hash,
+                profile_model.project_id,
+                profile_model.category_code,
+                profile_model.release_scope_key,
+                profile_model.profile_version,
+                profile_model.schema_version,
+                profile_model.rule_version,
+                profile_model.method_version,
+                profile_model.profile_payload_json[
+                    "competitor_profile_version_id"
+                ].as_string(),
+                profile_model.profile_payload_json["target"]["sku_code"].as_string(),
+                profile_model.profile_payload_json["release_scope_key"].as_string(),
+                profile_model.profile_payload_json["profile_version"].as_string(),
+                profile_model.profile_payload_json["result_hash"].as_string(),
+                profile_model.profile_payload_json["target_snapshot_ref"].as_string(),
+            )
+            .where(profile_model.competitor_profile_version_id == version_id)
+            .execution_options(yield_per=100)
+        )
+        profile_ids: set[str] = set()
+        target_snapshot_refs: set[str] = set()
+        for row in profile_rows:
+            profile_ids.add(row[0])
+            target_snapshot_refs.add(row[17])
+            if (
+                row[4] != row[3]
+                or tuple(row[5:12]) != expected_scope
+                or row[12] != version_id
+                or row[13] != row[1]
+                or row[14] != version.release_scope_key
+                or row[15] != version.profile_version
+                or row[16] != row[3]
+            ):
+                violations.add("agent_profile_payload_mismatch")
+
+        pair_model = entities.Core3SkuCompetitorProfilePair
+        pair_counts = (
+            select(
+                pair_model.sku_competitor_profile_id.label("profile_id"),
+                func.count().label("pair_count"),
+            )
+            .where(pair_model.competitor_profile_version_id == version_id)
+            .group_by(pair_model.sku_competitor_profile_id)
+            .subquery()
+        )
+        candidate_count_mismatches = int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(profile_model)
+                .outerjoin(
+                    pair_counts,
+                    pair_counts.c.profile_id == profile_model.sku_competitor_profile_id,
+                )
+                .where(profile_model.competitor_profile_version_id == version_id)
+                .where(
+                    func.coalesce(pair_counts.c.pair_count, 0)
+                    != func.coalesce(profile_model.analysis_candidate_count, 0)
+                )
+            )
+            or 0
+        )
+        if candidate_count_mismatches:
+            violations.add("agent_profile_candidate_count_mismatch")
+
+        snapshot_ids = set(
+            self.db.execute(
+                select(snapshot_model.competitor_profile_sku_snapshot_id).where(
+                    snapshot_model.competitor_profile_version_id == version_id
+                )
+            ).scalars()
+        )
+        if target_snapshot_refs - snapshot_ids:
+            violations.add("agent_profile_target_snapshot_missing")
+        pair_snapshot_refs = self.db.execute(
+            select(
+                pair_model.sku_competitor_profile_id,
+                pair_model.target_snapshot_ref,
+                pair_model.candidate_snapshot_ref,
+                pair_model.analysis_result_hash,
+                pair_model.result_hash,
+            )
+            .where(pair_model.competitor_profile_version_id == version_id)
+            .execution_options(yield_per=500)
+        )
+        for (
+            profile_id,
+            target_ref,
+            candidate_ref,
+            analysis_hash,
+            result_hash,
+        ) in pair_snapshot_refs:
+            if profile_id not in profile_ids:
+                violations.add("agent_pair_profile_missing")
+            if target_ref not in snapshot_ids:
+                violations.add("agent_pair_target_snapshot_missing")
+            if candidate_ref not in snapshot_ids:
+                violations.add("agent_pair_candidate_snapshot_missing")
+            if analysis_hash != result_hash:
+                violations.add("agent_pair_analysis_hash_mismatch")
+
+        selection_model = entities.Core3SkuCompetitorProfileSelection
+        selection_mismatches = int(
+            self.db.scalar(
+                select(func.count())
+                .select_from(selection_model)
+                .join(
+                    pair_model,
+                    pair_model.sku_competitor_profile_pair_id
+                    == selection_model.sku_competitor_profile_pair_id,
+                )
+                .where(selection_model.competitor_profile_version_id == version_id)
+                .where(
+                    (
+                        selection_model.sku_competitor_profile_id
+                        != pair_model.sku_competitor_profile_id
+                    )
+                    | (
+                        selection_model.candidate_sku_code
+                        != pair_model.candidate_sku_code
+                    )
+                    | (selection_model.result_hash != pair_model.result_hash)
+                    | (pair_model.selected.is_(False))
+                    | (
+                        selection_model.selection_rank
+                        != pair_model.pair_payload_json["selected_rank"].as_integer()
+                    )
+                )
+            )
+            or 0
+        )
+        if selection_mismatches:
+            violations.add("agent_selection_index_mismatch")
+        return sorted(violations)
 
     def _count(
         self,
@@ -625,8 +842,7 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
             .group_by(model.sku_competitor_profile_id)
         ).all()
         return any(
-            count != minimum or count != maximum
-            for _, count, minimum, maximum in groups
+            minimum != 1 or maximum != count for _, count, minimum, maximum in groups
         )
 
     def _selected_pair_codes(self, version_id: str) -> set[tuple[str, str]]:
@@ -670,6 +886,12 @@ class CompetitorProfileLifecycleService(Core3BaseRepository):
                 f"competitor profile version not found: {version_id}"
             )
         return row
+
+    def _version_record_by_id(
+        self,
+        version_id: str,
+    ) -> CompetitorProfileVersionRecord:
+        return _version_record(self._version_by_id(version_id))
 
     def _lock_release_scope(self, release_scope_key: str) -> None:
         project = self.db.execute(
