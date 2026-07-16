@@ -134,6 +134,11 @@ def test_production_work_item_preserves_the_full_candidate_universe() -> None:
         row.candidate_sku_code for row in item.selection_result.pair_decisions
     ] == expected
     assert len(item.candidate_snapshots) == len(expected)
+    assert item.target_snapshot.storage_projection_mode == "authoritative_typed"
+    assert all(
+        row.storage_projection_mode == "authoritative_typed"
+        for row in item.candidate_snapshots
+    )
     assert item.selection_result.analysis_candidate_count == len(expected)
     assert item.selection_result.selected_count == 3
     assert all(

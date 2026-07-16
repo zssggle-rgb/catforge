@@ -105,8 +105,10 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
     PairSelectionInput,
 )
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_snapshot_builder import (
+    SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION,
     SNAPSHOT_BUILDER_VERSION,
     VersionSkuAnalysisSnapshotBuilder,
+    build_authoritative_snapshot_projection,
 )
 from app.services.core3_real_data.analyst.competitor_profile_value_substitution import (
     ValueSubstitutionEvidenceEvaluator,
@@ -147,7 +149,7 @@ class CompetitorProfileV11SnapshotStage:
     price_volume_pressure: PriceVolumePressureBundle
     legacy_top3: tuple[LegacyTopCompetitorReference, ...]
     legacy_selection_result_hash: str
-    snapshots: tuple[VersionSkuAnalysisSnapshot, ...]
+    snapshots: list[VersionSkuAnalysisSnapshot]
 
 
 @dataclass(frozen=True)
@@ -231,7 +233,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         candidate_codes = tuple(
             row.candidate.sku_code for row in prepared.pair_features.pairs
         )
-        snapshots = tuple(
+        snapshots = list(
             VersionSkuAnalysisSnapshotBuilder().build_many(
                 prepared.category_bundle,
                 competitor_profile_version_id=competitor_profile_version_id,
@@ -279,6 +281,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
         target_code = stage.target_sku_code
         candidate_codes = [row.candidate.sku_code for row in stage.pair_features.pairs]
         snapshot_by_sku = {row.identity_market.sku_code: row for row in stage.snapshots}
+        stage.snapshots.clear()
         target_snapshot = snapshot_by_sku[target_code]
         stage_rows = (
             stage.recall_manifest.candidates,
@@ -345,6 +348,9 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
             selection_inputs.append(
                 PairSelectionInput(assembly=assembly, gate_evaluation=gate)
             )
+            snapshot_by_sku[candidate_code] = (
+                build_authoritative_snapshot_projection(candidate_snapshot)
+            )
             del (
                 source,
                 recalled_candidate,
@@ -352,6 +358,7 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
                 purchase_pool,
                 value_substitution,
                 price_volume_pressure,
+                candidate_snapshot,
             )
             if recall_rank % 8 == 0:
                 _release_memory()
@@ -385,9 +392,13 @@ class CompetitorProfileV11ProductionWorkItemBuilder:
                 "legacy_selection_result_hash": stage.legacy_selection_result_hash,
             },
         )
+        projected_target_snapshot = build_authoritative_snapshot_projection(
+            target_snapshot
+        )
+        snapshot_by_sku[target_code] = projected_target_snapshot
         return CompetitorProfileV11GenerationWorkItem(
             profile_version=profile_context,
-            target_snapshot=target_snapshot,
+            target_snapshot=projected_target_snapshot,
             candidate_snapshots=[snapshot_by_sku[code] for code in candidate_codes],
             pair_assemblies=assemblies,
             gate_evaluations=gates,
@@ -508,6 +519,9 @@ class CompetitorProfileV11ProductionService:
             "v1_1_selector": COMPETITOR_PROFILE_V1_1_SELECTION_METHOD_VERSION,
             "v1_1_selector_config": (COMPETITOR_PROFILE_V1_1_SELECTION_CONFIG_VERSION),
             "v1_1_snapshot_builder": SNAPSHOT_BUILDER_VERSION,
+            "v1_1_snapshot_projection": (
+                SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION
+            ),
             "v1_1_orchestrator": PRODUCTION_ORCHESTRATOR_VERSION,
         }
         version_input_fingerprint = stable_hash(

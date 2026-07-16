@@ -56,6 +56,9 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_selection impo
     assert_competitor_selection_result_integrity,
     assert_pair_selection_integrity,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_snapshot_builder import (
+    snapshot_expected_result_hash,
+)
 from app.services.core3_real_data.hash_utils import stable_hash
 
 
@@ -902,13 +905,7 @@ def _assert_snapshot_hash(snapshot: VersionSkuAnalysisSnapshot) -> None:
         },
         version="competitor_profile_v1_1_sku_snapshot_ref_v1",
     )
-    expected_result = stable_hash(
-        snapshot.model_dump(
-            mode="json",
-            exclude={"schema_version", "result_hash"},
-        ),
-        version="competitor_profile_v1_1_sku_snapshot_result_v1",
-    )
+    expected_result = snapshot_expected_result_hash(snapshot)
     if snapshot.snapshot_ref != expected_ref or snapshot.result_hash != expected_result:
         raise CompetitorProfileV11MaterializationError(
             f"G32 SKU snapshot hash does not close: {snapshot.identity_market.sku_code}"

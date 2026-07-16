@@ -49,6 +49,9 @@ from app.services.core3_real_data.hash_utils import stable_hash
 
 
 SNAPSHOT_BUILDER_VERSION = "competitor_profile_v1_1_sku_snapshot_builder_v1"
+SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION = (
+    "competitor_profile_v1_1_sku_snapshot_authoritative_projection_v1"
+)
 
 _REVIEW_STATUSES = {
     "blocked",
@@ -262,6 +265,73 @@ class VersionSkuAnalysisSnapshotBuilder:
             )
             for sku_code in requested
         ]
+
+
+def build_authoritative_snapshot_projection(
+    snapshot: VersionSkuAnalysisSnapshot,
+) -> VersionSkuAnalysisSnapshot:
+    """Retain typed SKU facts and lineage without legacy/raw duplicate bags."""
+
+    if snapshot.storage_projection_mode != "full":
+        raise VersionSkuAnalysisSnapshotBuildError(
+            "only a full G32 snapshot can create an authoritative projection"
+        )
+    payload = snapshot.model_dump(
+        mode="json",
+        exclude={
+            "schema_version",
+            "storage_projection_mode",
+            "source_full_result_hash",
+            "result_hash",
+        },
+    )
+    _strip_snapshot_duplicate_payloads(payload)
+    payload["semantic_profiles"] = {}
+    fact_sections = payload.get("fact_sections")
+    if isinstance(fact_sections, dict):
+        for key in ("evidence_sources", "sections", "sku", "legacy_payload"):
+            fact_sections[key] = [] if key == "evidence_sources" else {}
+    payload.update(
+        {
+            "storage_projection_mode": "authoritative_typed",
+            "source_full_result_hash": snapshot.result_hash,
+        }
+    )
+    return VersionSkuAnalysisSnapshot.model_validate(
+        {
+            **payload,
+            "result_hash": stable_hash(
+                payload,
+                version="competitor_profile_v1_1_sku_snapshot_result_v1",
+            ),
+        }
+    )
+
+
+def snapshot_expected_result_hash(snapshot: VersionSkuAnalysisSnapshot) -> str:
+    exclude = {"schema_version", "result_hash"}
+    if snapshot.storage_projection_mode == "full":
+        exclude.update({"storage_projection_mode", "source_full_result_hash"})
+    return stable_hash(
+        snapshot.model_dump(mode="json", exclude=exclude),
+        version="competitor_profile_v1_1_sku_snapshot_result_v1",
+    )
+
+
+def _strip_snapshot_duplicate_payloads(value: Any) -> None:
+    if isinstance(value, dict):
+        for key, child in list(value.items()):
+            normalized = str(key).lower()
+            if normalized == "raw_details" or normalized == "legacy_payload" or (
+                normalized.startswith("legacy_")
+                and normalized.endswith("_payload")
+            ):
+                value[key] = {}
+            else:
+                _strip_snapshot_duplicate_payloads(child)
+    elif isinstance(value, list):
+        for child in value:
+            _strip_snapshot_duplicate_payloads(child)
 
 
 def _market_snapshots(
@@ -2352,7 +2422,10 @@ def _canonical_json(value: Any) -> str:
 
 
 __all__ = [
+    "SNAPSHOT_AUTHORITATIVE_PROJECTION_VERSION",
     "SNAPSHOT_BUILDER_VERSION",
     "VersionSkuAnalysisSnapshotBuildError",
     "VersionSkuAnalysisSnapshotBuilder",
+    "build_authoritative_snapshot_projection",
+    "snapshot_expected_result_hash",
 ]

@@ -924,6 +924,8 @@ class VersionSkuAnalysisSnapshot(CompetitorProfileV11BaseModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     input_fingerprint: str = Field(min_length=1)
+    storage_projection_mode: Literal["full", "authoritative_typed"] = "full"
+    source_full_result_hash: str | None = None
     result_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -941,6 +943,15 @@ class VersionSkuAnalysisSnapshot(CompetitorProfileV11BaseModel):
                 and payload.sku_code != self.identity_market.sku_code
             ):
                 raise ValueError("snapshot child SKU must match identity")
+        if self.storage_projection_mode == "full":
+            if self.source_full_result_hash is not None:
+                raise ValueError(
+                    "full SKU snapshots cannot reference a projected source"
+                )
+        elif not self.source_full_result_hash:
+            raise ValueError(
+                "authoritative SKU projections require the full source result hash"
+            )
         return self
 
 
