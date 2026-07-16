@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
@@ -295,6 +296,164 @@ def _source_result() -> dict:
     }
 
 
+def _source_result_for_target(sku_code: str) -> dict:
+    source = deepcopy(_source_result())
+    source["target"]["sku_code"] = sku_code
+    source["target"]["model_name"] = sku_code
+    for receipt in source["evidence"]:
+        receipt["sku_code"] = sku_code
+    return source
+
+
+def test_zero_candidate_snapshot_roundtrip_and_business_answer(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    version = _version(repository)
+    source = _source_result_for_target("TV00000001")
+    source["result"]["competitor_set"]["candidates"] = []
+    source["result"]["competitor_answer"]["all_candidates"] = []
+    source["result"]["competitor_answer"]["top_competitors"] = []
+    profile, snapshots = _build_agent_snapshot(
+        source_result=source,
+        version=version,
+    )
+    assert profile.candidates == []
+    assert profile.candidate_pool_order == []
+    assert profile.analysis_order == []
+    assert profile.priority_order == []
+    assert len(snapshots) == 1
+    assert repository.write_agent_snapshot_draft(
+        profile=profile,
+        sku_snapshots=snapshots,
+    )
+    compact = repository.read_agent_snapshot(
+        target_sku_code="TV00000001",
+        read_mode="compact",
+        access_mode="preview",
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        release_scope_key=version.release_scope_key,
+    )
+    assert compact.status == "available"
+    assert compact.compact is not None
+    assert compact.compact.candidate_count == 0
+    assert compact.compact.pair_index == []
+    full = repository.read_agent_snapshot(
+        target_sku_code="TV00000001",
+        read_mode="full",
+        access_mode="preview",
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        release_scope_key=version.release_scope_key,
+    )
+    assert full.status == "available"
+    assert full.full is not None
+    runtime = CompetitorProfileAgentSnapshotAdapter().adapt(
+        full.full,
+        full.sku_snapshots,
+    )
+    assert runtime.candidates == []
+    answer = render_competitor_answer_from_saved_agent_analysis(
+        target=runtime.target.model_dump(mode="json"),
+        target_fact_brief=runtime.target_fact_brief,
+        target_claim_value=runtime.target_claim_value,
+        target_claim_contribution=runtime.target_claim_contribution,
+        candidates=[],
+        priority_order=[],
+        with_report="none",
+    )
+    assert "当前没有足够证据形成稳定重点竞品" in answer["short_answer"]
+    saved = session.execute(
+        select(entities.Core3SkuCompetitorProfile).where(
+            entities.Core3SkuCompetitorProfile.target_sku_code == "TV00000001"
+        )
+    ).scalar_one()
+    assert saved.conclusion_state == "no_priority_competitor"
+    assert saved.no_conclusion_reason_json["reason_code"] == "no_market_candidates"
+
+
+def test_batch_generation_resumes_failures_and_reuses_completed_profiles(
+    session: Session,
+    monkeypatch,
+) -> None:
+    repository = _repository(session)
+    version = _version(repository)
+
+    class InputProvider:
+        @staticmethod
+        def build_production_input_request():
+            raise AssertionError("batch scope should be prepared once")
+
+    service = CompetitorProfileAgentSnapshotGenerationService(
+        repository=repository,
+        input_provider=InputProvider(),
+    )
+    monkeypatch.setattr(
+        service,
+        "_prepare_scope",
+        lambda: (version.serving_scope, object()),
+    )
+    targets = ["TV00000001", "TV00000004", "TV00000005"]
+    monkeypatch.setattr(service, "_authoritative_target_codes", lambda _: targets)
+    monkeypatch.setattr(service, "_ensure_version", lambda **_: version)
+    attempts: dict[str, int] = {}
+
+    def run_existing(*, target_sku_code: str, **_):
+        attempts[target_sku_code] = attempts.get(target_sku_code, 0) + 1
+        if target_sku_code == "TV00000004" and attempts[target_sku_code] == 1:
+            raise RuntimeError("fixture transient failure")
+        return _source_result_for_target(target_sku_code)
+
+    monkeypatch.setattr(service, "_run_existing_agent", run_existing)
+    progress: list[dict] = []
+    first = service.generate_batch_draft(
+        profile_version=version.profile_version,
+        generated_by="pytest",
+        checkpoint_every=1,
+        progress_callback=progress.append,
+    )
+    assert first.generated_count == 2
+    assert first.reused_count == 0
+    assert first.failure_codes == (("TV00000004", "RuntimeError"),)
+    assert first.version.processing_status == "failed"
+    assert progress[-1]["processed_count"] == 3
+    assert progress[-1]["failure_count"] == 1
+
+    resumed = service.generate_batch_draft(
+        profile_version=version.profile_version,
+        generated_by="pytest",
+        checkpoint_every=2,
+    )
+    assert resumed.generated_count == 1
+    assert resumed.reused_count == 2
+    assert resumed.failure_codes == ()
+    assert resumed.version.processing_status == "success"
+    assert attempts == {
+        "TV00000001": 1,
+        "TV00000004": 2,
+        "TV00000005": 1,
+    }
+    profiles = list(
+        session.execute(
+            select(entities.Core3SkuCompetitorProfile.target_sku_code)
+            .where(
+                entities.Core3SkuCompetitorProfile.competitor_profile_version_id
+                == version.competitor_profile_version_id
+            )
+            .order_by(entities.Core3SkuCompetitorProfile.target_sku_code)
+        ).scalars()
+    )
+    assert profiles == targets
+    assert (
+        session.scalar(
+            select(entities.Core3CompetitorProfileVersion.failed_count).where(
+                entities.Core3CompetitorProfileVersion.competitor_profile_version_id
+                == version.competitor_profile_version_id
+            )
+        )
+        == 0
+    )
+
+
 def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:
     repository = _repository(session)
     version = _version(repository)
@@ -329,16 +488,15 @@ def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:
     assert full.status == "available"
     assert full.full == profile
     assert len(full.sku_snapshots) == 3
-    assert full.full.target_fact_brief == {
-        "storage_ref": full.full.target_snapshot_ref
-    }
+    assert full.full.target_fact_brief == {"storage_ref": full.full.target_snapshot_ref}
     runtime = CompetitorProfileAgentSnapshotAdapter().adapt(
         full.full,
         full.sku_snapshots,
     )
-    assert runtime.target_fact_brief == _source_result()["result"]["competitor_set"][
-        "target_fact_brief"
-    ]
+    assert (
+        runtime.target_fact_brief
+        == _source_result()["result"]["competitor_set"]["target_fact_brief"]
+    )
     assert [row.candidate.sku_code for row in runtime.candidates] == [
         "TV00000003",
         "TV00000002",
@@ -417,9 +575,9 @@ def test_selected_source_review_state_is_preserved(session: Session) -> None:
     repository = _repository(session)
     version = _version(repository)
     source = _source_result()
-    source["result"]["competitor_answer"]["top_competitors"][0][
-        "m12d_consumption"
-    ]["requires_review"] = True
+    source["result"]["competitor_answer"]["top_competitors"][0]["m12d_consumption"][
+        "requires_review"
+    ] = True
     profile, snapshots = _build_agent_snapshot(
         source_result=source,
         version=version,
@@ -489,12 +647,14 @@ def test_saved_renderer_does_not_reanalyze_or_reorder(monkeypatch) -> None:
         candidates=candidates,
         priority_order=["TV00000002", "TV00000003"],
     )
-    assert [
-        row["candidate"]["sku_code"] for row in answer["all_candidates"]
-    ] == ["TV00000003", "TV00000002"]
-    assert [
-        row["candidate"]["sku_code"] for row in answer["top_competitors"]
-    ] == ["TV00000002", "TV00000003"]
+    assert [row["candidate"]["sku_code"] for row in answer["all_candidates"]] == [
+        "TV00000003",
+        "TV00000002",
+    ]
+    assert [row["candidate"]["sku_code"] for row in answer["top_competitors"]] == [
+        "TV00000002",
+        "TV00000003",
+    ]
 
 
 def test_competitor_agent_preview_consumes_saved_profile_only(
@@ -561,9 +721,10 @@ def test_competitor_agent_preview_consumes_saved_profile_only(
         "TV00000002",
         "TV00000003",
     ]
-    assert [
-        row["candidate"]["sku_code"] for row in captured["candidates"]
-    ] == ["TV00000003", "TV00000002"]
+    assert [row["candidate"]["sku_code"] for row in captured["candidates"]] == [
+        "TV00000003",
+        "TV00000002",
+    ]
     assert [step["step_code"] for step in result["sop_steps"]] == [
         "resolve-sku",
         "competitor-profile-read",

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import gc
+from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.models import entities
 from app.services.core3_real_data.analyst.analyst_repository import (
@@ -58,6 +61,25 @@ class AgentSnapshotGenerationResult:
     selected_sku_codes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class AgentSnapshotBatchGenerationResult:
+    version: CompetitorProfileVersionRecord
+    target_count: int
+    generated_count: int
+    reused_count: int
+    failure_codes: tuple[tuple[str, str], ...]
+    last_target_sku_code: str | None
+
+
+class AgentSnapshotBatchAlreadyRunningError(RuntimeError):
+    """Raised when another writer owns the category/scope batch lock."""
+
+
+AGENT_SNAPSHOT_BATCH_WRITER_LOCK_KEY = (
+    f"catforge:{AGENT_SNAPSHOT_METHOD_VERSION}:batch_writer"
+)
+
+
 class CompetitorProfileAgentSnapshotGenerationService:
     """Run ``competitor-set`` once, type it, and save that exact result."""
 
@@ -69,6 +91,21 @@ class CompetitorProfileAgentSnapshotGenerationService:
     ) -> None:
         self.repository = repository
         self.input_provider = input_provider
+        self._prepared_scope: (
+            tuple[
+                ServingScope,
+                entities.Core3PurchaseReasonProfileVersion,
+            ]
+            | None
+        ) = None
+        self._agent_runner_cache: (
+            tuple[
+                str,
+                CatForgeAnalystService,
+                Any,
+            ]
+            | None
+        ) = None
 
     def generate_single_draft(
         self,
@@ -80,9 +117,7 @@ class CompetitorProfileAgentSnapshotGenerationService:
         target_code = target_sku_code.strip().upper()
         if not target_code:
             raise ValueError("target SKU code is required")
-        request = self.input_provider.build_production_input_request()
-        authority = self._current_purchase_reason_authority()
-        scope = _serving_scope(request, authority)
+        scope, _authority = self._prepare_scope()
         version = self._ensure_version(
             serving_scope=scope,
             profile_version=profile_version,
@@ -97,7 +132,9 @@ class CompetitorProfileAgentSnapshotGenerationService:
         )
         if existing.status == "available":
             if existing.full is None:
-                raise RuntimeError("available agent snapshot is missing its full payload")
+                raise RuntimeError(
+                    "available agent snapshot is missing its full payload"
+                )
             return AgentSnapshotGenerationResult(
                 status="reused",
                 version=version,
@@ -120,9 +157,7 @@ class CompetitorProfileAgentSnapshotGenerationService:
                 sku_snapshots=snapshots,
             )
             self.repository.db.flush()
-            version = self._refresh_version_state(
-                version.competitor_profile_version_id
-            )
+            version = self._refresh_version_state(version.competitor_profile_version_id)
             self.repository.db.commit()
         except Exception as exc:
             self.repository.db.rollback()
@@ -140,6 +175,223 @@ class CompetitorProfileAgentSnapshotGenerationService:
             selected_sku_codes=tuple(profile.priority_order),
         )
 
+    def generate_batch_draft(
+        self,
+        *,
+        profile_version: str,
+        generated_by: str,
+        checkpoint_every: int = 10,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> AgentSnapshotBatchGenerationResult:
+        """Persist one full authoritative category scope with DB-backed resume.
+
+        A long-lived service prepares the category scope and legacy analyst once.
+        Each target still runs the existing competitor agent exactly once unless
+        its immutable draft already exists, in which case resume reuses it.
+        """
+
+        if checkpoint_every < 1:
+            raise ValueError("checkpoint_every must be at least 1")
+        normalized_version = profile_version.strip()
+        if not normalized_version:
+            raise ValueError("profile version is required")
+        scope, authority = self._prepare_scope()
+        target_codes = self._authoritative_target_codes(authority)
+        with self._batch_writer_lock():
+            version = self._ensure_version(
+                serving_scope=scope,
+                profile_version=normalized_version,
+                generated_by=generated_by,
+            )
+            existing = self._existing_profile_index(
+                version.competitor_profile_version_id
+            )
+            unexpected = sorted(set(existing).difference(target_codes))
+            if unexpected:
+                raise ValueError(
+                    "agent snapshot version contains targets outside the authority manifest: "
+                    + ",".join(unexpected[:10])
+                )
+            failure_codes = self._saved_batch_failure_codes(
+                version.competitor_profile_version_id
+            )
+            for code in existing:
+                failure_codes.pop(code, None)
+            generated_count = 0
+            reused_count = 0
+            last_target: str | None = None
+            for index, target_code in enumerate(target_codes, start=1):
+                last_target = target_code
+                if target_code in existing:
+                    reused_count += 1
+                else:
+                    source_result = None
+                    profile = None
+                    snapshots = None
+                    try:
+                        source_result = self._run_existing_agent(
+                            target_sku_code=target_code,
+                            serving_scope=scope,
+                            candidate_limit=AGENT_SNAPSHOT_CANDIDATE_LIMIT,
+                        )
+                        profile, snapshots = _build_agent_snapshot(
+                            source_result=source_result,
+                            version=version,
+                        )
+                        if len(profile.candidates) > AGENT_SNAPSHOT_CANDIDATE_LIMIT:
+                            raise ValueError(
+                                "existing agent returned more candidates than requested"
+                            )
+                        created = self.repository.write_agent_snapshot_draft(
+                            profile=profile,
+                            sku_snapshots=snapshots,
+                        )
+                        self.repository.db.commit()
+                        if created:
+                            generated_count += 1
+                        else:
+                            reused_count += 1
+                        existing[target_code] = (
+                            profile.result_hash,
+                            len(profile.candidates),
+                        )
+                        failure_codes.pop(target_code, None)
+                    except Exception as exc:
+                        self.repository.db.rollback()
+                        failure_codes[target_code] = type(exc).__name__
+                    finally:
+                        del source_result, profile, snapshots
+                checkpoint = index % checkpoint_every == 0 or index == len(target_codes)
+                if checkpoint:
+                    version = self._checkpoint_batch_version(
+                        version.competitor_profile_version_id,
+                        failure_codes=failure_codes,
+                        last_target_sku_code=last_target,
+                        target_count=len(target_codes),
+                        final=index == len(target_codes),
+                    )
+                    if progress_callback is not None:
+                        progress_callback(
+                            {
+                                "category_code": scope.category_code,
+                                "competitor_profile_version_id": (
+                                    version.competitor_profile_version_id
+                                ),
+                                "profile_version": version.profile_version,
+                                "processed_count": index,
+                                "target_count": len(target_codes),
+                                "generated_count": generated_count,
+                                "reused_count": reused_count,
+                                "failure_count": len(failure_codes),
+                                "last_target_sku_code": last_target,
+                                "processing_status": version.processing_status,
+                            }
+                        )
+                    gc.collect()
+            return AgentSnapshotBatchGenerationResult(
+                version=version,
+                target_count=len(target_codes),
+                generated_count=generated_count,
+                reused_count=reused_count,
+                failure_codes=tuple(sorted(failure_codes.items())),
+                last_target_sku_code=last_target,
+            )
+
+    def _prepare_scope(
+        self,
+    ) -> tuple[ServingScope, entities.Core3PurchaseReasonProfileVersion]:
+        if self._prepared_scope is None:
+            request = self.input_provider.build_production_input_request()
+            authority = self._current_purchase_reason_authority()
+            self._prepared_scope = (_serving_scope(request, authority), authority)
+        return self._prepared_scope
+
+    def _authoritative_target_codes(
+        self,
+        authority: entities.Core3PurchaseReasonProfileVersion,
+    ) -> list[str]:
+        model = entities.Core3SkuPurchaseReasonProfile
+        codes = list(
+            self.repository.db.execute(
+                select(model.sku_code)
+                .where(
+                    model.purchase_reason_version_id
+                    == authority.purchase_reason_version_id
+                )
+                .where(model.release_status == "published")
+                .where(model.is_current.is_(True))
+                .order_by(model.sku_code)
+            ).scalars()
+        )
+        expected_count = int(authority.sku_count or 0)
+        if len(codes) != len(set(codes)) or len(codes) != expected_count:
+            raise ValueError(
+                "current M12D profile rows do not match the authoritative SKU count"
+            )
+        prefix = self.repository.category_code.value
+        if any(not code.startswith(prefix) for code in codes):
+            raise ValueError("authoritative M12D profile contains a cross-category SKU")
+        return codes
+
+    def _existing_profile_index(
+        self,
+        competitor_profile_version_id: str,
+    ) -> dict[str, tuple[str, int]]:
+        model = entities.Core3SkuCompetitorProfile
+        rows = self.repository.db.execute(
+            select(
+                model.target_sku_code,
+                model.analysis_result_hash,
+                model.analysis_candidate_count,
+            )
+            .where(model.competitor_profile_version_id == competitor_profile_version_id)
+            .where(model.method_version == AGENT_SNAPSHOT_METHOD_VERSION)
+        ).all()
+        return {
+            str(code): (str(result_hash), int(candidate_count or 0))
+            for code, result_hash, candidate_count in rows
+        }
+
+    def _saved_batch_failure_codes(
+        self,
+        competitor_profile_version_id: str,
+    ) -> dict[str, str]:
+        model = entities.Core3CompetitorProfileVersion
+        row = self.repository.db.execute(
+            select(model.safe_error_summary_json).where(
+                model.competitor_profile_version_id == competitor_profile_version_id
+            )
+        ).scalar_one()
+        failures = dict((row or {}).get("failures") or {})
+        return {str(code): str(value) for code, value in failures.items()}
+
+    @contextmanager
+    def _batch_writer_lock(self):
+        bind = self.repository.db.get_bind()
+        if bind.dialect.name != "postgresql":
+            yield
+            return
+        connection = bind.connect()
+        acquired = bool(
+            connection.execute(
+                text("select pg_try_advisory_lock(hashtext(:lock_key))"),
+                {"lock_key": AGENT_SNAPSHOT_BATCH_WRITER_LOCK_KEY},
+            ).scalar_one()
+        )
+        if not acquired:
+            connection.close()
+            raise AgentSnapshotBatchAlreadyRunningError(
+                "another agent snapshot batch writer owns this category scope"
+            )
+        try:
+            yield
+        finally:
+            connection.execute(
+                text("select pg_advisory_unlock(hashtext(:lock_key))"),
+                {"lock_key": AGENT_SNAPSHOT_BATCH_WRITER_LOCK_KEY},
+            )
+            connection.close()
+
     def _run_existing_agent(
         self,
         *,
@@ -147,25 +399,34 @@ class CompetitorProfileAgentSnapshotGenerationService:
         serving_scope: ServingScope,
         candidate_limit: int,
     ) -> dict[str, Any]:
-        service = CatForgeAnalystService(
-            self.repository.db,
-            project_id=serving_scope.project_id,
-            category_code=serving_scope.category_code,
-        )
-        context = service.build_context(
-            batch_id=format_serving_scope_batch_id(
-                serving_scope.product_category,
-                serving_scope.source_batch_ids,
-            ),
-            product_category=serving_scope.product_category.lower(),
-            market_window=serving_scope.market_window,
-            analysis_population=(
-                "fact_complete_with_comment"
-                if serving_scope.category_code == "TV"
-                else "all_semantic_profiles"
-            ),
-            resolve_latest=False,
-        )
+        cached = self._agent_runner_cache
+        if cached is None or cached[0] != serving_scope.release_scope_key:
+            service = CatForgeAnalystService(
+                self.repository.db,
+                project_id=serving_scope.project_id,
+                category_code=serving_scope.category_code,
+            )
+            context = service.build_context(
+                batch_id=format_serving_scope_batch_id(
+                    serving_scope.product_category,
+                    serving_scope.source_batch_ids,
+                ),
+                product_category=serving_scope.product_category.lower(),
+                market_window=serving_scope.market_window,
+                analysis_population=(
+                    "fact_complete_with_comment"
+                    if serving_scope.category_code == "TV"
+                    else "all_semantic_profiles"
+                ),
+                resolve_latest=False,
+            )
+            self._agent_runner_cache = (
+                serving_scope.release_scope_key,
+                service,
+                context,
+            )
+        else:
+            _, service, context = cached
         result = service.sop_orchestrators.competitor_set(
             context,
             sku_code=target_sku_code,
@@ -182,10 +443,18 @@ class CompetitorProfileAgentSnapshotGenerationService:
             raise ValueError(
                 str(result.get("message_cn") or "existing competitor analysis failed")
             )
-        if not competitor_set.get("candidates") or not answer.get("all_candidates"):
-            raise ValueError("existing competitor analysis returned no candidates")
+        candidate_rows = list(competitor_set.get("candidates") or [])
+        analysis_rows = list(answer.get("all_candidates") or [])
+        if len(candidate_rows) != len(analysis_rows):
+            raise ValueError("existing competitor candidate and analysis counts differ")
+        if len(candidate_rows) > candidate_limit:
+            raise ValueError(
+                "existing competitor analysis exceeded its candidate limit"
+            )
         if len(answer.get("top_competitors") or []) > AGENT_SNAPSHOT_PRIORITY_LIMIT:
-            raise ValueError("existing competitor analysis returned more than three priorities")
+            raise ValueError(
+                "existing competitor analysis returned more than three priorities"
+            )
         return result
 
     def _current_purchase_reason_authority(
@@ -277,6 +546,38 @@ class CompetitorProfileAgentSnapshotGenerationService:
         failure_code: str | None = None,
         failed_target_sku_code: str | None = None,
     ) -> CompetitorProfileVersionRecord:
+        failure_codes = (
+            {failed_target_sku_code or "unknown": failure_code} if failure_code else {}
+        )
+        model = entities.Core3SkuCompetitorProfile
+        completed_count = int(
+            self.repository.db.scalar(
+                select(func.count())
+                .select_from(model)
+                .where(
+                    model.competitor_profile_version_id == competitor_profile_version_id
+                )
+                .where(model.method_version == AGENT_SNAPSHOT_METHOD_VERSION)
+            )
+            or 0
+        )
+        return self._checkpoint_batch_version(
+            competitor_profile_version_id,
+            failure_codes=failure_codes,
+            last_target_sku_code=failed_target_sku_code,
+            target_count=completed_count + len(failure_codes),
+            final=True,
+        )
+
+    def _checkpoint_batch_version(
+        self,
+        competitor_profile_version_id: str,
+        *,
+        failure_codes: dict[str, str],
+        last_target_sku_code: str | None,
+        target_count: int,
+        final: bool,
+    ) -> CompetitorProfileVersionRecord:
         db = self.repository.db
         profile_states = list(
             db.execute(
@@ -302,31 +603,28 @@ class CompetitorProfileAgentSnapshotGenerationService:
             entities.Core3SkuCompetitorProfileSelection,
             competitor_profile_version_id,
         )
+        completed_count = counts.get("ready", 0) + counts.get("partial", 0)
+        complete = completed_count == target_count and not failure_codes
         version = self.repository.update_draft_generation_state(
             competitor_profile_version_id,
             ready_count=counts.get("ready", 0),
             partial_count=counts.get("partial", 0),
             blocked_count=counts.get("blocked", 0),
-            failed_count=1 if failure_code else 0,
+            failed_count=len(failure_codes),
             pair_count=pair_count,
             relation_count=0,
             selection_count=selection_count,
             processing_status=(
-                "failed"
-                if failure_code
-                else "success"
-                if profile_states
-                else "running"
+                "success" if complete else "failed" if final else "running"
             ),
-            safe_error_summary=(
-                {
-                    "failures": {
-                        failed_target_sku_code or "unknown": failure_code,
-                    }
-                }
-                if failure_code
-                else {}
-            ),
+            safe_error_summary={
+                "failures": dict(sorted(failure_codes.items())),
+                "checkpoint": {
+                    "completed_count": completed_count,
+                    "target_count": target_count,
+                    "last_target_sku_code": last_target_sku_code,
+                },
+            },
         )
         db.commit()
         return version
@@ -364,8 +662,7 @@ def _serving_scope(request, authority) -> ServingScope:
             "source_batch_ids": source_batch_ids,
             "authority_result_hash": authority.result_hash,
             "candidate_policy": (
-                "same_size_price_candidates_limit_"
-                f"{AGENT_SNAPSHOT_CANDIDATE_LIMIT}"
+                f"same_size_price_candidates_limit_{AGENT_SNAPSHOT_CANDIDATE_LIMIT}"
             ),
         },
         version="competitor_profile_agent_release_scope_v1",
@@ -418,7 +715,11 @@ def _build_agent_snapshot(
         str((row.get("candidate") or {}).get("sku_code") or "")
         for row in all_candidates
     ]
-    if not candidate_pool_order or set(candidate_pool_order) != set(analysis_order):
+    if (
+        len(candidate_pool_order) != len(set(candidate_pool_order))
+        or len(analysis_order) != len(set(analysis_order))
+        or set(candidate_pool_order) != set(analysis_order)
+    ):
         raise ValueError("existing agent candidate and analysis sets differ")
 
     target_purchase_reason = (
@@ -583,12 +884,9 @@ def _identity(
     *,
     fact_brief: dict[str, Any],
 ) -> AgentSkuIdentity:
-    market_metrics = (
-        ((fact_brief.get("sections") or {}).get("market") or {}).get(
-            "market_metrics"
-        )
-        or {}
-    )
+    market_metrics = ((fact_brief.get("sections") or {}).get("market") or {}).get(
+        "market_metrics"
+    ) or {}
     return AgentSkuIdentity(
         sku_code=str(row.get("sku_code") or ""),
         brand_name=row.get("brand_name"),
@@ -766,6 +1064,9 @@ def _version_row_count(db, model, version_id: str) -> int:
 
 
 __all__ = [
+    "AGENT_SNAPSHOT_BATCH_WRITER_LOCK_KEY",
+    "AgentSnapshotBatchAlreadyRunningError",
+    "AgentSnapshotBatchGenerationResult",
     "AgentSnapshotGenerationResult",
     "CompetitorProfileAgentSnapshotGenerationService",
 ]

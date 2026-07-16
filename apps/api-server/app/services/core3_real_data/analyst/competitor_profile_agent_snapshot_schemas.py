@@ -221,11 +221,11 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
     target_claim_contribution: dict[str, Any]
     m12d_consumption: dict[str, Any]
     candidate_pool_policy: list[str] = Field(min_length=1)
-    candidate_pool_order: list[str] = Field(min_length=1)
-    analysis_order: list[str] = Field(min_length=1)
-    candidates: list[AgentCandidateAnalysisRecord] = Field(min_length=1)
+    candidate_pool_order: list[str] = Field(default_factory=list)
+    analysis_order: list[str] = Field(default_factory=list)
+    candidates: list[AgentCandidateAnalysisRecord] = Field(default_factory=list)
     priority_order: list[str] = Field(
-        min_length=1,
+        default_factory=list,
         max_length=AGENT_SNAPSHOT_PRIORITY_LIMIT,
     )
     evidence: list[AgentEvidenceReceipt] = Field(default_factory=list)
@@ -249,7 +249,9 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
         if self.target_claim_value != {"storage_ref": self.target_snapshot_ref}:
             raise ValueError("target claim value must reference its shared snapshot")
         if self.target_claim_contribution != {"storage_ref": self.target_snapshot_ref}:
-            raise ValueError("target claim contribution must reference its shared snapshot")
+            raise ValueError(
+                "target claim contribution must reference its shared snapshot"
+            )
         for row in self.candidates:
             expected_ref = {"storage_ref": row.candidate_snapshot_ref}
             if (
@@ -257,7 +259,9 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
                 or row.analysis.candidate_claim_value != expected_ref
                 or row.analysis.candidate_claim_contribution != expected_ref
             ):
-                raise ValueError("candidate heavy payloads must reference one shared snapshot")
+                raise ValueError(
+                    "candidate heavy payloads must reference one shared snapshot"
+                )
         if (
             len(self.candidate_pool_order) != len(candidate_codes)
             or len(set(self.candidate_pool_order)) != len(candidate_codes)
@@ -284,8 +288,7 @@ class AgentCompetitorProfileSnapshot(CompetitorProfileV11BaseModel):
             if row.selected_rank is not None
         }
         if selected != {
-            sku_code: rank
-            for rank, sku_code in enumerate(self.priority_order, start=1)
+            sku_code: rank for rank, sku_code in enumerate(self.priority_order, start=1)
         }:
             raise ValueError("saved candidate ranks must match priority order")
         expected = stable_hash(
@@ -361,7 +364,11 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
                 raise ValueError("unavailable reads cannot expose profile data")
             return self
         expected = self.full if self.read_mode == "full" else self.compact
-        if self.competitor_profile_version_id is None or populated != 1 or expected is None:
+        if (
+            self.competitor_profile_version_id is None
+            or populated != 1
+            or expected is None
+        ):
             raise ValueError("available reads require the requested projection")
         if expected.competitor_profile_version_id != self.competitor_profile_version_id:
             raise ValueError("read projection must lock one version")
@@ -375,7 +382,10 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
                 *(row.candidate_sku_code for row in self.full.candidates),
             }
             actual_codes = {row.identity.sku_code for row in self.sku_snapshots}
-            if len(self.sku_snapshots) != len(actual_codes) or actual_codes != expected_codes:
+            if (
+                len(self.sku_snapshots) != len(actual_codes)
+                or actual_codes != expected_codes
+            ):
                 raise ValueError("full reads require one shared snapshot per saved SKU")
             snapshots = {row.identity.sku_code: row for row in self.sku_snapshots}
             if (
@@ -391,7 +401,9 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
                     snapshot.snapshot_ref != row.candidate_snapshot_ref
                     or snapshot.result_hash != row.candidate_snapshot_result_hash
                 ):
-                    raise ValueError("candidate snapshot identity differs from the profile")
+                    raise ValueError(
+                        "candidate snapshot identity differs from the profile"
+                    )
         return self
 
 
@@ -516,7 +528,9 @@ def decode_agent_sku_payload(snapshot: AgentSkuSnapshot) -> AgentSkuSourcePayloa
             AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES + 1,
         )
     except (ValueError, binascii.Error, zlib.error) as exc:
-        raise ValueError("saved agent SKU payload is not valid compressed JSON") from exc
+        raise ValueError(
+            "saved agent SKU payload is not valid compressed JSON"
+        ) from exc
     if (
         len(raw) > AGENT_SNAPSHOT_MAX_DECOMPRESSED_PAYLOAD_BYTES
         or not decoder.eof

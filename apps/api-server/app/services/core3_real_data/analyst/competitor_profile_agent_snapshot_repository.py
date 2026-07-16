@@ -93,7 +93,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             *(row.candidate_sku_code for row in profile.candidates),
         }
         if set(snapshot_by_code) != expected_codes:
-            raise ValueError("agent snapshot set must cover target and saved candidates")
+            raise ValueError(
+                "agent snapshot set must cover target and saved candidates"
+            )
         for row in snapshots:
             if (
                 row.competitor_profile_version_id
@@ -121,7 +123,10 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 version_id=profile.competitor_profile_version_id,
                 target_sku_code=profile.target.sku_code,
             )
-            if concurrent is None or self._read_agent_profile_row(concurrent) != profile:
+            if (
+                concurrent is None
+                or self._read_agent_profile_row(concurrent) != profile
+            ):
                 raise
             return False
         return True
@@ -229,7 +234,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             )
             .where(version_model.project_id == self.project_id)
             .where(version_model.category_code == self.category_code.value)
-            .where(version_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION)
+            .where(
+                version_model.schema_version == COMPETITOR_PROFILE_V1_1_SCHEMA_VERSION
+            )
             .where(version_model.method_version == AGENT_SNAPSHOT_METHOD_VERSION)
             .where(version_model.rule_version == AGENT_SNAPSHOT_RULE_VERSION)
             .where(version_model.release_status == "published")
@@ -238,9 +245,11 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
         )
         if release_scope_key is not None:
             stmt = stmt.where(version_model.release_scope_key == release_scope_key)
-        return self.db.execute(
-            stmt.order_by(version_model.generated_at.desc()).limit(1)
-        ).scalars().first()
+        return (
+            self.db.execute(stmt.order_by(version_model.generated_at.desc()).limit(1))
+            .scalars()
+            .first()
+        )
 
     def _assert_agent_version(
         self,
@@ -276,14 +285,18 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
     ) -> None:
         model = entities.Core3CompetitorProfileSkuSnapshot
         for snapshot in snapshots:
-            existing = self.db.execute(
-                select(model)
-                .where(
-                    model.competitor_profile_version_id
-                    == version.competitor_profile_version_id
+            existing = (
+                self.db.execute(
+                    select(model)
+                    .where(
+                        model.competitor_profile_version_id
+                        == version.competitor_profile_version_id
+                    )
+                    .where(model.sku_code == snapshot.identity.sku_code)
                 )
-                .where(model.sku_code == snapshot.identity.sku_code)
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if existing is not None:
                 if (
                     existing.result_hash != snapshot.result_hash
@@ -333,11 +346,15 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             for row in profile.candidates
         )
         confidence = _profile_confidence(profile)
-        display_name = " ".join(
-            value
-            for value in (profile.target.brand_name, profile.target.model_name)
-            if value
-        ) or profile.target.sku_code
+        has_candidates = bool(profile.candidates)
+        display_name = (
+            " ".join(
+                value
+                for value in (profile.target.brand_name, profile.target.model_name)
+                if value
+            )
+            or profile.target.sku_code
+        )
         row = entities.Core3SkuCompetitorProfile(
             competitor_profile_version_id=version.competitor_profile_version_id,
             project_id=version.project_id,
@@ -352,7 +369,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             target_sku_code=profile.target.sku_code,
             display_name_cn=display_name,
             analysis_state="partial" if profile.limitations else "ready",
-            conclusion_state="available",
+            conclusion_state=(
+                "available" if has_candidates else "no_priority_competitor"
+            ),
             freshness_status="current",
             profile_confidence=confidence,
             candidate_status_counts_json=dict(sorted(eligibility.items())),
@@ -362,7 +381,14 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             price_scale_pressure_json=[],
             same_brand_findings_json=[],
             configuration_decisions_json=[],
-            no_conclusion_reason_json={},
+            no_conclusion_reason_json=(
+                {}
+                if has_candidates
+                else {
+                    "reason_code": "no_market_candidates",
+                    "reason_cn": "现有竞品分析智能体未找到符合购买池的候选。",
+                }
+            ),
             source_lineage_json=_json([row.raw for row in profile.evidence]),
             qa_index_json=[
                 {"selection_rank": rank, "candidate_sku_code": sku_code}
@@ -384,11 +410,15 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             },
             analysis_evidence_index_json={
                 "receipt_count": len(profile.evidence),
-                "source_modules": sorted({row.source_module for row in profile.evidence}),
+                "source_modules": sorted(
+                    {row.source_module for row in profile.evidence}
+                ),
             },
             analysis_result_hash=profile.result_hash,
             analysis_candidate_count=len(profile.candidates),
-            analysis_available_dimension_count=len(_SAVED_ANALYSIS_DIMENSIONS),
+            analysis_available_dimension_count=(
+                len(_SAVED_ANALYSIS_DIMENSIONS) if has_candidates else 0
+            ),
             analysis_review_item_count=review_count,
             release_status="draft",
             is_current=False,
@@ -452,7 +482,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 candidate_snapshot_ref=record.candidate_snapshot_ref,
                 purchase_pool_level=_purchase_pool_level(analysis.purchase_pool),
                 purchase_pool_json=_json(analysis.purchase_pool),
-                evidence_family_json=_saved_evidence_families(analysis.model_dump(mode="python")),
+                evidence_family_json=_saved_evidence_families(
+                    analysis.model_dump(mode="python")
+                ),
                 market_comparison_json=_json(analysis.market_validation),
                 question_eligibility_json=[
                     "key_competitor_selection",
@@ -468,23 +500,24 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 non_selection_reason_cn=(
                     None
                     if selected
-                    else analysis.exclusion_reason_cn or "未进入已保存的重点竞品 Top 3。"
+                    else analysis.exclusion_reason_cn
+                    or "未进入已保存的重点竞品 Top 3。"
                 ),
                 confidence_level=confidence_level,
                 confidence=confidence,
                 evidence_refs_json=_json([row.raw for row in record.evidence]),
                 limitations_json=[],
-                risk_flags_json=(
-                    ["source_requires_review"] if review_required else []
+                risk_flags_json=(["source_requires_review"] if review_required else []),
+                pair_payload_json=_json(
+                    {
+                        "source_rank": record.source_rank,
+                        "selected_rank": record.selected_rank,
+                        "role": analysis.role,
+                        "role_cn": analysis.role_cn,
+                        "business_score": analysis.business_score,
+                        "result_hash": record.result_hash,
+                    }
                 ),
-                pair_payload_json=_json({
-                    "source_rank": record.source_rank,
-                    "selected_rank": record.selected_rank,
-                    "role": analysis.role,
-                    "role_cn": analysis.role_cn,
-                    "business_score": analysis.business_score,
-                    "result_hash": record.result_hash,
-                }),
                 analysis_snapshot_json={
                     "storage_mode": "agent_profile_candidate_ref",
                     "profile_result_hash": profile.result_hash,
@@ -577,44 +610,46 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 auxiliary_relation_codes_json=[],
                 selection_reason_cn=selection_reason,
                 independent_information_reason_cn=independent_reason,
-                price_value_pressure_summary_json=_json({
-                    "purchase_pressure_comparison": analysis.purchase_pressure_comparison,
-                    "market_validation": analysis.market_validation,
-                }),
+                price_value_pressure_summary_json=_json(
+                    {
+                        "purchase_pressure_comparison": analysis.purchase_pressure_comparison,
+                        "market_validation": analysis.market_validation,
+                    }
+                ),
                 confidence_level=_confidence_level(confidence),
                 evidence_refs_json=_json([row.raw for row in record.evidence]),
-                selection_payload_json=_json({
-                    "saved_selected_rank": rank,
-                    "source_rank": record.source_rank,
-                    "role": analysis.role,
-                    "ranking_trace": analysis.ranking_trace,
-                    "selection_gate": analysis.selection_gate,
-                }),
+                selection_payload_json=_json(
+                    {
+                        "saved_selected_rank": rank,
+                        "source_rank": record.source_rank,
+                        "role": analysis.role,
+                        "ranking_trace": analysis.ranking_trace,
+                        "selection_gate": analysis.selection_gate,
+                    }
+                ),
                 selection_policy_version=AGENT_SNAPSHOT_METHOD_VERSION,
                 selection_score=analysis.business_score,
                 selection_available_weight=Decimal("1"),
                 selection_conclusion_strength="supported",
                 selection_role_codes_json=[analysis.role],
-                selection_score_breakdown_json=_json({
-                    "business_score": analysis.business_score,
-                    "purchase_pool": analysis.purchase_pool,
-                    "weighted_overlap": analysis.weighted_overlap,
-                    "replacement_pressure": analysis.replacement_pressure,
-                    "market_validation": analysis.market_validation,
-                }),
+                selection_score_breakdown_json=_json(
+                    {
+                        "business_score": analysis.business_score,
+                        "purchase_pool": analysis.purchase_pool,
+                        "weighted_overlap": analysis.weighted_overlap,
+                        "replacement_pressure": analysis.replacement_pressure,
+                        "market_validation": analysis.market_validation,
+                    }
+                ),
                 release_status="draft",
                 is_current=False,
                 input_fingerprint=record.input_fingerprint,
                 result_hash=record.result_hash,
                 processing_status="success",
                 review_required=review_required,
-                review_status=(
-                    "review_required" if review_required else "auto_pass"
-                ),
+                review_status=("review_required" if review_required else "auto_pass"),
                 review_reasons_json=(
-                    ["saved_agent_source_requires_review"]
-                    if review_required
-                    else []
+                    ["saved_agent_source_requires_review"] if review_required else []
                 ),
             )
             self.db.add(row)
@@ -623,7 +658,9 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
         self,
         row: entities.Core3SkuCompetitorProfile,
     ) -> AgentCompetitorProfileSnapshot:
-        profile = AgentCompetitorProfileSnapshot.model_validate(row.profile_payload_json)
+        profile = AgentCompetitorProfileSnapshot.model_validate(
+            row.profile_payload_json
+        )
         if (
             profile.result_hash != row.result_hash
             or profile.result_hash != row.analysis_result_hash
@@ -689,8 +726,7 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 model.selected,
             )
             .where(
-                model.sku_competitor_profile_id
-                == profile_row.sku_competitor_profile_id
+                model.sku_competitor_profile_id == profile_row.sku_competitor_profile_id
             )
             .order_by(model.candidate_sku_code)
         ).all()
@@ -742,10 +778,8 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
                 model.pair_payload_json,
                 model.analysis_score,
                 model.analysis_result_hash,
-            )
-            .where(
-                model.sku_competitor_profile_id
-                == profile_row.sku_competitor_profile_id
+            ).where(
+                model.sku_competitor_profile_id == profile_row.sku_competitor_profile_id
             )
         ).all()
         index = []
