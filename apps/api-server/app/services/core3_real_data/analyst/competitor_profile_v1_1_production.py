@@ -76,6 +76,9 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_materializer i
     CompetitorProfileV11Materializer,
     MaterializedCompetitorProfileV11,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_memory import (
+    trace_competitor_profile_memory,
+)
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
     PAIR_ANALYSIS_AUTHORITATIVE_PROJECTION_VERSION,
     PAIR_ANALYSIS_ASSEMBLER_METHOD_VERSION,
@@ -442,6 +445,7 @@ class CompetitorProfileV11ProductionService:
         target = self.input_provider.load_target_input(category, target_code)
         config = build_production_materialization_config(category)
         prepared = self.work_item_builder.prepare(category, target, config)
+        trace_competitor_profile_memory("production_after_prepare")
         del category, target
         _release_memory()
         version = self._ensure_version(
@@ -454,12 +458,14 @@ class CompetitorProfileV11ProductionService:
                 prepared,
                 competitor_profile_version_id=version.competitor_profile_version_id,
             )
+            trace_competitor_profile_memory("production_after_snapshot_stage")
             del prepared
             _release_memory()
             item = self.work_item_builder.build_work_item_from_snapshot_stage(
                 snapshot_stage,
                 competitor_profile_version_id=version.competitor_profile_version_id,
             )
+            trace_competitor_profile_memory("production_after_work_item")
             del snapshot_stage
             _release_memory()
             materialized = CompetitorProfileV11Materializer().materialize(
@@ -473,11 +479,13 @@ class CompetitorProfileV11ProductionService:
                 release_inputs=True,
                 verify_source_hashes=False,
             )
+            trace_competitor_profile_memory("production_after_materialize")
             del item
             _release_memory()
             created = self.repository.write_materialized_draft_without_readback(
                 materialized.dto
             )
+            trace_competitor_profile_memory("production_after_repository_write")
             self.repository.db.commit()
             status: Literal["generated", "reused"] = (
                 "generated" if created else "reused"

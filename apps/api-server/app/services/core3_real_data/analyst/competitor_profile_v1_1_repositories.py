@@ -33,6 +33,9 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import
     RelationAssessment,
     VersionSkuAnalysisSnapshot,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_memory import (
+    trace_competitor_profile_memory,
+)
 from app.services.core3_real_data.hash_utils import stable_hash_json
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 
@@ -156,7 +159,9 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         deliberate acceptance readback after releasing generation memory.
         """
 
+        trace_competitor_profile_memory("repository_before_dto_validation")
         dto.validate_dto()
+        trace_competitor_profile_memory("repository_after_dto_validation")
         self._assert_context_scope(
             dto.profile_version.project_id,
             dto.profile_version.category_code,
@@ -183,13 +188,18 @@ class CompetitorProfileV11Repository(CompetitorProfileRepository):
         dto: CompetitorProfileAnalysisDTO,
     ) -> None:
         snapshot_refs = self._write_snapshots(version, dto)
+        trace_competitor_profile_memory("repository_after_snapshots")
         self._assert_dto_snapshot_refs(dto, snapshot_refs)
         profile_row = self._insert_profile(version, dto)
+        trace_competitor_profile_memory("repository_after_profile")
         profile_id = profile_row.sku_competitor_profile_id
         self.db.expunge(profile_row)
         pair_ids = self._insert_pairs(version, profile_id, dto)
+        trace_competitor_profile_memory("repository_after_pairs")
         self._insert_relations(version, pair_ids, dto)
+        trace_competitor_profile_memory("repository_after_relations")
         self._insert_selections(version, profile_id, pair_ids, dto)
+        trace_competitor_profile_memory("repository_after_selections")
         self.db.flush()
 
     def get_profile(

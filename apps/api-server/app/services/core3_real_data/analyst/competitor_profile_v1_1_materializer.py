@@ -19,6 +19,9 @@ from app.services.core3_real_data.analyst.competitor_profile_schemas import Evid
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_gate_evaluation import (
     PairGateEvaluation,
 )
+from app.services.core3_real_data.analyst.competitor_profile_v1_1_memory import (
+    trace_competitor_profile_memory,
+)
 from app.services.core3_real_data.analyst.competitor_profile_v1_1_pair_analysis import (
     PairAnalysisAssembly,
 )
@@ -130,6 +133,7 @@ class CompetitorProfileV11Materializer:
         release_inputs: bool = False,
         verify_source_hashes: bool = True,
     ) -> MaterializedCompetitorProfileV11:
+        trace_competitor_profile_memory("materializer_start")
         preserve_source_references = not verify_source_hashes
         snapshots = _unique_by_sku(candidate_snapshots, label="candidate snapshots")
         assemblies = _unique_by_candidate(pair_assemblies, label="G33 assemblies")
@@ -150,6 +154,7 @@ class CompetitorProfileV11Materializer:
             selection=selection_result,
             verify_snapshot_hashes=verify_source_hashes,
         )
+        trace_competitor_profile_memory("materializer_after_authority")
         assembly_hashes = {code: row.result_hash for code, row in assemblies.items()}
         gate_hashes = {code: row.result_hash for code, row in gates.items()}
         legacy_candidate_count = int(
@@ -203,6 +208,8 @@ class CompetitorProfileV11Materializer:
             if release_inputs and index % 8 == 0:
                 _release_memory()
 
+        trace_competitor_profile_memory("materializer_after_pairs")
+
         pair_by_code = {row.candidate_sku_code: row for row in pair_analyses}
         priority = _priority_selections(selection_result, pair_by_code)
         summary = _summary(
@@ -211,6 +218,7 @@ class CompetitorProfileV11Materializer:
             priority,
             legacy_candidate_count=legacy_candidate_count,
         )
+        trace_competitor_profile_memory("materializer_after_summary")
         pair_index = [
             PairIndexItem(
                 candidate_sku_code=row.candidate_sku_code,
@@ -248,6 +256,7 @@ class CompetitorProfileV11Materializer:
             selection_result=selection_result,
             input_fingerprint=input_fingerprint,
         )
+        trace_competitor_profile_memory("materializer_before_indexes")
         candidate_snapshot_rows = [snapshots[code] for code in sorted(snapshots)]
         persisted_candidate_snapshots = [
             row
@@ -265,6 +274,7 @@ class CompetitorProfileV11Materializer:
                 *pair_analyses,
             ]
         )
+        trace_competitor_profile_memory("materializer_after_indexes")
         result_manifest = {
             "materializer_version": COMPETITOR_PROFILE_V1_1_MATERIALIZER_VERSION,
             "profile_version": stable_hash(
@@ -309,6 +319,7 @@ class CompetitorProfileV11Materializer:
             result_manifest,
             version="competitor_profile_v1_1_profile_result_manifest_v2",
         )
+        trace_competitor_profile_memory("materializer_after_manifest_hash")
         dto_payload = {
             "profile_version": profile_version,
             "generation_receipt": generation_receipt,
@@ -324,10 +335,12 @@ class CompetitorProfileV11Materializer:
         }
         if preserve_source_references:
             dto = CompetitorProfileAnalysisDTO.model_construct(**dto_payload)
+            trace_competitor_profile_memory("materializer_before_dto_validation")
             dto.validate_dto()
+            trace_competitor_profile_memory("materializer_after_dto_validation")
         else:
             dto = CompetitorProfileAnalysisDTO(**dto_payload)
-        return MaterializedCompetitorProfileV11(
+        result = MaterializedCompetitorProfileV11(
             target_sku_code=selection_result.target_sku_code,
             dto=dto,
             stage_result_hashes={
@@ -339,6 +352,8 @@ class CompetitorProfileV11Materializer:
             input_fingerprint=input_fingerprint,
             result_hash=profile_result_hash,
         )
+        trace_competitor_profile_memory("materializer_after_result")
+        return result
 
 
 def _materialize_pair(
