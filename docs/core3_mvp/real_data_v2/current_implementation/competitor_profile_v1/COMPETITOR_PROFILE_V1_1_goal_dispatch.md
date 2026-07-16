@@ -1,6 +1,6 @@
 # CatForge 竞品画像 V1.1 串行 Goal 调度
 
-状态：G27—G40 completed；G41 pending；G42 approval-only
+状态：G27—G41A completed；G41B pending；G41C gated；G42 approval-only
 
 日期：2026-07-16
 
@@ -257,6 +257,8 @@ G41A 必须完成：现有 65E7Q 智能体分析一次；保存其实际候选�
 ## 10. G41：数据验收
 
 ### G41A 65E7Q
+
+完成状态：completed；关闭回执：`G41A_closure_receipt.md`。
 
 只写一个明确版本的 V1.1 draft。验收：
 
