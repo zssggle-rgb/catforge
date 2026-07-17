@@ -36,6 +36,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_qa import
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
     StoredSellpointValuePmReport,
+    _metric_range,
+    _number_range,
+    _round_market_units_cn,
     _v5_1_first_screen,
     render_stored_profile_markdown,
 )
@@ -378,7 +381,9 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert "待修复价值" in card_text
     assert "卖点如何形成用户价值" in card_text
     assert "非基础卖点组合" in card_text
-    assert "产品经理现在怎么做" in card_text
+    assert "产品经理现在怎么改卖点" in card_text
+    assert "首屏继续主推" in card_text
+    assert "暂不作为主卖点" in card_text
     report_button = next(
         element
         for element in card["body"]["elements"]
@@ -439,7 +444,11 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert "common_weeks_not_required" not in bounded_markdown
     assert "v4_strict_amount_gate_not_passed" not in bounded_markdown
     assert "## 四、价格和销量怎么决策" in bounded_markdown
-    assert "## 五、下一代产品怎么定义" in bounded_markdown
+    assert "## 五、产品卖点修改建议" in bounded_markdown
+    assert "首屏主卖点" in bounded_markdown
+    assert "卖点表达方式" in bounded_markdown
+    assert "暂不主推" in bounded_markdown
+    assert "## 五、下一代产品怎么定义" not in bounded_markdown
     assert "## 四、分析使用的产品范围" not in bounded_markdown
     assert "## 五、结论边界" not in bounded_markdown
     assert "正式竞品" not in bounded_markdown
@@ -453,6 +462,22 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert source.candidate_pools.result_hash not in visible_outputs
     assert "**总判断**" in visible_outputs
     assert handlers.call_count == 0
+
+
+def test_pm_visible_market_numbers_are_rounded_to_whole_yuan_and_units() -> None:
+    conclusion = (
+        "本品周均价较3款参照的平均水平高278.8606元，"
+        "周均销量较3款参照的平均水平高61.916666台；"
+        "该结果用于判断市场表现，不归因于单一卖点。"
+    )
+
+    assert _round_market_units_cn(conclusion) == (
+        "本品周均价较3款参照的平均水平高279元，"
+        "周均销量较3款参照的平均水平高62台；"
+        "该结果用于判断市场表现，不归因于单一卖点。"
+    )
+    assert _number_range([262.1, 427.4]) == "262–427"
+    assert _metric_range([262.1, 427.4], unit="元") == "262～427元"
 
 
 def test_preview_qa_projects_every_saved_business_topic_without_recomputation(

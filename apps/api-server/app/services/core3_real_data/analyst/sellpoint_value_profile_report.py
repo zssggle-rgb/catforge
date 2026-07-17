@@ -485,18 +485,43 @@ def render_stored_profile_markdown(
         lines.extend(["当前没有可直接用于价格和销量决策的量价组合比较。", ""])
     lines.extend(
         [
-            "## 五、下一代产品怎么定义",
+            "## 五、产品卖点修改建议",
             "",
-            f"- **SKU 角色**：{screen.sku_role_cn}",
             (
-                "- **必须守住的用户价值**："
-                + ("、".join(retained) if retained else "当前未确认。")
+                "- **首屏主卖点**："
+                + (
+                    f"优先突出{'、'.join(retained)}，不再按技术参数逐项平铺。"
+                    if retained
+                    else "当前没有足够依据调整首屏主卖点。"
+                )
             ),
             (
-                "- **优先修复的体验**："
-                + ("、".join(unconverted) if unconverted else "当前没有。")
+                "- **卖点表达方式**："
+                f"先讲用户获得的“{primary_value}”，"
+                + (
+                    f"再用{'、'.join(retained)}作为产品证明。"
+                    if retained
+                    else "待形成明确卖点后再补充产品证明。"
+                )
             ),
-            f"- **竞品配置策略**：{screen.competitor_action_cn}",
+            f"- **价格表达**：{_sellpoint_price_expression(report)}",
+            (
+                "- **暂不主推**："
+                + (
+                    f"{'、'.join(unconverted)}；在用户形成稳定体验感知前，"
+                    "先移出首屏主卖点。"
+                    if unconverted
+                    else "当前没有需要移出首屏的卖点。"
+                )
+            ),
+            (
+                "- **竞品对标写法**：不照抄竞品参数清单；"
+                + (
+                    f"优先对比{'、'.join(retained)}已经形成的用户价值和市场表现。"
+                    if retained
+                    else "先对比用户获得的价值和市场表现，再决定是否补充参数。"
+                )
+            ),
             "",
         ]
     )
@@ -527,12 +552,7 @@ def _representative_product_names(row: StoredPmValueAccountRow) -> str:
 def _business_market_result(row: StoredPmValueAccountRow) -> str:
     conclusion = row.price_performance_cn
     conclusion = re.sub(r"；该结果用于判断市场表现[^。]*。?", "。", conclusion)
-    conclusion = re.sub(
-        r"([0-9]+\.[0-9]+)(?=(?:元|台))",
-        lambda match: f"{float(match.group(1)):.1f}",
-        conclusion,
-    )
-    return conclusion
+    return _round_market_units_cn(conclusion)
 
 
 def render_stored_profile_feishu_card(
@@ -576,13 +596,25 @@ def render_stored_profile_feishu_card(
         elements.extend(
             [
                 {"tag": "hr"},
-                _card_markdown("**产品经理现在怎么做**"),
+                _card_markdown("**产品经理现在怎么改卖点**"),
                 _sellpoint_card_action_columns(report),
                 _card_markdown(
                     "\n\n".join(
                         (
-                            f"**竞品配置**\n{_compress(screen.competitor_action_cn, 260)}",
-                            f"**销量动作**\n{_compress(screen.growth_action_cn, 320)}",
+                            (
+                                "**卖点表达方式**\n"
+                                + _compress(
+                                    _sellpoint_expression_guidance(report),
+                                    300,
+                                )
+                            ),
+                            (
+                                "**价格表达**\n"
+                                + _compress(
+                                    _sellpoint_price_expression(report),
+                                    300,
+                                )
+                            ),
                         )
                     )
                 ),
@@ -760,10 +792,10 @@ def _sellpoint_card_action_columns(
             _card_column(
                 "\n".join(
                     [
-                        "**下一代继续投入**",
+                        "**首屏继续主推**",
                         *(
                             f"- {item}"
-                            for item in (retained or ["当前未确认继续投入项"])
+                            for item in (retained or ["当前未确认首屏主卖点"])
                         ),
                     ]
                 ),
@@ -772,10 +804,10 @@ def _sellpoint_card_action_columns(
             _card_column(
                 "\n".join(
                     [
-                        "**先修复，再谈加码**",
+                        "**暂不作为主卖点**",
                         *(
                             f"- {item}"
-                            for item in (unconverted or ["当前没有待修复项"])
+                            for item in (unconverted or ["当前没有需要移出首屏的卖点"])
                         ),
                     ]
                 ),
@@ -826,9 +858,59 @@ def _market_range_text(rows: Sequence[StoredPmValueAccountRow]) -> str:
 def _number_range(values: Sequence[float]) -> str:
     low = min(values)
     high = max(values)
-    if abs(low - high) < 0.05:
-        return f"{low:.1f}"
-    return f"{low:.1f}–{high:.1f}"
+    if round(low) == round(high):
+        return f"{low:.0f}"
+    return f"{low:.0f}–{high:.0f}"
+
+
+def _sellpoint_expression_guidance(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    value_groups = _sellpoint_card_value_groups(report)
+    primary_value = (
+        str(value_groups[0]["perceived_outcome_cn"])
+        if value_groups
+        else "当前已确认的用户价值"
+    )
+    retained = _investment_names(report, "retain")
+    proof_cn = (
+        f"再用{'、'.join(retained)}作为产品证明"
+        if retained
+        else "待形成明确卖点后再补充产品证明"
+    )
+    return f"先讲用户获得的“{primary_value}”，{proof_cn}；不按技术参数逐项平铺。"
+
+
+def _sellpoint_price_expression(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    price = report.first_screen.price_support_cn
+    if "有用户价值支撑" in price:
+        return (
+            "可以表达“这组体验升级值得更高价格”；"
+            "量价结果只支撑整组用户价值，不把具体金额拆给某一个参数。"
+        )
+    if "支撑存在压力" in price:
+        return (
+            "暂不把“值得加价”作为主张；先强化用户能直接感知的体验，"
+            "再决定是否保留价格表达。"
+        )
+    if "获得部分支撑" in price:
+        return (
+            "可以表达体验升级，但暂不强调明确加价；"
+            "等不同对照的价格和销量方向一致后再加强价格主张。"
+        )
+    return "暂不强调加价；先把已经成立的用户价值讲清楚。"
+
+
+def _round_market_units_cn(value: str) -> str:
+    return re.sub(
+        r"(?P<value>[0-9]+(?:\.[0-9]+)?)(?P<unit>元|台)",
+        lambda match: (
+            f"{float(match.group('value')):.0f}{match.group('unit')}"
+        ),
+        value,
+    )
 
 
 def _name_summary(values: Sequence[str], *, empty: str) -> str:
@@ -926,7 +1008,8 @@ def _v5_1_first_screen(
         )
     return StoredPmFirstScreen(
         retain_cn=(
-            f"下一代继续保护{'、'.join(retain)}；这些投入已经形成用户可感知价值。"
+            f"当前卖点材料继续突出{'、'.join(retain)}；"
+            "这些投入已经形成用户可感知价值。"
             if retain
             else (
                 f"现有证据尚不能判断{_unknown_investment_summary(unknown)}中哪些值得继续加码；"
@@ -936,7 +1019,8 @@ def _v5_1_first_screen(
             )
         ),
         unconverted_cn=(
-            f"{'、'.join(unconverted)}尚未转成用户体验价值；先改善实际体验兑现，不再追加纸面参数预算。"
+            f"{'、'.join(unconverted)}尚未转成用户体验价值；"
+            "暂不放入首屏主卖点，先改善实际体验兑现。"
             if unconverted
             else (
                 f"现有证据尚不能判断{_unknown_investment_summary(unknown)}中哪些已转化、哪些未转化；"
@@ -1140,9 +1224,9 @@ def _v5_1_sku_role(
 def _metric_range(values: Sequence[float], *, unit: str) -> str:
     low = min(values)
     high = max(values)
-    if round(low, 1) == round(high, 1):
-        return f"{low:.1f}{unit}"
-    return f"{low:.1f}～{high:.1f}{unit}"
+    if round(low) == round(high):
+        return f"{low:.0f}{unit}"
+    return f"{low:.0f}～{high:.0f}{unit}"
 
 
 def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
@@ -1257,20 +1341,21 @@ def _v5_1_value_row(
         and not decision.table_stake_assessment.exclude_from_core_sellpoints
     )
     comparisons = _unique(
-        f"{result.business_conclusion_cn}（{_candidate_names(result.used_comparator_sku_codes, candidate_names)}）"
+        f"{_round_market_units_cn(result.business_conclusion_cn)}"
+        f"（{_candidate_names(result.used_comparator_sku_codes, candidate_names)}）"
         for result in value.direct_market_results
         if _enum_text(result.status)
         in {"conclusion_available", "partial_conclusion"}
     )
     price_conclusions = _unique(
-        result.business_conclusion_cn
+        _round_market_units_cn(result.business_conclusion_cn)
         for result in value.direct_market_results
         if result.price_comparison is not None
         and _enum_text(result.status)
         in {"conclusion_available", "partial_conclusion"}
     )
     volume_conclusions = _unique(
-        result.business_conclusion_cn
+        _round_market_units_cn(result.business_conclusion_cn)
         for result in value.direct_market_results
         if result.sales_comparison is not None
         and _enum_text(result.status)
