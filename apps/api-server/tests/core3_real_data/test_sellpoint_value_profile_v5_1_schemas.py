@@ -194,6 +194,14 @@ def test_priority_order_must_match_saved_selection_ranks() -> None:
         _competitor_source(priority_order=["TV-C1", "TV-C3", "TV-C4"])
 
 
+def test_formal_competitor_source_preserves_saved_source_order() -> None:
+    payload = _competitor_source().model_dump(mode="python")
+    payload["candidates"] = list(reversed(payload["candidates"]))
+
+    with pytest.raises(ValidationError, match="ordered and contiguous"):
+        SellpointValueCompetitorSource.model_validate(payload)
+
+
 def test_question_candidate_missing_dimension_does_not_block_available_dimension() -> (
     None
 ):
@@ -202,6 +210,29 @@ def test_question_candidate_missing_dimension_does_not_block_available_dimension
     assert use.selected is True
     assert use.usable_dimensions == ["market"]
     assert use.unavailable_dimensions == ["parameter"]
+
+
+def test_same_sku_can_have_separate_competitor_and_reference_question_uses() -> None:
+    competitor = _selected_use("TV-C1")
+    reference = QuestionCandidateUse(
+        candidate_sku_code="TV-C1",
+        source_type="market_reference",
+        selected=True,
+        usable_dimensions=["market"],
+        selection_reasons=["reference_market_available"],
+    )
+
+    result = QuantificationResult(
+        layer="user_value_evidence",
+        method="question_local_source_identity",
+        status="conclusion_available",
+        strength="directional",
+        candidate_uses=[competitor, reference],
+        result={"source_identities": 2},
+        result_hash="source-identity-hash",
+    )
+
+    assert len(result.candidate_uses) == 2
 
 
 def test_unselected_candidate_requires_question_local_rejection_reason() -> None:

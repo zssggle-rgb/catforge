@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G05 completed；SPV51-G06 pending
+状态：SPV51-G01—G06 completed；SPV51-G07 pending
 
 日期：2026-07-17
 
@@ -97,6 +97,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G06 两池与问题级资格
 
 保留既有市场参考生成，和正式竞品 manifest 分开。候选每个问题单独 selected/rejected；缺某维度不影响其他问题。Top3 只标优先级。
+
+完成状态：completed；关闭回执：`SPV51_G06_closure_receipt.md`。
 
 ### SPV51-G07 基础能力与投入
 

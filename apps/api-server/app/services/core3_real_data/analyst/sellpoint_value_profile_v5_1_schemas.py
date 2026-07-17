@@ -14,6 +14,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    CandidateQuestion,
     SellpointValueEvidenceRef,
     SellpointValueProfileBaseModel,
 )
@@ -24,6 +25,16 @@ SPV_V5_1_RULE_VERSION = "sellpoint_value_profile_rule_v5_1"
 SPV_V5_1_METHOD_VERSION = "sellpoint_value_profile_method_v5_1"
 SPV_V5_1_CONFIG_VERSION = "sellpoint_value_profile_low_gate_v5_1"
 SPV_V5_1_COMPETITOR_METHOD_VERSION = "competitor_profile_agent_snapshot_v2"
+SPV_V5_1_CANDIDATE_QUESTIONS: tuple[CandidateQuestion, ...] = (
+    "current_price_support",
+    "value_relative_advantage",
+    "same_brand_role",
+    "scale_conversion",
+    "configuration_follow",
+    "specific_competitor",
+    "parameter_conversion",
+    "battlefield_expansion",
+)
 SPV_V5_1_COMPETITOR_FACT_GROUPS = (
     "basis",
     "semantic_overlap",
@@ -65,6 +76,16 @@ class QuestionConclusionStrength(str, Enum):
 class CandidateSourceType(str, Enum):
     COMPETITOR = "competitor"
     MARKET_REFERENCE = "market_reference"
+
+
+class AnalysisReferencePurpose(str, Enum):
+    SAME_SIZE_MARKET = "same_size_market"
+    SAME_BUDGET_MARKET = "same_budget_market"
+    SAME_BRAND_SIZE_LADDER = "same_brand_size_ladder"
+    PARAMETER_GROUP = "parameter_group"
+    PERFORMANCE_ARCHETYPE = "performance_archetype"
+    BATTLEFIELD_BENCHMARK = "battlefield_benchmark"
+    SYNTHETIC_DONOR = "synthetic_donor"
 
 
 class QuantificationLayer(str, Enum):
@@ -200,10 +221,10 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
             for row in self.candidates
         ):
             raise ValueError("competitor source candidates must stay in category")
-        if {row.source_rank for row in self.candidates} != set(
+        if [row.source_rank for row in self.candidates] != list(
             range(1, len(self.candidates) + 1)
         ):
-            raise ValueError("competitor source ranks must be contiguous")
+            raise ValueError("competitor source ranks must be ordered and contiguous")
         selected = sorted(
             (row for row in self.candidates if row.selected_rank is not None),
             key=lambda row: row.selected_rank or 0,
@@ -221,6 +242,8 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
 class QuestionCandidateUse(SellpointValueProfileBaseModel):
     candidate_sku_code: str = Field(min_length=1)
     source_type: CandidateSourceType
+    source_rank: int | None = Field(default=None, ge=1)
+    priority_rank: int | None = Field(default=None, ge=1, le=3)
     selected: bool
     usable_dimensions: list[str] = Field(default_factory=list)
     unavailable_dimensions: list[str] = Field(default_factory=list)
@@ -236,8 +259,16 @@ class QuestionCandidateUse(SellpointValueProfileBaseModel):
             self.unavailable_dimensions
         ):
             raise ValueError("question candidate dimensions must be unique")
+        if self.usable_dimensions != sorted(self.usable_dimensions) or (
+            self.unavailable_dimensions != sorted(self.unavailable_dimensions)
+        ):
+            raise ValueError("question candidate dimensions must be sorted")
         if usable & unavailable:
             raise ValueError("usable and unavailable dimensions must not overlap")
+        if self.source_type == CandidateSourceType.MARKET_REFERENCE and (
+            self.source_rank is not None or self.priority_rank is not None
+        ):
+            raise ValueError("market references cannot carry competitor ranks")
         if self.selected:
             if not self.usable_dimensions or not self.selection_reasons:
                 raise ValueError("selected candidates require usable facts and reasons")
@@ -245,6 +276,148 @@ class QuestionCandidateUse(SellpointValueProfileBaseModel):
                 raise ValueError("selected candidates cannot contain rejection reasons")
         elif not self.rejection_reasons:
             raise ValueError("unselected candidates require question-local reasons")
+        return self
+
+
+class SellpointValueAnalysisReference(SellpointValueProfileBaseModel):
+    reference_sku_code: str = Field(min_length=1)
+    brand_name: str | None = None
+    model_name: str | None = None
+    purposes: list[AnalysisReferencePurpose] = Field(min_length=1)
+    also_competitor: bool = False
+    same_brand_as_target: bool | None = None
+    market: CompetitorProfileSkuMarketFacts
+    parameter_facts: dict[str, Any] | None = None
+    battlefield_facts: dict[str, Any] | None = None
+    value_facts: dict[str, Any] | None = None
+    source_hashes: dict[str, str] = Field(default_factory=dict)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> "SellpointValueAnalysisReference":
+        if self.market.sku_code != self.reference_sku_code:
+            raise ValueError("analysis reference market facts must match reference SKU")
+        purposes = [value.value for value in self.purposes]
+        if purposes != sorted(set(purposes)):
+            raise ValueError("analysis reference purposes must be sorted and unique")
+        return self
+
+
+class QuestionCandidateSet(SellpointValueProfileBaseModel):
+    question_code: CandidateQuestion
+    required_dimensions: list[str] = Field(default_factory=list)
+    alternative_dimension_groups: list[list[str]] = Field(default_factory=list)
+    allowed_reference_purposes: list[AnalysisReferencePurpose] = Field(
+        default_factory=list
+    )
+    candidate_uses: list[QuestionCandidateUse] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_candidate_set(self) -> "QuestionCandidateSet":
+        if self.required_dimensions != sorted(set(self.required_dimensions)):
+            raise ValueError("required dimensions must be sorted and unique")
+        normalized_groups = [
+            sorted(set(group)) for group in self.alternative_dimension_groups
+        ]
+        if any(not group for group in normalized_groups):
+            raise ValueError("alternative dimension groups cannot be empty")
+        if normalized_groups != self.alternative_dimension_groups:
+            raise ValueError("alternative dimension groups must be sorted and unique")
+        purposes = [value.value for value in self.allowed_reference_purposes]
+        if purposes != sorted(set(purposes)):
+            raise ValueError("allowed reference purposes must be sorted and unique")
+        keys = [
+            (row.source_type.value, row.candidate_sku_code)
+            for row in self.candidate_uses
+        ]
+        if len(keys) != len(set(keys)):
+            raise ValueError("question candidate uses must be unique within each pool")
+        return self
+
+
+class SellpointValueCandidatePools(SellpointValueProfileBaseModel):
+    schema_version: Literal["sellpoint_value_candidate_pools_v5_1"]
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    competitor_profile_version_id: str = Field(min_length=1)
+    competitor_source_result_hash: str = Field(min_length=1)
+    competitor_source_version_result_hash: str = Field(min_length=1)
+    formal_competitors: list[CompetitorProfileCandidateRef] = Field(
+        default_factory=list
+    )
+    priority_order: list[str] = Field(default_factory=list, max_length=3)
+    analysis_references: list[SellpointValueAnalysisReference] = Field(
+        default_factory=list
+    )
+    question_candidate_sets: list[QuestionCandidateSet] = Field(
+        default_factory=list
+    )
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_pools(self) -> "SellpointValueCandidatePools":
+        competitor_codes = [row.candidate_sku_code for row in self.formal_competitors]
+        if len(competitor_codes) != len(set(competitor_codes)):
+            raise ValueError("formal competitors must be unique")
+        if self.target_sku_code in competitor_codes:
+            raise ValueError("target cannot appear in the formal competitor pool")
+        if [row.source_rank for row in self.formal_competitors] != list(
+            range(1, len(self.formal_competitors) + 1)
+        ):
+            raise ValueError("formal competitor ranks must be ordered and contiguous")
+        selected = sorted(
+            (row for row in self.formal_competitors if row.selected_rank is not None),
+            key=lambda row: row.selected_rank or 0,
+        )
+        if self.priority_order != [row.candidate_sku_code for row in selected]:
+            raise ValueError("priority order must remain a label from the source profile")
+        reference_codes = [row.reference_sku_code for row in self.analysis_references]
+        if len(reference_codes) != len(set(reference_codes)):
+            raise ValueError("analysis references must be unique")
+        if self.target_sku_code in reference_codes:
+            raise ValueError("target cannot appear in the analysis reference pool")
+        if any(
+            row.market.product_category != self.category_code
+            for row in [*self.formal_competitors, *self.analysis_references]
+        ):
+            raise ValueError("candidate pools must stay within category")
+        competitor_code_set = set(competitor_codes)
+        if any(
+            row.also_competitor != (row.reference_sku_code in competitor_code_set)
+            for row in self.analysis_references
+        ):
+            raise ValueError("analysis reference overlap flag must match formal pool")
+        questions = [row.question_code for row in self.question_candidate_sets]
+        if questions != list(SPV_V5_1_CANDIDATE_QUESTIONS):
+            raise ValueError("candidate pools must assess every question in order")
+        expected_keys = [
+            *((CandidateSourceType.COMPETITOR, code) for code in competitor_codes),
+            *((CandidateSourceType.MARKET_REFERENCE, code) for code in reference_codes),
+        ]
+        candidate_by_code = {
+            row.candidate_sku_code: row for row in self.formal_competitors
+        }
+        for question in self.question_candidate_sets:
+            actual_keys = [
+                (row.source_type, row.candidate_sku_code)
+                for row in question.candidate_uses
+            ]
+            if actual_keys != expected_keys:
+                raise ValueError(
+                    "each question must assess every pool member in source order"
+                )
+            for use in question.candidate_uses:
+                if use.source_type != CandidateSourceType.COMPETITOR:
+                    continue
+                candidate = candidate_by_code[use.candidate_sku_code]
+                if (
+                    use.source_rank != candidate.source_rank
+                    or use.priority_rank != candidate.selected_rank
+                ):
+                    raise ValueError(
+                        "question competitor ranks must remain source labels"
+                    )
         return self
 
 
@@ -330,9 +503,11 @@ class QuantificationResult(SellpointValueProfileBaseModel):
 
     @model_validator(mode="after")
     def validate_result_state(self) -> "QuantificationResult":
-        candidate_codes = [row.candidate_sku_code for row in self.candidate_uses]
-        if len(candidate_codes) != len(set(candidate_codes)):
-            raise ValueError("question candidate uses must be unique by SKU")
+        candidate_keys = [
+            (row.source_type, row.candidate_sku_code) for row in self.candidate_uses
+        ]
+        if len(candidate_keys) != len(set(candidate_keys)):
+            raise ValueError("question candidate uses must be unique within each pool")
         selected = [row for row in self.candidate_uses if row.selected]
         if self.status in {
             QuestionConclusionStatus.CONCLUSION_AVAILABLE,
@@ -516,6 +691,7 @@ class ProfileReleaseAssessment(SellpointValueProfileBaseModel):
 
 
 __all__ = [
+    "AnalysisReferencePurpose",
     "CandidateSourceType",
     "CompetitorProfileCandidateRef",
     "ConclusionDistribution",
@@ -524,15 +700,19 @@ __all__ = [
     "QuantificationLayer",
     "QuantificationResult",
     "QuestionCandidateUse",
+    "QuestionCandidateSet",
     "QuestionConclusionStatus",
     "QuestionConclusionStrength",
     "ReleaseIntegritySummary",
     "SPV_V5_1_COMPETITOR_METHOD_VERSION",
+    "SPV_V5_1_CANDIDATE_QUESTIONS",
     "SPV_V5_1_CONFIG_VERSION",
     "SPV_V5_1_METHOD_VERSION",
     "SPV_V5_1_RULE_VERSION",
     "SPV_V5_1_SCHEMA_VERSION",
     "SellpointValueCompetitorSource",
+    "SellpointValueAnalysisReference",
+    "SellpointValueCandidatePools",
     "TableStakeAssessment",
     "TableStakeAssessmentStatus",
     "ValueQuantificationStack",
