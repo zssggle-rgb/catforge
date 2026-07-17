@@ -72,7 +72,24 @@ def _analysis(sku_code: str, rank: int) -> SimpleNamespace:
     }
     values["ranking_gate_reasons"] = ["saved_gate"]
     values["shared_business_context"] = ["客厅换新"]
-    parameter_claim_overlap = values.pop("parameter_claim_overlap")
+    parameter_claim_overlap = {
+        **values.pop("parameter_claim_overlap"),
+        "parameter_overlap": {
+            "target_items": [
+                {
+                    "code": "capacity_w",
+                    "roles": ["core_picture", "param_value"],
+                }
+            ],
+            "matched_items": [
+                {
+                    "code": "capacity_w",
+                    "target_roles": ["core_picture", "param_value"],
+                    "candidate_roles": ["core_gaming", "param_value"],
+                }
+            ],
+        },
+    }
     if rank != 2:
         values["param_claim_overlap"] = parameter_claim_overlap
     return SimpleNamespace(
@@ -222,6 +239,13 @@ def test_formal_adapter_maps_all_saved_candidates_pair_facts_and_hashes() -> Non
     assert source.source_result_hash == "hash:profile:target"
     assert source.candidates[0].pair_result_hash == "hash:pair:1"
     assert source.candidates[0].pair_facts.value_anchor["rank"] == 1
+    parameter_overlap = source.candidates[0].pair_facts.parameter_claim_overlap[
+        "parameter_overlap"
+    ]
+    assert parameter_overlap["target_items"][0]["roles"] == [
+        "core_picture",
+        "param_value",
+    ]
     assert "parameter_claim_overlap" in (
         source.candidates[1].pair_facts.unavailable_fact_groups
     )
@@ -289,6 +313,14 @@ def test_adapter_category_contract_is_not_hardcoded_to_tv() -> None:
     assert result.source.category_code == "AC"
     assert result.source.target_market.product_category == "AC"
     assert all(row.market.product_category == "AC" for row in result.source.candidates)
+    parameter_overlap = result.source.candidates[
+        0
+    ].pair_facts.parameter_claim_overlap["parameter_overlap"]
+    assert parameter_overlap["target_items"][0]["roles"] == ["param_value"]
+    assert parameter_overlap["matched_items"][0]["target_roles"] == ["param_value"]
+    assert parameter_overlap["matched_items"][0]["candidate_roles"] == [
+        "param_value"
+    ]
 
 
 def test_unavailable_profile_is_explicit_and_does_not_read_version() -> None:

@@ -39,6 +39,16 @@ _PAIR_FACT_SOURCE_FIELDS = {
     "parameter_claim_overlap": "param_claim_overlap",
 }
 
+_AC_LEGACY_TV_PARAMETER_ROLE_LABELS = frozenset(
+    {
+        "core_picture",
+        "core_gaming",
+        "core_system",
+        "core_eye_care",
+    }
+)
+_PARAMETER_ROLE_KEYS = frozenset({"roles", "target_roles", "candidate_roles"})
+
 
 class SellpointValueCompetitorSourceIntegrityError(RuntimeError):
     """Raised when one saved competitor graph crosses its immutable boundary."""
@@ -243,7 +253,10 @@ def _candidate_ref(row: Any, *, category_code: Literal["TV", "AC"]):
             )
             unavailable.append(group)
         else:
-            pair_values[group] = deepcopy(value)
+            pair_values[group] = _pair_fact_value(
+                value,
+                category_code=category_code,
+            )
             available.append(group)
     return CompetitorProfileCandidateRef(
         candidate_sku_code=row.candidate_sku_code,
@@ -260,6 +273,49 @@ def _candidate_ref(row: Any, *, category_code: Literal["TV", "AC"]):
             unavailable_fact_groups=unavailable,
         ),
     )
+
+
+def _pair_fact_value(
+    value: Any,
+    *,
+    category_code: Literal["TV", "AC"],
+    field_name: str | None = None,
+) -> Any:
+    """Remove legacy TV bucket labels from AC parameter facts only.
+
+    The saved competitor profile can contain correct AC parameter codes inside
+    historical generic storage buckets named ``core_picture``/``core_gaming``.
+    Those bucket labels are not AC facts and must not be copied into a new AC
+    sellpoint-value profile. Actual parameter codes, values, evidence, and the
+    immutable source pair hash remain unchanged.
+    """
+
+    if isinstance(value, dict):
+        return {
+            key: _pair_fact_value(
+                item,
+                category_code=category_code,
+                field_name=str(key),
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        items = [
+            _pair_fact_value(
+                item,
+                category_code=category_code,
+                field_name=field_name,
+            )
+            for item in value
+        ]
+        if category_code == "AC" and field_name in _PARAMETER_ROLE_KEYS:
+            return [
+                item
+                for item in items
+                if item not in _AC_LEGACY_TV_PARAMETER_ROLE_LABELS
+            ]
+        return items
+    return deepcopy(value)
 
 
 def _target_market(identity: Any) -> CompetitorProfileSkuMarketFacts:
