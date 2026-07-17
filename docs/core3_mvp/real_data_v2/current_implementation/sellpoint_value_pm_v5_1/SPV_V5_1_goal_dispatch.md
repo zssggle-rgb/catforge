@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G09 completed；SPV51-G10 pending
+状态：SPV51-G01—G10 completed；SPV51-G11 pending
 
 日期：2026-07-17
 
@@ -121,6 +121,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G10 状态与生命周期
 
 实现 question→value→SKU→version 的局部聚合；移除全体 investment confidence 平均门槛；release quality 只由完整性和 invalid 决定。
+
+完成状态：completed；关闭回执：`SPV51_G10_closure_receipt.md`。
 
 ### SPV51-G11 生成与持久化集成
 

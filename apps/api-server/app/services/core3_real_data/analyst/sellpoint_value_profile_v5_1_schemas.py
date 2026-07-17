@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from enum import Enum
+from statistics import median
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
@@ -1094,6 +1095,335 @@ class StrictMarketImpliedWtpResult(SellpointValueProfileBaseModel):
         return self
 
 
+class QuestionConclusionSignal(SellpointValueProfileBaseModel):
+    question_code: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    confidence: Decimal | None = Field(default=None, ge=0, le=1)
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    source_result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_signal(self) -> "QuestionConclusionSignal":
+        if (
+            self.status
+            in {
+                QuestionConclusionStatus.NO_CONCLUSION,
+                QuestionConclusionStatus.INVALID,
+            }
+            and self.confidence is not None
+        ):
+            raise ValueError(
+                "no-conclusion and invalid signals cannot carry confidence"
+            )
+        if self.status == QuestionConclusionStatus.INVALID:
+            if not self.review_required or not self.review_reasons:
+                raise ValueError("invalid question signal requires local review")
+        elif self.review_required or self.review_reasons:
+            raise ValueError("only invalid question signals require review")
+        return self
+
+
+class ValueConclusionAggregationInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    question_signals: list[QuestionConclusionSignal] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_questions(self) -> "ValueConclusionAggregationInput":
+        codes = [row.question_code for row in self.question_signals]
+        if len(codes) != len(set(codes)):
+            raise ValueError("value question signals must be unique")
+        return self
+
+
+class ValueConclusionResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    question_count: int = Field(ge=0)
+    conclusion_available_count: int = Field(ge=0)
+    partial_conclusion_count: int = Field(ge=0)
+    no_conclusion_count: int = Field(ge=0)
+    invalid_count: int = Field(ge=0)
+    conclusion_confidences: list[Decimal] = Field(default_factory=list)
+    confidence_min: Decimal | None = Field(default=None, ge=0, le=1)
+    confidence_median: Decimal | None = Field(default=None, ge=0, le=1)
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    source_result_hashes: list[str] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "ValueConclusionResult":
+        counts = (
+            self.conclusion_available_count,
+            self.partial_conclusion_count,
+            self.no_conclusion_count,
+            self.invalid_count,
+        )
+        if self.question_count != sum(counts):
+            raise ValueError("value conclusion counts must cover all questions")
+        expected_status = (
+            QuestionConclusionStatus.INVALID
+            if self.invalid_count
+            else QuestionConclusionStatus.CONCLUSION_AVAILABLE
+            if self.conclusion_available_count
+            else QuestionConclusionStatus.PARTIAL_CONCLUSION
+            if self.partial_conclusion_count
+            else QuestionConclusionStatus.NO_CONCLUSION
+        )
+        if self.status != expected_status:
+            raise ValueError("value status must follow local question precedence")
+        if self.conclusion_confidences != sorted(self.conclusion_confidences):
+            raise ValueError("value conclusion confidences must be sorted")
+        if self.conclusion_confidences:
+            if self.confidence_min != min(
+                self.conclusion_confidences
+            ) or self.confidence_median != median(self.conclusion_confidences):
+                raise ValueError("value confidence summary must match direct evidence")
+        elif self.confidence_min is not None or self.confidence_median is not None:
+            raise ValueError("missing conclusion confidence must remain unknown")
+        if self.review_required != (self.status == QuestionConclusionStatus.INVALID):
+            raise ValueError("value review is only the overlay for local invalid state")
+        if self.review_required != bool(self.review_reasons):
+            raise ValueError("value review flag and reasons must agree")
+        if self.source_result_hashes != sorted(set(self.source_result_hashes)):
+            raise ValueError("value source hashes must be sorted and unique")
+        return self
+
+
+class SkuConclusionAggregationInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_results: list[ValueConclusionResult] = Field(default_factory=list)
+    structural_invalid_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "SkuConclusionAggregationInput":
+        codes = [row.value_bundle_code for row in self.value_results]
+        if len(codes) != len(set(codes)):
+            raise ValueError("SKU value results must be unique")
+        if any(
+            row.project_id != self.project_id
+            or row.category_code != self.category_code
+            or row.target_sku_code != self.target_sku_code
+            for row in self.value_results
+        ):
+            raise ValueError("SKU value results must stay within scope")
+        if self.structural_invalid_reasons != sorted(
+            set(self.structural_invalid_reasons)
+        ):
+            raise ValueError("structural invalid reasons must be sorted and unique")
+        return self
+
+
+class SkuConclusionResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    consumer_status: Literal[
+        "usable_conclusion",
+        "usable_partial",
+        "data_insufficient",
+        "invalid",
+    ]
+    value_count: int = Field(ge=0)
+    conclusion_available_value_codes: list[str] = Field(default_factory=list)
+    partial_conclusion_value_codes: list[str] = Field(default_factory=list)
+    no_conclusion_value_codes: list[str] = Field(default_factory=list)
+    invalid_value_codes: list[str] = Field(default_factory=list)
+    local_review_value_codes: list[str] = Field(default_factory=list)
+    conclusion_confidences: list[Decimal] = Field(default_factory=list)
+    confidence_min: Decimal | None = Field(default=None, ge=0, le=1)
+    confidence_median: Decimal | None = Field(default=None, ge=0, le=1)
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    structural_invalid_reasons: list[str] = Field(default_factory=list)
+    source_result_hashes: list[str] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "SkuConclusionResult":
+        code_lists = (
+            self.conclusion_available_value_codes,
+            self.partial_conclusion_value_codes,
+            self.no_conclusion_value_codes,
+            self.invalid_value_codes,
+        )
+        if any(values != sorted(set(values)) for values in code_lists):
+            raise ValueError("SKU value code lists must be sorted and unique")
+        flattened = [value for values in code_lists for value in values]
+        if self.value_count != len(flattened) or len(flattened) != len(set(flattened)):
+            raise ValueError("SKU value state lists must partition every value")
+        expected_status = (
+            QuestionConclusionStatus.INVALID
+            if self.structural_invalid_reasons
+            else QuestionConclusionStatus.CONCLUSION_AVAILABLE
+            if self.conclusion_available_value_codes
+            else QuestionConclusionStatus.PARTIAL_CONCLUSION
+            if self.partial_conclusion_value_codes
+            else QuestionConclusionStatus.INVALID
+            if self.invalid_value_codes and not self.no_conclusion_value_codes
+            else QuestionConclusionStatus.NO_CONCLUSION
+        )
+        if self.status != expected_status:
+            raise ValueError("SKU status must not propagate a local invalid value")
+        expected_consumer_status = {
+            QuestionConclusionStatus.CONCLUSION_AVAILABLE: "usable_conclusion",
+            QuestionConclusionStatus.PARTIAL_CONCLUSION: "usable_partial",
+            QuestionConclusionStatus.NO_CONCLUSION: "data_insufficient",
+            QuestionConclusionStatus.INVALID: "invalid",
+        }[self.status]
+        if self.consumer_status != expected_consumer_status:
+            raise ValueError("SKU consumer status must match conclusion status")
+        if self.local_review_value_codes != self.invalid_value_codes:
+            raise ValueError("local review values must preserve local invalid values")
+        if self.conclusion_confidences != sorted(self.conclusion_confidences):
+            raise ValueError("SKU conclusion confidences must be sorted")
+        if self.conclusion_confidences:
+            if self.confidence_min != min(
+                self.conclusion_confidences
+            ) or self.confidence_median != median(self.conclusion_confidences):
+                raise ValueError("SKU confidence summary must match direct evidence")
+        elif self.confidence_min is not None or self.confidence_median is not None:
+            raise ValueError(
+                "SKU confidence must remain unknown without direct evidence"
+            )
+        if self.review_required != (self.status == QuestionConclusionStatus.INVALID):
+            raise ValueError("only an invalid SKU requires SKU-level review")
+        if self.review_required != bool(self.review_reasons):
+            raise ValueError("SKU review flag and reasons must agree")
+        if self.source_result_hashes != sorted(set(self.source_result_hashes)):
+            raise ValueError("SKU source hashes must be sorted and unique")
+        return self
+
+
+class VersionConclusionAggregationInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    expected_sku_codes: list[str] = Field(min_length=1)
+    sku_results: list[SkuConclusionResult] = Field(default_factory=list)
+    generation_failure_sku_codes: list[str] = Field(default_factory=list)
+    dangling_reference_count: int = Field(default=0, ge=0)
+    hash_mismatch_count: int = Field(default=0, ge=0)
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_input(self) -> "VersionConclusionAggregationInput":
+        if self.expected_sku_codes != sorted(set(self.expected_sku_codes)):
+            raise ValueError("expected SKU codes must be sorted and unique")
+        if self.generation_failure_sku_codes != sorted(
+            set(self.generation_failure_sku_codes)
+        ):
+            raise ValueError("generation failure SKU codes must be sorted and unique")
+        return self
+
+
+class VersionConclusionResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    release_quality_status: Literal["ready", "limited", "blocked"]
+    conclusion_distribution: ConclusionDistribution
+    integrity: ReleaseIntegritySummary
+    conclusion_available_sku_codes: list[str] = Field(default_factory=list)
+    partial_conclusion_sku_codes: list[str] = Field(default_factory=list)
+    no_conclusion_sku_codes: list[str] = Field(default_factory=list)
+    invalid_sku_codes: list[str] = Field(default_factory=list)
+    generation_failure_sku_codes: list[str] = Field(default_factory=list)
+    local_review_item_count: int = Field(ge=0)
+    confidence_min: Decimal | None = Field(default=None, ge=0, le=1)
+    confidence_median: Decimal | None = Field(default=None, ge=0, le=1)
+    limitations: list[str] = Field(default_factory=list)
+    source_result_hashes: list[str] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "VersionConclusionResult":
+        lists = (
+            self.conclusion_available_sku_codes,
+            self.partial_conclusion_sku_codes,
+            self.no_conclusion_sku_codes,
+            self.invalid_sku_codes,
+        )
+        if any(values != sorted(set(values)) for values in lists):
+            raise ValueError("version SKU status lists must be sorted and unique")
+        flattened = [value for values in lists for value in values]
+        if len(flattened) != len(set(flattened)):
+            raise ValueError("version SKU status lists must not overlap")
+        if self.conclusion_distribution.total_count != len(flattened):
+            raise ValueError("version distribution must match SKU status lists")
+        expected_counts = (
+            len(self.conclusion_available_sku_codes),
+            len(self.partial_conclusion_sku_codes),
+            len(self.no_conclusion_sku_codes),
+            len(self.invalid_sku_codes),
+        )
+        actual_counts = (
+            self.conclusion_distribution.conclusion_available_count,
+            self.conclusion_distribution.partial_conclusion_count,
+            self.conclusion_distribution.no_conclusion_count,
+            self.conclusion_distribution.invalid_count,
+        )
+        if actual_counts != expected_counts:
+            raise ValueError("version distribution counts must match SKU status lists")
+        if self.integrity.invalid_profile_count != len(
+            self.invalid_sku_codes
+        ) or self.integrity.generation_failure_count != len(
+            self.generation_failure_sku_codes
+        ):
+            raise ValueError("version integrity counts must match saved status lists")
+        blocking = any(
+            (
+                self.integrity.generated_sku_count != self.integrity.expected_sku_count,
+                self.integrity.generation_failure_count,
+                self.integrity.invalid_profile_count,
+                self.integrity.cross_category_count,
+                self.integrity.duplicate_sku_count,
+                self.integrity.dangling_reference_count,
+                self.integrity.hash_mismatch_count,
+                self.conclusion_distribution.invalid_count,
+            )
+        )
+        limited = any(
+            (
+                self.conclusion_distribution.partial_conclusion_count,
+                self.conclusion_distribution.no_conclusion_count,
+                self.local_review_item_count,
+                bool(self.limitations),
+            )
+        )
+        expected_quality = "blocked" if blocking else "limited" if limited else "ready"
+        if self.release_quality_status != expected_quality:
+            raise ValueError(
+                "version quality must derive from integrity and local states"
+            )
+        if (self.confidence_min is None) != (self.confidence_median is None):
+            raise ValueError(
+                "version confidence summary must be jointly present or absent"
+            )
+        if (
+            self.confidence_min is not None
+            and self.confidence_median is not None
+            and self.confidence_min > self.confidence_median
+        ):
+            raise ValueError("version confidence minimum cannot exceed median")
+        if self.source_result_hashes != sorted(set(self.source_result_hashes)):
+            raise ValueError("version source hashes must be sorted and unique")
+        return self
+
+
 class QuantificationResult(SellpointValueProfileBaseModel):
     layer: QuantificationLayer
     method: str = Field(min_length=1)
@@ -1447,6 +1777,7 @@ __all__ = [
     "QuantificationResult",
     "QuestionCandidateUse",
     "QuestionCandidateSet",
+    "QuestionConclusionSignal",
     "QuestionConclusionStatus",
     "QuestionConclusionStrength",
     "ReleaseIntegritySummary",
@@ -1457,11 +1788,17 @@ __all__ = [
     "SPV_V5_1_RULE_VERSION",
     "SPV_V5_1_SCHEMA_VERSION",
     "SellpointValueCompetitorSource",
+    "SkuConclusionAggregationInput",
+    "SkuConclusionResult",
     "StrictMarketImpliedWtpResult",
     "SyntheticMarketBaselineResult",
     "SellpointValueAnalysisReference",
     "SellpointValueCandidatePools",
     "TableStakeAssessment",
     "TableStakeAssessmentStatus",
+    "ValueConclusionAggregationInput",
+    "ValueConclusionResult",
     "ValueQuantificationStack",
+    "VersionConclusionAggregationInput",
+    "VersionConclusionResult",
 ]
