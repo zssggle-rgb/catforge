@@ -15,6 +15,8 @@ from pydantic import Field, model_validator
 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
     CandidateQuestion,
+    CapabilityInvestmentInput,
+    InvestmentClassification,
     SellpointValueEvidenceRef,
     SellpointValueProfileBaseModel,
 )
@@ -86,6 +88,11 @@ class AnalysisReferencePurpose(str, Enum):
     PERFORMANCE_ARCHETYPE = "performance_archetype"
     BATTLEFIELD_BENCHMARK = "battlefield_benchmark"
     SYNTHETIC_DONOR = "synthetic_donor"
+
+
+class InvestmentQuestionCode(str, Enum):
+    INVESTMENT_CONVERSION = "investment_conversion"
+    CONFIGURATION_FOLLOW = "configuration_follow"
 
 
 class QuantificationLayer(str, Enum):
@@ -217,8 +224,7 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
         if self.target_sku_code in codes:
             raise ValueError("competitor source cannot contain the target SKU")
         if any(
-            row.market.product_category != self.category_code
-            for row in self.candidates
+            row.market.product_category != self.category_code for row in self.candidates
         ):
             raise ValueError("competitor source candidates must stay in category")
         if [row.source_rank for row in self.candidates] != list(
@@ -350,9 +356,7 @@ class SellpointValueCandidatePools(SellpointValueProfileBaseModel):
     analysis_references: list[SellpointValueAnalysisReference] = Field(
         default_factory=list
     )
-    question_candidate_sets: list[QuestionCandidateSet] = Field(
-        default_factory=list
-    )
+    question_candidate_sets: list[QuestionCandidateSet] = Field(default_factory=list)
     result_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -371,7 +375,9 @@ class SellpointValueCandidatePools(SellpointValueProfileBaseModel):
             key=lambda row: row.selected_rank or 0,
         )
         if self.priority_order != [row.candidate_sku_code for row in selected]:
-            raise ValueError("priority order must remain a label from the source profile")
+            raise ValueError(
+                "priority order must remain a label from the source profile"
+            )
         reference_codes = [row.reference_sku_code for row in self.analysis_references]
         if len(reference_codes) != len(set(reference_codes)):
             raise ValueError("analysis references must be unique")
@@ -570,11 +576,21 @@ class TableStakeAssessment(SellpointValueProfileBaseModel):
     minimum_known_count: int = Field(ge=1)
     prevalence_threshold: Decimal = Field(gt=0, le=1)
     prevalence: Decimal | None = Field(default=None, ge=0, le=1)
+    scope_complete: bool = True
+    exclude_from_core_sellpoints: bool | None = None
+    limitations: list[str] = Field(default_factory=list)
     review_required: bool = False
     review_reasons: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_assessment(self) -> "TableStakeAssessment":
+        if self.exclude_from_core_sellpoints is not None and (
+            self.exclude_from_core_sellpoints
+            != (self.status == TableStakeAssessmentStatus.CONFIRMED_TABLE_STAKE)
+        ):
+            raise ValueError(
+                "only confirmed table stakes are excluded from core sellpoints"
+            )
         if self.known_count != self.present_count + self.absent_count:
             raise ValueError("known count must equal present plus absent")
         if self.total_count != (
@@ -589,13 +605,17 @@ class TableStakeAssessment(SellpointValueProfileBaseModel):
         if self.prevalence != expected:
             raise ValueError("prevalence must equal present divided by known")
         if self.status == TableStakeAssessmentStatus.CONFIRMED_TABLE_STAKE and (
-            self.known_count < self.minimum_known_count
+            not self.scope_complete
+            or self.contradicted_count
+            or self.known_count < self.minimum_known_count
             or self.prevalence is None
             or self.prevalence < self.prevalence_threshold
         ):
             raise ValueError("confirmed table stake must pass the positive threshold")
         if self.status == TableStakeAssessmentStatus.NOT_TABLE_STAKE and (
-            self.known_count < self.minimum_known_count
+            not self.scope_complete
+            or self.contradicted_count
+            or self.known_count < self.minimum_known_count
             or self.prevalence is None
             or self.prevalence >= self.prevalence_threshold
         ):
@@ -603,22 +623,127 @@ class TableStakeAssessment(SellpointValueProfileBaseModel):
                 "not-table-stake requires sufficient known samples below threshold"
             )
         if self.status == TableStakeAssessmentStatus.NOT_ASSESSED:
-            if self.known_count >= self.minimum_known_count:
-                raise ValueError("not-assessed requires insufficient known samples")
+            if self.known_count >= self.minimum_known_count and self.scope_complete:
+                raise ValueError("not-assessed requires insufficient samples or scope")
             if self.review_required or self.review_reasons:
                 raise ValueError(
                     "insufficient table-stake samples do not require review"
                 )
-        elif (
-            self.status != TableStakeAssessmentStatus.INVALID
-            and self.known_count < self.minimum_known_count
+        elif self.status != TableStakeAssessmentStatus.INVALID and (
+            self.known_count < self.minimum_known_count or not self.scope_complete
         ):
-            raise ValueError("insufficient known samples must remain not-assessed")
+            raise ValueError("insufficient evidence must remain not-assessed")
         if self.status == TableStakeAssessmentStatus.INVALID:
             if not self.review_required or not self.review_reasons:
                 raise ValueError("invalid table-stake assessments require review")
         elif self.review_required != bool(self.review_reasons):
             raise ValueError("review flag and reasons must agree")
+        return self
+
+
+class CapabilityInvestmentQuestionInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    question_code: InvestmentQuestionCode
+    value_bundle_code: str = Field(min_length=1)
+    investment: CapabilityInvestmentInput
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "CapabilityInvestmentQuestionInput":
+        if self.investment.comparison_scope.category_code != self.category_code:
+            raise ValueError("investment question must stay within category")
+        return self
+
+
+class LocalCapabilityInvestmentDecision(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    question_code: InvestmentQuestionCode
+    value_bundle_code: str = Field(min_length=1)
+    capability_code: str = Field(min_length=1)
+    capability_name_cn: str = Field(min_length=1)
+    classification: InvestmentClassification
+    status: QuestionConclusionStatus
+    table_stake_assessment: TableStakeAssessment
+    used_dimensions: list[str] = Field(default_factory=list)
+    unavailable_dimensions: list[str] = Field(default_factory=list)
+    business_reason_cn: str = Field(min_length=1)
+    confidence: Decimal | None = Field(default=None, ge=0, le=1)
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_local_decision(self) -> "LocalCapabilityInvestmentDecision":
+        used = self.used_dimensions
+        unavailable = self.unavailable_dimensions
+        if used != sorted(set(used)) or unavailable != sorted(set(unavailable)):
+            raise ValueError("investment dimensions must be sorted and unique")
+        if set(used) & set(unavailable):
+            raise ValueError(
+                "used and unavailable investment dimensions cannot overlap"
+            )
+        if self.status in {
+            QuestionConclusionStatus.CONCLUSION_AVAILABLE,
+            QuestionConclusionStatus.PARTIAL_CONCLUSION,
+        }:
+            if self.classification == "unknown" or self.confidence is None:
+                raise ValueError(
+                    "available investment conclusions require a classification"
+                )
+            if self.review_required or self.review_reasons:
+                raise ValueError("valid investment conclusions cannot carry review")
+        elif self.status == QuestionConclusionStatus.NO_CONCLUSION:
+            if self.classification != "unknown" or self.confidence is not None:
+                raise ValueError("no-conclusion investments must remain unknown")
+            if self.review_required or self.review_reasons:
+                raise ValueError("insufficient investment evidence is not review")
+        elif self.status == QuestionConclusionStatus.INVALID:
+            if (
+                self.classification != "unknown"
+                or not self.review_required
+                or not self.review_reasons
+            ):
+                raise ValueError("invalid investment decisions require local review")
+        if self.classification == "table_stake" and (
+            self.table_stake_assessment.status
+            != TableStakeAssessmentStatus.CONFIRMED_TABLE_STAKE
+        ):
+            raise ValueError("table-stake decisions require a confirmed assessment")
+        allowed = (
+            {"retain", "unconverted", "table_stake", "unknown"}
+            if self.question_code == InvestmentQuestionCode.INVESTMENT_CONVERSION
+            else {"do_not_follow", "missing_competitive_gap", "unknown"}
+        )
+        if self.classification not in allowed:
+            raise ValueError("investment classification does not answer this question")
+        return self
+
+
+class InvestmentScopeReview(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    question_code: InvestmentQuestionCode
+    value_bundle_code: str = Field(min_length=1)
+    invalid_capability_codes: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_review(self) -> "InvestmentScopeReview":
+        if self.invalid_capability_codes != sorted(set(self.invalid_capability_codes)):
+            raise ValueError("invalid capability codes must be sorted and unique")
+        if self.review_required != bool(self.invalid_capability_codes):
+            raise ValueError("local review must match invalid capabilities")
+        if self.review_required != bool(self.review_reasons):
+            raise ValueError("local review flag and reasons must agree")
         return self
 
 
@@ -693,9 +818,13 @@ class ProfileReleaseAssessment(SellpointValueProfileBaseModel):
 __all__ = [
     "AnalysisReferencePurpose",
     "CandidateSourceType",
+    "CapabilityInvestmentQuestionInput",
     "CompetitorProfileCandidateRef",
     "ConclusionDistribution",
     "DirectMarketGap",
+    "InvestmentQuestionCode",
+    "InvestmentScopeReview",
+    "LocalCapabilityInvestmentDecision",
     "ProfileReleaseAssessment",
     "QuantificationLayer",
     "QuantificationResult",

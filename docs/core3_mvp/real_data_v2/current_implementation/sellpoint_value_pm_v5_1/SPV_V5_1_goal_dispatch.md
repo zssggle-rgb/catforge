@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G06 completed；SPV51-G07 pending
+状态：SPV51-G01—G07 completed；SPV51-G08 pending
 
 日期：2026-07-17
 
@@ -103,6 +103,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G07 基础能力与投入
 
 基础能力样本不足返回 not_assessed；known/missing 正确。投入分类 unknown 不向 value/SKU 传播；只保留真实冲突 review。
+
+完成状态：completed；关闭回执：`SPV51_G07_closure_receipt.md`。
 
 ### SPV51-G08 直接量价与参数组
 
