@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G02 completed；SPV51-G03 pending
+状态：SPV51-G01—G03 completed；SPV51-G04 pending
 
 日期：2026-07-17
 
@@ -79,6 +79,8 @@
 ### SPV51-G03 Typed Schema 与配置
 
 新增 schema/config，兼容读取 V5 旧 payload。专项测试覆盖状态组合、空/单/多候选、unknown、invalid、TV/AC 隔离。
+
+完成状态：completed；关闭回执：`SPV51_G03_closure_receipt.md`。
 
 ### SPV51-G04 Migration/Entities
 

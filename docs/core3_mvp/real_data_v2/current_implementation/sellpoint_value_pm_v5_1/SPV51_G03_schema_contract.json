@@ -1,0 +1,81 @@
+{
+  "schema_version": "sku_sellpoint_value_decision_profile_v1_1",
+  "rule_version": "sellpoint_value_profile_rule_v5_1",
+  "method_version": "sellpoint_value_profile_method_v5_1",
+  "config_version": "sellpoint_value_profile_low_gate_v5_1",
+  "competitor_source": {
+    "method_version": "competitor_profile_agent_snapshot_v2",
+    "formal": "current published only",
+    "preview": "explicit non-current draft or current published",
+    "candidate_contract": [
+      "candidate_sku_code",
+      "source_rank",
+      "selected_rank",
+      "role",
+      "business_score",
+      "pair_result_hash"
+    ],
+    "priority_contract": "priority_order equals saved selected_rank order and never truncates candidates"
+  },
+  "question_statuses": [
+    "conclusion_available",
+    "partial_conclusion",
+    "no_conclusion",
+    "invalid"
+  ],
+  "question_strengths": [
+    "group",
+    "small_group",
+    "single",
+    "directional",
+    "none"
+  ],
+  "quantification_layers": [
+    "user_value_evidence",
+    "direct_market_gap",
+    "market_archetype",
+    "strict_market_implied_wtp"
+  ],
+  "direct_market_gap": {
+    "minimum_comparator_count": 1,
+    "single": 1,
+    "small_group": "2-4",
+    "group": ">=5",
+    "require_common_weeks": false,
+    "require_common_platforms": false,
+    "allow_weekly_average": true,
+    "causal_claim": false
+  },
+  "value_realization": {
+    "minimum_shared_anchor_count": 1,
+    "allow_single_comparator": true
+  },
+  "parameter_group": {
+    "minimum_distinct_value_count": 2,
+    "minimum_skus_per_value": 1,
+    "require_ordinal_tier": false
+  },
+  "table_stake": {
+    "minimum_known_count": 5,
+    "prevalence_threshold": 0.8,
+    "insufficient_sample_status": "not_assessed",
+    "insufficient_sample_requires_review": false
+  },
+  "optional_enhancements": {
+    "market_archetype": {"required_for_profile": false, "required_for_release": false},
+    "synthetic_control": {"required_for_profile": false, "required_for_release": false},
+    "strict_market_implied_wtp": {"required_for_profile": false, "required_for_release": false}
+  },
+  "release_quality": {
+    "ready": "full integrity, no partial/no_conclusion/review",
+    "limited": "full integrity with partial/no_conclusion/review",
+    "blocked": "coverage, generation, invalid, scope, duplicate, dangling reference or hash integrity failure",
+    "non_blocking": [
+      "strict WTP no_conclusion",
+      "synthetic control no_conclusion",
+      "table-stake not_assessed",
+      "question-local unknown",
+      "question-local review"
+    ]
+  }
+}
