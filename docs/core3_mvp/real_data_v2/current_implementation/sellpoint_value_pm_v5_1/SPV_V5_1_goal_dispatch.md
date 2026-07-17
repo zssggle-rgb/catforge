@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G14 completed；SPV51-G15 pending
+状态：SPV51-G01—G15 completed；SPV51-G16 pending
 
 日期：2026-07-17
 
@@ -159,6 +159,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G15 65E7Q draft
 
 只生成一个 V5.1 draft。按 requirements 第 9 节逐项回读；报告和 QA 使用 preview；任何旧候选回退、20/Top3 不一致、4 个量价结果整体丢失、局部状态再全局传播均失败。
+
+完成状态：completed；关闭回执：`SPV51_G15_closure_receipt.md`；业务验收：`SPV51_G15_65E7Q_acceptance_report.md`；结构化证据：`SPV51_G15_65E7Q_acceptance_evidence.json`。
 
 ### SPV51-G16 AC 单 SKU draft
 

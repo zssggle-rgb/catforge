@@ -1,0 +1,303 @@
+{
+  "acceptance_id": "SPV51-G15-65E7Q-205",
+  "accepted_at": "2026-07-17",
+  "environment": "205",
+  "target": {
+    "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+    "category_code": "TV",
+    "batch_id": "m00_20260623014631_c8630747",
+    "sku_code": "TV00029112",
+    "display_name_cn": "海信 65E7Q"
+  },
+  "draft_version": {
+    "sellpoint_value_profile_version_id": "40803663-3562-4426-b97e-db3f5e6aa9a4",
+    "sku_sellpoint_value_profile_id": "7986ae9d-6734-486d-a3fb-5311df507699",
+    "profile_version": "spv_v5_1_65e7q_g15_20260717_r1",
+    "schema_version": "sku_sellpoint_value_decision_profile_v1_1",
+    "method_version": "sellpoint_value_profile_method_v5_1",
+    "release_status": "draft",
+    "is_current": false,
+    "processing_status": "success",
+    "release_quality_status": "ready",
+    "analysis_state": "ready",
+    "conclusion_status": "conclusion_available",
+    "review_required": false,
+    "review_status": "auto_pass",
+    "profile_confidence": 0.72,
+    "version_count": 1,
+    "profile_count": 1,
+    "candidate_count": 71,
+    "value_item_count": 5,
+    "version_distribution": {
+      "sku_count": 1,
+      "ready_count": 1,
+      "review_required_count": 0,
+      "blocked_count": 0,
+      "failed_count": 0,
+      "conclusion_available_count": 1,
+      "partial_conclusion_count": 0,
+      "no_conclusion_count": 0,
+      "invalid_count": 0,
+      "integrity_error_count": 0
+    },
+    "value_distribution": {
+      "conclusion_available_count": 4,
+      "partial_conclusion_count": 1,
+      "no_conclusion_count": 0,
+      "invalid_count": 0
+    }
+  },
+  "hashes": {
+    "version_input_fingerprint": "sha256:sellpoint_value_version_input_v5_1:676c5fbe323c6f88d824b517611c46bb0959f5d7162cf2ee9434326c56833cb4",
+    "version_candidate_universe_fingerprint": "sha256:sellpoint_value_version_candidates_v5_1:fdc2ec06f4ce8ad1f9572079636dd8535b7d6a3f8657971d5ccd6012efbea234",
+    "version_result_hash": "sha256:sellpoint_value_version_result_v5_1:c82c2b478e607c33c15280a37bf447b5f47b7ff30df18ce5d30eba291f850232",
+    "profile_input_fingerprint": "sha256:sellpoint_value_profile_input_v5_1:4f33eb14f4448e493a9c0f80a05e101bcf8fe8afc395ea4c9cbc874e0747233d",
+    "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:7b54f4e8baf2030ff10cf28ed443687a5dec57f0ba71d4c084781e7496a82746"
+  },
+  "competitor_profile_source": {
+    "competitor_profile_version_id": "288b6ce0-b632-478c-9705-8297103da730",
+    "profile_version": "competitor_profile_agent_snapshot_v2_tv_full_g41c_20260716_r2",
+    "method_version": "competitor_profile_agent_snapshot_v2",
+    "release_status": "published",
+    "is_current": true,
+    "version_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89",
+    "candidate_universe_fingerprint": "sha256:competitor_profile_agent_candidate_universe_v1:4d8eb324e2374a63e0555caf38ca66f1a1833f7f1bf831837c74df07ed950190",
+    "target_profile_result_hash": "sha256:competitor_profile_agent_profile_result_v2:bd7e899a989f192cc35c06d7ded02ca05bc0aa54cf323dca4cf8a320f3ab9ae6",
+    "formal_competitor_count": 20,
+    "top3_sku_codes": [
+      "TV00027801",
+      "TV00028909",
+      "TV00029936"
+    ],
+    "analysis_reference_count": 51,
+    "old_m12_m13_m14_fallback_calls": 0
+  },
+  "question_candidate_pools": [
+    {
+      "question_code": "current_price_support",
+      "selected_count": 71,
+      "competitor_count": 20,
+      "reference_count": 51
+    },
+    {
+      "question_code": "value_relative_advantage",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "same_brand_role",
+      "selected_count": 5,
+      "competitor_count": 5,
+      "reference_count": 0
+    },
+    {
+      "question_code": "scale_conversion",
+      "selected_count": 71,
+      "competitor_count": 20,
+      "reference_count": 51
+    },
+    {
+      "question_code": "configuration_follow",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "specific_competitor",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "parameter_conversion",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "battlefield_expansion",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    }
+  ],
+  "investment_decisions": {
+    "retain": [
+      "明亮环境与明暗层次",
+      "影院声场",
+      "色彩与画面真实",
+      "大屏客厅沉浸",
+      "系统与交互效率"
+    ],
+    "unconverted": [
+      "游戏与运动流畅"
+    ],
+    "raw_occurrence_counts": {
+      "retain": 13,
+      "unconverted": 3
+    },
+    "core_sellpoint_filter": "只有 retain 且非基础的卖点进入核心卖点组合；游戏与运动流畅未进入核心卖点。"
+  },
+  "value_items": [
+    {
+      "battlefield_name_cn": "游戏体育流畅",
+      "value_bundle_name_cn": "游戏设备适配降低踩坑风险支撑卖点组合",
+      "conclusion_status": "partial_conclusion",
+      "core_sellpoints": []
+    },
+    {
+      "battlefield_name_cn": "高端画质升级",
+      "value_bundle_name_cn": "影音用户愿为画质升级付费支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "高端画质升级",
+      "value_bundle_name_cn": "画质配置解释加价支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "高端画质升级",
+      "value_bundle_name_cn": "同尺寸画质越级获得感支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "高端画质升级",
+      "value_bundle_name_cn": "贵得值的体验升级支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    }
+  ],
+  "direct_market_comparisons": [
+    {
+      "comparison_name": "影音画质价值组合",
+      "reference_sku_codes": [
+        "TV00027801",
+        "TV00029936"
+      ],
+      "target_weekly_average_price": 5949.3917,
+      "reference_weekly_average_price": 5579.508,
+      "price_gap": 369.8837,
+      "target_weekly_average_sales": 250.958333,
+      "reference_weekly_average_sales": 205.3125,
+      "sales_gap": 45.645833,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "画质价值的价格支撑",
+      "reference_sku_codes": [
+        "TV00027801"
+      ],
+      "price_gap": 427.4241,
+      "sales_gap": 56.958333,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "同尺寸画质升级",
+      "reference_sku_codes": [
+        "TV00027801",
+        "TV00029020"
+      ],
+      "price_gap": 262.1192,
+      "sales_gap": 75.708333,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "值得升级的价值组合",
+      "reference_sku_codes": [
+        "TV00027801",
+        "TV00029020",
+        "TV00029936"
+      ],
+      "price_gap": 278.8606,
+      "sales_gap": 61.916666,
+      "causal_claim": false
+    }
+  ],
+  "quantification_layers": {
+    "direct_market_association": {
+      "available_count": 4,
+      "status": "available"
+    },
+    "parameter_group_comparison": {
+      "comparison_count": 16,
+      "available_count": 0,
+      "status": "no_conclusion",
+      "visible_in_pm_first_screen": false
+    },
+    "market_archetype": {
+      "available_count": 1,
+      "reference_count": 3,
+      "price_gap": 278.8606,
+      "sales_gap": 61.916666,
+      "status": "available"
+    },
+    "strict_wtp": {
+      "value_count": 5,
+      "available_count": 0,
+      "pair_count": 0,
+      "status": "no_conclusion",
+      "visible_in_pm_first_screen": false
+    }
+  },
+  "pm_first_screen": {
+    "retain_investment_cn": "下一代继续保护明亮环境与明暗层次、影院声场、色彩与画面真实、大屏客厅沉浸、系统与交互效率；这些投入已经形成用户可感知价值。",
+    "unconverted_investment_cn": "游戏与运动流畅尚未转成用户体验价值；先改善实际体验兑现，不再追加纸面参数预算。",
+    "competitor_configuration_cn": "现阶段不因竞品纸面参数新增配置预算；新增资源优先投向明亮环境与明暗层次、影院声场、色彩与画面真实、大屏客厅沉浸、系统与交互效率。",
+    "price_support_cn": "当前价格有用户价值支撑：4组价值组合对照均显示，本品周均价高262.1～427.4元的同时，周均销量仍高45.6～75.7台。当前无需把降价作为第一动作；该结果属于价值组合的市场表现，不拆给单项参数。",
+    "volume_strategy_cn": "若目标是增加销量，先继续做强明亮环境与明暗层次、影院声场、色彩与画面真实、大屏客厅沉浸、系统与交互效率，并优先修复游戏与运动流畅的价值转化；现有对照下本品价量同时领先，降价不应作为第一动作。只有明确把 SKU 改成走量款时，再单独评估降价。",
+    "sku_role_cn": "本品更适合继续承担65英寸高端画质升级款角色：以明亮环境与明暗层次、影院声场、色彩与画面真实、大屏客厅沉浸、系统与交互效率承接用户价值，承接较高价格并保持销量，不转为低价走量款。"
+  },
+  "consumer_acceptance": {
+    "report_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:7b54f4e8baf2030ff10cf28ed443687a5dec57f0ba71d4c084781e7496a82746",
+    "card_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:7b54f4e8baf2030ff10cf28ed443687a5dec57f0ba71d4c084781e7496a82746",
+    "qa_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:7b54f4e8baf2030ff10cf28ed443687a5dec57f0ba71d4c084781e7496a82746",
+    "qa_topics_answered": [
+      "retain",
+      "unconverted",
+      "configuration",
+      "price",
+      "volume",
+      "sku_role",
+      "battlefield"
+    ],
+    "battlefield_qa_fact_count": 1,
+    "read_tables": [
+      "core3_sellpoint_value_profile_version",
+      "core3_sku_sellpoint_value_profile",
+      "core3_sku_sellpoint_value_candidate",
+      "core3_sku_sellpoint_value_item",
+      "core3_competitor_profile_version"
+    ],
+    "read_statement_count": 56,
+    "live_recomputation": false,
+    "external_report_publish": false
+  },
+  "runtime_acceptance": {
+    "remote_git_head": "a0fe719eec2068ec1270babcaf2b49b7bfdb0b4b",
+    "implementation_commits": [
+      "10d8495",
+      "9d4342c",
+      "1af8805"
+    ],
+    "api_image": "sha256:6d708b660472427bdd2796c0275866b5234ebc2c21f8221437f73de0625b0f69",
+    "alembic_revision": "0048_core3_sellpoint_value_profile_v5_1",
+    "healthz": "ok",
+    "readyz": "ready",
+    "post_deploy_error_or_traceback_count": 0,
+    "concurrent_generation_process_count": 0,
+    "reused_same_immutable_version_on_rerun": true,
+    "v5_1_published_count": 0,
+    "v5_1_current_count": 0,
+    "ac_sku_count": 0,
+    "other_sku_count": 0
+  },
+  "protection": {
+    "remote_git_head_switched": false,
+    "remote_dirty_or_stash_cleaned": false,
+    "protected_stash_oid": "2156593622e0f07af67695da1e0e965153349b05",
+    "old_m12_m13_m14_modified": false,
+    "m03b_to_m12d_rerun": false,
+    "review_publish_current_executed": false
+  },
+  "acceptance_result": "passed"
+}
