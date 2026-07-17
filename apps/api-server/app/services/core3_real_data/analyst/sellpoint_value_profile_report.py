@@ -56,6 +56,8 @@ class StoredPmFirstScreen(SellpointValueProfileBaseModel):
 class StoredPmInvestmentRow(SellpointValueProfileBaseModel):
     capability_code: str = Field(min_length=1)
     capability_name_cn: str = Field(min_length=1)
+    product_sellpoint_cn: str | None = None
+    perceived_user_value_cn: str | None = None
     action_code: str = Field(min_length=1)
     action_cn: str = Field(min_length=1)
     business_reason_cn: str = Field(min_length=1)
@@ -387,73 +389,67 @@ def render_stored_profile_markdown(
                 ]
             )
         return _sanitize("\n".join(lines))
-    retained = _investment_names(report, "retain")
-    unconverted = _investment_names(report, "unconverted")
-    value_groups = _sellpoint_card_value_groups(report)
-    primary_value = (
-        str(value_groups[0]["perceived_outcome_cn"])
-        if value_groups
-        else "当前画像尚未形成可展示的用户价值结论。"
-    )
+    realized_links = _sellpoint_value_links(report, "retain")
+    unconverted_links = _sellpoint_value_links(report, "unconverted")
+    answer = _user_sellpoint_value_answer(report)
+    realized_products = _link_product_names(realized_links)
+    unconverted_products = _link_product_names(unconverted_links)
+    realized_groups = _sellpoint_value_mapping_groups(realized_links)
     lines = [
         f"# {title}",
         "",
-        "## 一、总判断",
+        "## 结论总览",
         "",
-        f"- **用户已经感知到什么价值**：{primary_value}",
+        f"- **用户卖点价值是什么**：{answer}",
+        f"- **卖点与用户价值如何对应**：{_sellpoint_mapping_summary(realized_links)}",
+        f"- **哪些卖点没有转化**：{_unconverted_sellpoint_summary(unconverted_links)}",
+        f"- **价格和销量怎么决策**：{screen.price_support_cn}",
+        f"- **产品卖点修改建议**：{_sellpoint_action_summary(report)}",
+        "",
+        "## 一、用户卖点价值是什么",
+        "",
+        answer,
+        "",
         (
-            "- **哪些非基础卖点在支撑**："
-            + ("、".join(retained) if retained else "当前未确认。")
+            "产品卖点是产品提供的具体能力或配置；用户卖点价值是该卖点已经"
+            "转化为用户实际感知到的好处，并且获得市场价格或销量承接。"
         ),
-        f"- **哪里还没有兑现**：{screen.unconverted_cn}",
-        f"- **当前价格和销量是否获得支撑**：{screen.price_support_cn}",
-        f"- **本品应该承担什么角色**：{screen.sku_role_cn}",
         "",
-        "## 二、卖点如何形成用户价值",
+        "## 二、卖点与用户价值如何对应",
         "",
     ]
-    if value_groups:
-        for index, group in enumerate(value_groups, start=1):
-            lines.extend(
-                [
-                    f"### {index}. {group['battlefield_name_cn']}",
-                    "",
-                    (
-                        "- 非基础卖点组合："
-                        + (
-                            "、".join(group["sellpoints"])
-                            or "当前未形成可主推的非基础卖点组合。"
-                        )
-                    ),
-                    f"- 用户获得的价值：{group['perceived_outcome_cn']}",
-                    (
-                        "- 市场兑现："
-                        + (
-                            f"{group['market_count']} 组价值组合对照均形成支撑，"
-                            f"{group['market_range_cn']}。"
-                            if group["has_market_result"]
-                            else "尚未形成可用的量价结果，先修复实际体验兑现。"
-                        )
-                    ),
-                    "",
-                ]
-            )
-    else:
-        lines.extend(["当前画像没有形成可展示的卖点与用户价值关系。", ""])
-    lines.extend(["## 三、产品投入怎么取舍", ""])
-    if report.investment_decisions:
+    if realized_groups:
         lines.extend(
             [
-                "| 产品投入 | 建议动作 | 为什么 |",
+                "| 产品卖点组合 | 用户实际感知到的价值 | 结论 |",
                 "| --- | --- | --- |",
                 *(
-                    f"| {row.capability_name_cn} | {row.action_cn} | "
-                    f"{row.business_reason_cn} |"
-                    for row in report.investment_decisions
+                    f"| {'、'.join(group['product_sellpoints'])} | "
+                    f"{group['user_value_cn']} | 已形成用户卖点价值 |"
+                    for group in realized_groups
                 ),
                 "",
             ]
         )
+    else:
+        lines.extend(["当前画像没有形成可展示的产品卖点与用户价值对应关系。", ""])
+    lines.extend(["## 三、哪些卖点没有转化", ""])
+    if unconverted_links:
+        lines.extend(
+            [
+                "| 产品卖点 | 原本希望形成的用户价值 | 当前用户感知 | 处理建议 |",
+                "| --- | --- | --- | --- |",
+                *(
+                    f"| {row.product_sellpoint_cn} | {row.capability_name_cn} | "
+                    f"{_unconverted_perceived_value(row)} | "
+                    "先移出首屏主卖点，优先修复体验兑现 |"
+                    for row in unconverted_links
+                ),
+                "",
+            ]
+        )
+    else:
+        lines.extend(["当前没有确认“产品卖点已具备、但用户价值尚未形成”的项目。", ""])
     lines.extend(
         [
             "## 四、价格和销量怎么决策",
@@ -469,11 +465,11 @@ def render_stored_profile_markdown(
     if market_rows:
         lines.extend(
             [
-                "| 用户价值组合 | 非基础卖点组合 | 代表对照 | 量价结果 |",
+                "| 用户卖点价值组合 | 对应产品卖点 | 代表对照 | 量价结果 |",
                 "| --- | --- | --- | --- |",
                 *(
                     f"| {row.value_bundle_name_cn} | "
-                    f"{'、'.join(row.core_sellpoints_cn) or '当前未形成'} | "
+                    f"{_product_sellpoints_for_value_row(report, row)} | "
                     f"{_representative_product_names(row)} | "
                     f"{_business_market_result(row)} |"
                     for row in market_rows
@@ -490,38 +486,30 @@ def render_stored_profile_markdown(
             (
                 "- **首屏主卖点**："
                 + (
-                    f"优先突出{'、'.join(retained)}，不再按技术参数逐项平铺。"
-                    if retained
+                    f"优先突出{'、'.join(realized_products)}。"
+                    if realized_products
                     else "当前没有足够依据调整首屏主卖点。"
                 )
             ),
             (
                 "- **卖点表达方式**："
-                f"先讲用户获得的“{primary_value}”，"
                 + (
-                    f"再用{'、'.join(retained)}作为产品证明。"
-                    if retained
-                    else "待形成明确卖点后再补充产品证明。"
+                    _sellpoint_expression_guidance(report)
+                    if realized_links
+                    else "待形成明确的产品卖点与用户价值对应后再调整表达。"
                 )
             ),
             f"- **价格表达**：{_sellpoint_price_expression(report)}",
             (
                 "- **暂不主推**："
                 + (
-                    f"{'、'.join(unconverted)}；在用户形成稳定体验感知前，"
+                    f"{'、'.join(unconverted_products)}；在用户形成稳定体验感知前，"
                     "先移出首屏主卖点。"
-                    if unconverted
+                    if unconverted_products
                     else "当前没有需要移出首屏的卖点。"
                 )
             ),
-            (
-                "- **竞品对标写法**：不照抄竞品参数清单；"
-                + (
-                    f"优先对比{'、'.join(retained)}已经形成的用户价值和市场表现。"
-                    if retained
-                    else "先对比用户获得的价值和市场表现，再决定是否补充参数。"
-                )
-            ),
+            f"- **产品角色**：{screen.sku_role_cn}",
             "",
         ]
     )
@@ -561,7 +549,6 @@ def render_stored_profile_feishu_card(
     title: str,
     links: Sequence[dict[str, str]] = (),
 ) -> dict[str, Any]:
-    screen = report.first_screen
     card_title = _sellpoint_card_title(title)
     if report.consumer_status == "data_insufficient":
         content = "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
@@ -570,42 +557,65 @@ def render_stored_profile_feishu_card(
         content = "画像数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
         elements = [_card_markdown(content)]
     else:
+        realized_links = _sellpoint_value_links(report, "retain")
+        unconverted_links = _sellpoint_value_links(report, "unconverted")
+        realized_groups = _sellpoint_value_mapping_groups(realized_links)
+        realized_products = _link_product_names(realized_links)
+        unconverted_products = _link_product_names(unconverted_links)
+        market_rows = _market_value_rows(report.value_accounts)
         elements = [
             _card_markdown(
                 "\n".join(
                     (
-                        f"**总判断**\n{_compress(screen.sku_role_cn, 260)}",
-                        f"**价格判断**\n{_compress(screen.price_support_cn, 320)}",
+                        "**答案｜这款 SKU 的用户卖点价值**",
+                        _compress(_user_sellpoint_value_answer(report), 520),
                     )
                 )
             ),
-            _sellpoint_card_metric_columns(report),
+            _card_markdown(
+                f"**已形成用户卖点价值 {len(realized_groups)} 组**　｜　"
+                f"**尚未转化 {len(unconverted_links)} 项**　｜　"
+                f"**量价支撑 {len(market_rows)} 组组合**"
+            ),
         ]
-        value_groups = _sellpoint_card_value_groups(report)
-        if value_groups:
+        if realized_groups or unconverted_links:
             elements.extend(
                 [
                     {"tag": "hr"},
-                    _card_markdown("**卖点如何形成用户价值**"),
+                    _card_markdown("**产品卖点 → 用户卖点价值**"),
                     *(
-                        _card_markdown(_sellpoint_card_value_group_markdown(group))
-                        for group in value_groups[:3]
+                        _card_markdown(
+                            _sellpoint_value_group_markdown(group)
+                        )
+                        for group in realized_groups[:4]
+                    ),
+                    *(
+                        _card_markdown(_sellpoint_value_link_markdown(row))
+                        for row in unconverted_links[:2]
                     ),
                 ]
             )
         elements.extend(
             [
                 {"tag": "hr"},
-                _card_markdown("**产品经理现在怎么改卖点**"),
-                _sellpoint_card_action_columns(report),
+                _card_markdown("**这些结论对产品经理有什么帮助**"),
                 _card_markdown(
                     "\n\n".join(
                         (
                             (
-                                "**卖点表达方式**\n"
-                                + _compress(
-                                    _sellpoint_expression_guidance(report),
-                                    300,
+                                "**首屏主推**\n"
+                                + (
+                                    "、".join(realized_products)
+                                    if realized_products
+                                    else "当前未确认"
+                                )
+                            ),
+                            (
+                                "**暂不主推**\n"
+                                + (
+                                    "、".join(unconverted_products)
+                                    if unconverted_products
+                                    else "当前没有"
                                 )
                             ),
                             (
@@ -782,6 +792,175 @@ def _sellpoint_card_value_group_markdown(group: dict[str, Any]) -> str:
     )
 
 
+def _sellpoint_value_links(
+    report: StoredSellpointValuePmReport,
+    action_code: str,
+) -> list[StoredPmInvestmentRow]:
+    return [
+        row
+        for row in report.investment_decisions
+        if row.action_code == action_code and row.product_sellpoint_cn
+    ]
+
+
+def _link_product_names(rows: Sequence[StoredPmInvestmentRow]) -> list[str]:
+    return _unique(
+        row.product_sellpoint_cn
+        for row in rows
+        if row.product_sellpoint_cn
+    )
+
+
+def _sellpoint_value_mapping_groups(
+    rows: Sequence[StoredPmInvestmentRow],
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        user_value = (
+            row.perceived_user_value_cn
+            or "现有画像未形成具体体验表述。"
+        )
+        grouped.setdefault(user_value, [])
+        if row.product_sellpoint_cn:
+            grouped[user_value].append(row.product_sellpoint_cn)
+    return [
+        {
+            "product_sellpoints": _unique(product_sellpoints),
+            "user_value_cn": user_value,
+        }
+        for user_value, product_sellpoints in grouped.items()
+        if product_sellpoints
+    ]
+
+
+def _user_sellpoint_value_answer(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    rows = _sellpoint_value_links(report, "retain")
+    groups = _sellpoint_value_mapping_groups(rows)
+    if not groups:
+        value_groups = _sellpoint_card_value_groups(report)
+        if value_groups:
+            group = value_groups[0]
+            return (
+                f"当前已确认用户在“{group['battlefield_name_cn']}”上获得"
+                f"“{group['perceived_outcome_cn']}”；但画像未保存可对应的产品卖点，"
+                "暂不能形成完整的用户卖点价值结论。"
+            )
+        return "当前画像尚未形成“产品卖点已经转成用户价值”的可用结论。"
+    mappings = "；".join(
+        f"{'、'.join(group['product_sellpoints'])}让用户实际感知到"
+        f"“{str(group['user_value_cn']).rstrip('。')}”"
+        for group in groups
+    )
+    market_rows = _market_value_rows(report.value_accounts)
+    market_cn = (
+        f"这些价值所在的{len(market_rows)}组组合均获得量价支撑，"
+        f"{_market_range_text(market_rows)}。"
+        if market_rows
+        else "这些价值当前尚未形成可用的量价结果。"
+    )
+    return f"{mappings}。{market_cn}"
+
+
+def _sellpoint_mapping_summary(
+    rows: Sequence[StoredPmInvestmentRow],
+) -> str:
+    groups = _sellpoint_value_mapping_groups(rows)
+    if not groups:
+        return "当前没有可展示的产品卖点与用户价值对应关系。"
+    return "；".join(
+        f"{'、'.join(group['product_sellpoints'])} → "
+        f"{str(group['user_value_cn']).rstrip('。')}"
+        for group in groups
+    ) + "。"
+
+
+def _unconverted_sellpoint_summary(
+    rows: Sequence[StoredPmInvestmentRow],
+) -> str:
+    if not rows:
+        return "当前没有确认尚未转化的产品卖点。"
+    return (
+        "、".join(_link_product_names(rows))
+        + "已经具备产品事实，但尚未形成稳定用户价值。"
+    )
+
+
+def _sellpoint_action_summary(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    realized = _link_product_names(_sellpoint_value_links(report, "retain"))
+    unconverted = _link_product_names(
+        _sellpoint_value_links(report, "unconverted")
+    )
+    parts = []
+    if realized:
+        parts.append(f"首屏主推{'、'.join(realized)}")
+    if unconverted:
+        parts.append(f"暂不主推{'、'.join(unconverted)}")
+    return "；".join(parts) + "。" if parts else "当前没有足够依据调整卖点材料。"
+
+
+def _product_sellpoints_for_value_row(
+    report: StoredSellpointValuePmReport,
+    row: StoredPmValueAccountRow,
+) -> str:
+    by_value = {
+        item.capability_name_cn: item.product_sellpoint_cn
+        for item in report.investment_decisions
+        if item.product_sellpoint_cn
+    }
+    values = _unique(
+        by_value.get(value)
+        for value in row.core_sellpoints_cn
+        if by_value.get(value)
+    )
+    return "、".join(values) or "当前未保存可展示的产品卖点"
+
+
+def _sellpoint_value_link_markdown(row: StoredPmInvestmentRow) -> str:
+    status = (
+        "已形成"
+        if row.action_code == "retain"
+        else "尚未形成稳定用户价值"
+    )
+    perceived = (
+        _unconverted_perceived_value(row)
+        if row.action_code == "unconverted"
+        else row.perceived_user_value_cn or "当前没有具体体验表述"
+    )
+    return "\n".join(
+        (
+            f"**{row.product_sellpoint_cn} → {row.capability_name_cn}**",
+            f"用户实际感知：{perceived}",
+            f"结论：{status}",
+        )
+    )
+
+
+def _unconverted_perceived_value(row: StoredPmInvestmentRow) -> str:
+    perceived = row.perceived_user_value_cn or "尚未形成稳定用户感知"
+    perceived = re.sub(
+        r"^尚未形成稳定感知：",
+        "尚未观察到用户稳定感知“",
+        perceived,
+    )
+    if perceived.startswith("尚未观察到用户稳定感知“"):
+        return perceived.rstrip("。") + "”。"
+    return perceived
+
+
+def _sellpoint_value_group_markdown(group: dict[str, Any]) -> str:
+    return "\n".join(
+        (
+            f"**{'、'.join(group['product_sellpoints'])}**",
+            f"用户实际感知：{group['user_value_cn']}",
+            "结论：已形成用户卖点价值",
+        )
+    )
+
+
 def _sellpoint_card_action_columns(
     report: StoredSellpointValuePmReport,
 ) -> dict[str, Any]:
@@ -866,19 +1045,18 @@ def _number_range(values: Sequence[float]) -> str:
 def _sellpoint_expression_guidance(
     report: StoredSellpointValuePmReport,
 ) -> str:
-    value_groups = _sellpoint_card_value_groups(report)
-    primary_value = (
-        str(value_groups[0]["perceived_outcome_cn"])
-        if value_groups
-        else "当前已确认的用户价值"
+    rows = _sellpoint_value_links(report, "retain")
+    if not rows:
+        return "待形成明确的产品卖点与用户价值对应后再调整表达。"
+    first = rows[0]
+    user_value = (
+        first.perceived_user_value_cn or first.capability_name_cn
+    ).rstrip("。")
+    return (
+        f"先写“{first.product_sellpoint_cn}”，紧接着说明它让用户获得"
+        f"“{user_value}”；其他卖点也按同一方式逐项对应，"
+        "不再把参数和用户好处分开罗列。"
     )
-    retained = _investment_names(report, "retain")
-    proof_cn = (
-        f"再用{'、'.join(retained)}作为产品证明"
-        if retained
-        else "待形成明确卖点后再补充产品证明"
-    )
-    return f"先讲用户获得的“{primary_value}”，{proof_cn}；不按技术参数逐项平铺。"
 
 
 def _sellpoint_price_expression(
@@ -1230,33 +1408,199 @@ def _metric_range(values: Sequence[float], *, unit: str) -> str:
 
 
 def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
-    result: list[StoredPmInvestmentRow] = []
-    seen: set[tuple[str, str]] = set()
+    candidates: dict[tuple[str, str], list[tuple[Any, Any]]] = {}
     for value in values:
         for decision in value.investment_decisions:
             status = _enum_text(decision.status)
-            if status not in {"conclusion_available", "partial_conclusion"}:
+            if (
+                status not in {"conclusion_available", "partial_conclusion"}
+                or decision.confidence is None
+            ):
                 continue
             key = (decision.capability_code, decision.classification)
-            if key in seen or decision.confidence is None:
-                continue
-            seen.add(key)
-            result.append(
-                StoredPmInvestmentRow(
-                    capability_code=decision.capability_code,
-                    capability_name_cn=decision.capability_name_cn,
-                    action_code=decision.classification,
-                    action_cn=INVESTMENT_ACTION_CN.get(
-                        decision.classification,
-                        "暂不作产品取舍",
-                    ),
-                    business_reason_cn=_sanitize(decision.business_reason_cn),
-                    evidence_boundary_cn=_v5_1_business_boundary(value),
-                    confidence=float(decision.confidence),
-                    review_required=False,
-                )
+            candidates.setdefault(key, []).append((value, decision))
+    result = []
+    for rows in candidates.values():
+        value, decision = sorted(
+            rows,
+            key=lambda item: (
+                len(item[0].capability_codes),
+                not bool(item[0].direct_market_results),
+                item[0].value_bundle_code,
+            ),
+        )[0]
+        parameter = next(
+            (
+                row
+                for row in value.parameter_group_results
+                if row.parameter_code == decision.capability_code
+            ),
+            None,
+        )
+        result.append(
+            StoredPmInvestmentRow(
+                capability_code=decision.capability_code,
+                capability_name_cn=decision.capability_name_cn,
+                product_sellpoint_cn=_v5_1_product_sellpoint_cn(
+                    decision.capability_code,
+                    decision.capability_name_cn,
+                    parameter.target_value if parameter is not None else None,
+                ),
+                perceived_user_value_cn=_capability_perceived_user_value(
+                    decision.capability_code,
+                    value.perceived_outcome_cn,
+                ),
+                action_code=decision.classification,
+                action_cn=INVESTMENT_ACTION_CN.get(
+                    decision.classification,
+                    "暂不作产品取舍",
+                ),
+                business_reason_cn=_sanitize(decision.business_reason_cn),
+                evidence_boundary_cn=_v5_1_business_boundary(value),
+                confidence=float(decision.confidence),
+                review_required=False,
             )
-    return sorted(result, key=lambda row: (row.action_code, row.capability_code))
+        )
+    return sorted(
+        result,
+        key=lambda row: (
+            row.action_code != "retain",
+            row.capability_code,
+        ),
+    )
+
+
+def _v5_1_product_sellpoint_cn(
+    capability_code: str,
+    capability_name_cn: str,
+    target_value: str | None,
+) -> str | None:
+    target = str(target_value or "").strip()
+    facts = _target_fact_map(target)
+    if capability_code == "tv_bright_room_dark_detail":
+        zones = _first_number(
+            facts.get("控光分区") or _pattern_value(target, r"([0-9,.]+)\s*分区")
+        )
+        brightness = _first_number(
+            facts.get("标称亮度")
+            or _pattern_value(target, r"([0-9,.]+)\s*nits?")
+        )
+        parts = []
+        if zones:
+            parts.append(f"{zones}分区控光")
+        if brightness:
+            parts.append(f"{brightness}nit高亮")
+        return "、".join(parts) or capability_name_cn
+    if capability_code == "tv_color_picture_truth":
+        gamut = _first_number(facts.get("色域"))
+        return f"{gamut}%色域" if gamut else capability_name_cn
+    if capability_code == "tv_gaming_motion_fluency":
+        refresh = _first_number(
+            facts.get("刷新率")
+            or _pattern_value(target, r"([0-9,.]+)\s*Hz")
+        )
+        return f"{refresh}Hz高刷" if refresh else capability_name_cn
+    if capability_code == "tv_system_interaction_efficiency":
+        parts = []
+        chip = facts.get("芯片")
+        if chip:
+            parts.append(f"{chip}芯片")
+        memory = _first_number(facts.get("运行内存"))
+        storage = _first_number(facts.get("存储"))
+        if memory and storage:
+            parts.append(f"{memory}GB+{storage}GB")
+        elif memory:
+            parts.append(f"{memory}GB运行内存")
+        elif storage:
+            parts.append(f"{storage}GB存储")
+        return "、".join(parts) or capability_name_cn
+    if capability_code == "tv_cinema_soundstage":
+        return capability_name_cn
+    if capability_code == "tv_large_screen_immersion":
+        return None
+    if target == "产品侧已发布相关卖点表达":
+        return capability_name_cn
+    if not target or target in {capability_code, capability_name_cn}:
+        return None
+    generic = _generic_product_sellpoint(facts)
+    if generic:
+        return generic
+    return target if target and len(target) <= 80 else capability_name_cn
+
+
+def _target_fact_map(value: str) -> dict[str, str]:
+    result = {}
+    for item in re.split(r"[；;]", value):
+        if "=" not in item:
+            continue
+        key, raw = item.split("=", 1)
+        key = key.strip()
+        raw = raw.strip()
+        if key and raw:
+            result[key] = raw
+    return result
+
+
+def _pattern_value(value: str, pattern: str) -> str | None:
+    match = re.search(pattern, value, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
+def _first_number(value: str | None) -> str | None:
+    match = re.search(r"[0-9]+(?:\.[0-9]+)?", str(value or "").replace(",", ""))
+    if not match:
+        return None
+    number = float(match.group(0))
+    return f"{number:.0f}" if number.is_integer() else f"{number:g}"
+
+
+def _generic_product_sellpoint(facts: dict[str, str]) -> str | None:
+    excluded_keys = (
+        "接口",
+        "显示技术",
+        "背光类型",
+        "MiniLED",
+        "屏幕尺寸",
+    )
+    excluded_values = {"有", "无", "是", "否", "true", "false"}
+    parts = [
+        f"{value}{key}"
+        for key, value in facts.items()
+        if not any(token in key for token in excluded_keys)
+        and value.lower() not in excluded_values
+    ]
+    return "、".join(parts[:3]) or None
+
+
+def _capability_perceived_user_value(
+    capability_code: str,
+    perceived_outcome_cn: str,
+) -> str:
+    outcome = _business_perceived_outcome(perceived_outcome_cn)
+    keywords = {
+        "tv_bright_room_dark_detail": ("画面清楚", "明暗层次", "暗场", "明亮"),
+        "tv_color_picture_truth": ("色彩", "画面真实"),
+        "tv_cinema_soundstage": ("声场", "声音", "影院", "沉浸"),
+        "tv_large_screen_immersion": ("大屏", "沉浸"),
+        "tv_system_interaction_efficiency": ("系统", "交互", "开机", "投屏"),
+        "tv_gaming_motion_fluency": ("跟手", "流畅", "拖影", "游戏", "运动"),
+    }.get(capability_code, ())
+    clauses = [
+        item.strip("。 ")
+        for item in re.split(r"[；;]", outcome)
+        if item.strip("。 ")
+    ]
+    matched = [
+        item
+        for item in clauses
+        if not keywords or any(keyword in item for keyword in keywords)
+    ]
+    result = "；".join(matched or clauses or [outcome])
+    if capability_code == "tv_system_interaction_efficiency":
+        system = re.search(r"系统体验[^，；。]*", result)
+        if system:
+            result = system.group(0)
+    return result + "。"
 
 
 def _v5_1_unknown_investment_names(values: Sequence[Any]) -> list[str]:

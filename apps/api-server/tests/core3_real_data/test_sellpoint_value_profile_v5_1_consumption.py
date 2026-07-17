@@ -39,6 +39,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_report import 
     _metric_range,
     _number_range,
     _round_market_units_cn,
+    _v5_1_product_sellpoint_cn,
     _v5_1_first_screen,
     render_stored_profile_markdown,
 )
@@ -376,14 +377,12 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert card["header"]["title"]["content"] == "海信 65E7Q 用户卖点价值看板"
     assert card["header"]["subtitle"]["content"]
     card_text = str(card["body"])
-    assert "已形成用户价值" in card_text
+    assert "答案｜这款 SKU 的用户卖点价值" in card_text
+    assert "已形成用户卖点价值" in card_text
     assert "量价支撑" in card_text
-    assert "待修复价值" in card_text
-    assert "卖点如何形成用户价值" in card_text
-    assert "非基础卖点组合" in card_text
-    assert "产品经理现在怎么改卖点" in card_text
-    assert "首屏继续主推" in card_text
-    assert "暂不作为主卖点" in card_text
+    assert "尚未转化" in card_text
+    assert "这些结论对产品经理有什么帮助" in card_text
+    assert "非基础卖点组合" not in card_text
     report_button = next(
         element
         for element in card["body"]["elements"]
@@ -443,24 +442,33 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert "market_association_not_randomized_causality" not in bounded_markdown
     assert "common_weeks_not_required" not in bounded_markdown
     assert "v4_strict_amount_gate_not_passed" not in bounded_markdown
+    assert "## 结论总览" in bounded_markdown
+    assert "**用户卖点价值是什么**" in bounded_markdown
+    assert "**卖点与用户价值如何对应**" in bounded_markdown
+    assert "**哪些卖点没有转化**" in bounded_markdown
+    assert "**价格和销量怎么决策**" in bounded_markdown
+    assert "**产品卖点修改建议**" in bounded_markdown
+    assert "## 一、用户卖点价值是什么" in bounded_markdown
+    assert "## 二、卖点与用户价值如何对应" in bounded_markdown
+    assert "## 三、哪些卖点没有转化" in bounded_markdown
     assert "## 四、价格和销量怎么决策" in bounded_markdown
     assert "## 五、产品卖点修改建议" in bounded_markdown
     assert "首屏主卖点" in bounded_markdown
     assert "卖点表达方式" in bounded_markdown
     assert "暂不主推" in bounded_markdown
     assert "## 五、下一代产品怎么定义" not in bounded_markdown
+    assert "## 一、总判断" not in bounded_markdown
     assert "## 四、分析使用的产品范围" not in bounded_markdown
     assert "## 五、结论边界" not in bounded_markdown
     assert "正式竞品" not in bounded_markdown
     assert "不代表单一卖点的实验因果增量" not in bounded_markdown
-    assert "非基础卖点组合" in bounded_markdown
-    assert "用户获得的价值" in bounded_markdown
+    assert "非基础卖点组合" not in bounded_markdown
     assert "证据边界" not in bounded_markdown
     assert "可信度" not in bounded_markdown
     assert source.profile_version not in visible_outputs
     assert readback.profile.result_hash not in visible_outputs
     assert source.candidate_pools.result_hash not in visible_outputs
-    assert "**总判断**" in visible_outputs
+    assert "**答案｜这款 SKU 的用户卖点价值**" in visible_outputs
     assert handlers.call_count == 0
 
 
@@ -478,6 +486,42 @@ def test_pm_visible_market_numbers_are_rounded_to_whole_yuan_and_units() -> None
     )
     assert _number_range([262.1, 427.4]) == "262–427"
     assert _metric_range([262.1, 427.4], unit="元") == "262～427元"
+
+
+def test_product_sellpoint_copy_uses_product_facts_and_filters_table_stakes() -> (
+    None
+):
+    assert _v5_1_product_sellpoint_cn(
+        "tv_bright_room_dark_detail",
+        "明亮环境与明暗层次",
+        (
+            "MiniLED=有；显示技术=miniled；标称亮度=5200nits；"
+            "控光分区=1920；背光类型=U-LED"
+        ),
+    ) == "1920分区控光、5200nit高亮"
+    assert _v5_1_product_sellpoint_cn(
+        "tv_color_picture_truth",
+        "色彩与画面真实",
+        "色域=98；广色域=有；量子点=无",
+    ) == "98%色域"
+    assert _v5_1_product_sellpoint_cn(
+        "tv_gaming_motion_fluency",
+        "游戏与运动流畅",
+        "刷新率=300；HDMI 2.1 接口=1；HDMI 接口=HDMI2.1",
+    ) == "300Hz高刷"
+    assert _v5_1_product_sellpoint_cn(
+        "tv_system_interaction_efficiency",
+        "系统与交互效率",
+        "芯片=MT9655；运行内存=4；存储=64；AI 模型=海信星海",
+    ) == "MT9655芯片、4GB+64GB"
+    assert (
+        _v5_1_product_sellpoint_cn(
+            "tv_large_screen_immersion",
+            "大屏客厅沉浸",
+            "screen_size_inch=65",
+        )
+        is None
+    )
 
 
 def test_preview_qa_projects_every_saved_business_topic_without_recomputation(
