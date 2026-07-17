@@ -9,7 +9,10 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_config im
     sellpoint_value_v5_1_config,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
+    SPV_V5_1_COMPETITOR_FACT_GROUPS,
     CompetitorProfileCandidateRef,
+    CompetitorProfilePairFacts,
+    CompetitorProfileSkuMarketFacts,
     ConclusionDistribution,
     DirectMarketGap,
     ProfileReleaseAssessment,
@@ -22,6 +25,20 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas i
 )
 
 
+def _pair_facts() -> CompetitorProfilePairFacts:
+    values = {group: {} for group in SPV_V5_1_COMPETITOR_FACT_GROUPS}
+    values["basis"] = {"same_market": True}
+    values["ranking_gate_reasons"] = []
+    values["shared_business_context"] = []
+    return CompetitorProfilePairFacts(
+        **values,
+        available_fact_groups=["basis"],
+        unavailable_fact_groups=[
+            group for group in SPV_V5_1_COMPETITOR_FACT_GROUPS if group != "basis"
+        ],
+    )
+
+
 def _candidate(
     rank: int,
     *,
@@ -32,8 +49,16 @@ def _candidate(
         source_rank=rank,
         selected_rank=selected_rank,
         role="primary_direct" if selected_rank == 1 else "downtrade_diversion",
+        role_cn="核心正面竞争" if selected_rank == 1 else "价格下探分流",
         business_score=Decimal("0.8"),
         pair_result_hash=f"pair-{rank}",
+        market=CompetitorProfileSkuMarketFacts(
+            sku_code=f"TV-C{rank}",
+            product_category="TV",
+            weighted_price=Decimal("5000"),
+            avg_weekly_sales_volume=Decimal("50"),
+        ),
+        pair_facts=_pair_facts(),
     )
 
 
@@ -57,8 +82,15 @@ def _competitor_source(**overrides) -> SellpointValueCompetitorSource:
         "category_code": "TV",
         "release_scope_key": "project-1:TV",
         "target_sku_code": "TV-TARGET",
+        "target_market": {
+            "sku_code": "TV-TARGET",
+            "product_category": "TV",
+            "weighted_price": 6000,
+            "avg_weekly_sales_volume": 40,
+        },
         "candidates": candidates,
         "priority_order": ["TV-C3", "TV-C1", "TV-C4"],
+        "source_version_result_hash": "version-hash-1",
         "source_result_hash": "profile-hash-1",
     }
     payload.update(overrides)
@@ -74,6 +106,20 @@ def _selected_use(code: str = "TV-C1") -> QuestionCandidateUse:
         unavailable_dimensions=["parameter"],
         selection_reasons=["market_available"],
     )
+
+
+def test_saved_empty_fact_group_is_not_automatically_treated_as_missing() -> None:
+    values = {group: {} for group in SPV_V5_1_COMPETITOR_FACT_GROUPS}
+    values["ranking_gate_reasons"] = []
+    values["shared_business_context"] = []
+
+    facts = CompetitorProfilePairFacts(
+        **values,
+        available_fact_groups=list(SPV_V5_1_COMPETITOR_FACT_GROUPS),
+        unavailable_fact_groups=[],
+    )
+
+    assert "parameter_claim_overlap" in facts.available_fact_groups
 
 
 def _gap(count: int) -> DirectMarketGap:

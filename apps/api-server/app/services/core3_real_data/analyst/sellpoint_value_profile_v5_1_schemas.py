@@ -24,6 +24,27 @@ SPV_V5_1_RULE_VERSION = "sellpoint_value_profile_rule_v5_1"
 SPV_V5_1_METHOD_VERSION = "sellpoint_value_profile_method_v5_1"
 SPV_V5_1_CONFIG_VERSION = "sellpoint_value_profile_low_gate_v5_1"
 SPV_V5_1_COMPETITOR_METHOD_VERSION = "competitor_profile_agent_snapshot_v2"
+SPV_V5_1_COMPETITOR_FACT_GROUPS = (
+    "basis",
+    "semantic_overlap",
+    "parameter_claim_overlap",
+    "sales_overlap",
+    "target_purchase_reason_profile",
+    "candidate_purchase_reason_profile",
+    "anchor_substitutability",
+    "value_anchor",
+    "replacement_pressure",
+    "purchase_pressure_comparison",
+    "m12d_consumption",
+    "purchase_pool",
+    "weighted_overlap",
+    "matched_dimensions",
+    "market_validation",
+    "selection_gate",
+    "ranking_trace",
+    "ranking_gate_reasons",
+    "shared_business_context",
+)
 
 
 class QuestionConclusionStatus(str, Enum):
@@ -60,13 +81,76 @@ class TableStakeAssessmentStatus(str, Enum):
     INVALID = "invalid"
 
 
+class CompetitorProfileSkuMarketFacts(SellpointValueProfileBaseModel):
+    sku_code: str = Field(min_length=1)
+    brand_name: str | None = None
+    model_name: str | None = None
+    product_category: Literal["TV", "AC"]
+    size_tier: str | None = None
+    price_band_in_size_tier: str | None = None
+    screen_size_inch: Decimal | None = Field(default=None, ge=0)
+    weighted_price: Decimal | None = Field(default=None, ge=0)
+    avg_weekly_sales_volume: Decimal | None = Field(default=None, ge=0)
+    sales_volume_total: Decimal | None = Field(default=None, ge=0)
+    price_gap_to_target: Decimal | None = None
+    price_gap_pct_to_target: Decimal | None = None
+
+
+class CompetitorProfilePairFacts(SellpointValueProfileBaseModel):
+    basis: dict[str, Any]
+    semantic_overlap: dict[str, Any]
+    parameter_claim_overlap: dict[str, Any]
+    sales_overlap: dict[str, Any]
+    target_purchase_reason_profile: dict[str, Any]
+    candidate_purchase_reason_profile: dict[str, Any]
+    anchor_substitutability: dict[str, Any]
+    value_anchor: dict[str, Any]
+    replacement_pressure: dict[str, Any]
+    purchase_pressure_comparison: dict[str, Any]
+    m12d_consumption: dict[str, Any]
+    purchase_pool: dict[str, Any]
+    weighted_overlap: dict[str, Any]
+    matched_dimensions: dict[str, Any]
+    market_validation: dict[str, Any]
+    selection_gate: dict[str, Any]
+    ranking_trace: dict[str, Any]
+    ranking_gate_reasons: list[str]
+    shared_business_context: list[str]
+    available_fact_groups: list[str]
+    unavailable_fact_groups: list[str]
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> "CompetitorProfilePairFacts":
+        available = self.available_fact_groups
+        unavailable = self.unavailable_fact_groups
+        if len(available) != len(set(available)) or len(unavailable) != len(
+            set(unavailable)
+        ):
+            raise ValueError("competitor fact availability groups must be unique")
+        if set(available) & set(unavailable):
+            raise ValueError("competitor fact availability groups must not overlap")
+        expected = set(SPV_V5_1_COMPETITOR_FACT_GROUPS)
+        if set(available) | set(unavailable) != expected:
+            raise ValueError("competitor fact availability must cover every fact group")
+        return self
+
+
 class CompetitorProfileCandidateRef(SellpointValueProfileBaseModel):
     candidate_sku_code: str = Field(min_length=1)
     source_rank: int = Field(ge=1)
     selected_rank: int | None = Field(default=None, ge=1, le=3)
     role: str = Field(min_length=1)
+    role_cn: str = Field(min_length=1)
     business_score: Decimal = Field(ge=0, le=1)
     pair_result_hash: str = Field(min_length=1)
+    market: CompetitorProfileSkuMarketFacts
+    pair_facts: CompetitorProfilePairFacts
+
+    @model_validator(mode="after")
+    def validate_candidate(self) -> "CompetitorProfileCandidateRef":
+        if self.market.sku_code != self.candidate_sku_code:
+            raise ValueError("competitor market facts must match candidate SKU")
+        return self
 
 
 class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
@@ -81,8 +165,10 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
     category_code: Literal["TV", "AC"]
     release_scope_key: str = Field(min_length=1)
     target_sku_code: str = Field(min_length=1)
+    target_market: CompetitorProfileSkuMarketFacts
     candidates: list[CompetitorProfileCandidateRef] = Field(default_factory=list)
     priority_order: list[str] = Field(default_factory=list, max_length=3)
+    source_version_result_hash: str = Field(min_length=1)
     source_result_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -99,11 +185,21 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
                 raise ValueError(
                     "preview requires a non-current draft or current published"
                 )
+        if (
+            self.target_market.sku_code != self.target_sku_code
+            or self.target_market.product_category != self.category_code
+        ):
+            raise ValueError("competitor source target market must match source scope")
         codes = [row.candidate_sku_code for row in self.candidates]
         if len(codes) != len(set(codes)):
             raise ValueError("competitor source candidates must be unique")
         if self.target_sku_code in codes:
             raise ValueError("competitor source cannot contain the target SKU")
+        if any(
+            row.market.product_category != self.category_code
+            for row in self.candidates
+        ):
+            raise ValueError("competitor source candidates must stay in category")
         if {row.source_rank for row in self.candidates} != set(
             range(1, len(self.candidates) + 1)
         ):

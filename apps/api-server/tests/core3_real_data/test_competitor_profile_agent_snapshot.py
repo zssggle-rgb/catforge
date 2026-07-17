@@ -48,6 +48,10 @@ from app.services.core3_real_data.analyst.competitor_profile_v1_1_schemas import
 from app.services.core3_real_data.analyst.competitor_profile_schemas import (
     ReleaseQualityStatus,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_competitor_adapter import (
+    SellpointValueCompetitorProfileAdapter,
+    SellpointValueCompetitorReadRequest,
+)
 from app.services.core3_real_data.constants import Core3CategoryCode
 from app.services.core3_real_data.repositories import Core3RepositoryContext
 
@@ -573,6 +577,18 @@ def test_agent_snapshot_limited_release_uses_method_specific_integrity_gate(
     )
     assert formal.status == "available"
     assert formal.preview is False
+    spv_source = SellpointValueCompetitorProfileAdapter(repository).read(
+        SellpointValueCompetitorReadRequest(
+            project_id="project-1",
+            category_code="TV",
+            target_sku_code="TV00000001",
+            access_mode="formal",
+        )
+    )
+    assert spv_source.source is not None
+    assert spv_source.source.release_status == "published"
+    assert spv_source.source.is_current
+    assert spv_source.source.source_version_result_hash == current.result_hash
 
 
 def test_agent_snapshot_release_gate_detects_selection_hash_tampering(
@@ -667,6 +683,26 @@ def test_agent_snapshot_roundtrip_and_compact_read(session: Session) -> None:
     assert compact.compact.candidate_count == 2
     assert compact.compact.priority_order == ["TV00000002", "TV00000003"]
     assert [row.source_rank for row in compact.compact.pair_index] == [1, 2]
+
+    spv_source = SellpointValueCompetitorProfileAdapter(repository).read(
+        SellpointValueCompetitorReadRequest(
+            project_id="project-1",
+            category_code="TV",
+            target_sku_code="TV00000001",
+            access_mode="preview",
+            release_scope_key=version.release_scope_key,
+            competitor_profile_version_id=version.competitor_profile_version_id,
+        )
+    )
+    assert spv_source.status == "available"
+    assert spv_source.source is not None
+    assert spv_source.source.source_version_result_hash == version.result_hash
+    assert spv_source.source.source_result_hash == profile.result_hash
+    assert [row.candidate_sku_code for row in spv_source.source.candidates] == [
+        "TV00000002",
+        "TV00000003",
+    ]
+    assert spv_source.source.priority_order == ["TV00000002", "TV00000003"]
 
 
 def test_generation_reuses_saved_draft_without_running_live_analysis(
