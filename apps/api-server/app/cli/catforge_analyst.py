@@ -79,7 +79,24 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_lifecycle impo
     SellpointValueProfileLifecycleService,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
+    SellpointValueProfileRepository,
     SellpointValueProfileRepositoryError,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_competitor_adapter import (
+    SellpointValueCompetitorProfileAdapter,
+    SellpointValueCompetitorSourceIntegrityError,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_generation import (
+    SellpointValueV51GenerationAlreadyRunningError,
+    SellpointValueV51GenerationService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_input_provider import (
+    SavedV5SellpointValueV51InputProvider,
+    SellpointValueV51ProductionInputError,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_repository import (
+    SellpointValueV51Repository,
+    SellpointValueV51RepositoryError,
 )
 from app.services.core3_real_data.constants import (
     CORE3_M12D_AC_ANCHOR_TAXONOMY_VERSION,
@@ -140,6 +157,7 @@ PROFILE_WRITE_COMMANDS = (
     "competitor-profile-v1-1-generate",
     "sellpoint-value-profile-generate",
     "sellpoint-value-profile-batch-generate",
+    "sellpoint-value-profile-v5-1-generate",
 )
 
 COMPETITOR_PROFILE_WRITE_COMMANDS = (
@@ -190,6 +208,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = run_competitor_profile_preview(db, args)
             elif args.command == "competitor-profile-read":
                 result = run_competitor_profile_read(db, args)
+            elif args.command == "sellpoint-value-profile-v5-1-generate":
+                result = run_sellpoint_value_profile_v5_1_generation(db, args)
             elif args.command in PROFILE_WRITE_COMMANDS:
                 result = run_sellpoint_value_profile_generation(db, args)
             elif args.command == "sku-purchase-reason":
@@ -291,6 +311,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         SellpointValueGenerationAlreadyRunningError,
         SellpointValueProfileInputError,
         SellpointValueProfileRepositoryError,
+        SellpointValueV51GenerationAlreadyRunningError,
+        SellpointValueV51ProductionInputError,
+        SellpointValueV51RepositoryError,
+        SellpointValueCompetitorSourceIntegrityError,
         CompetitorProfileGenerationAlreadyRunningError,
         CompetitorProfileGenerationReadbackError,
         CompetitorProfileInputError,
@@ -346,6 +370,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generate drafts for the complete authoritative SKU scope.",
     )
     add_profile_generation_args(profile_batch, batch=True)
+
+    profile_v5_1_generate = subparsers.add_parser(
+        "sellpoint-value-profile-v5-1-generate",
+        help=(
+            "Generate one immutable V5.1 draft from an explicit saved V5 profile "
+            "and the formal current competitor-agent snapshot."
+        ),
+    )
+    profile_v5_1_generate.add_argument("--project-id", required=True)
+    profile_v5_1_generate.add_argument(
+        "--category-code", choices=("TV", "AC"), required=True
+    )
+    profile_v5_1_generate.add_argument("--batch-id", required=True)
+    profile_v5_1_generate.add_argument("--sku-code", required=True)
+    profile_v5_1_generate.add_argument("--profile-version", required=True)
+    profile_v5_1_generate.add_argument("--source-profile-version", required=True)
+    profile_v5_1_generate.add_argument("--generated-by", required=True)
+    profile_v5_1_generate.add_argument(
+        "--result-detail",
+        choices=("summary", "full"),
+        default="summary",
+    )
+    profile_v5_1_generate.add_argument(
+        "--enable-profile-write",
+        action="store_true",
+        help="Explicitly allow this single-SKU immutable V5.1 draft write.",
+    )
+    add_format_arg(profile_v5_1_generate)
 
     competitor_profile_generate = subparsers.add_parser(
         "competitor-profile-generate",
@@ -969,6 +1021,137 @@ def run_sellpoint_value_profile_generation(
         "profile_version": request.profile_version,
         "version_result_hash": request.version_result_hash,
         "batch_generation": batch_result.model_dump(mode="json"),
+    }
+
+
+def run_sellpoint_value_profile_v5_1_generation(
+    db: Session,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    """Generate exactly one V5.1 draft from locked, already-saved inputs."""
+
+    category_code = str(args.category_code).strip().upper()
+    sku_code = str(args.sku_code).strip().upper()
+    context = Core3RepositoryContext(
+        db=db,
+        project_id=str(args.project_id).strip(),
+        category_code=Core3CategoryCode(category_code),
+    )
+    provider = SavedV5SellpointValueV51InputProvider(
+        repository=SellpointValueProfileRepository(context),
+        competitor_adapter=SellpointValueCompetitorProfileAdapter(
+            CompetitorProfileAgentSnapshotRepository(context)
+        ),
+        source_profile_version=str(args.source_profile_version).strip(),
+    )
+    request = provider.build_version_request(
+        project_id=context.project_id,
+        category_code=category_code,
+        batch_id=str(args.batch_id).strip(),
+        profile_version=str(args.profile_version).strip(),
+        expected_sku_codes=[sku_code],
+        generated_by=str(args.generated_by).strip(),
+    )
+    readback = SellpointValueV51GenerationService(
+        repository=SellpointValueV51Repository(context),
+        input_provider=provider,
+    ).generate_draft(
+        request,
+        sku_code=sku_code,
+    )
+    payload = (
+        readback.model_dump(mode="json")
+        if args.result_detail == "full"
+        else _sellpoint_value_v5_1_generation_summary(readback)
+    )
+    return {
+        "status": AnalystStatus.OK.value,
+        "command": args.command,
+        "generation": payload,
+    }
+
+
+def _sellpoint_value_v5_1_generation_summary(readback: Any) -> dict[str, Any]:
+    profile = readback.profile
+    version = readback.persisted.version
+    investments = [
+        decision
+        for value in profile.values
+        for decision in value.investment_decisions
+    ]
+    return {
+        "sellpoint_value_profile_version_id": (
+            version.sellpoint_value_profile_version_id
+        ),
+        "profile_version": version.profile_version,
+        "release_status": str(version.release_status),
+        "is_current": version.is_current,
+        "processing_status": version.processing_status,
+        "release_quality_status": str(version.release_quality_status),
+        "target_sku_code": profile.target.sku_code,
+        "result_hash": profile.result_hash,
+        "input_fingerprint": profile.input_fingerprint,
+        "version_result_hash": version.result_hash,
+        "candidate_universe_fingerprint": (
+            version.candidate_universe_fingerprint
+        ),
+        "competitor_profile_version_id": (
+            profile.competitor_source.competitor_profile_version_id
+        ),
+        "competitor_source_result_hash": (
+            profile.competitor_source.source_result_hash
+        ),
+        "competitor_source_version_result_hash": (
+            profile.competitor_source.source_version_result_hash
+        ),
+        "formal_competitor_count": len(
+            profile.candidate_pools.formal_competitors
+        ),
+        "priority_order": list(profile.candidate_pools.priority_order),
+        "analysis_reference_count": len(
+            profile.candidate_pools.analysis_references
+        ),
+        "question_candidate_set_count": len(
+            profile.candidate_pools.question_candidate_sets
+        ),
+        "value_count": len(profile.values),
+        "value_conclusions": [
+            {
+                "value_bundle_code": value.value_bundle_code,
+                "value_bundle_name_cn": value.value_bundle_name_cn,
+                "status": str(value.value_conclusion.status),
+                "capability_codes": list(value.capability_codes),
+                "direct_market_result_count": len(
+                    value.direct_market_results
+                ),
+                "parameter_group_result_count": len(
+                    value.parameter_group_results
+                ),
+                "market_archetype_result_count": len(
+                    value.market_archetype_results
+                ),
+                "strict_wtp_status": (
+                    str(value.strict_market_implied_wtp.status)
+                    if value.strict_market_implied_wtp is not None
+                    else None
+                ),
+            }
+            for value in profile.values
+        ],
+        "investment_counts": {
+            classification: sum(
+                decision.classification == classification
+                for decision in investments
+            )
+            for classification in sorted(
+                {str(decision.classification) for decision in investments}
+            )
+        },
+        "sku_conclusion_status": str(profile.sku_conclusion.status),
+        "consumer_status": profile.sku_conclusion.consumer_status,
+        "source_lineage": [
+            row.model_dump(mode="json") for row in profile.source_lineage
+        ],
     }
 
 
