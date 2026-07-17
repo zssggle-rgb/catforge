@@ -2248,7 +2248,7 @@ def attach_feishu_card_delivery(result: dict[str, Any], args: argparse.Namespace
     if answer_key == "sellpoint_value_pm_v4_answer" and delivery_payload.get("status") == "sent":
         delivery_payload["message_cn"] = "已发送飞书用户价值结构与市场兑现卡片。"
     if answer_key == "sellpoint_value_pm_v5_answer" and delivery_payload.get("status") == "sent":
-        delivery_payload["message_cn"] = "已发送飞书用户感知价值与市场兑现卡片。"
+        delivery_payload["message_cn"] = "已发送飞书用户卖点价值卡片。"
     if not isinstance(result.get("result"), dict):
         result["result"] = {}
     if not isinstance(result["result"].get(answer_key), dict):

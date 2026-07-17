@@ -144,7 +144,7 @@ Use the fixed SOP route when the question clearly matches one of these intents. 
 | --- | --- | --- | --- |
 | "这个 SKU 的竞品是谁", "和谁竞争", "直接竞品" | `competitor-set` | `sku_code` or `query` | Build the competitor set. Use XiaoAo answer mode. Selection priority is same purchase pool, role-weighted value battlefield overlap, role-weighted user task overlap, role-weighted target group overlap, substitutable value anchors, replacement pressure, then sales as market validation only. |
 | "A 为什么比 B 卖得好/差", "销量差异原因" | `why-sales-diff` | `sku_code` and `candidate_sku_code` | Explain a pairwise sales difference. If only one SKU is provided, run `competitor-set` first and ask the user to confirm the comparison SKU if needed. |
-| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sku-claim-value` | `sku_code` or `query` | Broad SKU-level claim-value question. In Feishu card entry, call the stable XiaoAo card command with `--with-report feishu-doc --feishu-card-only`; return the CLI stdout exactly. The business answer is the claim-value dashboard card and the visible stdout should be a short Chinese card delivery status. Do not request JSON, do not run jq/grep/Python post-processing, and do not make multiple exploratory tool calls. |
+| "某 SKU 的用户卖点价值是什么", "卖点支付价值", "卖点价值有哪些" | `sellpoint-value-pm-v5` | `sku_code` or `query` | Broad SKU-level user sellpoint-value question. Always read the current published V5.1 profile with `--enable-v5`; never run the legacy live-analysis command or rebuild the profile in the conversation. In Feishu, use the full card command below and return its stdout exactly. |
 | "哪些卖点支撑用户选择", "哪些卖点是溢价卖点" | `premium-claim-drivers` | `sku_code` or `query` | Identify premium drivers, sales drivers, basic support, brand-claimed-only points, and drag factors. This SOP now uses quantified claim-value and contribution results when available. |
 | "某个卖点值多少钱", "某卖点贡献多少销量" | `claim-value-space` | claim name/code, optional dimension | Return observable price premium, weekly-sales lift, weekly-amount lift, pool sample status, and confidence. |
 | "某 SKU 卖得好靠哪些卖点" | `claim-contribution` | `sku_code` or `query` | Explain SKU excess price/sales/amount performance by Top claim contributors. |
@@ -169,10 +169,10 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst premium-claim-drivers --query 65E7Q --product-category tv --batch-id latest --format json
 ```
 
-For broad SKU claim-value questions in Feishu, use only the full card command below. The `<chat_id>` and `<message_id>` are the current inbound Feishu chat id and message id from the prompt metadata. Keep both parameters: `--feishu-chat-id` sends the dashboard as a visible main-chat card, while `--feishu-reply-message-id` remains a fallback. Do not use the non-card text command in Feishu conversations.
+For broad SKU user sellpoint-value questions in Feishu, use only the full card command below. The `<chat_id>` and `<message_id>` are the current inbound Feishu chat id and message id from the prompt metadata. Keep both parameters: `--feishu-chat-id` sends the saved-profile business card as a visible main-chat card, while `--feishu-reply-message-id` remains a fallback. Use `--product-category ac` for air conditioners and `tv` for televisions. Do not use the legacy `sku-claim-value` route, do not use preview selectors, and do not use the non-card text command in Feishu conversations.
 
 ```bash
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query 65E7Q --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sellpoint-value-pm-v5 --query 65E7Q --product-category tv --batch-id latest --enable-v5 --format text --with-report feishu-doc --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "sellpoint-value-v5-card-<message_id>" --feishu-card-only
 ```
 
 ```bash
@@ -289,7 +289,7 @@ For "这款和某竞品有什么区别":
 
 For "某卖点是否支撑销量/溢价":
 
-1. Use the full `sku-claim-value` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only` in the same command. Return the CLI stdout exactly; on success it should be a short Chinese card delivery status. Do not parse JSON. The card itself contains the claim-value dashboard and report button. If publishing fails, say the detailed report link is temporarily unavailable and do not show a server-local Markdown path.
+1. Use the full `sellpoint-value-pm-v5 --enable-v5` Feishu card command from the fixed SOP section if the question is broad SKU centered, such as "某 SKU 的用户卖点价值是什么". The command must include `--feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "sellpoint-value-v5-card-<message_id>" --feishu-card-only` in the same command. It must use formal mode, with no preview version arguments. Return the CLI stdout exactly; on success it should be a short Chinese card delivery status. Do not parse JSON. If the saved profile returns data insufficient, send that saved result rather than falling back to live analysis.
 2. `claim-contribution` if the user asks "靠哪些卖点卖得好".
 3. `claim-value-space` if the question is claim centered, such as "MiniLED 值多少钱".
 4. `comment-support --claim-code ...` only when a narrow comment-evidence check is needed.

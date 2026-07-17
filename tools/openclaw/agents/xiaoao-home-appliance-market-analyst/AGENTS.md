@@ -169,18 +169,18 @@ docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforg
 
 ### 问哪些卖点支撑用户选择或溢价
 
-如果用户问的是宽口径 SKU 用户卖点价值，例如“海信 65E7Q 的用户卖点价值是什么”“某 SKU 的卖点支付价值有哪些”“这款产品的卖点价值是什么”，必须直接运行稳定命令。飞书卡片入口优先发送用户卖点价值看板卡片，不能请求 JSON 后自行改写结论。
+如果用户问的是宽口径 SKU 用户卖点价值，例如“海信 65E7Q 的用户卖点价值是什么”“某 SKU 的卖点支付价值有哪些”“这款产品的卖点价值是什么”，必须读取当前正式发布的 V5.1 用户卖点价值画像。不能运行旧的现场分析命令，不能在对话中重建画像，也不能使用草稿 preview。
 
-飞书入口必须使用下面这一条完整命令，把 `<chat_id>` 和 `<message_id>` 替换成当前用户消息元数据里的 chat_id 和 message_id。不要先运行不带卡片参数的文本命令，也不要把参数拆开“追加”：
+飞书入口必须使用下面这一条完整命令，把 `<chat_id>` 和 `<message_id>` 替换成当前用户消息元数据里的 chat_id 和 message_id；空调使用 `--product-category ac`，电视使用 `tv`。不要先运行不带卡片参数的文本命令，也不要把参数拆开“追加”：
 
 ```bash
 cd /opt/catforge
-docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sku-claim-value --query "<用户给出的型号或 SKU>" --product-category tv --batch-id latest --limit 200 --format text --answer-style xiaoao --with-report feishu-doc --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "claim-value-card-<message_id>" --feishu-card-only
+docker compose -f docker-compose.cloud.yml exec -T api python -m app.cli.catforge_analyst sellpoint-value-pm-v5 --query "<用户给出的型号或 SKU>" --product-category tv --batch-id latest --enable-v5 --format text --with-report feishu-doc --max-chat-chars 600 --feishu-chat-id "<chat_id>" --feishu-reply-message-id "<message_id>" --feishu-card-idempotency-key "sellpoint-value-v5-card-<message_id>" --feishu-card-only
 ```
 
-最终回复必须把命令 stdout 原样作为可见文本发送给用户。成功时 stdout 应是“已发送飞书用户卖点价值看板卡片。”这类短中文状态；不要输出空回复或只发心跳。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用多个分析命令，也不要把输出重新扩写成更长报告。这类飞书聊天答案必须控制在一次工具调用内。卡片会展示用户支付价值阶梯、卖点角色分层、Top 用户支付价值卖点、建议动作，并提供飞书详细报告按钮；如果飞书发布暂不可用，只能说明“详细报告链接暂时不可用”，禁止把服务器本地 Markdown 路径发给用户。
+最终回复必须把命令 stdout 原样作为可见文本发送给用户。不要输出空回复或只发心跳。不要请求 JSON，不要再用 Python/jq/grep/sed 过滤结果，不要连续调用旧分析命令，也不要把输出重新扩写成另一套结论。卡片、报告和追问必须共同消费同一个正式画像 hash；画像明确返回数据不足时，直接呈现数据不足，不得临时重算补结论。
 
-用 `premium-claim-drivers`，需要量化时继续用 `sku-claim-value`、`claim-contribution`、`claim-value-space` 或 `claim-value-compare`。把卖点分为：
+窄口径的单个卖点、贡献或竞品拦截问题仍可使用 `premium-claim-drivers`、`claim-contribution`、`claim-value-space` 或 `claim-value-compare`；宽口径 SKU 用户卖点价值必须使用正式 V5.1 画像。把卖点分为：
 
 - 强溢价卖点
 - 强销量卖点

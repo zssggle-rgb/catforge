@@ -231,6 +231,49 @@ def test_attach_feishu_card_delivery_supports_claim_value_answer(monkeypatch) ->
     assert delivery["message_cn"] == "已发送飞书用户卖点价值看板卡片。"
 
 
+def test_attach_feishu_card_delivery_labels_saved_v5_profile_card(monkeypatch) -> None:
+    def fake_publish_feishu_card_reply(**kwargs):
+        del kwargs
+        return competitor_answer.FeishuCardPublishResult(
+            status="sent",
+            message_cn="sent",
+            message_id="om_sent",
+            chat_id="oc_chat",
+        )
+
+    monkeypatch.setattr(
+        competitor_answer,
+        "publish_feishu_card_reply",
+        fake_publish_feishu_card_reply,
+    )
+    result = {
+        "result": {
+            "sellpoint_value_pm_v5_answer": {
+                "feishu_card_payload": {
+                    "schema": "2.0",
+                    "body": {"elements": []},
+                },
+            }
+        }
+    }
+
+    catforge_analyst.attach_feishu_card_delivery(
+        result,
+        Namespace(
+            feishu_reply_message_id="om_original",
+            feishu_chat_id=None,
+            feishu_reply_in_thread=False,
+            feishu_card_idempotency_key="sellpoint-value-v5-card-om_original",
+        ),
+    )
+
+    delivery = result["result"]["sellpoint_value_pm_v5_answer"][
+        "feishu_card_delivery"
+    ]
+    assert delivery["status"] == "sent"
+    assert delivery["message_cn"] == "已发送飞书用户卖点价值卡片。"
+
+
 def test_attach_feishu_card_delivery_prefers_main_chat_message(monkeypatch) -> None:
     reply_calls: list[dict[str, object]] = []
     message_calls: list[dict[str, object]] = []
