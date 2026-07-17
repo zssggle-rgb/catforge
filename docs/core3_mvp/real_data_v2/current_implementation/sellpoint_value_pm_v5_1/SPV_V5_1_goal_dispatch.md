@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G18 completed；任务链已停止；发布准备 blocked
+状态：SPV51-G01—G19 completed；等待用户明确 limited 发布批准
 
 日期：2026-07-17
 
@@ -179,6 +179,12 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 只读输出 ready/limited/blocked 判定、V5→V5.1 diff、no_conclusion 清单、发布/回退步骤。停止 heartbeat，等待用户明确批准；不执行 review/publish/current。
 
 完成状态：completed；发布准备结论：blocked。画像数据为 limited 可用，但现有发布完整性校验仍沿用旧 V5 计数，实际拒绝 V5.1 TV `282/66/29/0` 和 AC `138/6/11/0` 分布。关闭回执：`SPV51_G18_closure_receipt.md`；完整审计：`SPV51_G18_publish_readiness_audit.md`；结构化证据：`SPV51_G18_publish_readiness_evidence.json`。未执行 review、publish 或 current；任务链停止，等待用户决定是否另建发布状态机修复 Goal。
+
+### SPV51-G19 发布状态机修复
+
+按 `method_version` 修复 V5.1 limited 发布完整性，保留旧 V5 合同；新增首次正式启用后的受控 current 撤销。专项测试、精确提交、205 单文件保护部署和真实 TV/AC 只读门禁复核通过。没有重生成画像，没有 review、publish 或 current。
+
+完成状态：completed；实现提交：`101ffd4f9c77dc40c7ba83930c6a630d64c91444`；关闭回执：`SPV51_G19_closure_receipt.md`；结构化证据：`SPV51_G19_publish_lifecycle_fix_evidence.json`。发布准备状态已从 blocked 变为 `ready_for_explicit_limited_release_approval`，等待用户明确批准两个版本及操作人。
 
 ## 4. Heartbeat 提示词
 

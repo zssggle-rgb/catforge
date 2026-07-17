@@ -176,10 +176,10 @@ conclusion_available_count
 2. 将两个目标版本及其 profile、candidate、value item 的 `is_current` 同时改为 false；
 3. 保留 published 版本和全部 hash，不删除、不覆盖，便于审计和后续修复；
 4. 事务提交后验证 TV/AC current published 均为 0；
-5. 验证正式智能体恢复 `profile_unavailable`，preview 仍可锁定保存结果做问题定位；
+5. 验证正式智能体恢复 `profile_unavailable`；published/non-current 历史版本只保留审计读取，不开放业务 preview；
 6. 不把 blocked 的旧 V5 切为 current。
 
-当前 repository 没有公开的“撤销首个 current”生命周期方法。发布修复 Goal 应同时提供或冻结上述回退命令，避免上线后只能临时手改数据库。
+G18 审计时 repository 尚没有公开的“撤销首个 current”生命周期方法。后续发布修复 Goal 必须提供上述受控回退能力，避免上线后只能临时手改数据库。
 
 ## 8. 发布前必须重新通过的门禁
 

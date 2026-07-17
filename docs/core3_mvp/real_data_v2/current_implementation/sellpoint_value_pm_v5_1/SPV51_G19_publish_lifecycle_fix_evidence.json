@@ -1,0 +1,135 @@
+{
+  "goal": "SPV51-G19",
+  "date": "2026-07-17",
+  "environment": "205",
+  "status": "passed",
+  "source_commit": "101ffd4f9c77dc40c7ba83930c6a630d64c91444",
+  "scope": {
+    "publish_completeness": "method-version-specific",
+    "first_release_current_deactivation": true,
+    "profile_regeneration": false,
+    "review_publish_current_executed": false
+  },
+  "implementation": {
+    "v5_1_count_contract": [
+      "conclusion_available_count",
+      "partial_conclusion_count",
+      "no_conclusion_count",
+      "invalid_count"
+    ],
+    "v5_1_limited_policy": "partial_conclusion and no_conclusion are complete, formally consumable limited states",
+    "v5_1_blockers": [
+      "coverage mismatch",
+      "invalid profile",
+      "generation failure",
+      "blocked profile",
+      "integrity error",
+      "readback validation not completed"
+    ],
+    "legacy_v5_contract_preserved": true,
+    "deactivate_current_contract": {
+      "allowed_source_state": "published + current",
+      "required_actor": "explicit non-system approver",
+      "required_reason": true,
+      "version_release_status_after": "published",
+      "version_is_current_after": false,
+      "children_is_current_after": false,
+      "analytical_hashes_preserved": true,
+      "automatic_old_v5_restore": false,
+      "transactional": true
+    }
+  },
+  "tests": {
+    "affected_regression": "79 passed",
+    "actual_tv_distribution": "282/66/29/0 passed",
+    "actual_ac_distribution": "138/6/11/0 passed",
+    "integrity_error_still_blocks": true,
+    "legacy_v5_limited_gate_preserved": true,
+    "deactivation_child_state": "published + non-current",
+    "deactivation_failure_is_atomic": true,
+    "formal_consumer_after_deactivation": "profile_unavailable",
+    "ruff": "passed",
+    "compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "deployment": {
+    "mode": "protected single-file hotfix",
+    "deployed_file": "apps/api-server/app/services/core3_real_data/analyst/sellpoint_value_profile_repositories.py",
+    "deployed_file_sha256": "d6c1c9057f9fac4527063c6bdf6939e84003cec215928f3389d6f83c834f1608",
+    "container_file_sha256": "d6c1c9057f9fac4527063c6bdf6939e84003cec215928f3389d6f83c834f1608",
+    "backup": "/home/deploy/catforge-deploy-backups/spv51-g19-publish-lifecycle-20260717",
+    "api_image": "sha256:537af0f41d79591e8a837df0339f597d805be1b3b626723ae42a604f94e50048",
+    "healthz": "ok",
+    "readyz": "ready",
+    "database": "ok",
+    "oom_killed": false,
+    "restart_count": 0
+  },
+  "live_read_only_audit": {
+    "transaction": "read_only",
+    "TV": {
+      "version_id": "37f2ef77-187a-4ee6-b0a7-87708a21856f",
+      "profile_version": "spv_v5_1_tv_full_g17_20260717_r1",
+      "distribution": {
+        "conclusion_available": 282,
+        "partial_conclusion": 66,
+        "no_conclusion": 29,
+        "invalid": 0
+      },
+      "sku_count": 377,
+      "failed_count": 0,
+      "integrity_error_count": 0,
+      "publish_completeness_gate": "passed",
+      "release_status": "draft",
+      "release_quality_status": "limited",
+      "is_current": false,
+      "result_hash": "sha256:sellpoint_value_version_result_v5_1:3b5e0ed330b6e4ca6806c6cc0ad01718ceb54e39d6f3dda34bbbd89ea9722e99",
+      "source_competitor_profile_version_id": "288b6ce0-b632-478c-9705-8297103da730",
+      "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89"
+    },
+    "AC": {
+      "version_id": "38d86772-cd31-4b0c-bf4c-cccc64de6aee",
+      "profile_version": "spv_v5_1_ac_full_g17_20260717_r1",
+      "distribution": {
+        "conclusion_available": 138,
+        "partial_conclusion": 6,
+        "no_conclusion": 11,
+        "invalid": 0
+      },
+      "sku_count": 155,
+      "failed_count": 0,
+      "integrity_error_count": 0,
+      "publish_completeness_gate": "passed",
+      "release_status": "draft",
+      "release_quality_status": "limited",
+      "is_current": false,
+      "result_hash": "sha256:sellpoint_value_version_result_v5_1:8b1563715921a9b7f252d176c529633c3ead7b5a2ffd881f3fc1883a60d43f71",
+      "source_competitor_profile_version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+      "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4"
+    },
+    "legacy_v5_tv_gate": "blocked",
+    "legacy_v5_ac_gate": "blocked",
+    "current_published_tv_count": 0,
+    "current_published_ac_count": 0
+  },
+  "protection": {
+    "remote_git_head_preserved": "a0fe719eec2068ec1270babcaf2b49b7bfdb0b4b",
+    "remote_dirty_files_not_cleaned": true,
+    "protected_stash_oid": "2156593622e0f07af67695da1e0e965153349b05",
+    "env_sha256": "7243971662532eaa036d64f7d73d71920c586286a94df5eacead1713e6e5b56a",
+    "database_writes": 0,
+    "profile_hash_changes": 0,
+    "upstream_changes": 0
+  },
+  "release_readiness": {
+    "status": "ready_for_explicit_limited_release_approval",
+    "automatic_release_allowed": false,
+    "required_user_approval": [
+      "review both exact version ids",
+      "allow limited",
+      "publish and set current",
+      "reviewer and publisher identities",
+      "release note"
+    ]
+  }
+}
