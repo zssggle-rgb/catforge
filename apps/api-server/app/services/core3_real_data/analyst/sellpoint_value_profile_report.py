@@ -221,6 +221,7 @@ def build_v5_1_stored_profile_pm_report(
         in {"conclusion_available", "partial_conclusion"}
     ]
     investments = _v5_1_investment_rows(usable_values)
+    unknown_investments = _v5_1_unknown_investment_names(usable_values)
     candidates = _v5_1_candidate_rows(profile)
     candidate_names = {
         row.candidate_sku_code: row.candidate_name_cn for row in candidates
@@ -233,6 +234,7 @@ def build_v5_1_stored_profile_pm_report(
         profile,
         investments,
         consumer_status=consumer_status,
+        unknown_investments=unknown_investments,
     )
     version = readback.persisted.version
     return StoredSellpointValuePmReport(
@@ -550,6 +552,7 @@ def _v5_1_first_screen(
     investments: Sequence[StoredPmInvestmentRow],
     *,
     consumer_status: str,
+    unknown_investments: Sequence[str] = (),
 ) -> StoredPmFirstScreen:
     if consumer_status in {"data_insufficient", "invalid"}:
         message = (
@@ -572,6 +575,7 @@ def _v5_1_first_screen(
     unconverted = _unique(by_action.get("unconverted", []))
     no_follow = _unique(by_action.get("do_not_follow", []))
     gaps = _unique(by_action.get("missing_competitive_gap", []))
+    unknown = _unique(unknown_investments)
     market_position = _v5_1_market_position(profile)
     competitor_parts = []
     if no_follow:
@@ -585,19 +589,33 @@ def _v5_1_first_screen(
             + (
                 f"新增资源优先投向{'、'.join(resource_target)}。"
                 if resource_target
-                else "保持现有产品定义，待形成明确价值缺口后再调整配置。"
+                else (
+                    "先补齐现有投入的用户价值转化判断，再决定跟进或补缺。"
+                    if unknown
+                    else "保持现有产品定义，待形成明确价值缺口后再调整配置。"
+                )
             )
         )
     return StoredPmFirstScreen(
         retain_cn=(
             f"下一代继续保护{'、'.join(retain)}；这些投入已经形成用户可感知价值。"
             if retain
-            else "本轮不新增差异化投入，先保持现有产品定义。"
+            else (
+                f"现有证据尚不能判断{_unknown_investment_summary(unknown)}中哪些值得继续加码；"
+                "本轮先保持产品定义，不把未知当成应追加投入。"
+                if unknown
+                else "本轮不新增差异化投入，先保持现有产品定义。"
+            )
         ),
         unconverted_cn=(
             f"{'、'.join(unconverted)}尚未转成用户体验价值；先改善实际体验兑现，不再追加纸面参数预算。"
             if unconverted
-            else "现有投入均未出现明确的价值转化短板，下一步以保持体验稳定为主。"
+            else (
+                f"现有证据尚不能判断{_unknown_investment_summary(unknown)}中哪些已转化、哪些未转化；"
+                "不能把未知解释成没有短板。"
+                if unknown
+                else "现有投入均未出现明确的价值转化短板，下一步以保持体验稳定为主。"
+            )
         ),
         competitor_action_cn=" ".join(competitor_parts),
         price_support_cn=market_position["price_support_cn"],
@@ -612,6 +630,12 @@ def _v5_1_first_screen(
             retain=retain,
         ),
     )
+
+
+def _unknown_investment_summary(values: Sequence[str]) -> str:
+    if len(values) <= 2:
+        return "、".join(values)
+    return f"{values[0]}等{len(values)}类投入"
 
 
 def _v5_1_market_position(profile: Any) -> dict[str, Any]:
@@ -821,6 +845,17 @@ def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
                 )
             )
     return sorted(result, key=lambda row: (row.action_code, row.capability_code))
+
+
+def _v5_1_unknown_investment_names(values: Sequence[Any]) -> list[str]:
+    return _unique(
+        [
+            decision.capability_name_cn
+            for value in values
+            for decision in value.investment_decisions
+            if _enum_text(decision.classification) == "unknown"
+        ]
+    )
 
 
 def _v5_1_candidate_rows(profile: Any) -> list[StoredPmCandidateRow]:

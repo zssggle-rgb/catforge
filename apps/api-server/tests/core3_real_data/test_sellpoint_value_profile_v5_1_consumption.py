@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -28,6 +29,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_generatio
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
     StoredSellpointValuePmReport,
+    _v5_1_first_screen,
     render_stored_profile_markdown,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
@@ -268,6 +270,34 @@ def test_preview_requires_profile_version_and_immutable_version_id() -> None:
             sku_code="TV-TARGET",
             profile_version="spv-v51-r1",
         )
+
+
+def test_unknown_investments_are_not_reported_as_no_conversion_shortfall() -> None:
+    screen = _v5_1_first_screen(
+        SimpleNamespace(
+            values=[],
+            competitor_source=SimpleNamespace(
+                target_market=SimpleNamespace(screen_size_inch=None)
+            ),
+        ),
+        [],
+        consumer_status="usable_conclusion",
+        unknown_investments=[
+            "冷暖能力与空间匹配",
+            "长期用电成本可控",
+            "远程控制与操作省事",
+        ],
+    )
+
+    assert "尚不能判断冷暖能力与空间匹配等3类投入中哪些值得继续加码" in (
+        screen.retain_cn
+    )
+    assert "尚不能判断冷暖能力与空间匹配等3类投入中哪些已转化" in (
+        screen.unconverted_cn
+    )
+    assert "不能把未知解释成没有短板" in screen.unconverted_cn
+    assert "均未出现明确" not in screen.unconverted_cn
+    assert "先补齐现有投入的用户价值转化判断" in screen.competitor_action_cn
 
 
 def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
