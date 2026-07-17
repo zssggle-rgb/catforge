@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01 completed；SPV51-G02 pending
+状态：SPV51-G01—G02 completed；SPV51-G03 pending
 
 日期：2026-07-17
 
@@ -73,6 +73,8 @@
 - golden fixture 和旧路径调用计数桩。
 
 不写数据库，不修改 205。
+
+完成状态：completed；关闭回执：`SPV51_G02_closure_receipt.md`。
 
 ### SPV51-G03 Typed Schema 与配置
 

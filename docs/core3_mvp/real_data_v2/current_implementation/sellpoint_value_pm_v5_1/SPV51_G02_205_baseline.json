@@ -1,0 +1,163 @@
+{
+  "audit_contract": "spv_v5_1_g02_readonly_baseline_v1",
+  "target_sku_code": "TV00029112",
+  "competitor_profile": {
+    "TV": {
+      "version_id": "288b6ce0-b632-478c-9705-8297103da730",
+      "profile_version": "competitor_profile_agent_snapshot_v2_tv_full_g41c_20260716_r2",
+      "release_status": "published",
+      "release_quality_status": "limited",
+      "is_current": true,
+      "sku_count": 377,
+      "pair_count": 7300,
+      "selection_count": 1131,
+      "result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89"
+    },
+    "AC": {
+      "version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+      "profile_version": "competitor_profile_agent_snapshot_v2_ac_full_g41c_20260716_r1",
+      "release_status": "published",
+      "release_quality_status": "limited",
+      "is_current": true,
+      "sku_count": 155,
+      "pair_count": 2774,
+      "selection_count": 461,
+      "result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4"
+    },
+    "target_65e7q": {
+      "version_id": "288b6ce0-b632-478c-9705-8297103da730",
+      "candidate_count": 20,
+      "priority_order": [
+        "TV00027801",
+        "TV00028909",
+        "TV00029936"
+      ],
+      "source_result_hash": "sha256:competitor_profile_agent_profile_result_v2:bd7e899a989f192cc35c06d7ded02ca05bc0aa54cf323dca4cf8a320f3ab9ae6",
+      "candidates": [
+        {"sku_code": "TV00029020", "source_rank": 1, "selected_rank": null, "role": "strong_direct", "business_score": "0.822614"},
+        {"sku_code": "TV00029936", "source_rank": 2, "selected_rank": 3, "role": "strong_direct", "business_score": "0.828626"},
+        {"sku_code": "TV00027801", "source_rank": 3, "selected_rank": 1, "role": "primary_direct", "business_score": "0.924181"},
+        {"sku_code": "TV00028909", "source_rank": 4, "selected_rank": 2, "role": "downtrade_diversion", "business_score": "0.926876"},
+        {"sku_code": "TV00027912", "source_rank": 5, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.926876"},
+        {"sku_code": "TV00028166", "source_rank": 6, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.900846"},
+        {"sku_code": "TV00028829", "source_rank": 7, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.841464"},
+        {"sku_code": "TV00027861", "source_rank": 8, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.792292"},
+        {"sku_code": "TV00027541", "source_rank": 9, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.885090"},
+        {"sku_code": "TV00027899", "source_rank": 10, "selected_rank": null, "role": "uptrade_alternative", "business_score": "0.900825"},
+        {"sku_code": "TV00027027", "source_rank": 11, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.761474"},
+        {"sku_code": "TV00028099", "source_rank": 12, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.801474"},
+        {"sku_code": "TV00028546", "source_rank": 13, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.591071"},
+        {"sku_code": "TV00030053", "source_rank": 14, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.753504"},
+        {"sku_code": "TV00026065", "source_rank": 15, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.801474"},
+        {"sku_code": "TV00028423", "source_rank": 16, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.799497"},
+        {"sku_code": "TV00029169", "source_rank": 17, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.805605"},
+        {"sku_code": "TV00028082", "source_rank": 18, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.692124"},
+        {"sku_code": "TV00029120", "source_rank": 19, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.660706"},
+        {"sku_code": "TV00030137", "source_rank": 20, "selected_rank": null, "role": "downtrade_diversion", "business_score": "0.677128"}
+      ]
+    }
+  },
+  "spv_v5": {
+    "TV": {
+      "version_id": "d0956a12-b615-4cd0-ae48-50f078a00994",
+      "profile_version": "spv_profile_v5_65e7q_g09_20260713_r5",
+      "release_status": "draft",
+      "release_quality_status": "blocked",
+      "is_current": false,
+      "sku_count": 377,
+      "ready_count": 1,
+      "review_required_count": 347,
+      "blocked_count": 29,
+      "failed_count": 0,
+      "profile_distribution": {
+        "ready|review=false": 1,
+        "ready|review=true": 66,
+        "partial|review=true": 281,
+        "blocked|review=true": 29
+      },
+      "value_items": {
+        "total": 1231,
+        "review_required": 1101,
+        "direct_market_gap_available": 283,
+        "strict_market_implied_wtp_available": 0
+      },
+      "investment_classifications": {
+        "retain": 130,
+        "table_stake": 411,
+        "unconverted": 373,
+        "do_not_follow": 5,
+        "missing_competitive_gap": 10,
+        "unknown": 2768
+      },
+      "dominant_review_reasons": {
+        "competitor_universe_unavailable": 293,
+        "profile_confidence_low": 271,
+        "comparison_scope_incomplete": 3118,
+        "decision_not_identified": 2768,
+        "decision_signal_conflicted": 1704,
+        "present_capability_decision_evidence_insufficient": 1004
+      }
+    },
+    "AC": {
+      "version_id": "823e398d-087b-469e-bdbd-0ddfd47181eb",
+      "profile_version": "spv_profile_v5_ac_g10_20260713_r2",
+      "release_status": "draft",
+      "release_quality_status": "blocked",
+      "is_current": false,
+      "sku_count": 155,
+      "ready_count": 0,
+      "review_required_count": 144,
+      "blocked_count": 11,
+      "failed_count": 0,
+      "profile_distribution": {
+        "partial|review=true": 144,
+        "blocked|review=true": 11
+      },
+      "value_items": {
+        "total": 936,
+        "review_required": 936,
+        "direct_market_gap_available": 212,
+        "strict_market_implied_wtp_available": 0
+      },
+      "investment_classifications": {
+        "retain": 106,
+        "unconverted": 40,
+        "unknown": 1557
+      },
+      "dominant_review_reasons": {
+        "competitor_universe_unavailable": 155,
+        "profile_confidence_low": 133,
+        "comparison_scope_incomplete": 1703,
+        "decision_not_identified": 1557,
+        "decision_signal_conflicted": 1085,
+        "present_capability_decision_evidence_insufficient": 472
+      }
+    },
+    "target_65e7q": {
+      "profile_id": "a759ff2a-4ed6-46ee-bdd2-7601519eb8f5",
+      "analysis_state": "partial",
+      "profile_confidence": "0.5971",
+      "review_required": true,
+      "candidate_universe": {
+        "competitor_universe_status": "unavailable",
+        "competitor_count": 0,
+        "reference_count": 51,
+        "candidate_status_counts": {"limited": 51}
+      },
+      "value_items": [
+        {"code": "bundle:av_user_willing_to_pay_for_picture", "review_reason": "linked_investment_review", "strict_wtp_status": "blocked", "comparators": ["TV00027801", "TV00029936"], "price_gap_abs": 369.88375, "price_gap_pct": 0.066293, "sales_volume_gap_abs": 45.645833, "sales_volume_gap_pct": 0.222324},
+        {"code": "bundle:gaming_device_fit_reduces_risk", "review_reason": "linked_investment_review", "strict_wtp_status": "blocked", "comparators": []},
+        {"code": "bundle:picture_upgrade_justifies_price", "review_reason": "linked_investment_review", "strict_wtp_status": "blocked", "comparators": ["TV00027801"], "price_gap_abs": 427.4241, "price_gap_pct": 0.077404, "sales_volume_gap_abs": 56.958333, "sales_volume_gap_pct": 0.2936},
+        {"code": "bundle:same_size_picture_step_up", "review_reason": "linked_investment_review", "strict_wtp_status": "blocked", "comparators": ["TV00027801", "TV00029020"], "price_gap_abs": 262.1192, "price_gap_pct": 0.046089, "sales_volume_gap_abs": 75.708333, "sales_volume_gap_pct": 0.432002},
+        {"code": "bundle:worth_paying_more_for_experience_upgrade", "review_reason": "linked_investment_review", "strict_wtp_status": "blocked", "comparators": ["TV00027801", "TV00029020", "TV00029936"], "price_gap_abs": 312.3434, "price_gap_pct": 0.055409, "sales_volume_gap_abs": 56.958333, "sales_volume_gap_pct": 0.2936}
+      ]
+    }
+  },
+  "forbidden_formal_candidate_sources": [
+    "sellpoint_value_candidate_universe",
+    "M12 candidate recall",
+    "M13 candidate scoring",
+    "M14 priority selection",
+    "live competitor-set analysis"
+  ]
+}
