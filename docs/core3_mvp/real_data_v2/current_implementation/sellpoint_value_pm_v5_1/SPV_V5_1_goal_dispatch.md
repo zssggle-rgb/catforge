@@ -186,6 +186,12 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 
 完成状态：completed；实现提交：`101ffd4f9c77dc40c7ba83930c6a630d64c91444`；关闭回执：`SPV51_G19_closure_receipt.md`；结构化证据：`SPV51_G19_publish_lifecycle_fix_evidence.json`。发布准备状态已从 blocked 变为 `ready_for_explicit_limited_release_approval`，等待用户明确批准两个版本及操作人。
 
+### SPV51-G20 正式发布与飞书智能体消费
+
+用户明确批准后，在受控流程中完成 TV、AC 精确版本 review、publish 和 current 切换。飞书小奥的宽口径用户卖点价值问题已从旧实时分析切换为只读当前正式 V5.1 画像；修复 `latest` 与画像存储批次错位、品牌+型号连续写法无法匹配两个正式消费问题。
+
+完成状态：completed；TV 377 款和 AC 155 款均为 published/current/limited；正式报告、深入问答、数据不足返回和 OpenClaw 新会话验收通过。实现提交：`821c1f7`、`4d609c8`、`8c4bffb`；关闭回执：`SPV51_G20_release_and_feishu_consumption_receipt.md`；结构化证据：`SPV51_G20_release_and_feishu_consumption_evidence.json`。
+
 ## 4. Heartbeat 提示词
 
 每次唤醒：

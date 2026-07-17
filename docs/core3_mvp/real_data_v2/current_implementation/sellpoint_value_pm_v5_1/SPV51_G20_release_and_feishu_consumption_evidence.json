@@ -1,0 +1,159 @@
+{
+  "status": "completed",
+  "environment": "205",
+  "completed_at": "2026-07-17T19:04:40+08:00",
+  "authorization": {
+    "authorized_by": "user",
+    "operator": "sjs",
+    "instruction": "明确批准发布，发布后让飞书用户卖点价值智能体消费该画像数据",
+    "limited_release_allowed": true
+  },
+  "release": {
+    "transaction_scope": "TV and AC exact version review, publish, and current switch",
+    "release_note_cn": "用户明确批准用户卖点价值画像 V5.1 limited 正式发布，并切换飞书用户卖点价值智能体消费。",
+    "versions": [
+      {
+        "category_code": "TV",
+        "sellpoint_value_profile_version_id": "37f2ef77-187a-4ee6-b0a7-87708a21856f",
+        "profile_version": "spv_v5_1_tv_full_g17_20260717_r1",
+        "release_status": "published",
+        "release_quality_status": "limited",
+        "is_current": true,
+        "reviewed_by": "sjs",
+        "published_by": "sjs",
+        "reviewed_at": "2026-07-17T18:48:22.768348+08:00",
+        "published_at": "2026-07-17T18:48:29.197857+08:00",
+        "sku_count": 377,
+        "conclusion_distribution": {
+          "conclusion_available": 282,
+          "partial_conclusion": 66,
+          "no_conclusion": 29,
+          "invalid": 0
+        },
+        "result_hash": "sha256:sellpoint_value_version_result_v5_1:3b5e0ed330b6e4ca6806c6cc0ad01718ceb54e39d6f3dda34bbbd89ea9722e99",
+        "profile_count": 377,
+        "published_current_profile_count": 377,
+        "candidate_count": 29730,
+        "published_current_candidate_count": 29730,
+        "value_item_count": 1231,
+        "published_current_value_item_count": 1231,
+        "source_competitor_profile_version_id": "288b6ce0-b632-478c-9705-8297103da730",
+        "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89",
+        "source_competitor_status": "published_current_hash_matched"
+      },
+      {
+        "category_code": "AC",
+        "sellpoint_value_profile_version_id": "38d86772-cd31-4b0c-bf4c-cccc64de6aee",
+        "profile_version": "spv_v5_1_ac_full_g17_20260717_r1",
+        "release_status": "published",
+        "release_quality_status": "limited",
+        "is_current": true,
+        "reviewed_by": "sjs",
+        "published_by": "sjs",
+        "reviewed_at": "2026-07-17T18:48:27.144919+08:00",
+        "published_at": "2026-07-17T18:48:34.245280+08:00",
+        "sku_count": 155,
+        "conclusion_distribution": {
+          "conclusion_available": 138,
+          "partial_conclusion": 6,
+          "no_conclusion": 11,
+          "invalid": 0
+        },
+        "result_hash": "sha256:sellpoint_value_version_result_v5_1:8b1563715921a9b7f252d176c529633c3ead7b5a2ffd881f3fc1883a60d43f71",
+        "profile_count": 155,
+        "published_current_profile_count": 155,
+        "candidate_count": 10506,
+        "published_current_candidate_count": 10506,
+        "value_item_count": 936,
+        "published_current_value_item_count": 936,
+        "source_competitor_profile_version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+        "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4",
+        "source_competitor_status": "published_current_hash_matched"
+      }
+    ],
+    "formal_current_count_by_category": {
+      "TV": 1,
+      "AC": 1
+    }
+  },
+  "formal_consumption": {
+    "route": "sellpoint-value-pm-v5 --enable-v5",
+    "batch_selector": "latest",
+    "access_mode": "formal",
+    "preview_used": false,
+    "legacy_live_analysis_fallback": false,
+    "tv_65e7q": {
+      "sku_code": "TV00029112",
+      "status": "available",
+      "price_support": "4组价值组合对照；周均价高262.1至427.4元，周均销量仍高45.6至75.7台",
+      "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:fdc4720e9f04b58049773be516a7f2a2e7742065d2c02c2c6c1e24966c442b1d",
+      "qa_answer_hash": "sha256:sellpoint_value_profile_qa_v1:8dbd6c45ebd945abba89276e54f4a42155ed0f3ab559faaf647a1799a6345344",
+      "qa_topic": "price_support",
+      "report_url": "https://my.feishu.cn/docx/IDNgdg2I3on3UsxfoHJcpcP2nwB"
+    },
+    "ac_sample": {
+      "sku_code": "AC00039187",
+      "display_name_cn": "海信 KFR-35GW/E5E1-1",
+      "status": "available",
+      "price_support": "4组对照；周均价高150.3至233.9元时，周均销量低1281.2至4803.2台"
+    },
+    "no_conclusion_sample": {
+      "sku_code": "TV00009549",
+      "display_name_cn": "康佳 LED32E330CE",
+      "status": "data_insufficient",
+      "message_cn": "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+    }
+  },
+  "openclaw_acceptance": {
+    "agent": "xiaoao-home-appliance-market-analyst",
+    "session_id": "f5038a3d-f2be-4470-88c1-4c7cf9419e5e",
+    "run_id": "8e0d05be-d411-4cd0-87d1-5ea47d6a70cb",
+    "status": "ok",
+    "actual_command_route": "sellpoint-value-pm-v5 --query 海信65E7Q --product-category tv --batch-id latest --enable-v5",
+    "legacy_sku_claim_value_called": false,
+    "business_sections_returned": [
+      "保留什么",
+      "哪里没转化",
+      "竞品配置怎么处理",
+      "当前价格是否撑得住",
+      "如果要销量",
+      "SKU角色"
+    ],
+    "workspace_skill_hash": "49537ec4ac8afd52903010e4b836409e54786d4562c8cdbcb610fe8d1e0332de",
+    "workspace_agent_hash": "4f31aa314605ba86eb30c22746198542cfe72f3161a73361f771c144b103edd3"
+  },
+  "release_consumption_fixes": [
+    {
+      "commit": "4d609c8",
+      "change": "formal current V5.1 resolution is independent of the latest raw source batch; preview remains exact-batch locked"
+    },
+    {
+      "commit": "8c4bffb",
+      "change": "brand plus model queries such as 海信65E7Q normalize to the saved SKU target"
+    }
+  ],
+  "deployment": {
+    "consumer_file_hash": "db30f86693e40f0d4bbcc8efee8ab3e0c77d672daa72afd98ed178c76c238ce5",
+    "merged_cli_hash": "cdad0f70cbf09051518e0922f576a05dae529364124eeef59f8774d06ce41e5d",
+    "merged_skill_hash": "49537ec4ac8afd52903010e4b836409e54786d4562c8cdbcb610fe8d1e0332de",
+    "merged_agent_hash": "4f31aa314605ba86eb30c22746198542cfe72f3161a73361f771c144b103edd3",
+    "backup_path": "/home/deploy/catforge-deploy-backups/spv51-g20-release-consumption-20260717",
+    "remote_dirty_changes_preserved": true
+  },
+  "verification": {
+    "focused_tests": "44 passed",
+    "ruff": "passed",
+    "diff_check": "passed",
+    "healthz": "ok",
+    "readyz": "ready_database_ok",
+    "api_container_health": "healthy",
+    "api_oom_killed": false,
+    "api_restart_count": 0,
+    "openclaw_gateway": "running_rpc_ok_config_audit_ok"
+  },
+  "rollback": {
+    "method": "deactivate_current_version",
+    "executed": false,
+    "expected_effect": "atomically clear current on the exact TV or AC version and all child rows while preserving published data and hashes"
+  }
+}
