@@ -138,7 +138,7 @@ class SellpointValueV51QaService:
                 topic=topic,
                 answer_status=status,
                 direct_answer_cn=text,
-                work_implication_cn="将已确认的差异化投入纳入产品定义和资源优先级。",
+                work_implication_cn=_investment_work_implication(rows),
                 boundary_cn="动作来自画像保存的局部投入结论，不从置信度或复核原因重新推导。",
                 facts=_investment_facts(rows),
             )
@@ -245,16 +245,36 @@ class SellpointValueV51QaService:
                 facts=_candidate_facts(report.full_candidates),
             )
         if topic == "battlefield_action":
-            facts = _archetype_facts(readback)
-            direct = "；".join(row.summary_cn for row in facts)
+            battlefield_facts = _battlefield_facts(readback)
+            archetype_facts = _archetype_facts(readback)
+            facts = [*battlefield_facts, *archetype_facts]
+            battlefield_names = [
+                row.summary_cn for row in battlefield_facts
+            ]
+            direct_parts = []
+            if battlefield_names:
+                direct_parts.append(
+                    f"本品当前已形成的用户价值战场：{'、'.join(battlefield_names)}。"
+                )
+            if archetype_facts:
+                direct_parts.append(
+                    "可用于判断战场动作的市场参照："
+                    + "；".join(row.summary_cn for row in archetype_facts)
+                )
+            direct = "".join(direct_parts)
             return _make_answer(
                 readback,
                 question=question,
                 topic=topic,
                 answer_status=status if direct else "limited",
                 direct_answer_cn=direct or "现有画像尚未形成明确的价值战场动作结论。",
-                work_implication_cn="优先使用已保存的增强已有战场或相邻战场参照安排产品动作。",
-                boundary_cn="可选市场原型无结论时不会抹掉已有直接量价结论。",
+                work_implication_cn=(
+                    "先明确本品已进入的价值战场，再用已保存的市场参照判断应增强现有战场还是调整产品角色。"
+                ),
+                boundary_cn=(
+                    "价值战场和市场参照均来自同一已保存画像；"
+                    "可选市场原型无结论时不会抹掉已有战场结论。"
+                ),
                 facts=facts,
             )
         if topic == "table_stake":
@@ -401,6 +421,15 @@ def _investment_facts(rows: Sequence[Any]) -> list[ProfileQaFact]:
     ]
 
 
+def _investment_work_implication(rows: Sequence[Any]) -> str:
+    action_codes = {_enum_text(row.action_code) for row in rows}
+    if "unknown" in action_codes or not rows:
+        return "在补齐投入与用户价值转化判断前，先保持产品定义，不新增资源优先级。"
+    if action_codes == {"retain"}:
+        return "将已确认的差异化投入纳入产品定义和资源优先级。"
+    return "按画像保存的投入状态分别安排保持、改善或停止跟进，不把未知当成已确认动作。"
+
+
 def _market_facts(readback: Any, *, metric: str) -> list[ProfileQaFact]:
     result = []
     for value in readback.profile.values:
@@ -435,6 +464,30 @@ def _market_facts(readback: Any, *, metric: str) -> list[ProfileQaFact]:
                         record_id=synthetic.result_hash,
                     )
                 )
+    return result
+
+
+def _battlefield_facts(readback: Any) -> list[ProfileQaFact]:
+    result: list[ProfileQaFact] = []
+    seen: set[str] = set()
+    for value in readback.profile.values:
+        if _enum_text(value.value_conclusion.status) not in {
+            "conclusion_available",
+            "partial_conclusion",
+        }:
+            continue
+        name = value.battlefield_name_cn or value.battlefield_code
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        result.append(
+            ProfileQaFact(
+                fact_path=f"values.{value.value_bundle_code}.battlefield",
+                summary_cn=name,
+                record_type="value_item",
+                record_id=value.value_conclusion.result_hash,
+            )
+        )
     return result
 
 

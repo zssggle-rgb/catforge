@@ -27,6 +27,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_enhanceme
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_generation import (
     SellpointValueV51GenerationService,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_qa import (
+    _investment_work_implication,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
     StoredSellpointValuePmReport,
     _v5_1_first_screen,
@@ -300,6 +303,19 @@ def test_unknown_investments_are_not_reported_as_no_conversion_shortfall() -> No
     assert "先补齐现有投入的用户价值转化判断" in screen.competitor_action_cn
 
 
+def test_unknown_investment_qa_does_not_claim_a_confirmed_resource_priority() -> (
+    None
+):
+    implication = _investment_work_implication([])
+    explicit_unknown = _investment_work_implication(
+        [SimpleNamespace(action_code="unknown")]
+    )
+
+    assert "补齐投入与用户价值转化判断前" in implication
+    assert "已确认" not in implication
+    assert explicit_unknown == implication
+
+
 def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     consumer_session,
 ) -> None:
@@ -444,6 +460,13 @@ def test_preview_qa_projects_every_saved_business_topic_without_recomputation(
     assert answers["competitor_selection"]["profile_facts"]
     assert "正式竞品" in answers["source_pool"]["direct_answer_cn"]
     assert answers["battlefield_action"]["profile_facts"]
+    assert "本品当前已形成的用户价值战场：画质体验" in (
+        answers["battlefield_action"]["direct_answer_cn"]
+    )
+    assert any(
+        row["record_type"] == "value_item"
+        for row in answers["battlefield_action"]["profile_facts"]
+    )
     assert answers["table_stake"]["answer_status"] == "limited"
     assert answers["version_change"]["answer_status"] == "unknown"
     assert answers["unsupported"]["answer_status"] == "unknown"
