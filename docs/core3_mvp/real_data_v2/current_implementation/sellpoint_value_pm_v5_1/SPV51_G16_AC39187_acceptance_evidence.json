@@ -1,0 +1,348 @@
+{
+  "acceptance_id": "SPV51-G16-AC00039187-205",
+  "accepted_at": "2026-07-17",
+  "environment": "205",
+  "acceptance_result": "passed",
+  "target": {
+    "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+    "category_code": "AC",
+    "batch_id": "m00_20260624000202_1150a669",
+    "sku_code": "AC00039187",
+    "brand_name": "海信",
+    "model_name": "KFR-35GW/E5E1-1",
+    "display_name_cn": "海信 KFR-35GW/E5E1-1"
+  },
+  "draft_version": {
+    "sellpoint_value_profile_version_id": "79da586e-f655-45c9-ba32-95c957e57a80",
+    "sku_sellpoint_value_profile_id": "3171c15a-781c-4384-9616-8fcbc313692d",
+    "profile_version": "spv_v5_1_ac39187_g16_20260717_r1",
+    "schema_version": "sku_sellpoint_value_decision_profile_v1_1",
+    "method_version": "sellpoint_value_profile_method_v5_1",
+    "release_status": "draft",
+    "is_current": false,
+    "release_quality_status": "ready",
+    "processing_status": "completed",
+    "analysis_state": "ready",
+    "conclusion_status": "conclusion_available",
+    "review_required": false,
+    "review_status": "auto_pass",
+    "version_count": 1,
+    "profile_count": 1,
+    "candidate_count": 96,
+    "value_item_count": 8,
+    "version_distribution": {
+      "sku_count": 1,
+      "ready_count": 1,
+      "review_required_count": 0,
+      "blocked_count": 0,
+      "failed_count": 0,
+      "conclusion_available_count": 1,
+      "partial_conclusion_count": 0,
+      "no_conclusion_count": 0,
+      "invalid_count": 0,
+      "integrity_error_count": 0
+    },
+    "value_distribution": {
+      "conclusion_available_count": 8,
+      "partial_conclusion_count": 0,
+      "no_conclusion_count": 0,
+      "invalid_count": 0
+    }
+  },
+  "hashes": {
+    "version_input_fingerprint": "sha256:sellpoint_value_version_input_v5_1:08166e808c36fe35a967b8be9b1c91b614eadeb82f507198f5dbbfaa109a0092",
+    "version_candidate_universe_fingerprint": "sha256:sellpoint_value_version_candidates_v5_1:4c7b89677ed368d807b394595e0d83fffa85d6899ff457b2cc16e8d892cc833a",
+    "version_result_hash": "sha256:sellpoint_value_version_result_v5_1:352509f6766883552ba92ec2c51fcbc9c7c00605500719ee3c341b00fa9ac8a0",
+    "profile_input_fingerprint": "sha256:sellpoint_value_profile_input_v5_1:aa2d6e3639465d44e8f53a796247585eb9175766abf5ce8a671bb1542f62e51a",
+    "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:ec75c00e05d91906af949cf212bb8f7e8c59d47e02fad61aefa41c398b20bff7",
+    "candidate_pool_result_hash": "3b1b58a83085888b30a03e527b6003792241c6ed53af5afb8a7db6decf09a066"
+  },
+  "competitor_profile_source": {
+    "competitor_profile_version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+    "profile_version": "competitor_profile_agent_snapshot_v2_ac_full_g41c_20260716_r1",
+    "method_version": "competitor_profile_agent_snapshot_v2",
+    "release_status": "published",
+    "is_current": true,
+    "version_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4",
+    "target_profile_result_hash": "sha256:competitor_profile_agent_profile_result_v2:61c5794bf148c8b155363049c01fc4ed32d1873adea40bc568198ecde9f6b476",
+    "formal_competitor_count": 20,
+    "top3_sku_codes": [
+      "AC00035950",
+      "AC00038855",
+      "AC00038232"
+    ],
+    "analysis_reference_count": 76,
+    "old_m12_m13_m14_fallback_calls": 0
+  },
+  "question_candidate_pools": [
+    {
+      "question_code": "current_price_support",
+      "selected_count": 96,
+      "competitor_count": 20,
+      "reference_count": 76
+    },
+    {
+      "question_code": "value_relative_advantage",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "same_brand_role",
+      "selected_count": 1,
+      "competitor_count": 1,
+      "reference_count": 0
+    },
+    {
+      "question_code": "scale_conversion",
+      "selected_count": 96,
+      "competitor_count": 20,
+      "reference_count": 76
+    },
+    {
+      "question_code": "configuration_follow",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "specific_competitor",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "parameter_conversion",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    },
+    {
+      "question_code": "battlefield_expansion",
+      "selected_count": 20,
+      "competitor_count": 20,
+      "reference_count": 0
+    }
+  ],
+  "value_items": [
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "冷暖效果解释更高价格支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "新风/净化减少闷和空气担忧支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "2匹挂机大房间均衡",
+      "value_bundle_name_cn": "大空间冷暖一步到位支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "长期省电抵消更高价格支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "低价不明显牺牲核心冷暖体验支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "匹数空间匹配降低买小风险支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "小房间/租房安装适配支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    },
+    {
+      "battlefield_name_cn": "1匹及以下挂机舒适升级",
+      "value_bundle_name_cn": "远程/智能控制减少操作摩擦支撑卖点组合",
+      "conclusion_status": "conclusion_available"
+    }
+  ],
+  "investment_decisions": {
+    "classification": "unknown",
+    "count": 8,
+    "capability_names_cn": [
+      "冷暖能力与空间匹配",
+      "极端天气与潮湿环境稳定",
+      "空气洁净与维护省心",
+      "柔风不直吹",
+      "远程控制与操作省事",
+      "大空间快速覆盖",
+      "长期用电成本可控",
+      "安装与空间适配"
+    ],
+    "table_stake_status": "not_assessed",
+    "business_projection": "现有证据不足以判断哪类投入应继续加码或已经形成转化短板；报告与问答明确保留未知，不把未知解释为没有短板。"
+  },
+  "direct_market_comparisons": [
+    {
+      "comparison_name": "新风与健康价值组合",
+      "reference_count": 16,
+      "price_gap": 233.9027,
+      "sales_gap": -3886.995987,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "大空间冷暖价值组合",
+      "reference_count": 9,
+      "price_gap": 150.2565,
+      "sales_gap": -4803.246756,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "节能及核心体验价值组合",
+      "reference_count": 8,
+      "price_gap": 170.9023,
+      "sales_gap": -1281.204875,
+      "causal_claim": false
+    },
+    {
+      "comparison_name": "智能与远程控制价值组合",
+      "reference_count": 9,
+      "price_gap": 156.0311,
+      "sales_gap": -2487.876936,
+      "causal_claim": false
+    }
+  ],
+  "quantification_layers": {
+    "direct_market_association": {
+      "raw_available_count": 6,
+      "deduplicated_pm_comparison_count": 4,
+      "status": "available"
+    },
+    "parameter_group_comparison": {
+      "comparison_count": 18,
+      "available_count": 0,
+      "status": "no_conclusion",
+      "visible_in_pm_first_screen": false
+    },
+    "market_archetype": {
+      "available_count": 8,
+      "same_budget_reference_count": 18,
+      "same_budget_price_gap": 65.7399,
+      "same_budget_sales_gap": -3168.596689,
+      "status": "available"
+    },
+    "strict_wtp": {
+      "value_count": 8,
+      "available_count": 0,
+      "status": "no_conclusion",
+      "visible_in_pm_first_screen": false
+    }
+  },
+  "pm_first_screen": {
+    "retain_investment_cn": "现有证据尚不能判断冷暖能力与空间匹配等8类投入中哪些值得继续加码；本轮先保持产品定义，不把未知当成应追加投入。",
+    "unconverted_investment_cn": "现有证据尚不能判断冷暖能力与空间匹配等8类投入中哪些已转化、哪些未转化；不能把未知解释成没有短板。",
+    "competitor_configuration_cn": "现阶段不因竞品纸面参数新增配置预算；先补齐现有投入的用户价值转化判断，再决定跟进或补缺。",
+    "price_support_cn": "当前价格支撑存在压力：4组对照显示，本品周均价高150.3～233.9元时，周均销量低1281.2～4803.2台。若销量优先，需要在强化用户价值与调整价格角色之间做明确取舍。",
+    "volume_strategy_cn": "若销量优先，先验证已成立的用户价值能否补回销量；若仍不能改善，再下调价格或把 SKU 调整为走量角色，不能继续加价后等待自然转化。",
+    "sku_role_cn": "本品当前处于1匹及以下挂机舒适升级款与走量款的定位取舍点：以已成立的用户价值维持产品定位；若销量压力不能改善，再调整为更明确的走量角色。"
+  },
+  "consumer_acceptance": {
+    "report_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:ec75c00e05d91906af949cf212bb8f7e8c59d47e02fad61aefa41c398b20bff7",
+    "card_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:ec75c00e05d91906af949cf212bb8f7e8c59d47e02fad61aefa41c398b20bff7",
+    "qa_profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:ec75c00e05d91906af949cf212bb8f7e8c59d47e02fad61aefa41c398b20bff7",
+    "qa_topics_answered": [
+      "retain_investment",
+      "unconverted_investment",
+      "price_support",
+      "volume_action",
+      "sku_role",
+      "battlefield_action",
+      "source_pool"
+    ],
+    "battlefield_names_cn": [
+      "1匹及以下挂机舒适升级",
+      "2匹挂机大房间均衡"
+    ],
+    "visible_raw_internal_term_count": 0,
+    "visible_tv_term_count": 0,
+    "saved_tv_role_tag_count": 0,
+    "read_tables": [
+      "core3_competitor_profile_version",
+      "core3_sellpoint_value_profile_version",
+      "core3_sku_sellpoint_value_candidate",
+      "core3_sku_sellpoint_value_item",
+      "core3_sku_sellpoint_value_profile"
+    ],
+    "read_statement_count": 56,
+    "live_recomputation": false,
+    "external_report_publish": false
+  },
+  "necessary_p1_fixes": [
+    {
+      "commit": "47af89a",
+      "purpose": "清除 AC 竞品输入中遗留的 TV 参数角色标签，保留真实 AC 参数和值。"
+    },
+    {
+      "commit": "f725fba",
+      "purpose": "把报告中的内部门槛码翻译成产品经理可理解的结论边界。"
+    },
+    {
+      "commit": "4358322",
+      "purpose": "确保投入未知不会被写成没有价值转化短板。"
+    },
+    {
+      "commit": "f54849b",
+      "purpose": "让投入和价值战场问答与已保存结论一致。"
+    }
+  ],
+  "test_acceptance": {
+    "adapter_targeted_tests_passed": 30,
+    "report_boundary_targeted_tests_passed": 41,
+    "unknown_investment_targeted_tests_passed": 42,
+    "final_qa_consumption_tests_passed": 12,
+    "python_compile": "passed",
+    "git_diff_check": "passed",
+    "full_regression_repeated_in_g16": false,
+    "full_regression_source": "SPV51-G13"
+  },
+  "runtime_acceptance": {
+    "remote_git_head": "a0fe719eec2068ec1270babcaf2b49b7bfdb0b4b",
+    "api_image": "sha256:36b7e2af0e474580c599551e6b247696faa578a24f8c3c7d1525345024eb8867",
+    "alembic_revision": "0048_core3_sellpoint_value_profile_v5_1",
+    "healthz": "ok",
+    "readyz": "ready",
+    "api_restart_count": 0,
+    "post_deploy_error_or_traceback_count": 0,
+    "concurrent_generation_process_count": 0,
+    "v5_1_category_counts": {
+      "TV": {
+        "version_count": 1,
+        "sku_count": 1,
+        "published_count": 0,
+        "current_count": 0
+      },
+      "AC": {
+        "version_count": 1,
+        "sku_count": 1,
+        "published_count": 0,
+        "current_count": 0
+      }
+    },
+    "deployment_backups": [
+      "/home/deploy/catforge-deploy-backups/spv51-g16-p1-20260717",
+      "/home/deploy/catforge-deploy-backups/spv51-g16-p2-20260717",
+      "/home/deploy/catforge-deploy-backups/spv51-g16-p3-20260717",
+      "/home/deploy/catforge-deploy-backups/spv51-g16-p4-20260717"
+    ]
+  },
+  "protection": {
+    "remote_env_sha256": "7243971662532eaa036d64f7d73d71920c586286a94df5eacead1713e6e5b56a",
+    "remote_git_head_switched": false,
+    "remote_dirty_or_stash_cleaned": false,
+    "protected_stash_oid": "2156593622e0f07af67695da1e0e965153349b05",
+    "old_m12_m13_m14_modified": false,
+    "m03b_to_m12d_rerun": false,
+    "review_publish_current_executed": false,
+    "full_batch_generated": false
+  }
+}

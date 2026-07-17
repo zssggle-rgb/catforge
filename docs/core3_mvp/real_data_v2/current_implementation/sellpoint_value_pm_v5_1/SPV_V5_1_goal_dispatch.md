@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G15 completed；SPV51-G16 pending
+状态：SPV51-G01—G16 completed；SPV51-G17 pending
 
 日期：2026-07-17
 
@@ -165,6 +165,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G16 AC 单 SKU draft
 
 从正式 AC 竞品画像选择一个上游较完整 SKU，验证 AC 术语、能力段、候选、价格销量和用户价值，无 TV 假设。失败即停止。
+
+完成状态：completed；关闭回执：`SPV51_G16_closure_receipt.md`；业务验收：`SPV51_G16_AC39187_acceptance_report.md`；结构化证据：`SPV51_G16_AC39187_acceptance_evidence.json`。
 
 ### SPV51-G17 TV/AC 全量 draft
 
