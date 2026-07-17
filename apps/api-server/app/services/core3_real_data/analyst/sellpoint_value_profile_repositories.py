@@ -179,9 +179,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             candidate_payload["sku_sellpoint_value_profile_id"] = (
                 profile_row.sku_sellpoint_value_profile_id
             )
-            self.db.add(
-                entities.Core3SkuSellpointValueCandidate(**candidate_payload)
-            )
+            self.db.add(entities.Core3SkuSellpointValueCandidate(**candidate_payload))
         for item in bundle.value_items:
             item_payload = _entity_payload(item)
             item_payload["sku_sellpoint_value_profile_id"] = (
@@ -217,8 +215,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SellpointValueProfileVersion)
             .where(
-                entities.Core3SellpointValueProfileVersion.project_id
-                == self.project_id
+                entities.Core3SellpointValueProfileVersion.project_id == self.project_id
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.category_code
@@ -236,10 +233,14 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 entities.Core3SellpointValueProfileVersion.release_status
                 == release_status
             )
-        stmt = stmt.order_by(
-            entities.Core3SellpointValueProfileVersion.generated_at.desc(),
-            entities.Core3SellpointValueProfileVersion.profile_version,
-        ).offset(normalized_offset).limit(normalized_limit)
+        stmt = (
+            stmt.order_by(
+                entities.Core3SellpointValueProfileVersion.generated_at.desc(),
+                entities.Core3SellpointValueProfileVersion.profile_version,
+            )
+            .offset(normalized_offset)
+            .limit(normalized_limit)
+        )
         return [
             SellpointValueVersionRecord.model_validate(row)
             for row in self.db.execute(stmt).scalars()
@@ -281,27 +282,18 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             return None
         stmt = (
             select(entities.Core3SkuSellpointValueProfile)
-            .where(
-                entities.Core3SkuSellpointValueProfile.project_id
-                == self.project_id
-            )
+            .where(entities.Core3SkuSellpointValueProfile.project_id == self.project_id)
             .where(
                 entities.Core3SkuSellpointValueProfile.category_code
                 == self.category_code.value
             )
-            .where(
-                entities.Core3SkuSellpointValueProfile.batch_id
-                == version.batch_id
-            )
+            .where(entities.Core3SkuSellpointValueProfile.batch_id == version.batch_id)
             .where(
                 entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
                 == version.sellpoint_value_profile_version_id
             )
             .where(entities.Core3SkuSellpointValueProfile.sku_code == sku_code)
-            .where(
-                entities.Core3SkuSellpointValueProfile.release_status
-                == "published"
-            )
+            .where(entities.Core3SkuSellpointValueProfile.release_status == "published")
             .where(entities.Core3SkuSellpointValueProfile.is_current.is_(True))
         )
         profile = self.db.execute(stmt).scalars().first()
@@ -388,10 +380,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         normalized_limit, normalized_offset = self.pagination(limit, offset)
         stmt = (
             select(entities.Core3SkuSellpointValueProfile)
-            .where(
-                entities.Core3SkuSellpointValueProfile.project_id
-                == self.project_id
-            )
+            .where(entities.Core3SkuSellpointValueProfile.project_id == self.project_id)
             .where(
                 entities.Core3SkuSellpointValueProfile.category_code
                 == self.category_code.value
@@ -403,17 +392,18 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         )
         if analysis_state is not None:
             stmt = stmt.where(
-                entities.Core3SkuSellpointValueProfile.analysis_state
-                == analysis_state
+                entities.Core3SkuSellpointValueProfile.analysis_state == analysis_state
             )
         if review_required is not None:
             stmt = stmt.where(
                 entities.Core3SkuSellpointValueProfile.review_required
                 == review_required
             )
-        stmt = stmt.order_by(
-            entities.Core3SkuSellpointValueProfile.sku_code
-        ).offset(normalized_offset).limit(normalized_limit)
+        stmt = (
+            stmt.order_by(entities.Core3SkuSellpointValueProfile.sku_code)
+            .offset(normalized_offset)
+            .limit(normalized_limit)
+        )
         return [
             SkuSellpointValueProfileRecord.model_validate(row)
             for row in self.db.execute(stmt).scalars()
@@ -470,8 +460,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SkuSellpointValueCandidate)
             .where(
-                entities.Core3SkuSellpointValueCandidate.project_id
-                == self.project_id
+                entities.Core3SkuSellpointValueCandidate.project_id == self.project_id
             )
             .where(
                 entities.Core3SkuSellpointValueCandidate.category_code
@@ -488,9 +477,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         )
         rows = list(self.db.execute(stmt).scalars())
         if eligibility_status is not None:
-            rows = [
-                row for row in rows if row.eligibility_status == eligibility_status
-            ]
+            rows = [row for row in rows if row.eligibility_status == eligibility_status]
         if question_code is not None:
             field_name = (
                 "selected_questions_json"
@@ -498,16 +485,12 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 else "eligible_questions_json"
             )
             rows = [
-                row
-                for row in rows
-                if question_code in (getattr(row, field_name) or [])
+                row for row in rows if question_code in (getattr(row, field_name) or [])
             ]
         normalized_limit, normalized_offset = self.pagination(limit, offset)
         return [
             SkuSellpointValueCandidateRecord.model_validate(row)
-            for row in rows[
-                normalized_offset : normalized_offset + normalized_limit
-            ]
+            for row in rows[normalized_offset : normalized_offset + normalized_limit]
         ]
 
     def list_value_items(
@@ -522,9 +505,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         self._profile_by_id(sku_sellpoint_value_profile_id)
         stmt = (
             select(entities.Core3SkuSellpointValueItem)
-            .where(
-                entities.Core3SkuSellpointValueItem.project_id == self.project_id
-            )
+            .where(entities.Core3SkuSellpointValueItem.project_id == self.project_id)
             .where(
                 entities.Core3SkuSellpointValueItem.category_code
                 == self.category_code.value
@@ -553,9 +534,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         normalized_limit, normalized_offset = self.pagination(limit, offset)
         return [
             SkuSellpointValueItemRecord.model_validate(row)
-            for row in rows[
-                normalized_offset : normalized_offset + normalized_limit
-            ]
+            for row in rows[normalized_offset : normalized_offset + normalized_limit]
         ]
 
     def review_version(
@@ -580,10 +559,11 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         version.release_quality_status = _enum_value(release_quality_status)
         version.reviewed_at = now
         version.reviewed_by = reviewed_by
-        version.review_required = (
-            version.release_quality_status
-            in {"limited", "blocked", "unassessed"}
-        )
+        version.review_required = version.release_quality_status in {
+            "limited",
+            "blocked",
+            "unassessed",
+        }
         version.review_status = (
             "review_required" if version.review_required else "reviewed"
         )
@@ -601,9 +581,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SourceBatch.batch_id)
             .where(entities.Core3SourceBatch.project_id == self.project_id)
-            .where(
-                entities.Core3SourceBatch.category_code == self.category_code.value
-            )
+            .where(entities.Core3SourceBatch.category_code == self.category_code.value)
             .where(entities.Core3SourceBatch.batch_id == batch_id)
             .with_for_update()
         )
@@ -628,6 +606,11 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         review_required: bool,
         review_status: str,
         review_reason_json: Mapping[str, Any] | None = None,
+        conclusion_available_count: int | None = None,
+        partial_conclusion_count: int | None = None,
+        no_conclusion_count: int | None = None,
+        invalid_count: int | None = None,
+        integrity_error_count: int | None = None,
     ) -> SellpointValueVersionRecord:
         version = self._version_by_id(
             sellpoint_value_profile_version_id,
@@ -643,10 +626,41 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         }
         if any(value < 0 for value in counts.values()):
             raise ValueError("version progress counts cannot be negative")
-        if ready_count + review_required_count + blocked_count + failed_count > sku_count:
+        if (
+            ready_count + review_required_count + blocked_count + failed_count
+            > sku_count
+        ):
             raise ValueError("version progress status counts cannot exceed sku_count")
         for field_name, value in counts.items():
             setattr(version, field_name, value)
+        v5_1_counts = {
+            "conclusion_available_count": conclusion_available_count,
+            "partial_conclusion_count": partial_conclusion_count,
+            "no_conclusion_count": no_conclusion_count,
+            "invalid_count": invalid_count,
+            "integrity_error_count": integrity_error_count,
+        }
+        supplied_v5_1_counts = {
+            key: value for key, value in v5_1_counts.items() if value is not None
+        }
+        if supplied_v5_1_counts:
+            if len(supplied_v5_1_counts) != len(v5_1_counts):
+                raise ValueError("V5.1 progress counts must be updated together")
+            if any(value < 0 for value in supplied_v5_1_counts.values()):
+                raise ValueError("V5.1 progress counts cannot be negative")
+            conclusion_count = sum(
+                supplied_v5_1_counts[key]
+                for key in (
+                    "conclusion_available_count",
+                    "partial_conclusion_count",
+                    "no_conclusion_count",
+                    "invalid_count",
+                )
+            )
+            if conclusion_count > sku_count:
+                raise ValueError("V5.1 conclusion counts cannot exceed sku_count")
+            for field_name, value in supplied_v5_1_counts.items():
+                setattr(version, field_name, value)
         version.quality_summary_json = dict(quality_summary_json)
         version.validation_summary_json = dict(validation_summary_json)
         version.release_quality_status = _enum_value(release_quality_status)
@@ -694,8 +708,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         self._assert_publish_completeness(version)
 
         scope_filter = (
-            entities.Core3SellpointValueProfileVersion.project_id
-            == self.project_id,
+            entities.Core3SellpointValueProfileVersion.project_id == self.project_id,
             entities.Core3SellpointValueProfileVersion.category_code
             == self.category_code.value,
             entities.Core3SellpointValueProfileVersion.batch_id == version.batch_id,
@@ -708,8 +721,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 != version.sellpoint_value_profile_version_id
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.release_status
-                == "published"
+                entities.Core3SellpointValueProfileVersion.release_status == "published"
             )
             .where(entities.Core3SellpointValueProfileVersion.is_current.is_(True))
             .values(is_current=False)
@@ -738,8 +750,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 select(func.count())
                 .select_from(entities.Core3SkuSellpointValueProfile)
                 .where(
-                    entities.Core3SkuSellpointValueProfile.project_id
-                    == self.project_id
+                    entities.Core3SkuSellpointValueProfile.project_id == self.project_id
                 )
                 .where(
                     entities.Core3SkuSellpointValueProfile.category_code
@@ -770,14 +781,12 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         if version.failed_count or version.blocked_count:
             violations.append("failed_or_blocked_profiles_present")
         if version.release_quality_status == "ready" and (
-            version.ready_count != version.sku_count
-            or version.review_required_count
+            version.ready_count != version.sku_count or version.review_required_count
         ):
             violations.append("ready_release_not_fully_ready")
         if version.release_quality_status == "limited" and (
             version.review_required_count <= 0
-            or version.ready_count + version.review_required_count
-            != version.sku_count
+            or version.ready_count + version.review_required_count != version.sku_count
         ):
             violations.append("limited_release_counts_invalid")
         if violations:
@@ -795,8 +804,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SellpointValueProfileVersion)
             .where(
-                entities.Core3SellpointValueProfileVersion.project_id
-                == self.project_id
+                entities.Core3SellpointValueProfileVersion.project_id == self.project_id
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.category_code
@@ -813,18 +821,21 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == profile_version
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.rule_version
-                == rule_version
+                entities.Core3SellpointValueProfileVersion.rule_version == rule_version
             )
         )
-        return self.db.execute(
-            stmt.order_by(
-                _batch_scope_order(
-                    entities.Core3SellpointValueProfileVersion.batch_id,
-                    batch_id,
+        return (
+            self.db.execute(
+                stmt.order_by(
+                    _batch_scope_order(
+                        entities.Core3SellpointValueProfileVersion.batch_id,
+                        batch_id,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     def _find_current_published_version(
         self,
@@ -834,8 +845,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SellpointValueProfileVersion)
             .where(
-                entities.Core3SellpointValueProfileVersion.project_id
-                == self.project_id
+                entities.Core3SellpointValueProfileVersion.project_id == self.project_id
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.category_code
@@ -848,8 +858,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 )
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.release_status
-                == "published"
+                entities.Core3SellpointValueProfileVersion.release_status == "published"
             )
             .where(entities.Core3SellpointValueProfileVersion.is_current.is_(True))
             .order_by(
@@ -857,7 +866,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                     entities.Core3SellpointValueProfileVersion.batch_id,
                     batch_id,
                 ),
-                entities.Core3SellpointValueProfileVersion.published_at.desc()
+                entities.Core3SellpointValueProfileVersion.published_at.desc(),
             )
         )
         return self.db.execute(stmt).scalars().first()
@@ -871,8 +880,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
         stmt = (
             select(entities.Core3SellpointValueProfileVersion)
             .where(
-                entities.Core3SellpointValueProfileVersion.project_id
-                == self.project_id
+                entities.Core3SellpointValueProfileVersion.project_id == self.project_id
             )
             .where(
                 entities.Core3SellpointValueProfileVersion.category_code
@@ -902,10 +910,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
     ) -> entities.Core3SkuSellpointValueProfile | None:
         stmt = (
             select(entities.Core3SkuSellpointValueProfile)
-            .where(
-                entities.Core3SkuSellpointValueProfile.project_id
-                == self.project_id
-            )
+            .where(entities.Core3SkuSellpointValueProfile.project_id == self.project_id)
             .where(
                 entities.Core3SkuSellpointValueProfile.category_code
                 == self.category_code.value
@@ -916,22 +921,14 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 == profile_version
             )
             .where(entities.Core3SkuSellpointValueProfile.sku_code == sku_code)
-            .where(
-                entities.Core3SkuSellpointValueProfile.rule_version
-                == rule_version
-            )
+            .where(entities.Core3SkuSellpointValueProfile.rule_version == rule_version)
         )
         return self.db.execute(stmt).scalars().first()
 
-    def _profile_by_id(
-        self, profile_id: str
-    ) -> entities.Core3SkuSellpointValueProfile:
+    def _profile_by_id(self, profile_id: str) -> entities.Core3SkuSellpointValueProfile:
         stmt = (
             select(entities.Core3SkuSellpointValueProfile)
-            .where(
-                entities.Core3SkuSellpointValueProfile.project_id
-                == self.project_id
-            )
+            .where(entities.Core3SkuSellpointValueProfile.project_id == self.project_id)
             .where(
                 entities.Core3SkuSellpointValueProfile.category_code
                 == self.category_code.value
@@ -988,8 +985,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 for row in candidates
             ],
             value_items=[
-                SkuSellpointValueItemRecord.model_validate(row)
-                for row in value_items
+                SkuSellpointValueItemRecord.model_validate(row) for row in value_items
             ],
         )
 

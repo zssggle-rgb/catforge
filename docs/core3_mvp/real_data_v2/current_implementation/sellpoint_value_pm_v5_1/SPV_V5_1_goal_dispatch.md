@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G10 completed；SPV51-G11 pending
+状态：SPV51-G01—G11 completed；SPV51-G12 pending
 
 日期：2026-07-17
 
@@ -127,6 +127,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G11 生成与持久化集成
 
 fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回读 typed validation/hash；单 SKU 失败隔离；V5 历史和 published current 不变。
+
+完成状态：completed；关闭回执：`SPV51_G11_closure_receipt.md`。
 
 ### SPV51-G12 消费路径
 

@@ -21,6 +21,14 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import
 SELLPOINT_VALUE_PROFILE_SCHEMA_VERSION = "sku_sellpoint_value_decision_profile_v1"
 SELLPOINT_VALUE_PROFILE_RULE_VERSION = "sellpoint_value_profile_materializer_v1"
 SELLPOINT_VALUE_PROFILE_METHOD_VERSION = "sellpoint_value_pm_v5_profile_v1"
+SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION = (
+    "sku_sellpoint_value_decision_profile_v1_1"
+)
+SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION = "sellpoint_value_profile_rule_v5_1"
+SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION = "sellpoint_value_profile_method_v5_1"
+SELLPOINT_VALUE_PROFILE_V5_1_COMPETITOR_METHOD_VERSION = (
+    "competitor_profile_agent_snapshot_v2"
+)
 PROFILE_AUTO_PASS_MIN_CONFIDENCE = Decimal("0.6000")
 FORBIDDEN_FACTORY_EXPORT_KEYS = frozenset(
     {
@@ -49,7 +57,9 @@ class SellpointValueReleaseQualityStatus(str, Enum):
 
 
 class SellpointValuePersistenceBaseModel(SellpointValueProfileBaseModel):
-    model_config = ConfigDict(extra="forbid", from_attributes=True, use_enum_values=True)
+    model_config = ConfigDict(
+        extra="forbid", from_attributes=True, use_enum_values=True
+    )
 
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "SellpointValuePersistenceBaseModel":
@@ -67,6 +77,9 @@ class SellpointValueVersionDraftCreate(SellpointValuePersistenceBaseModel):
     rule_version: str = SELLPOINT_VALUE_PROFILE_RULE_VERSION
     method_version: str = SELLPOINT_VALUE_PROFILE_METHOD_VERSION
     method_versions_json: dict[str, str] = Field(default_factory=dict)
+    source_competitor_profile_version_id: str | None = None
+    source_competitor_profile_method_version: str | None = None
+    source_competitor_profile_result_hash: str | None = None
     release_status: Literal["draft"] = "draft"
     release_quality_status: SellpointValueReleaseQualityStatus = (
         SellpointValueReleaseQualityStatus.UNASSESSED
@@ -82,6 +95,11 @@ class SellpointValueVersionDraftCreate(SellpointValuePersistenceBaseModel):
     review_required_count: int = Field(default=0, ge=0)
     blocked_count: int = Field(default=0, ge=0)
     failed_count: int = Field(default=0, ge=0)
+    conclusion_available_count: int | None = Field(default=None, ge=0)
+    partial_conclusion_count: int | None = Field(default=None, ge=0)
+    no_conclusion_count: int | None = Field(default=None, ge=0)
+    invalid_count: int | None = Field(default=None, ge=0)
+    integrity_error_count: int | None = Field(default=None, ge=0)
     input_fingerprint: str = Field(min_length=1)
     candidate_universe_fingerprint: str = Field(min_length=1)
     result_hash: str = Field(min_length=1)
@@ -96,6 +114,7 @@ class SellpointValueVersionDraftCreate(SellpointValuePersistenceBaseModel):
             raise ValueError("category_code and product_category must match")
         if self.review_required and self.review_status == "auto_pass":
             raise ValueError("review-required versions cannot be auto-pass")
+        _validate_v5_1_version_fields(self)
         return self
 
 
@@ -110,6 +129,9 @@ class SellpointValueVersionRecord(SellpointValuePersistenceBaseModel):
     rule_version: str = Field(min_length=1)
     method_version: str = Field(min_length=1)
     method_versions_json: dict[str, str] = Field(default_factory=dict)
+    source_competitor_profile_version_id: str | None = None
+    source_competitor_profile_method_version: str | None = None
+    source_competitor_profile_result_hash: str | None = None
     release_status: SellpointValueReleaseStatus
     release_quality_status: SellpointValueReleaseQualityStatus
     is_current: bool
@@ -131,6 +153,11 @@ class SellpointValueVersionRecord(SellpointValuePersistenceBaseModel):
     review_required_count: int = Field(ge=0)
     blocked_count: int = Field(ge=0)
     failed_count: int = Field(ge=0)
+    conclusion_available_count: int | None = Field(default=None, ge=0)
+    partial_conclusion_count: int | None = Field(default=None, ge=0)
+    no_conclusion_count: int | None = Field(default=None, ge=0)
+    invalid_count: int | None = Field(default=None, ge=0)
+    integrity_error_count: int | None = Field(default=None, ge=0)
     input_fingerprint: str = Field(min_length=1)
     candidate_universe_fingerprint: str = Field(min_length=1)
     result_hash: str = Field(min_length=1)
@@ -140,6 +167,11 @@ class SellpointValueVersionRecord(SellpointValuePersistenceBaseModel):
     review_reason_json: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def validate_v5_1_fields(self) -> "SellpointValueVersionRecord":
+        _validate_v5_1_version_fields(self)
+        return self
 
 
 class SellpointValuePersistedScope(SellpointValuePersistenceBaseModel):
@@ -177,8 +209,21 @@ class SkuSellpointValueProfileDraft(SellpointValuePersistedScope):
     brand_name: str | None = None
     display_name_cn: str = Field(min_length=1)
     analysis_state: Literal["ready", "partial", "blocked"]
+    conclusion_status: (
+        Literal[
+            "conclusion_available",
+            "partial_conclusion",
+            "no_conclusion",
+            "invalid",
+        ]
+        | None
+    ) = None
     freshness_status: Literal["current", "stale", "unknown"] = "unknown"
     profile_confidence: Decimal = Field(ge=0, le=1)
+    conclusion_available_count: int | None = Field(default=None, ge=0)
+    partial_conclusion_count: int | None = Field(default=None, ge=0)
+    no_conclusion_count: int | None = Field(default=None, ge=0)
+    invalid_count: int | None = Field(default=None, ge=0)
     target_market_summary_json: dict[str, Any] = Field(default_factory=dict)
     source_lineage_json: list[dict[str, Any]] = Field(default_factory=list)
     candidate_universe_summary_json: dict[str, Any] = Field(default_factory=dict)
@@ -195,11 +240,14 @@ class SkuSellpointValueProfileDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_profile_quality(self) -> "SkuSellpointValueProfileDraft":
-        _validate_low_confidence_review(
-            self.profile_confidence,
-            self.review_required,
-            self.review_status,
-        )
+        if self.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+            _validate_v5_1_profile_fields(self)
+        else:
+            _validate_low_confidence_review(
+                self.profile_confidence,
+                self.review_required,
+                self.review_status,
+            )
         if self.analysis_state == "blocked" and not self.review_required:
             raise ValueError("blocked profiles require review")
         return self
@@ -229,14 +277,19 @@ class SkuSellpointValueCandidateDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_candidate_quality(self) -> "SkuSellpointValueCandidateDraft":
-        _validate_low_confidence_review(
-            self.confidence,
-            self.review_required,
-            self.review_status,
-        )
-        if self.pool_type == "reference" and not set(
-            self.eligible_questions_json
-        ).issubset({"parameter_conversion", "battlefield_expansion"}):
+        if self.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+            _validate_low_confidence_review(
+                self.confidence,
+                self.review_required,
+                self.review_status,
+            )
+        if (
+            self.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION
+            and self.pool_type == "reference"
+            and not set(self.eligible_questions_json).issubset(
+                {"parameter_conversion", "battlefield_expansion"}
+            )
+        ):
             raise ValueError(
                 "reference rows can only drive parameter or battlefield questions"
             )
@@ -258,6 +311,15 @@ class SkuSellpointValueItemDraft(SellpointValuePersistedScope):
     normalized_bundle_code: str = Field(min_length=1)
     perceived_outcome_cn: str = Field(min_length=1)
     perceived_value_status: str = Field(min_length=1)
+    conclusion_status: (
+        Literal[
+            "conclusion_available",
+            "partial_conclusion",
+            "no_conclusion",
+            "invalid",
+        ]
+        | None
+    ) = None
     capability_codes_json: list[str] = Field(default_factory=list)
     investment_decisions_json: list[dict[str, Any]] = Field(default_factory=list)
     investment_classifications_json: list[InvestmentClassification] = Field(
@@ -267,6 +329,7 @@ class SkuSellpointValueItemDraft(SellpointValuePersistedScope):
     question_codes_json: list[str] = Field(default_factory=list)
     price_realization_json: dict[str, Any] = Field(default_factory=dict)
     volume_realization_json: dict[str, Any] = Field(default_factory=dict)
+    direct_market_result_available: bool | None = None
     evidence_refs_json: list[SellpointValueEvidenceRef] = Field(default_factory=list)
     evidence_boundary_cn: str = Field(min_length=1)
     limitations_json: list[str] = Field(default_factory=list)
@@ -274,11 +337,24 @@ class SkuSellpointValueItemDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_item_quality(self) -> "SkuSellpointValueItemDraft":
-        _validate_low_confidence_review(
-            self.confidence,
-            self.review_required,
-            self.review_status,
-        )
+        if self.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+            if self.conclusion_status is None:
+                raise ValueError("V5.1 value items require conclusion_status")
+            if self.direct_market_result_available is None:
+                raise ValueError("V5.1 value items require direct market availability")
+            if self.conclusion_status == "invalid":
+                if not self.review_required or self.review_status == "auto_pass":
+                    raise ValueError("invalid V5.1 value items require local review")
+            elif self.review_required != bool(self.review_reason_json):
+                raise ValueError(
+                    "V5.1 value item review must match explicit local reasons"
+                )
+        else:
+            _validate_low_confidence_review(
+                self.confidence,
+                self.review_required,
+                self.review_status,
+            )
         return self
 
 
@@ -386,6 +462,59 @@ def _validate_low_confidence_review(
         not review_required or review_status == "auto_pass"
     ):
         raise ValueError("low-confidence records must require review")
+
+
+def _validate_v5_1_version_fields(value: Any) -> None:
+    if value.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+        return
+    if (
+        value.schema_version != SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION
+        or value.rule_version != SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION
+    ):
+        raise ValueError("V5.1 method requires the V5.1 schema and rule")
+    if (
+        not value.source_competitor_profile_version_id
+        or value.source_competitor_profile_method_version
+        != SELLPOINT_VALUE_PROFILE_V5_1_COMPETITOR_METHOD_VERSION
+        or not value.source_competitor_profile_result_hash
+    ):
+        raise ValueError("V5.1 versions require a complete competitor profile source")
+    counts = (
+        value.conclusion_available_count,
+        value.partial_conclusion_count,
+        value.no_conclusion_count,
+        value.invalid_count,
+        value.integrity_error_count,
+    )
+    if any(item is None for item in counts):
+        raise ValueError("V5.1 versions require conclusion and integrity counts")
+    conclusion_count = sum(item for item in counts[:4] if item is not None)
+    if conclusion_count > value.sku_count:
+        raise ValueError("V5.1 conclusion counts cannot exceed SKU count")
+
+
+def _validate_v5_1_profile_fields(value: SkuSellpointValueProfileDraft) -> None:
+    counts = (
+        value.conclusion_available_count,
+        value.partial_conclusion_count,
+        value.no_conclusion_count,
+        value.invalid_count,
+    )
+    if value.conclusion_status is None or any(item is None for item in counts):
+        raise ValueError("V5.1 profiles require conclusion status and counts")
+    expected_analysis_state = {
+        "conclusion_available": "ready",
+        "partial_conclusion": "partial",
+        "no_conclusion": "partial",
+        "invalid": "blocked",
+    }[value.conclusion_status]
+    if value.analysis_state != expected_analysis_state:
+        raise ValueError("V5.1 analysis_state must project conclusion_status")
+    if value.conclusion_status == "invalid":
+        if not value.invalid_count or not value.review_required:
+            raise ValueError("invalid V5.1 profiles require invalid count and review")
+    elif value.invalid_count or value.review_required:
+        raise ValueError("usable V5.1 profiles cannot carry SKU-level review")
 
 
 def _assert_no_factory_only_keys(value: Any) -> None:
