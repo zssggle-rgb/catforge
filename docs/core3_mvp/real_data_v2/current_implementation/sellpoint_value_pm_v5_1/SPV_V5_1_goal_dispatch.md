@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G03 completed；SPV51-G04 pending
+状态：SPV51-G01—G04 completed；SPV51-G05 pending
 
 日期：2026-07-17
 
@@ -85,6 +85,8 @@
 ### SPV51-G04 Migration/Entities
 
 只实现 G03 冻结的最小持久化变更。测试 upgrade/downgrade、唯一键、历史 V5 行、current isolation 和 PostgreSQL/SQLite 差异。
+
+完成状态：completed；关闭回执：`SPV51_G04_closure_receipt.md`。
 
 ### SPV51-G05 竞品画像 Adapter
 

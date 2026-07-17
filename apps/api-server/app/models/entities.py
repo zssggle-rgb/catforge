@@ -6737,6 +6737,48 @@ class Core3SellpointValueProfileVersion(Base, AuditMixin):
         CheckConstraint("blocked_count >= 0", name="ck_core3_spv_version_blocked_count"),
         CheckConstraint("failed_count >= 0", name="ck_core3_spv_version_failed_count"),
         CheckConstraint(
+            "conclusion_available_count IS NULL OR conclusion_available_count >= 0",
+            name="ck_core3_spv_version_v51_available",
+        ),
+        CheckConstraint(
+            "partial_conclusion_count IS NULL OR partial_conclusion_count >= 0",
+            name="ck_core3_spv_version_v51_partial",
+        ),
+        CheckConstraint(
+            "no_conclusion_count IS NULL OR no_conclusion_count >= 0",
+            name="ck_core3_spv_version_v51_no_conclusion",
+        ),
+        CheckConstraint(
+            "invalid_count IS NULL OR invalid_count >= 0",
+            name="ck_core3_spv_version_v51_invalid",
+        ),
+        CheckConstraint(
+            "integrity_error_count IS NULL OR integrity_error_count >= 0",
+            name="ck_core3_spv_version_v51_integrity",
+        ),
+        CheckConstraint(
+            "method_version <> 'sellpoint_value_profile_method_v5_1' OR "
+            "(source_competitor_profile_version_id IS NOT NULL "
+            "AND source_competitor_profile_version_id <> '' "
+            "AND source_competitor_profile_method_version = "
+            "'competitor_profile_agent_snapshot_v2' "
+            "AND source_competitor_profile_result_hash IS NOT NULL "
+            "AND source_competitor_profile_result_hash <> '' "
+            "AND conclusion_available_count IS NOT NULL "
+            "AND partial_conclusion_count IS NOT NULL "
+            "AND no_conclusion_count IS NOT NULL "
+            "AND invalid_count IS NOT NULL "
+            "AND integrity_error_count IS NOT NULL)",
+            name="ck_core3_spv_version_v51_complete",
+        ),
+        CheckConstraint(
+            "method_version <> 'sellpoint_value_profile_method_v5_1' OR "
+            "(conclusion_available_count + partial_conclusion_count + "
+            "no_conclusion_count + invalid_count <= sku_count "
+            "AND invalid_count <= sku_count)",
+            name="ck_core3_spv_version_v51_distribution",
+        ),
+        CheckConstraint(
             "release_status in ('draft','reviewed','published','deprecated')",
             name="ck_core3_spv_version_release_status",
         ),
@@ -6765,6 +6807,12 @@ class Core3SellpointValueProfileVersion(Base, AuditMixin):
         Index(
             "ix_core3_spv_version_candidate_fp",
             "candidate_universe_fingerprint",
+        ),
+        Index(
+            "ix_core3_spv_version_competitor_source",
+            "project_id",
+            "category_code",
+            "source_competitor_profile_version_id",
         ),
         Index(
             "uq_core3_spv_current_published",
@@ -6805,6 +6853,15 @@ class Core3SellpointValueProfileVersion(Base, AuditMixin):
     rule_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     method_version: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     method_versions_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    source_competitor_profile_version_id: Mapped[str | None] = mapped_column(
+        String(120)
+    )
+    source_competitor_profile_method_version: Mapped[str | None] = mapped_column(
+        String(120)
+    )
+    source_competitor_profile_result_hash: Mapped[str | None] = mapped_column(
+        String(200)
+    )
     release_status: Mapped[str] = mapped_column(
         String(40), nullable=False, default="draft", index=True
     )
@@ -6836,6 +6893,11 @@ class Core3SellpointValueProfileVersion(Base, AuditMixin):
     review_required_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     blocked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    conclusion_available_count: Mapped[int | None] = mapped_column(Integer)
+    partial_conclusion_count: Mapped[int | None] = mapped_column(Integer)
+    no_conclusion_count: Mapped[int | None] = mapped_column(Integer)
+    invalid_count: Mapped[int | None] = mapped_column(Integer)
+    integrity_error_count: Mapped[int | None] = mapped_column(Integer)
     input_fingerprint: Mapped[str] = mapped_column(
         String(200), nullable=False, index=True
     )
@@ -6876,6 +6938,42 @@ class Core3SkuSellpointValueProfile(Base, AuditMixin):
             name="ck_core3_spv_profile_analysis_state",
         ),
         CheckConstraint(
+            "conclusion_status IS NULL OR conclusion_status in "
+            "('conclusion_available','partial_conclusion','no_conclusion','invalid')",
+            name="ck_core3_spv_profile_v51_status",
+        ),
+        CheckConstraint(
+            "conclusion_available_count IS NULL OR conclusion_available_count >= 0",
+            name="ck_core3_spv_profile_v51_available",
+        ),
+        CheckConstraint(
+            "partial_conclusion_count IS NULL OR partial_conclusion_count >= 0",
+            name="ck_core3_spv_profile_v51_partial",
+        ),
+        CheckConstraint(
+            "no_conclusion_count IS NULL OR no_conclusion_count >= 0",
+            name="ck_core3_spv_profile_v51_no_conclusion",
+        ),
+        CheckConstraint(
+            "invalid_count IS NULL OR invalid_count >= 0",
+            name="ck_core3_spv_profile_v51_invalid",
+        ),
+        CheckConstraint(
+            "method_version <> 'sellpoint_value_profile_method_v5_1' OR "
+            "(conclusion_status IS NOT NULL "
+            "AND conclusion_available_count IS NOT NULL "
+            "AND partial_conclusion_count IS NOT NULL "
+            "AND no_conclusion_count IS NOT NULL "
+            "AND invalid_count IS NOT NULL)",
+            name="ck_core3_spv_profile_v51_complete",
+        ),
+        CheckConstraint(
+            "method_version <> 'sellpoint_value_profile_method_v5_1' OR "
+            "((conclusion_status = 'invalid' AND invalid_count > 0) OR "
+            "(conclusion_status <> 'invalid' AND invalid_count = 0))",
+            name="ck_core3_spv_profile_v51_invalid_state",
+        ),
+        CheckConstraint(
             "release_status in ('draft','reviewed','published','deprecated')",
             name="ck_core3_spv_profile_release_status",
         ),
@@ -6907,6 +7005,13 @@ class Core3SkuSellpointValueProfile(Base, AuditMixin):
             "category_code",
             "analysis_state",
             "review_required",
+        ),
+        Index(
+            "ix_core3_spv_profile_v51_conclusion",
+            "project_id",
+            "category_code",
+            "batch_id",
+            "conclusion_status",
         ),
         Index(
             "ix_core3_spv_profile_current",
@@ -6961,12 +7066,17 @@ class Core3SkuSellpointValueProfile(Base, AuditMixin):
     analysis_state: Mapped[str] = mapped_column(
         String(40), nullable=False, default="blocked", index=True
     )
+    conclusion_status: Mapped[str | None] = mapped_column(String(40))
     freshness_status: Mapped[str] = mapped_column(
         String(40), nullable=False, default="unknown", index=True
     )
     profile_confidence: Mapped[Decimal] = mapped_column(
         Numeric(6, 4), nullable=False, default=Decimal("0.0000")
     )
+    conclusion_available_count: Mapped[int | None] = mapped_column(Integer)
+    partial_conclusion_count: Mapped[int | None] = mapped_column(Integer)
+    no_conclusion_count: Mapped[int | None] = mapped_column(Integer)
+    invalid_count: Mapped[int | None] = mapped_column(Integer)
     target_market_summary_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
     source_lineage_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     candidate_universe_summary_json: Mapped[dict] = mapped_column(
@@ -7161,6 +7271,17 @@ class Core3SkuSellpointValueItem(Base, AuditMixin):
             name="ck_core3_spv_item_release_status",
         ),
         CheckConstraint(
+            "conclusion_status IS NULL OR conclusion_status in "
+            "('conclusion_available','partial_conclusion','no_conclusion','invalid')",
+            name="ck_core3_spv_item_v51_status",
+        ),
+        CheckConstraint(
+            "method_version <> 'sellpoint_value_profile_method_v5_1' OR "
+            "(conclusion_status IS NOT NULL "
+            "AND direct_market_result_available IS NOT NULL)",
+            name="ck_core3_spv_item_v51_complete",
+        ),
+        CheckConstraint(
             "NOT is_current OR release_status = 'published'",
             name="ck_core3_spv_item_current_release",
         ),
@@ -7173,6 +7294,12 @@ class Core3SkuSellpointValueItem(Base, AuditMixin):
         Index(
             "ix_core3_spv_item_profile_id",
             "sku_sellpoint_value_profile_id",
+        ),
+        Index(
+            "ix_core3_spv_item_v51_conclusion",
+            "sku_sellpoint_value_profile_id",
+            "conclusion_status",
+            "direct_market_result_available",
         ),
         Index(
             "ix_core3_spv_item_version_id",
@@ -7241,6 +7368,7 @@ class Core3SkuSellpointValueItem(Base, AuditMixin):
     perceived_value_status: Mapped[str] = mapped_column(
         String(60), nullable=False, default="unknown", index=True
     )
+    conclusion_status: Mapped[str | None] = mapped_column(String(40))
     capability_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     investment_decisions_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     investment_classifications_json: Mapped[list] = mapped_column(
@@ -7250,6 +7378,7 @@ class Core3SkuSellpointValueItem(Base, AuditMixin):
     question_codes_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     price_realization_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
     volume_realization_json: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    direct_market_result_available: Mapped[bool | None] = mapped_column(Boolean)
     evidence_refs_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
     evidence_boundary_cn: Mapped[str] = mapped_column(Text, nullable=False)
     limitations_json: Mapped[list] = mapped_column(JSONBCompat, default=list)
