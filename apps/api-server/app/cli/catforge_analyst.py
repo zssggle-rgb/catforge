@@ -250,7 +250,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     preview_profile_version=getattr(
                         args, "preview_profile_version", None
                     ),
+                    preview_sellpoint_value_profile_version_id=getattr(
+                        args,
+                        "preview_sellpoint_value_profile_version_id",
+                        None,
+                    ),
                     profile_version=getattr(args, "profile_version", None),
+                    sellpoint_value_profile_version_id=getattr(
+                        args,
+                        "sellpoint_value_profile_version_id",
+                        None,
+                    ),
                     expected_result_hash=getattr(
                         args, "expected_result_hash", None
                     ),
@@ -455,6 +465,14 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Product-manager question answered from one stored profile.",
             )
             command_parser.add_argument("--profile-version")
+            command_parser.add_argument(
+                "--profile-access-mode",
+                choices=("formal", "preview"),
+                default="formal",
+            )
+            command_parser.add_argument(
+                "--sellpoint-value-profile-version-id"
+            )
             command_parser.add_argument("--expected-result-hash")
             command_parser.add_argument("--qa-topic")
             command_parser.add_argument("--compare-profile-version")
@@ -472,6 +490,10 @@ def build_parser() -> argparse.ArgumentParser:
                     "Explicitly preview one saved profile version. Without this "
                     "flag V5 only reads the current published profile."
                 ),
+            )
+            command_parser.add_argument(
+                "--preview-sellpoint-value-profile-version-id",
+                help="Lock preview to one immutable V5.1 version id.",
             )
         if command == "sellpoint-value-pm-v4":
             command_parser.add_argument(

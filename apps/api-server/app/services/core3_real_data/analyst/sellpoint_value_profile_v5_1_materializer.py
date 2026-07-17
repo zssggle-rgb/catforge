@@ -226,7 +226,13 @@ def _profile_draft(
             for status in value_statuses
         ),
         invalid_count=(
-            sum(status == QuestionConclusionStatus.INVALID for status in value_statuses)
+            max(
+                1,
+                sum(
+                    status == QuestionConclusionStatus.INVALID
+                    for status in value_statuses
+                ),
+            )
             if conclusion.status == QuestionConclusionStatus.INVALID
             else 0
         ),

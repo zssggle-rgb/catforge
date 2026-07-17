@@ -58,12 +58,15 @@ def test_cli_command_exists_but_is_default_off() -> None:
             "--enable-v5",
             "--preview-profile-version",
             "spv-draft-1",
+            "--preview-sellpoint-value-profile-version-id",
+            "spv-version-1",
         ]
     )
 
     assert disabled.enable_v5 is False
     assert enabled.enable_v5 is True
     assert enabled.preview_profile_version == "spv-draft-1"
+    assert enabled.preview_sellpoint_value_profile_version_id == "spv-version-1"
     assert "sellpoint-value-pm-v5" in SOP_COMMANDS
     assert get_ability("sellpoint-value-pm-v5").status == "implemented_default_off"
 

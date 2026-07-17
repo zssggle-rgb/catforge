@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
@@ -185,7 +184,7 @@ def _write_profile(
         )
 
 
-def test_v5_requires_published_profile_unless_preview_is_explicit(
+def test_v51_entrypoint_rejects_old_v5_draft_even_with_profile_name(
     profile_session: Session,
 ) -> None:
     repository = _repository(profile_session)
@@ -208,12 +207,12 @@ def test_v5_requires_published_profile_unless_preview_is_explicit(
 
     assert default["status"] == "not_found"
     assert "不会临时重算" in default["limitations"][0]
-    assert preview["status"] == "ok"
-    assert preview["result"]["sellpoint_value_pm_v5"]["release_status"] == "draft"
+    assert preview["status"] == "error"
+    assert "version id" in preview["limitations"][0]
     assert handlers.call_count == 0
 
 
-def test_published_profile_drives_all_report_formats_with_one_hash(
+def test_published_old_v5_profile_is_not_used_by_v51_entrypoint(
     profile_session: Session,
 ) -> None:
     repository = _repository(profile_session)
@@ -230,48 +229,12 @@ def test_published_profile_drives_all_report_formats_with_one_hash(
         evidence_report_url="https://example.com/evidence",
     )
 
-    assert result["status"] == "ok"
-    payload = result["result"]
-    report = payload["sellpoint_value_pm_v5"]
-    answer = payload["sellpoint_value_pm_v5_answer"]
-    assert report["profile_version"] == "spv-published"
-    assert report["generated_at"]
-    assert report["published_at"]
-    assert report["candidate_manifest_hash"] == "candidate-spv-published"
-    assert report["candidate_count"] == 1
-    assert report["reference_count"] == 1
-    assert len(report["first_screen"]) == 5
-    assert report["profile_result_hash"] == answer["result_hash"]
-    assert answer["report_ref"]["result_hash"] == answer["result_hash"]
-    assert answer["feishu_card_payload"]["result_hash"] == answer["result_hash"]
-    assert answer["result_hash"] in answer["short_answer"]
-    assert report["candidate_manifest_hash"] in answer["short_answer"]
-    assert "（已发布，数据已更新）" in answer["short_answer"]
-    rendered_card = json.dumps(answer["feishu_card_payload"], ensure_ascii=False)
-    assert "已发布" in rendered_card
-    assert "数据已更新" in rendered_card
-    assert "发布时间" in answer["short_answer"]
-    assert answer["result_hash"] in json.dumps(
-        answer["feishu_card_payload"], ensure_ascii=False
-    )
-    assert answer["feishu_card_payload"]["release_status"] == "published"
-    assert (
-        answer["feishu_card_payload"]["candidate_manifest_hash"]
-        == report["candidate_manifest_hash"]
-    )
-    assert [item["label"] for item in answer["report_links"]] == [
-        "查看用户选择对比",
-        "查看完整画像",
-    ]
-    rendered = json.dumps(payload, ensure_ascii=False)
-    for forbidden in ("反事实", "合成对照", "合成控制", "门禁", "M12", "M13", "M14"):
-        assert forbidden not in rendered
-    assert "HDMI 2.1：保持基础竞争能力" in rendered
-    assert "TCL 65Q9L PRO" in rendered
+    assert result["status"] == "not_found"
+    assert "V5.1" in result["message_cn"]
     assert handlers.call_count == 0
 
 
-def test_stale_blocked_preview_is_honest_and_does_not_recompute(
+def test_old_v5_blocked_preview_cannot_enter_v51_consumer(
     profile_session: Session,
 ) -> None:
     repository = _repository(profile_session)
@@ -300,9 +263,8 @@ def test_stale_blocked_preview_is_honest_and_does_not_recompute(
         preview_profile_version="spv-stale",
     )
 
-    assert result["status"] == "ok"
-    assert any("不能作为当前产品决策依据" in item for item in result["limitations"])
-    assert any("不能形成正式产品取舍" in item for item in result["limitations"])
+    assert result["status"] == "error"
+    assert "version id" in result["limitations"][0]
     assert handlers.call_count == 0
 
 

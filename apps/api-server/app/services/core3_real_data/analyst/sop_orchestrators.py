@@ -67,7 +67,7 @@ from app.services.core3_real_data.analyst.replacement_pressure import (
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
     build_stored_profile_answer_artifacts,
-    build_stored_profile_pm_report,
+    build_v5_1_stored_profile_pm_report,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
@@ -75,7 +75,18 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories i
 from app.services.core3_real_data.analyst.sellpoint_value_profile_qa import (
     ProfileQaTargetAmbiguousError,
     ProfileQaTopicCode,
-    SellpointValueProfileQaService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_consumer import (
+    SellpointValueV51ConsumerIntegrityError,
+    SellpointValueV51ConsumerReadRequest,
+    SellpointValueV51ConsumerReader,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_qa import (
+    SellpointValueV51QaService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_repository import (
+    SellpointValueV51Repository,
+    SellpointValueV51RepositoryError,
 )
 
 
@@ -174,9 +185,19 @@ class SopOrchestrators:
         self.atomic_handlers = atomic_handlers
         self.sellpoint_value_profile_repository = sellpoint_value_profile_repository
         self.competitor_profile_v1_1_reader = competitor_profile_v1_1_reader
-        self.sellpoint_value_profile_qa_service = (
-            SellpointValueProfileQaService(sellpoint_value_profile_repository)
+        self.sellpoint_value_v5_1_repository = (
+            SellpointValueV51Repository(sellpoint_value_profile_repository.context)
             if sellpoint_value_profile_repository is not None
+            else None
+        )
+        self.sellpoint_value_v5_1_reader = (
+            SellpointValueV51ConsumerReader(self.sellpoint_value_v5_1_repository)
+            if self.sellpoint_value_v5_1_repository is not None
+            else None
+        )
+        self.sellpoint_value_profile_qa_service = (
+            SellpointValueV51QaService(self.sellpoint_value_v5_1_reader)
+            if self.sellpoint_value_v5_1_reader is not None
             else None
         )
 
@@ -209,7 +230,9 @@ class SopOrchestrators:
         query: str | None = None,
         sku_code: str | None = None,
         model_name: str | None = None,
+        profile_access_mode: Literal["formal", "preview"] | None = None,
         profile_version: str | None = None,
+        sellpoint_value_profile_version_id: str | None = None,
         expected_result_hash: str | None = None,
         topic_code: ProfileQaTopicCode | None = None,
         candidate_sku_code: str | None = None,
@@ -234,18 +257,28 @@ class SopOrchestrators:
                 limitations=["当前运行环境尚未接入用户卖点价值画像存储。"],
                 message_cn="当前没有可读取的用户卖点价值画像。",
             )
+        access_mode = profile_access_mode or (
+            "preview"
+            if profile_version or sellpoint_value_profile_version_id
+            else "formal"
+        )
         try:
             answer = service.answer(
+                project_id=context.project_id,
+                category_code=context.category_code,
                 batch_id=context.batch_id,
                 question=question,
                 query=query,
                 sku_code=sku_code,
                 model_name=model_name,
+                access_mode=access_mode,
                 profile_version=profile_version,
+                sellpoint_value_profile_version_id=(
+                    sellpoint_value_profile_version_id
+                ),
                 expected_result_hash=expected_result_hash,
                 topic_code=topic_code,
                 candidate_sku_code=candidate_sku_code,
-                compare_profile_version=compare_profile_version,
             )
         except ProfileQaTargetAmbiguousError as exc:
             return base_result(
@@ -256,10 +289,22 @@ class SopOrchestrators:
                 limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
                 message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
             )
+        except (
+            ValueError,
+            SellpointValueV51ConsumerIntegrityError,
+            SellpointValueV51RepositoryError,
+        ) as exc:
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command=command,
+                context=context,
+                limitations=[str(exc)],
+                message_cn="用户卖点价值画像读取条件不完整或画像数据异常。",
+            )
         if answer is None:
             scope_cn = (
                 f"指定画像版本 {profile_version}"
-                if profile_version
+                if access_mode == "preview"
                 else "当前已发布画像"
             )
             return base_result(
@@ -313,6 +358,7 @@ class SopOrchestrators:
         selection_compare_url: str | None = None,
         evidence_report_url: str | None = None,
         preview_profile_version: str | None = None,
+        preview_sellpoint_value_profile_version_id: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         if not enable_v5:
@@ -323,8 +369,8 @@ class SopOrchestrators:
                 limitations=["V5 默认关闭，必须由显式命令参数启用。"],
                 message_cn="用户卖点价值 V5 默认关闭；请使用显式 enable_v5 参数。",
             )
-        repository = self.sellpoint_value_profile_repository
-        if repository is None:
+        reader = self.sellpoint_value_v5_1_reader
+        if reader is None:
             return base_result(
                 status=AnalystStatus.NOT_FOUND,
                 command="sellpoint-value-pm-v5",
@@ -332,18 +378,45 @@ class SopOrchestrators:
                 limitations=["当前运行环境尚未接入用户卖点价值画像存储。"],
                 message_cn="当前没有可读取的用户卖点价值画像。",
             )
-        targets = repository.resolve_profile_targets(
-            batch_id=context.batch_id,
-            profile_version=preview_profile_version,
-            query=query,
-            sku_code=sku_code,
-            model_name=model_name,
+        access_mode = (
+            "preview"
+            if preview_profile_version
+            or preview_sellpoint_value_profile_version_id
+            else "formal"
         )
-        if not targets:
+        try:
+            read = reader.read(
+                SellpointValueV51ConsumerReadRequest(
+                    project_id=context.project_id,
+                    category_code=context.category_code,
+                    batch_id=context.batch_id,
+                    access_mode=access_mode,
+                    query=query,
+                    sku_code=sku_code,
+                    model_name=model_name,
+                    profile_version=preview_profile_version,
+                    sellpoint_value_profile_version_id=(
+                        preview_sellpoint_value_profile_version_id
+                    ),
+                )
+            )
+        except (
+            ValueError,
+            SellpointValueV51ConsumerIntegrityError,
+            SellpointValueV51RepositoryError,
+        ) as exc:
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                limitations=[str(exc)],
+                message_cn="用户卖点价值画像读取条件不完整或画像数据异常。",
+            )
+        if read.status == "profile_unavailable":
             scope_cn = (
                 f"指定预览版本 {preview_profile_version}"
-                if preview_profile_version
-                else "当前已发布版本"
+                if access_mode == "preview"
+                else "当前已发布 V5.1 版本"
             )
             return base_result(
                 status=AnalystStatus.NOT_FOUND,
@@ -352,38 +425,17 @@ class SopOrchestrators:
                 limitations=[f"{scope_cn}中没有匹配的 SKU 画像，且不会临时重算。"],
                 message_cn=f"{scope_cn}中没有找到该 SKU 的用户卖点价值画像。",
             )
-        if len(targets) > 1:
+        if read.status == "ambiguous":
             return base_result(
                 status=AnalystStatus.AMBIGUOUS,
                 command="sellpoint-value-pm-v5",
                 context=context,
-                result={"candidates": targets},
+                result={"candidates": read.candidates},
                 limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
                 message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
             )
-        target = targets[0]
-        if preview_profile_version:
-            bundle = repository.get_profile(
-                batch_id=context.batch_id,
-                profile_version=preview_profile_version,
-                sku_code=str(target["sku_code"]),
-                rule_version=str(target["rule_version"]),
-            )
-        else:
-            bundle = repository.get_current_published_profile(
-                batch_id=context.batch_id,
-                sku_code=str(target["sku_code"]),
-            )
-        if bundle is None:
-            return base_result(
-                status=AnalystStatus.NOT_FOUND,
-                command="sellpoint-value-pm-v5",
-                context=context,
-                target=target,
-                limitations=["画像索引与画像明细不一致，需要修复后再读取。"],
-                message_cn="找到了画像索引，但没有找到对应画像明细。",
-            )
-        report = build_stored_profile_pm_report(bundle)
+        assert read.readback is not None
+        report = build_v5_1_stored_profile_pm_report(read.readback)
         answer = build_stored_profile_answer_artifacts(
             report,
             with_report=with_report,

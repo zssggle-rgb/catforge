@@ -533,7 +533,7 @@ def test_answer_locks_hash_and_version_diff_reads_saved_profiles_only(
     assert missing_version is not None and missing_version.answer_status == "unknown"
 
 
-def test_orchestrator_has_zero_upstream_calls_and_formats_four_sections(
+def test_orchestrator_does_not_fallback_from_v51_to_published_v5(
     qa_session: Session,
 ) -> None:
     repository = _write_version(
@@ -553,16 +553,8 @@ def test_orchestrator_has_zero_upstream_calls_and_formats_four_sections(
         sku_code="TV001",
         question="当前价格为什么获得支撑",
     )
-    text = catforge_analyst.format_business_text(result)
-
-    assert result["status"] == "ok"
-    assert result["atoms_used"] == []
+    assert result["status"] == "not_found"
     assert handlers.call_count == 0
-    assert "画像事实｜" in text
-    assert "产品工作含义｜" in text
-    assert "证据边界｜" in text
-    answer = result["result"]["sellpoint_value_profile_answer"]
-    assert result["evidence"][0]["result_hash"] == answer["result_hash"]
 
 
 def test_cli_exposes_explicit_profile_lock_arguments() -> None:
@@ -575,6 +567,10 @@ def test_cli_exposes_explicit_profile_lock_arguments() -> None:
             "为什么选这款竞品",
             "--profile-version",
             "spv-draft",
+            "--profile-access-mode",
+            "preview",
+            "--sellpoint-value-profile-version-id",
+            "spv-version-id",
             "--expected-result-hash",
             "result-hash",
             "--candidate-sku-code",
@@ -586,6 +582,8 @@ def test_cli_exposes_explicit_profile_lock_arguments() -> None:
 
     assert args.profile_question == "为什么选这款竞品"
     assert args.profile_version == "spv-draft"
+    assert args.profile_access_mode == "preview"
+    assert args.sellpoint_value_profile_version_id == "spv-version-id"
     assert args.expected_result_hash == "result-hash"
     assert args.candidate_sku_code == "TV-COMPETITOR"
     assert args.compare_profile_version == "spv-previous"
@@ -616,8 +614,8 @@ def test_qa_does_not_read_draft_without_explicit_version(qa_session: Session) ->
 
     assert default["status"] == "not_found"
     assert "不会临时重算" in default["limitations"][0]
-    assert preview["status"] == "ok"
-    assert preview["result"]["sellpoint_value_profile_answer"]["release_status"] == "draft"
+    assert preview["status"] == "error"
+    assert "version id" in preview["limitations"][0]
     assert handlers.call_count == 0
 
 
@@ -647,6 +645,10 @@ def test_cli_forwards_profile_qa_lock_arguments(monkeypatch, capsys) -> None:
             "为什么选这款产品",
             "--profile-version",
             "spv-draft",
+            "--profile-access-mode",
+            "preview",
+            "--sellpoint-value-profile-version-id",
+            "spv-version-id",
             "--expected-result-hash",
             "result-hash",
             "--candidate-sku-code",
@@ -659,6 +661,8 @@ def test_cli_forwards_profile_qa_lock_arguments(monkeypatch, capsys) -> None:
     assert exit_code == 0
     assert captured["question"] == "为什么选这款产品"
     assert captured["profile_version"] == "spv-draft"
+    assert captured["profile_access_mode"] == "preview"
+    assert captured["sellpoint_value_profile_version_id"] == "spv-version-id"
     assert captured["expected_result_hash"] == "result-hash"
     assert captured["candidate_sku_code"] == "TV-COMPETITOR"
     assert "not_found" in capsys.readouterr().out

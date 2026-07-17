@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G11 completed；SPV51-G12 pending
+状态：SPV51-G01—G12 completed；SPV51-G13 pending
 
 日期：2026-07-17
 
@@ -133,6 +133,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G12 消费路径
 
 报告和 QA 映射保存的状态与四层量化，不现场重算。测试 formal、preview、no_conclusion、invalid、strict WTP absent 和同 hash。
+
+完成状态：completed；关闭回执：`SPV51_G12_closure_receipt.md`。
 
 ### SPV51-G13 集成质量
 

@@ -169,7 +169,9 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
         description_cn="锁定一份已保存的用户卖点价值画像，回答产品投入、价格、销量、竞品、价值战场和版本变化追问。",
         required_inputs=("sku_code|query", "question"),
         optional_inputs=(
+            "profile_access_mode",
             "profile_version",
+            "sellpoint_value_profile_version_id",
             "expected_result_hash",
             "candidate_sku_code",
             "compare_profile_version",
@@ -181,10 +183,16 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="sellpoint-value-pm-v5",
         ability_type="sop",
-        description_cn="显式启用后生成用户感知价值、相对亮点、量价承接、市场合成参照和战场组合；默认不参与自然语言路由。",
+        description_cn="显式启用后读取一份已保存的 V5.1 画像，组织用户价值、重点卖点、投入取舍和量价结论；默认不参与自然语言路由。",
         required_inputs=("sku_code|query", "enable_v5"),
-        optional_inputs=("with_report", "max_chat_chars", "report_title"),
-        source_modules=("M03B", "M04C", "M05C", "M07", "M09C", "M10C", "M11C", "M11D", "M12D", "M14"),
+        optional_inputs=(
+            "with_report",
+            "max_chat_chars",
+            "report_title",
+            "preview_profile_version",
+            "preview_sellpoint_value_profile_version_id",
+        ),
+        source_modules=(),
         status="implemented_default_off",
     ),
     AbilityDefinition(
