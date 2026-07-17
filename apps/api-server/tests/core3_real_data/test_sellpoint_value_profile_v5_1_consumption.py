@@ -332,6 +332,23 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
             artifacts["feishu_card_payload"]["body"]["elements"][0]["content"],
         )
     )
+    bounded_markdown = render_stored_profile_markdown(
+        StoredSellpointValuePmReport.model_validate(report).model_copy(
+            update={
+                "limitations": [
+                    "market_association_not_randomized_causality",
+                    "common_weeks_not_required",
+                    "v4_strict_amount_gate_not_passed",
+                ]
+            }
+        ),
+        title="用户卖点价值分析",
+    )
+    assert "market_association_not_randomized_causality" not in bounded_markdown
+    assert "common_weeks_not_required" not in bounded_markdown
+    assert "v4_strict_amount_gate_not_passed" not in bounded_markdown
+    assert "## 五、结论边界" in bounded_markdown
+    assert "不代表单一卖点的实验因果增量" in bounded_markdown
     assert source.profile_version not in visible_outputs
     assert readback.profile.result_hash not in visible_outputs
     assert source.candidate_pools.result_hash not in visible_outputs

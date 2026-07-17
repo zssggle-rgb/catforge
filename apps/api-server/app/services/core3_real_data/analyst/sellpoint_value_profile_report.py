@@ -463,12 +463,13 @@ def render_stored_profile_markdown(
                 "",
             ]
         )
-    if report.limitations:
+    business_limitations = _business_report_limitations(report.limitations)
+    if business_limitations:
         lines.extend(
             [
-                "## 五、当前不能下的结论",
+                "## 五、结论边界",
                 "",
-                *(f"- {item}" for item in report.limitations),
+                *(f"- {item}" for item in business_limitations),
                 "",
             ]
         )
@@ -1159,6 +1160,69 @@ def _profile_limitations(profile: Any) -> list[str]:
     if profile.analysis_state == "blocked":
         limitations.append("关键证据不足或冲突，本画像只能预览，不能形成正式产品取舍。")
     return list(dict.fromkeys(limitations))
+
+
+def _business_report_limitations(values: Sequence[str]) -> list[str]:
+    """Project audit limitations into a small PM-readable boundary section."""
+
+    market_association_codes = {
+        "common_platforms_not_required",
+        "common_weeks_not_required",
+        "full_window_weekly_average",
+        "market_association_not_causal",
+        "market_association_not_randomized_causality",
+        "market_association_not_single_sellpoint_causality",
+        "same_budget_market_association_not_causal",
+    }
+    parameter_codes = {
+        "no_different_normalized_parameter_value",
+        "ordinal_tiers_not_required",
+    }
+    audit_only_codes = {
+        "saved_v5_user_value_and_reference_facts_reused",
+        "v4_strict_amount_gate_not_passed",
+    }
+    result: list[str] = []
+    has_market_association = False
+    has_parameter_gap = False
+    has_table_stake_gap = False
+    for raw in values:
+        item = str(raw).strip()
+        if not item:
+            continue
+        if item in market_association_codes:
+            has_market_association = True
+            continue
+        if item in parameter_codes:
+            has_parameter_gap = True
+            continue
+        if item == "saved_reference_capability_prevalence_unavailable":
+            has_table_stake_gap = True
+            continue
+        if item in audit_only_codes:
+            continue
+        if item.startswith("组合成员在当前 SKU 中共同变化"):
+            result.append(
+                "同一价值组合中的多项能力共同变化，不能把量价差拆给其中一个能力。"
+            )
+            continue
+        if re.fullmatch(r"[a-z0-9_]+", item):
+            continue
+        result.append(_sanitize(item))
+    prefixed: list[str] = []
+    if has_market_association:
+        prefixed.append(
+            "价格与销量结论来自完整观察窗口的同类产品比较，用于判断价值组合的市场表现，不代表单一卖点的实验因果增量。"
+        )
+    if has_parameter_gap:
+        prefixed.append(
+            "现有参数事实没有形成可用的不同档位比较，本报告不据此判断某项参数值得追加投入。"
+        )
+    if has_table_stake_gap:
+        prefixed.append(
+            "现有参照样本不足以确认哪些能力已成为行业基础配置。"
+        )
+    return list(dict.fromkeys([*prefixed, *result]))
 
 
 def _sanitize(value: str) -> str:
