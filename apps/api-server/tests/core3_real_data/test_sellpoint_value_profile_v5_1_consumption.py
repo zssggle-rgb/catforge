@@ -18,6 +18,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_aggregati
     aggregate_value_conclusion,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_consumer import (
+    SellpointValueV51ConsumerIntegrityError,
     SellpointValueV51ConsumerReadRequest,
     SellpointValueV51ConsumerReader,
 )
@@ -51,6 +52,9 @@ from tests.core3_real_data.test_sellpoint_value_profile_v5_1_materialization imp
     _repository,
     _request,
     session as _materialization_session,
+)
+from tests.core3_real_data.test_sellpoint_value_profile_persistence import (
+    _source_batch,
 )
 
 
@@ -523,6 +527,94 @@ def test_formal_report_reads_only_current_published_v5_1(consumer_session) -> No
     assert report["profile_version"] == "spv-v51-formal"
     assert report["profile_result_hash"] == readback.profile.result_hash
     assert handlers.call_count == 0
+
+
+def test_formal_reader_uses_current_published_version_across_source_batches(
+    consumer_session,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-formal-latest")
+    repository, readback = _generate(consumer_session, source)
+    version_id = readback.persisted.version.sellpoint_value_profile_version_id
+    _mark_published_current(consumer_session, version_id)
+
+    result = SellpointValueV51ConsumerReader(repository).read(
+        SellpointValueV51ConsumerReadRequest(
+            project_id="project-1",
+            category_code="TV",
+            batch_id="later-latest-batch",
+            sku_code="TV-TARGET",
+        )
+    )
+
+    assert result.status == "available"
+    assert result.readback is not None
+    assert result.readback.profile.batch_id == "batch-1"
+    assert result.readback.profile.result_hash == readback.profile.result_hash
+
+
+def test_preview_reader_keeps_exact_batch_lock(consumer_session) -> None:
+    source = _materialization_input(profile_version="spv-v51-preview-batch-lock")
+    repository, readback = _generate(consumer_session, source)
+    version_id = readback.persisted.version.sellpoint_value_profile_version_id
+
+    result = SellpointValueV51ConsumerReader(repository).read(
+        SellpointValueV51ConsumerReadRequest(
+            project_id="project-1",
+            category_code="TV",
+            batch_id="later-latest-batch",
+            access_mode="preview",
+            sku_code="TV-TARGET",
+            profile_version=source.profile_version,
+            sellpoint_value_profile_version_id=version_id,
+        )
+    )
+
+    assert result.status == "profile_unavailable"
+
+
+def test_formal_reader_rejects_multiple_current_versions_across_batches(
+    consumer_session,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-formal-unique")
+    repository, readback = _generate(consumer_session, source)
+    version_id = readback.persisted.version.sellpoint_value_profile_version_id
+    _mark_published_current(consumer_session, version_id)
+    first = consumer_session.get(
+        entities.Core3SellpointValueProfileVersion,
+        version_id,
+    )
+    assert first is not None
+    consumer_session.add(_source_batch("batch-2", "project-1", "TV"))
+    consumer_session.flush()
+    duplicate_values = {
+        column.name: getattr(first, column.name)
+        for column in entities.Core3SellpointValueProfileVersion.__table__.columns
+    }
+    duplicate_values.update(
+        {
+            "sellpoint_value_profile_version_id": "spv-v51-second-current",
+            "batch_id": "batch-2",
+            "profile_version": "spv-v51-formal-second",
+            "result_hash": "sha256:spv-v51-formal-second",
+        }
+    )
+    consumer_session.add(
+        entities.Core3SellpointValueProfileVersion(**duplicate_values)
+    )
+    consumer_session.commit()
+
+    with pytest.raises(
+        SellpointValueV51ConsumerIntegrityError,
+        match="multiple V5.1 versions occupy one consumer scope",
+    ):
+        SellpointValueV51ConsumerReader(repository).read(
+            SellpointValueV51ConsumerReadRequest(
+                project_id="project-1",
+                category_code="TV",
+                batch_id="later-latest-batch",
+                sku_code="TV-TARGET",
+            )
+        )
 
 
 def test_formal_consumer_becomes_unavailable_after_controlled_current_deactivation(

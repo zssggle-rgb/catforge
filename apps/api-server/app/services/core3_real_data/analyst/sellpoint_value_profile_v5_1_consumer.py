@@ -143,7 +143,7 @@ class SellpointValueV51ConsumerReader:
             )
         row = matches[0]
         readback = self.repository.get_v5_1_profile(
-            batch_id=request.batch_id,
+            batch_id=version.batch_id,
             profile_version=version.profile_version,
             sku_code=row.sku_code,
         )
@@ -183,9 +183,6 @@ class SellpointValueV51ConsumerReader:
                 == request.category_code
             )
             .where(
-                entities.Core3SellpointValueProfileVersion.batch_id == request.batch_id
-            )
-            .where(
                 entities.Core3SellpointValueProfileVersion.schema_version
                 == SPV_V5_1_SCHEMA_VERSION
             )
@@ -206,6 +203,8 @@ class SellpointValueV51ConsumerReader:
             )
         else:
             stmt = stmt.where(
+                entities.Core3SellpointValueProfileVersion.batch_id
+                == request.batch_id,
                 entities.Core3SellpointValueProfileVersion.sellpoint_value_profile_version_id
                 == request.sellpoint_value_profile_version_id,
                 entities.Core3SellpointValueProfileVersion.profile_version
@@ -242,7 +241,7 @@ class SellpointValueV51ConsumerReader:
             or persisted.result_hash != version.result_hash
             or readback.profile.project_id != request.project_id
             or readback.profile.category_code != request.category_code
-            or readback.profile.batch_id != request.batch_id
+            or readback.profile.batch_id != version.batch_id
         ):
             raise SellpointValueV51ConsumerIntegrityError(
                 "V5.1 typed readback crossed its locked version scope"
