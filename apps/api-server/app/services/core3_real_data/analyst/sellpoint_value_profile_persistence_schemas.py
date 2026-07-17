@@ -377,6 +377,15 @@ class SkuSellpointValueProfileProgressRecord(SellpointValuePersistenceBaseModel)
 
     sku_code: str = Field(min_length=1)
     analysis_state: Literal["ready", "partial", "blocked"]
+    conclusion_status: (
+        Literal[
+            "conclusion_available",
+            "partial_conclusion",
+            "no_conclusion",
+            "invalid",
+        ]
+        | None
+    ) = None
     review_required: bool
 
 
@@ -396,6 +405,83 @@ class SkuSellpointValueItemRecord(SkuSellpointValueItemDraft):
     is_current: bool
     created_at: datetime
     updated_at: datetime
+
+
+class SavedV5VersionSource(SellpointValuePersistenceBaseModel):
+    """Small immutable V5 version projection used by V5.1 generation."""
+
+    sellpoint_value_profile_version_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    batch_id: str = Field(min_length=1)
+    profile_version: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    method_version: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
+
+
+class SavedV5SkuProfileSource(SellpointValuePersistenceBaseModel):
+    """Only profile scalars that the V5.1 fact adapter consumes."""
+
+    sku_sellpoint_value_profile_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    batch_id: str = Field(min_length=1)
+    profile_version: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    method_version: str = Field(min_length=1)
+    sku_code: str = Field(min_length=1)
+    model_code: str | None = None
+    model_name: str | None = None
+    brand_name: str | None = None
+    display_name_cn: str | None = None
+    result_hash: str = Field(min_length=1)
+
+
+class SavedV5ReferenceCandidateSource(SellpointValuePersistenceBaseModel):
+    """Reference candidate facts required for the V5.1 analysis-reference pool."""
+
+    sku_sellpoint_value_candidate_id: str = Field(min_length=1)
+    batch_id: str = Field(min_length=1)
+    pool_type: Literal["reference"]
+    candidate_sku_code: str = Field(min_length=1)
+    candidate_brand_name: str | None = None
+    candidate_model_name: str | None = None
+    market_summary_json: dict[str, Any] = Field(default_factory=dict)
+    result_hash: str = Field(min_length=1)
+
+
+class SavedV5ValueItemSource(SellpointValuePersistenceBaseModel):
+    """Value facts used by V5.1, excluding old report/evidence payloads."""
+
+    sku_sellpoint_value_item_id: str = Field(min_length=1)
+    batch_id: str = Field(min_length=1)
+    battlefield_code: str = Field(min_length=1)
+    battlefield_name_cn: str | None = None
+    purchase_reason_code: str | None = None
+    purchase_reason_name_cn: str | None = None
+    value_bundle_code: str = Field(min_length=1)
+    value_bundle_name_cn: str = Field(min_length=1)
+    normalized_bundle_code: str = Field(min_length=1)
+    perceived_outcome_cn: str = Field(min_length=1)
+    perceived_value_status: str = Field(min_length=1)
+    capability_codes_json: list[str] = Field(default_factory=list)
+    investment_decisions_json: list[dict[str, Any]] = Field(default_factory=list)
+    question_result_refs_json: list[dict[str, Any]] = Field(default_factory=list)
+    price_realization_json: dict[str, Any] = Field(default_factory=dict)
+    evidence_boundary_cn: str | None = None
+    limitations_json: list[str] = Field(default_factory=list)
+    confidence: Decimal = Field(ge=0, le=1)
+    result_hash: str = Field(min_length=1)
+
+
+class SellpointValueSavedV5GenerationSource(SellpointValuePersistenceBaseModel):
+    """Typed, memory-bounded saved-V5 input for V5.1 generation."""
+
+    version: SavedV5VersionSource
+    profile: SavedV5SkuProfileSource
+    candidates: list[SavedV5ReferenceCandidateSource] = Field(default_factory=list)
+    value_items: list[SavedV5ValueItemSource] = Field(default_factory=list)
 
 
 class SellpointValueDraftBundle(SellpointValuePersistenceBaseModel):

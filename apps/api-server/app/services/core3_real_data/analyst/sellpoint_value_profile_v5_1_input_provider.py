@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
     SELLPOINT_VALUE_PROFILE_METHOD_VERSION,
     SELLPOINT_VALUE_PROFILE_RULE_VERSION,
-    SellpointValueProfileReadBundle,
+    SellpointValueSavedV5GenerationSource,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
@@ -201,36 +201,64 @@ class SavedV5SellpointValueV51InputProvider:
         if not expected:
             raise ValueError("V5.1 generation requires at least one SKU")
 
-        sources = [
-            self._build_materialization_input(
+        candidate_pool_hashes: dict[str, str] = {}
+        competitor_versions: set[tuple[Any, ...]] = set()
+        version_competitor = None
+        version_source_lineage: list[SellpointValueV51SourceLineage] = []
+        if len(expected) == 1:
+            source = self._build_materialization_input(
                 project_id=project_id,
                 category_code=normalized_category,
                 batch_id=batch_id,
                 profile_version=profile_version,
-                sku_code=sku_code,
+                sku_code=expected[0],
                 generated_by=generated_by,
             )
-            for sku_code in expected
-        ]
-        competitor_versions = {
-            (
-                row.competitor_source.access_mode,
-                row.competitor_source.competitor_profile_version_id,
-                row.competitor_source.profile_version,
-                row.competitor_source.method_version,
-                row.competitor_source.release_status,
-                row.competitor_source.is_current,
-                row.competitor_source.release_scope_key,
-                row.competitor_source.source_version_result_hash,
+            self._remember_input(
+                (profile_version, batch_id, source.target.sku_code),
+                source,
             )
-            for row in sources
-        }
-        if len(competitor_versions) != 1:
+            candidate_pool_hashes[source.target.sku_code] = (
+                source.candidate_pools.result_hash
+            )
+            version_competitor = source.competitor_source
+            version_source_lineage = source.source_lineage
+            competitor_versions.add(
+                _competitor_version_identity(source.competitor_source)
+            )
+        else:
+            # Freeze only the light version scope here. Holding every fully
+            # assembled value graph made a 377-SKU request retain more than a
+            # gigabyte before the first draft write. Each full graph is built
+            # later, one SKU at a time, and rechecked against this hash.
+            for sku_code in expected:
+                bundle, competitor = self._load_saved_v5_bundle_and_competitor(
+                    project_id=project_id,
+                    category_code=normalized_category,
+                    batch_id=batch_id,
+                    sku_code=sku_code,
+                )
+                candidate_pools = build_sellpoint_value_candidate_pools(
+                    competitor_source=competitor,
+                    analysis_reference_records=[
+                        _analysis_reference_record(
+                            row,
+                            purposes=_reference_purposes(bundle),
+                        )
+                        for row in bundle.candidates
+                        if row.pool_type == "reference"
+                    ],
+                )
+                candidate_pool_hashes[sku_code] = candidate_pools.result_hash
+                competitor_versions.add(_competitor_version_identity(competitor))
+                if version_competitor is None:
+                    version_competitor = competitor
+                    version_source_lineage = _saved_v5_source_lineage(bundle)
+        if len(competitor_versions) != 1 or version_competitor is None:
             raise SellpointValueV51ProductionInputError(
                 "authoritative SKUs do not share one formal competitor version"
             )
-        source = sources[0]
-        competitor = source.competitor_source
+        competitor = version_competitor
         request = SellpointValueV51VersionRequest(
             project_id=project_id,
             category_code=normalized_category,
@@ -249,66 +277,33 @@ class SavedV5SellpointValueV51InputProvider:
                 version_result_hash=competitor.source_version_result_hash,
             ),
             expected_sku_codes=expected,
-            candidate_pool_hashes={
-                row.target.sku_code: row.candidate_pools.result_hash for row in sources
-            },
-            method_config=source.method_config,
+            candidate_pool_hashes=candidate_pool_hashes,
+            method_config=sellpoint_value_v5_1_config(normalized_category),
             method_versions=dict(sorted(SPV_V5_1_PRODUCTION_METHOD_VERSIONS.items())),
-            source_lineage=source.source_lineage,
+            source_lineage=version_source_lineage,
             generated_by=generated_by,
         )
-        for row in sources:
-            self._cache[
-                (request.profile_version, request.batch_id, row.target.sku_code)
-            ] = row
         return request
 
-    def load_materialization_input(
+    def _remember_input(
         self,
-        request: SellpointValueV51VersionRequest,
-        sku_code: str,
-    ) -> SellpointValueV51MaterializationInput:
-        normalized = sku_code.strip().upper()
-        key = (request.profile_version, request.batch_id, normalized)
-        source = self._cache.get(key)
-        if source is None:
-            source = self._build_materialization_input(
-                project_id=request.project_id,
-                category_code=request.category_code,
-                batch_id=request.batch_id,
-                profile_version=request.profile_version,
-                sku_code=normalized,
-                generated_by=request.generated_by,
-            )
-            self._cache[key] = source
-        if source.candidate_pools.result_hash != request.candidate_pool_hashes.get(
-            normalized
-        ):
-            raise SellpointValueV51ProductionInputError(
-                "saved V5.1 candidate pool changed after request creation"
-            )
-        if (
-            source.competitor_source.competitor_profile_version_id
-            != request.competitor_source.competitor_profile_version_id
-            or source.competitor_source.source_version_result_hash
-            != request.competitor_source.version_result_hash
-        ):
-            raise SellpointValueV51ProductionInputError(
-                "formal competitor source changed after request creation"
-            )
-        return source
+        key: tuple[str, str, str],
+        source: SellpointValueV51MaterializationInput,
+    ) -> None:
+        # Generation is strictly serial. Retaining more than the current graph
+        # adds no reuse value and makes full-category runs scale with all SKUs.
+        self._cache.clear()
+        self._cache[key] = source
 
-    def _build_materialization_input(
+    def _load_saved_v5_bundle_and_competitor(
         self,
         *,
         project_id: str,
         category_code: str,
         batch_id: str,
-        profile_version: str,
         sku_code: str,
-        generated_by: str,
-    ) -> SellpointValueV51MaterializationInput:
-        bundle = self.repository.get_profile(
+    ) -> tuple[SellpointValueSavedV5GenerationSource, Any]:
+        bundle = self.repository.get_saved_v5_generation_source(
             batch_id=batch_id,
             profile_version=self.source_profile_version,
             sku_code=sku_code,
@@ -339,7 +334,59 @@ class SavedV5SellpointValueV51InputProvider:
             raise SellpointValueV51ProductionInputError(
                 f"current published competitor profile is unavailable for {sku_code}"
             )
-        competitor_source = competitor_read.source
+        return bundle, competitor_read.source
+
+    def load_materialization_input(
+        self,
+        request: SellpointValueV51VersionRequest,
+        sku_code: str,
+    ) -> SellpointValueV51MaterializationInput:
+        normalized = sku_code.strip().upper()
+        key = (request.profile_version, request.batch_id, normalized)
+        source = self._cache.get(key)
+        if source is None:
+            source = self._build_materialization_input(
+                project_id=request.project_id,
+                category_code=request.category_code,
+                batch_id=request.batch_id,
+                profile_version=request.profile_version,
+                sku_code=normalized,
+                generated_by=request.generated_by,
+            )
+            self._remember_input(key, source)
+        if source.candidate_pools.result_hash != request.candidate_pool_hashes.get(
+            normalized
+        ):
+            raise SellpointValueV51ProductionInputError(
+                "saved V5.1 candidate pool changed after request creation"
+            )
+        if (
+            source.competitor_source.competitor_profile_version_id
+            != request.competitor_source.competitor_profile_version_id
+            or source.competitor_source.source_version_result_hash
+            != request.competitor_source.version_result_hash
+        ):
+            raise SellpointValueV51ProductionInputError(
+                "formal competitor source changed after request creation"
+            )
+        return source
+
+    def _build_materialization_input(
+        self,
+        *,
+        project_id: str,
+        category_code: str,
+        batch_id: str,
+        profile_version: str,
+        sku_code: str,
+        generated_by: str,
+    ) -> SellpointValueV51MaterializationInput:
+        bundle, competitor_source = self._load_saved_v5_bundle_and_competitor(
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            sku_code=sku_code,
+        )
         purposes = _reference_purposes(bundle)
         candidate_pools = build_sellpoint_value_candidate_pools(
             competitor_source=competitor_source,
@@ -369,20 +416,7 @@ class SavedV5SellpointValueV51InputProvider:
             )
         )
         profile = bundle.profile
-        source_lineage = [
-            SellpointValueV51SourceLineage(
-                source_code="saved_sellpoint_value_v5_profile",
-                source_type="upstream",
-                version_id=bundle.version.sellpoint_value_profile_version_id,
-                method_version=bundle.version.method_version,
-                result_hash=profile.result_hash,
-                record_ids=[profile.sku_sellpoint_value_profile_id],
-                limitations=[
-                    "saved_facts_only",
-                    "legacy_review_and_release_states_not_propagated",
-                ],
-            )
-        ]
+        source_lineage = _saved_v5_source_lineage(bundle)
         return SellpointValueV51MaterializationInput(
             project_id=project_id,
             category_code=category_code,
@@ -418,8 +452,41 @@ class SavedV5SellpointValueV51InputProvider:
         )
 
 
+def _competitor_version_identity(competitor: Any) -> tuple[Any, ...]:
+    return (
+        competitor.access_mode,
+        competitor.competitor_profile_version_id,
+        competitor.profile_version,
+        competitor.method_version,
+        competitor.release_status,
+        competitor.is_current,
+        competitor.release_scope_key,
+        competitor.source_version_result_hash,
+    )
+
+
+def _saved_v5_source_lineage(
+    bundle: SellpointValueSavedV5GenerationSource,
+) -> list[SellpointValueV51SourceLineage]:
+    profile = bundle.profile
+    return [
+        SellpointValueV51SourceLineage(
+            source_code="saved_sellpoint_value_v5_profile",
+            source_type="upstream",
+            version_id=bundle.version.sellpoint_value_profile_version_id,
+            method_version=bundle.version.method_version,
+            result_hash=profile.result_hash,
+            record_ids=[profile.sku_sellpoint_value_profile_id],
+            limitations=[
+                "saved_facts_only",
+                "legacy_review_and_release_states_not_propagated",
+            ],
+        )
+    ]
+
+
 def _assert_saved_v5_bundle(
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
     *,
     project_id: str,
     category_code: str,
@@ -455,7 +522,7 @@ def _assert_saved_v5_bundle(
 
 
 def _reference_purposes(
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
 ) -> dict[str, set[AnalysisReferencePurpose]]:
     result = {
         row.candidate_sku_code: {AnalysisReferencePurpose.SAME_SIZE_MARKET}
@@ -506,7 +573,7 @@ def _analysis_reference_record(
 
 
 def _capability_value_status_overrides(
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
 ) -> dict[str, str]:
     """Prefer a dedicated one-capability value over composite bundle inference."""
 
@@ -523,7 +590,7 @@ def _capability_value_status_overrides(
 
 def _value_input(
     *,
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
     item: Any,
     competitor_source: Any,
     candidate_pools: Any,
@@ -650,7 +717,7 @@ def _value_input(
 
 def _direct_market_results(
     *,
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
     item: Any,
     competitor_source: Any,
     candidate_pools: Any,
@@ -870,7 +937,7 @@ def _parameter_results(
 
 def _investment_decisions(
     *,
-    bundle: SellpointValueProfileReadBundle,
+    bundle: SellpointValueSavedV5GenerationSource,
     item: Any,
     capability_status_overrides: Mapping[str, str],
     evidence_ref: SellpointValueEvidenceRef,

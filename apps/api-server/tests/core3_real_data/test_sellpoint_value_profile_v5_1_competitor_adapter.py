@@ -195,8 +195,8 @@ class StrictSavedRepository:
         self.version = version or _version()
         self.calls: list[tuple[str, Any]] = []
 
-    def read_agent_snapshot(self, **kwargs: Any) -> SimpleNamespace:
-        self.calls.append(("read_agent_snapshot", kwargs))
+    def read_agent_profile_payload(self, **kwargs: Any) -> SimpleNamespace:
+        self.calls.append(("read_agent_profile_payload", kwargs))
         return self.read_result
 
     def get_version_by_id(self, version_id: str) -> SimpleNamespace:
@@ -252,10 +252,9 @@ def test_formal_adapter_maps_all_saved_candidates_pair_facts_and_hashes() -> Non
     assert source.candidates[1].market.avg_weekly_sales_volume == Decimal("52")
     assert repository.calls == [
         (
-            "read_agent_snapshot",
+            "read_agent_profile_payload",
             {
                 "target_sku_code": "TV-TARGET",
-                "read_mode": "full",
                 "access_mode": "formal",
                 "competitor_profile_version_id": None,
                 "release_scope_key": None,
@@ -338,7 +337,9 @@ def test_unavailable_profile_is_explicit_and_does_not_read_version() -> None:
 
     assert result.status == "profile_unavailable"
     assert result.source is None
-    assert [call[0] for call in repository.calls] == ["read_agent_snapshot"]
+    assert [call[0] for call in repository.calls] == [
+        "read_agent_profile_payload"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -385,7 +386,7 @@ def test_integrity_mismatch_fails_instead_of_falling_back(
         SellpointValueCompetitorProfileAdapter(repository).read(_request())
 
     assert [call[0] for call in repository.calls] == [
-        "read_agent_snapshot",
+        "read_agent_profile_payload",
         "get_version_by_id",
     ]
 
@@ -415,6 +416,6 @@ def test_adapter_import_graph_and_runtime_are_saved_profile_only() -> None:
     repository = StrictSavedRepository()
     SellpointValueCompetitorProfileAdapter(repository).read(_request())
     assert {call[0] for call in repository.calls} == {
-        "read_agent_snapshot",
+        "read_agent_profile_payload",
         "get_version_by_id",
     }

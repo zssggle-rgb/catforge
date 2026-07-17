@@ -359,6 +359,15 @@ def test_zero_candidate_snapshot_roundtrip_and_business_answer(
     )
     assert full.status == "available"
     assert full.full is not None
+    profile_only = repository.read_agent_profile_payload(
+        target_sku_code="TV00000001",
+        access_mode="preview",
+        competitor_profile_version_id=version.competitor_profile_version_id,
+        release_scope_key=version.release_scope_key,
+    )
+    assert profile_only.status == "available"
+    assert profile_only.full == full.full
+    assert not hasattr(profile_only, "sku_snapshots")
     runtime = CompetitorProfileAgentSnapshotAdapter().adapt(
         full.full,
         full.sku_snapshots,

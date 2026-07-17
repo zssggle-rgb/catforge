@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G16 completed；SPV51-G17 pending
+状态：SPV51-G01—G17 completed；SPV51-G18 pending
 
 日期：2026-07-17
 
@@ -171,6 +171,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G17 TV/AC 全量 draft
 
 仅在 G15/G16 均通过后创建。生成 377 TV + 155 AC 新 draft，复核 coverage、invalid/failure、状态分布、直接量价覆盖、局部 review 和 hash。
+
+完成状态：completed；关闭回执：`SPV51_G17_closure_receipt.md`；业务验收：`SPV51_G17_full_draft_acceptance_report.md`；结构化证据：`SPV51_G17_full_draft_evidence.json`。
 
 ### SPV51-G18 发布准备审计
 

@@ -498,6 +498,55 @@ def test_create_write_read_and_idempotent_reuse(session: Session) -> None:
     ) == 1
 
 
+def test_saved_v5_generation_source_projects_only_consumed_facts(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+    repository.write_draft(_bundle(version.sellpoint_value_profile_version_id))
+    item = session.execute(
+        select(entities.Core3SkuSellpointValueItem)
+    ).scalar_one()
+    item.investment_decisions_json = [
+        {
+            "capability_code": "local_dimming",
+            "capability_name_cn": "分区控光",
+            "classification": "retain",
+            "target_fact_status": "known_present",
+            "target_value": "1920",
+            "relative_experience_status": "better",
+            "evidence_refs": [{"payload": "x" * 10000}],
+            "prevalence_summary": {"unused": True},
+        }
+    ]
+    session.flush()
+
+    source = repository.get_saved_v5_generation_source(
+        batch_id="batch-tv",
+        profile_version="spv-v1",
+        sku_code="TV001",
+        rule_version=SELLPOINT_VALUE_PROFILE_RULE_VERSION,
+    )
+
+    assert source is not None
+    assert source.version.result_hash == version.result_hash
+    assert source.profile.sku_code == "TV001"
+    assert [row.candidate_sku_code for row in source.candidates] == [
+        "TV-REFERENCE"
+    ]
+    assert source.value_items[0].investment_decisions_json == [
+        {
+            "capability_code": "local_dimming",
+            "capability_name_cn": "分区控光",
+            "classification": "retain",
+            "target_fact_status": "known_present",
+            "target_value": "1920",
+            "relative_experience_status": "better",
+        }
+    ]
+    assert "evidence_refs" not in source.value_items[0].investment_decisions_json[0]
+
+
 def test_immutable_version_profile_and_children_cannot_be_overwritten(
     session: Session,
 ) -> None:
@@ -591,12 +640,13 @@ def test_candidate_and_value_item_filters_paginate_after_filtering(
         limit=1,
     )
     assert [row.model_dump() for row in progress] == [
-        {
-            "sku_code": "TV001",
-            "analysis_state": "ready",
-            "review_required": False,
-        }
-    ]
+            {
+                "sku_code": "TV001",
+                "analysis_state": "ready",
+                "conclusion_status": None,
+                "review_required": False,
+            }
+        ]
     assert [
         row.candidate_sku_code
         for row in repository.list_candidates(

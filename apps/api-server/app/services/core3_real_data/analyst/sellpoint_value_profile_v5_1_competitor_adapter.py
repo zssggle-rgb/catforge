@@ -109,9 +109,8 @@ class SellpointValueCompetitorProfileAdapter:
             raise ValueError("competitor adapter category does not match repository")
 
         target_sku_code = request.target_sku_code.strip().upper()
-        read = self.repository.read_agent_snapshot(
+        read = self.repository.read_agent_profile_payload(
             target_sku_code=target_sku_code,
-            read_mode="full",
             access_mode=request.access_mode,
             competitor_profile_version_id=request.competitor_profile_version_id,
             release_scope_key=request.release_scope_key,
@@ -120,7 +119,6 @@ class SellpointValueCompetitorProfileAdapter:
             return SellpointValueCompetitorReadResult(status="profile_unavailable")
         if (
             read.status != "available"
-            or read.read_mode != "full"
             or read.full is None
             or read.competitor_profile_version_id is None
         ):

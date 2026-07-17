@@ -63,7 +63,7 @@ class SellpointValueV51ReadbackIntegrityError(SellpointValueV51RepositoryError):
     pass
 
 
-SPV_V5_1_PROGRESS_READ_PAGE_SIZE = 64
+SPV_V5_1_PROGRESS_READ_PAGE_SIZE = 1
 
 
 class SellpointValueV51Repository(SellpointValueProfileRepository):
@@ -109,26 +109,49 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
         sellpoint_value_profile_version_id: str,
         expected_sku_codes: Sequence[str],
         failed_sku_codes: Sequence[str] = (),
+        validate_readbacks: bool = False,
     ) -> SellpointValueVersionRecord:
         expected = sorted(set(expected_sku_codes))
-        failed = sorted(set(failed_sku_codes))
         if list(expected_sku_codes) != expected:
             raise ValueError("expected SKU codes must be sorted and unique")
-        if not set(failed).issubset(expected):
+        reported_failed = sorted(set(failed_sku_codes))
+        if not set(reported_failed).issubset(expected):
             raise ValueError("failed SKU codes must stay in the expected scope")
         version = self._version_by_id(sellpoint_value_profile_version_id)
         if version.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
             raise ValueError("V5.1 progress cannot update a historical V5 version")
-        generated_codes: list[str] = []
+        previous_failed = sorted(
+            set(
+                (version.validation_summary_json or {}).get(
+                    "failed_sku_codes",
+                    [],
+                )
+            )
+        )
+        if not set(previous_failed).issubset(expected):
+            raise ValueError("saved failed SKU codes exceed the expected scope")
+        progress_rows = self.list_profile_progress(
+            sellpoint_value_profile_version_id=sellpoint_value_profile_version_id,
+            limit=1000,
+        )
+        generated_codes = [row.sku_code for row in progress_rows]
+        failed = sorted(
+            (set(previous_failed) | set(reported_failed)) - set(generated_codes)
+        )
         hash_or_reference_errors: list[str] = []
-        statuses: Counter[str] = Counter()
-        for row, persisted in self._iter_v5_1_read_bundles(version):
-            generated_codes.append(row.sku_code)
-            statuses[row.conclusion_status] += 1
-            try:
-                self._validate_v5_1_readback(persisted)
-            except (ValidationError, SellpointValueV51RepositoryError, ValueError):
-                hash_or_reference_errors.append(row.sku_code)
+        statuses: Counter[str] = Counter(
+            row.conclusion_status for row in progress_rows
+        )
+        if validate_readbacks:
+            for row, persisted in self._iter_v5_1_read_bundles(version):
+                try:
+                    self._validate_v5_1_readback(persisted)
+                except (
+                    ValidationError,
+                    SellpointValueV51RepositoryError,
+                    ValueError,
+                ):
+                    hash_or_reference_errors.append(row.sku_code)
         unexpected_codes = sorted(set(generated_codes) - set(expected))
         local_review_count = int(
             self.db.scalar(
@@ -144,12 +167,15 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
         )
         missing_codes = sorted(set(expected) - set(generated_codes) - set(failed))
         integrity_error_count = len(unexpected_codes) + len(hash_or_reference_errors)
+        completed = len(generated_codes) + len(failed) >= len(expected)
+        validation_pending = completed and not validate_readbacks and not failed
         blocking = bool(
             failed
             or missing_codes
             or unexpected_codes
             or hash_or_reference_errors
             or statuses["invalid"]
+            or validation_pending
         )
         limited = bool(
             statuses["partial_conclusion"]
@@ -163,7 +189,6 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
             if limited
             else SellpointValueReleaseQualityStatus.READY
         )
-        completed = len(generated_codes) + len(failed) >= len(expected)
         reasons = [
             reason
             for reason, active in (
@@ -171,6 +196,7 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
                 ("missing_authoritative_sku", bool(missing_codes)),
                 ("unexpected_sku", bool(unexpected_codes)),
                 ("readback_integrity_error", bool(hash_or_reference_errors)),
+                ("readback_validation_pending", validation_pending),
                 ("invalid_sku", bool(statuses["invalid"])),
                 ("local_value_review", bool(local_review_count)),
             )
@@ -198,9 +224,18 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
                 "missing_sku_codes": missing_codes,
                 "unexpected_sku_codes": unexpected_codes,
                 "readback_error_sku_codes": sorted(hash_or_reference_errors),
+                "readback_validation_status": (
+                    "completed" if validate_readbacks else "deferred"
+                ),
             },
             release_quality_status=quality,
-            processing_status="completed" if completed else "running",
+            processing_status=(
+                "completed"
+                if completed and (validate_readbacks or failed)
+                else "validating"
+                if completed
+                else "running"
+            ),
             review_required=bool(reasons),
             review_status="review_required" if reasons else "auto_pass",
             review_reason_json={"reasons": reasons} if reasons else {},

@@ -15,6 +15,7 @@ from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_sche
     AGENT_SNAPSHOT_METHOD_VERSION,
     AGENT_SNAPSHOT_RULE_VERSION,
     AgentCompetitorProfileCompact,
+    AgentCompetitorProfilePayloadReadResult,
     AgentCompetitorProfileReadResult,
     AgentCompetitorProfileSnapshot,
     AgentPairIndexItem,
@@ -190,6 +191,45 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             competitor_profile_version_id=version.competitor_profile_version_id,
             full=full,
             sku_snapshots=sku_snapshots,
+        )
+
+    def read_agent_profile_payload(
+        self,
+        *,
+        target_sku_code: str,
+        access_mode: Literal["formal", "preview"],
+        competitor_profile_version_id: str | None = None,
+        release_scope_key: str | None = None,
+    ) -> AgentCompetitorProfilePayloadReadResult:
+        """Read the verified saved analysis graph without raw SKU snapshots."""
+
+        version = self._resolve_agent_version(
+            target_sku_code=target_sku_code,
+            access_mode=access_mode,
+            competitor_profile_version_id=competitor_profile_version_id,
+            release_scope_key=release_scope_key,
+        )
+        if version is None:
+            return AgentCompetitorProfilePayloadReadResult(
+                status="profile_unavailable",
+                preview=access_mode == "preview",
+            )
+        profile_row = self._find_v11_profile(
+            version_id=version.competitor_profile_version_id,
+            target_sku_code=target_sku_code,
+        )
+        if profile_row is None:
+            return AgentCompetitorProfilePayloadReadResult(
+                status="profile_unavailable",
+                preview=access_mode == "preview",
+            )
+        full = self._read_agent_profile_row(profile_row)
+        self._verify_pair_index(profile_row, full)
+        return AgentCompetitorProfilePayloadReadResult(
+            status="available",
+            preview=access_mode == "preview",
+            competitor_profile_version_id=version.competitor_profile_version_id,
+            full=full,
         )
 
     def _resolve_agent_version(

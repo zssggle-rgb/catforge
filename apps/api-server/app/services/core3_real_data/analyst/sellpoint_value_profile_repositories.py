@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Mapping
 
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from app.models import entities
@@ -19,8 +19,13 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SellpointValueDraftBundle,
     SellpointValueProfileReadBundle,
     SellpointValueReleaseQualityStatus,
+    SellpointValueSavedV5GenerationSource,
     SellpointValueVersionDraftCreate,
     SellpointValueVersionRecord,
+    SavedV5ReferenceCandidateSource,
+    SavedV5SkuProfileSource,
+    SavedV5ValueItemSource,
+    SavedV5VersionSource,
     SkuSellpointValueCandidateRecord,
     SkuSellpointValueItemRecord,
     SkuSellpointValueProfileRecord,
@@ -271,6 +276,208 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             return None
         return self._read_bundle(version, profile)
 
+    def get_saved_v5_generation_source(
+        self,
+        *,
+        batch_id: str,
+        profile_version: str,
+        sku_code: str,
+        rule_version: str,
+    ) -> SellpointValueSavedV5GenerationSource | None:
+        """Read only the saved V5 facts consumed by V5.1 generation.
+
+        General V5 readback hydrates report, QA, and repeated evidence JSON.
+        Some old item rows exceed several megabytes even though the V5.1
+        adapter only consumes six investment fields. This projection keeps
+        full readback unchanged while bounding generation memory per SKU.
+        """
+
+        version_model = entities.Core3SellpointValueProfileVersion
+        version_stmt = (
+            select(
+                version_model.sellpoint_value_profile_version_id,
+                version_model.project_id,
+                version_model.category_code,
+                version_model.batch_id,
+                version_model.profile_version,
+                version_model.rule_version,
+                version_model.method_version,
+                version_model.result_hash,
+            )
+            .where(version_model.project_id == self.project_id)
+            .where(version_model.category_code == self.category_code.value)
+            .where(_batch_scope_filter(version_model.batch_id, batch_id))
+            .where(version_model.profile_version == profile_version)
+            .where(version_model.rule_version == rule_version)
+            .order_by(_batch_scope_order(version_model.batch_id, batch_id))
+        )
+        version_row = self.db.execute(version_stmt).mappings().first()
+        if version_row is None:
+            return None
+
+        profile_model = entities.Core3SkuSellpointValueProfile
+        profile_stmt = (
+            select(
+                profile_model.sku_sellpoint_value_profile_id,
+                profile_model.project_id,
+                profile_model.category_code,
+                profile_model.batch_id,
+                profile_model.profile_version,
+                profile_model.rule_version,
+                profile_model.method_version,
+                profile_model.sku_code,
+                profile_model.model_code,
+                profile_model.model_name,
+                profile_model.brand_name,
+                profile_model.display_name_cn,
+                profile_model.result_hash,
+            )
+            .where(profile_model.project_id == self.project_id)
+            .where(profile_model.category_code == self.category_code.value)
+            .where(profile_model.batch_id == version_row["batch_id"])
+            .where(profile_model.profile_version == profile_version)
+            .where(profile_model.sku_code == sku_code)
+            .where(profile_model.rule_version == rule_version)
+        )
+        profile_row = self.db.execute(profile_stmt).mappings().first()
+        if profile_row is None:
+            return None
+        profile_id = str(profile_row["sku_sellpoint_value_profile_id"])
+
+        candidate_model = entities.Core3SkuSellpointValueCandidate
+        candidate_stmt = (
+            select(
+                candidate_model.sku_sellpoint_value_candidate_id,
+                candidate_model.batch_id,
+                candidate_model.pool_type,
+                candidate_model.candidate_sku_code,
+                candidate_model.candidate_brand_name,
+                candidate_model.candidate_model_name,
+                candidate_model.market_summary_json,
+                candidate_model.result_hash,
+            )
+            .where(candidate_model.sku_sellpoint_value_profile_id == profile_id)
+            .where(candidate_model.pool_type == "reference")
+            .order_by(candidate_model.candidate_sku_code)
+        )
+        candidate_rows = self.db.execute(candidate_stmt).mappings().all()
+
+        item_model = entities.Core3SkuSellpointValueItem
+        item_stmt = (
+            select(
+                item_model.sku_sellpoint_value_item_id,
+                item_model.batch_id,
+                item_model.battlefield_code,
+                item_model.battlefield_name_cn,
+                item_model.purchase_reason_code,
+                item_model.purchase_reason_name_cn,
+                item_model.value_bundle_code,
+                item_model.value_bundle_name_cn,
+                item_model.normalized_bundle_code,
+                item_model.perceived_outcome_cn,
+                item_model.perceived_value_status,
+                item_model.capability_codes_json,
+                item_model.question_result_refs_json,
+                item_model.price_realization_json,
+                item_model.evidence_boundary_cn,
+                item_model.limitations_json,
+                item_model.confidence,
+                item_model.result_hash,
+            )
+            .where(item_model.sku_sellpoint_value_profile_id == profile_id)
+            .order_by(
+                item_model.battlefield_code,
+                item_model.normalized_bundle_code,
+            )
+        )
+        item_rows = [
+            dict(row) for row in self.db.execute(item_stmt).mappings().all()
+        ]
+        investments_by_item: dict[str, list[dict[str, Any]]] = {}
+        for row in self._read_saved_v5_investment_inputs(profile_id):
+            item_id = str(row["sku_sellpoint_value_item_id"])
+            investments_by_item.setdefault(item_id, []).append(
+                _saved_v5_investment_projection(row)
+            )
+        for row in item_rows:
+            row["investment_decisions_json"] = investments_by_item.get(
+                str(row["sku_sellpoint_value_item_id"]),
+                [],
+            )
+
+        return SellpointValueSavedV5GenerationSource(
+            version=SavedV5VersionSource.model_validate(version_row),
+            profile=SavedV5SkuProfileSource.model_validate(profile_row),
+            candidates=[
+                SavedV5ReferenceCandidateSource.model_validate(row)
+                for row in candidate_rows
+            ],
+            value_items=[
+                SavedV5ValueItemSource.model_validate(row) for row in item_rows
+            ],
+        )
+
+    def _read_saved_v5_investment_inputs(
+        self,
+        profile_id: str,
+    ) -> list[Mapping[str, Any]]:
+        """Project investment arrays before repeated evidence reaches Python."""
+
+        if self.db.get_bind().dialect.name == "postgresql":
+            stmt = text(
+                """
+                SELECT
+                    item.sku_sellpoint_value_item_id,
+                    investment.ordinality,
+                    investment.value ->> 'capability_code' AS capability_code,
+                    investment.value ->> 'capability_name_cn'
+                        AS capability_name_cn,
+                    investment.value ->> 'classification' AS classification,
+                    investment.value ->> 'target_fact_status'
+                        AS target_fact_status,
+                    investment.value ->> 'target_value' AS target_value,
+                    investment.value ->> 'relative_experience_status'
+                        AS relative_experience_status
+                FROM core3_sku_sellpoint_value_item AS item
+                CROSS JOIN LATERAL
+                    jsonb_array_elements(
+                        COALESCE(item.investment_decisions_json, '[]'::jsonb)
+                    ) WITH ORDINALITY AS investment(value, ordinality)
+                WHERE item.sku_sellpoint_value_profile_id = :profile_id
+                ORDER BY
+                    item.battlefield_code,
+                    item.normalized_bundle_code,
+                    investment.ordinality
+                """
+            )
+            return list(
+                self.db.execute(stmt, {"profile_id": profile_id}).mappings()
+            )
+
+        item_model = entities.Core3SkuSellpointValueItem
+        rows = self.db.execute(
+            select(
+                item_model.sku_sellpoint_value_item_id,
+                item_model.investment_decisions_json,
+            )
+            .where(item_model.sku_sellpoint_value_profile_id == profile_id)
+            .order_by(
+                item_model.battlefield_code,
+                item_model.normalized_bundle_code,
+            )
+        ).mappings()
+        return [
+            {
+                "sku_sellpoint_value_item_id": row[
+                    "sku_sellpoint_value_item_id"
+                ],
+                **_saved_v5_investment_projection(investment),
+            }
+            for row in rows
+            for investment in (row["investment_decisions_json"] or [])
+            if isinstance(investment, Mapping)
+        ]
+
     def get_current_published_profile(
         self,
         *,
@@ -429,6 +636,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             select(
                 profile.sku_code,
                 profile.analysis_state,
+                profile.conclusion_status,
                 profile.review_required,
             )
             .where(profile.project_id == self.project_id)
@@ -1097,6 +1305,26 @@ def _entity_payload(payload: BaseModel | Mapping[str, Any]) -> dict[str, Any]:
     else:
         raw = dict(payload)
     return {key: _jsonable(value) for key, value in raw.items()}
+
+
+_SAVED_V5_INVESTMENT_INPUT_FIELDS = (
+    "capability_code",
+    "capability_name_cn",
+    "classification",
+    "target_fact_status",
+    "target_value",
+    "relative_experience_status",
+)
+
+
+def _saved_v5_investment_projection(
+    value: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        field_name: value.get(field_name)
+        for field_name in _SAVED_V5_INVESTMENT_INPUT_FIELDS
+        if value.get(field_name) is not None
+    }
 
 
 def _jsonable(value: Any) -> Any:

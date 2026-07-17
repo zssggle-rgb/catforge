@@ -4,7 +4,10 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from app.cli import catforge_analyst
+from app.cli.sellpoint_value_v5_1_batch import _chunks, _merge_scope_fragments
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
     SELLPOINT_VALUE_PROFILE_METHOD_VERSION,
     SELLPOINT_VALUE_PROFILE_RULE_VERSION,
@@ -38,7 +41,7 @@ class SavedProfileRepository:
         self.bundle = bundle
         self.calls: list[dict[str, Any]] = []
 
-    def get_profile(self, **kwargs: Any) -> Any:
+    def get_saved_v5_generation_source(self, **kwargs: Any) -> Any:
         self.calls.append(kwargs)
         return self.bundle
 
@@ -52,6 +55,40 @@ class FormalCompetitorAdapter:
         return SellpointValueCompetitorReadResult(
             status="available",
             source=_source(),
+        )
+
+
+class MultiSavedProfileRepository:
+    def __init__(self, bundles: dict[str, Any]) -> None:
+        self.bundles = bundles
+        self.calls: list[dict[str, Any]] = []
+
+    def get_saved_v5_generation_source(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        return self.bundles.get(kwargs["sku_code"])
+
+
+class PerSkuFormalCompetitorAdapter:
+    def __init__(self) -> None:
+        self.requests: list[Any] = []
+
+    def read(self, request: Any) -> SellpointValueCompetitorReadResult:
+        self.requests.append(request)
+        source = _source().model_copy(
+            update={
+                "target_sku_code": request.target_sku_code,
+                "target_market": _source().target_market.model_copy(
+                    update={
+                        "sku_code": request.target_sku_code,
+                        "model_name": request.target_sku_code,
+                    }
+                ),
+                "source_result_hash": f"profile-hash-{request.target_sku_code}",
+            }
+        )
+        return SellpointValueCompetitorReadResult(
+            status="available",
+            source=source,
         )
 
 
@@ -197,6 +234,27 @@ def _bundle() -> SimpleNamespace:
     )
 
 
+def _bundle_for_sku(sku_code: str) -> SimpleNamespace:
+    bundle = _bundle()
+    profile_payload = vars(bundle.profile).copy()
+    profile_payload.update(
+        {
+            "sku_sellpoint_value_profile_id": f"saved-profile-{sku_code}",
+            "sku_code": sku_code,
+            "model_code": sku_code,
+            "model_name": sku_code,
+            "display_name_cn": sku_code,
+            "result_hash": f"saved-profile-hash-{sku_code}",
+        }
+    )
+    return SimpleNamespace(
+        version=bundle.version,
+        profile=SimpleNamespace(**profile_payload),
+        candidates=bundle.candidates,
+        value_items=bundle.value_items,
+    )
+
+
 def test_saved_v5_provider_builds_one_formal_v5_1_graph() -> None:
     repository = SavedProfileRepository(_bundle())
     competitor_adapter = FormalCompetitorAdapter()
@@ -269,6 +327,74 @@ def test_saved_v5_provider_builds_one_formal_v5_1_graph() -> None:
     assert materialized.profile.input_fingerprint
     assert materialized.persistence_bundle.profile.release_status == "draft"
     assert materialized.persistence_bundle.profile.is_current is False
+
+
+def test_multi_sku_request_freezes_light_scope_and_retains_one_graph() -> None:
+    sku_codes = ["TV-A", "TV-B"]
+    repository = MultiSavedProfileRepository(
+        {sku_code: _bundle_for_sku(sku_code) for sku_code in sku_codes}
+    )
+    competitor_adapter = PerSkuFormalCompetitorAdapter()
+    provider = SavedV5SellpointValueV51InputProvider(
+        repository=repository,
+        competitor_adapter=competitor_adapter,
+        source_profile_version=SOURCE_PROFILE_VERSION,
+    )
+
+    request = provider.build_version_request(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        profile_version="spv-v5-1-full",
+        expected_sku_codes=sku_codes,
+        generated_by="spv51-g17-test",
+    )
+
+    assert request.expected_sku_codes == sku_codes
+    assert set(request.candidate_pool_hashes) == set(sku_codes)
+    assert provider._cache == {}
+    assert len(repository.calls) == 2
+    assert len(competitor_adapter.requests) == 2
+
+    first = provider.load_materialization_input(request, "TV-A")
+    assert first.target.sku_code == "TV-A"
+    assert list(provider._cache) == [("spv-v5-1-full", BATCH_ID, "TV-A")]
+
+    second = provider.load_materialization_input(request, "TV-B")
+    assert second.target.sku_code == "TV-B"
+    assert list(provider._cache) == [("spv-v5-1-full", BATCH_ID, "TV-B")]
+    assert len(repository.calls) == 4
+    assert len(competitor_adapter.requests) == 4
+
+
+def test_batch_scope_fragments_merge_into_one_authoritative_version() -> None:
+    fragments = []
+    for sku_code in ("TV-A", "TV-B"):
+        provider = SavedV5SellpointValueV51InputProvider(
+            repository=MultiSavedProfileRepository(
+                {sku_code: _bundle_for_sku(sku_code)}
+            ),
+            competitor_adapter=PerSkuFormalCompetitorAdapter(),
+            source_profile_version=SOURCE_PROFILE_VERSION,
+        )
+        fragments.append(
+            provider.build_version_request(
+                project_id=PROJECT_ID,
+                category_code="TV",
+                batch_id=BATCH_ID,
+                profile_version="spv-v5-1-full",
+                expected_sku_codes=[sku_code],
+                generated_by="spv51-g17-test",
+            ).model_dump(mode="json")
+        )
+
+    request = _merge_scope_fragments(fragments)
+
+    assert request.expected_sku_codes == ["TV-A", "TV-B"]
+    assert set(request.candidate_pool_hashes) == {"TV-A", "TV-B"}
+    assert _chunks(request.expected_sku_codes, 1) == [["TV-A"], ["TV-B"]]
+    with pytest.raises(ValueError, match="duplicate SKU"):
+        _merge_scope_fragments([fragments[0], fragments[0]])
 
 
 def test_v5_1_cli_requires_explicit_single_draft_write(capsys: Any) -> None:

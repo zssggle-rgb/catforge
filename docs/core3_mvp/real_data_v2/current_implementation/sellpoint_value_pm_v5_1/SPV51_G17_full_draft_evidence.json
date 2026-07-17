@@ -1,0 +1,278 @@
+{
+  "acceptance_id": "SPV51-G17-TV-AC-FULL-DRAFT-205",
+  "accepted_at": "2026-07-17",
+  "environment": "205",
+  "acceptance_result": "passed",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "combined": {
+    "expected_sku_count": 532,
+    "generated_sku_count": 532,
+    "usable_sku_count": 492,
+    "conclusion_available_count": 420,
+    "partial_conclusion_count": 72,
+    "no_conclusion_count": 40,
+    "invalid_count": 0,
+    "generation_failure_count": 0,
+    "integrity_error_count": 0,
+    "cross_category_count": 0,
+    "self_pair_count": 0,
+    "duplicate_candidate_key_count": 0,
+    "duplicate_value_item_key_count": 0,
+    "orphan_candidate_count": 0,
+    "orphan_value_item_count": 0
+  },
+  "categories": {
+    "TV": {
+      "scope": {
+        "batch_id": "m00_20260623014631_c8630747",
+        "expected_sku_count": 377,
+        "generated_sku_count": 377,
+        "distinct_sku_count": 377
+      },
+      "version": {
+        "sellpoint_value_profile_version_id": "37f2ef77-187a-4ee6-b0a7-87708a21856f",
+        "profile_version": "spv_v5_1_tv_full_g17_20260717_r1",
+        "schema_version": "sku_sellpoint_value_decision_profile_v1_1",
+        "rule_version": "sellpoint_value_profile_rule_v5_1",
+        "method_version": "sellpoint_value_profile_method_v5_1",
+        "release_status": "draft",
+        "release_quality_status": "limited",
+        "is_current": false,
+        "processing_status": "completed",
+        "input_fingerprint": "sha256:sellpoint_value_version_input_v5_1:10f3b527f0f5164b97415e4b5fd7168638eadff113c76b4e4d32cad794d69121",
+        "candidate_universe_fingerprint": "sha256:sellpoint_value_version_candidates_v5_1:f150351371e3304c0f01cca210446c6d23d8fdcb5f2f24eb4e358f5041ccd74f",
+        "result_hash": "sha256:sellpoint_value_version_result_v5_1:3b5e0ed330b6e4ca6806c6cc0ad01718ceb54e39d6f3dda34bbbd89ea9722e99"
+      },
+      "sources": {
+        "saved_v5_profile_version": "spv_profile_v5_65e7q_g09_20260713_r5",
+        "saved_v5_version_id": "d0956a12-b615-4cd0-ae48-50f078a00994",
+        "competitor_profile_version": "competitor_profile_agent_snapshot_v2_tv_full_g41c_20260716_r2",
+        "competitor_profile_version_id": "288b6ce0-b632-478c-9705-8297103da730",
+        "competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89",
+        "lineage_complete_profile_count": 377,
+        "legacy_m12_m13_m14_fallback_call_count": 0
+      },
+      "conclusion_distribution": {
+        "conclusion_available": 282,
+        "partial_conclusion": 66,
+        "no_conclusion": 29,
+        "invalid": 0,
+        "review_required": 0
+      },
+      "candidate_distribution": {
+        "candidate_row_count": 29730,
+        "formal_competitor_per_sku": {
+          "min": 3,
+          "median": 20.0,
+          "max": 20
+        },
+        "market_reference_per_sku": {
+          "min": 3,
+          "median": 52.0,
+          "max": 87
+        }
+      },
+      "value_results": {
+        "value_item_count": 1231,
+        "conclusion_available": 858,
+        "partial_conclusion": 370,
+        "no_conclusion": 3,
+        "direct_market_available": 283,
+        "market_archetype_available": 788,
+        "parameter_group_available": 0,
+        "parameter_group_no_conclusion": 3893,
+        "strict_wtp_available": 0,
+        "strict_wtp_no_conclusion": 1231
+      },
+      "investment_occurrences": {
+        "retain": 179,
+        "unconverted": 964,
+        "unknown": 2843
+      },
+      "validation": {
+        "missing_sku_count": 0,
+        "unexpected_sku_count": 0,
+        "generation_failure_count": 0,
+        "readback_error_count": 0,
+        "invalid_count": 0,
+        "integrity_error_count": 0,
+        "self_pair_count": 0,
+        "cross_category_count": 0,
+        "duplicate_candidate_key_count": 0,
+        "duplicate_value_item_key_count": 0,
+        "orphan_candidate_count": 0,
+        "orphan_value_item_count": 0,
+        "readback_validation_status": "completed"
+      }
+    },
+    "AC": {
+      "scope": {
+        "batch_id": "m00_20260624000202_1150a669",
+        "expected_sku_count": 155,
+        "generated_sku_count": 155,
+        "distinct_sku_count": 155
+      },
+      "version": {
+        "sellpoint_value_profile_version_id": "38d86772-cd31-4b0c-bf4c-cccc64de6aee",
+        "profile_version": "spv_v5_1_ac_full_g17_20260717_r1",
+        "schema_version": "sku_sellpoint_value_decision_profile_v1_1",
+        "rule_version": "sellpoint_value_profile_rule_v5_1",
+        "method_version": "sellpoint_value_profile_method_v5_1",
+        "release_status": "draft",
+        "release_quality_status": "limited",
+        "is_current": false,
+        "processing_status": "completed",
+        "input_fingerprint": "sha256:sellpoint_value_version_input_v5_1:137ac1155191d0e3ab8fad7c65da5bda959fd85393482e81c6c1dd474c9fdc36",
+        "candidate_universe_fingerprint": "sha256:sellpoint_value_version_candidates_v5_1:0042050cee5e536b308b96696ce7ce846beefa1961d4b66f77acf9869eef014d",
+        "result_hash": "sha256:sellpoint_value_version_result_v5_1:8b1563715921a9b7f252d176c529633c3ead7b5a2ffd881f3fc1883a60d43f71"
+      },
+      "sources": {
+        "saved_v5_profile_version": "spv_profile_v5_ac_g10_20260713_r2",
+        "saved_v5_version_id": "823e398d-087b-469e-bdbd-0ddfd47181eb",
+        "competitor_profile_version": "competitor_profile_agent_snapshot_v2_ac_full_g41c_20260716_r1",
+        "competitor_profile_version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+        "competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4",
+        "lineage_complete_profile_count": 155,
+        "legacy_m12_m13_m14_fallback_call_count": 0
+      },
+      "conclusion_distribution": {
+        "conclusion_available": 138,
+        "partial_conclusion": 6,
+        "no_conclusion": 11,
+        "invalid": 0,
+        "review_required": 0
+      },
+      "candidate_distribution": {
+        "candidate_row_count": 10506,
+        "formal_competitor_per_sku": {
+          "min": 1,
+          "median": 20.0,
+          "max": 20
+        },
+        "market_reference_per_sku": {
+          "min": 1,
+          "median": 37.0,
+          "max": 76
+        }
+      },
+      "value_results": {
+        "value_item_count": 936,
+        "conclusion_available": 880,
+        "partial_conclusion": 56,
+        "no_conclusion": 0,
+        "direct_market_available": 212,
+        "market_archetype_available": 878,
+        "parameter_group_available": 0,
+        "parameter_group_no_conclusion": 2154,
+        "strict_wtp_available": 0,
+        "strict_wtp_no_conclusion": 936
+      },
+      "investment_occurrences": {
+        "retain": 112,
+        "unconverted": 119,
+        "unknown": 1923
+      },
+      "validation": {
+        "missing_sku_count": 0,
+        "unexpected_sku_count": 0,
+        "generation_failure_count": 0,
+        "readback_error_count": 0,
+        "invalid_count": 0,
+        "integrity_error_count": 0,
+        "self_pair_count": 0,
+        "cross_category_count": 0,
+        "duplicate_candidate_key_count": 0,
+        "duplicate_value_item_key_count": 0,
+        "orphan_candidate_count": 0,
+        "orphan_value_item_count": 0,
+        "readback_validation_status": "completed"
+      }
+    }
+  },
+  "consumer_acceptance": {
+    "TV00029112": {
+      "display_name_cn": "海信 65E7Q",
+      "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:fdc4720e9f04b58049773be516a7f2a2e7742065d2c02c2c6c1e24966c442b1d",
+      "report_card_qa_same_hash": true,
+      "candidate_count": 20,
+      "reference_count": 51,
+      "value_account_count": 5,
+      "upstream_recalculation_call_count": 0,
+      "same_first_screen_as_g15": true,
+      "same_value_accounts_as_g15": true,
+      "same_investment_decisions_as_g15": true,
+      "visible_hash_or_version_count": 0,
+      "cross_category_term_count": 0
+    },
+    "AC00039187": {
+      "display_name_cn": "海信 KFR-35GW/E5E1-1",
+      "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:2c46a4d5ea2aea6230fe5be75e041a57b57caa117e7cf5431f6ce8bccabb4f3f",
+      "report_card_qa_same_hash": true,
+      "candidate_count": 20,
+      "reference_count": 76,
+      "value_account_count": 8,
+      "upstream_recalculation_call_count": 0,
+      "same_first_screen_as_g16": true,
+      "same_value_accounts_as_g16": true,
+      "same_investment_decisions_as_g16": true,
+      "visible_hash_or_version_count": 0,
+      "cross_category_term_count": 0
+    },
+    "data_insufficient_samples": {
+      "TV00009549": {
+        "consumer_status": "data_insufficient",
+        "report_card_qa_same_hash": true,
+        "business_message_cn": "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+      },
+      "AC00034959": {
+        "consumer_status": "data_insufficient",
+        "report_card_qa_same_hash": true,
+        "business_message_cn": "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+      }
+    },
+    "sql_tables_read": [
+      "core3_competitor_profile_version",
+      "core3_sellpoint_value_profile_version",
+      "core3_sku_sellpoint_value_profile",
+      "core3_sku_sellpoint_value_candidate",
+      "core3_sku_sellpoint_value_item"
+    ]
+  },
+  "performance_and_recovery": {
+    "root_causes_fixed": [
+      "old V5 general readback hydrated unused report and repeated evidence JSON",
+      "every generation chunk revalidated all previously generated profiles"
+    ],
+    "heavy_old_v5_item_investment_json_bytes_observed": 9343267,
+    "lightweight_source_and_materialization_seconds_observed": 0.9,
+    "lightweight_source_and_materialization_rss_mb_observed": 233.6,
+    "stable_generation_container_memory_mb_observed": "approximately 600-650",
+    "previous_single_heavy_sku_container_memory_gib_observed": 1.72,
+    "tv_state_file_sha256": "5d532fb8b2c213ee51b9d951ae100d172be742365bb8086d5645d1562cd92a60",
+    "ac_state_file_sha256": "ed149a100aa56f1f3730356fcdbd81d47feb699c3b6396f2ae96dddf418e102f"
+  },
+  "tests": {
+    "targeted_regression": "68 passed",
+    "ruff": "passed",
+    "compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "runtime": {
+    "api_image": "sha256:537af0f41d79591e8a837df0339f597d805be1b3b626723ae42a604f94e50048",
+    "healthz": "ok",
+    "readyz": "ready",
+    "oom_killed": false,
+    "restart_count": 0,
+    "env_sha256": "7243971662532eaa036d64f7d73d71920c586286a94df5eacead1713e6e5b56a",
+    "protected_stash_oid": "2156593622e0f07af67695da1e0e965153349b05"
+  },
+  "release_protection": {
+    "review_executed": false,
+    "publish_executed": false,
+    "current_switch_executed": false,
+    "formal_competitor_profile_modified": false,
+    "old_v5_modified": false,
+    "legacy_m12_m13_m14_modified": false,
+    "m03b_to_m12d_rerun": false
+  }
+}

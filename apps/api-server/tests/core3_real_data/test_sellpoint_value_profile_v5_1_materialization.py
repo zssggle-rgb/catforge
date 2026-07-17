@@ -742,7 +742,7 @@ def test_failed_sku_rolls_back_only_itself_and_version_records_failure(
     )
 
 
-def test_version_progress_batches_integrity_reads_without_per_sku_queries(
+def test_version_progress_defers_full_integrity_reads_until_explicit_audit(
     session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -783,11 +783,14 @@ def test_version_progress_batches_integrity_reads_without_per_sku_queries(
             )
         )
     session.commit()
-    monkeypatch.setattr(
-        repository,
-        "_validate_v5_1_readback",
-        lambda persisted: persisted,
-    )
+    validation_calls = 0
+
+    def record_validation(persisted: Any) -> Any:
+        nonlocal validation_calls
+        validation_calls += 1
+        return persisted
+
+    monkeypatch.setattr(repository, "_validate_v5_1_readback", record_validation)
     select_statements: list[str] = []
 
     def count_selects(
@@ -813,7 +816,10 @@ def test_version_progress_batches_integrity_reads_without_per_sku_queries(
 
     assert progress.sku_count == 130
     assert progress.conclusion_available_count == 130
-    assert len(select_statements) <= 15
+    assert progress.processing_status == "validating"
+    assert progress.validation_summary_json["readback_validation_status"] == "deferred"
+    assert validation_calls == 0
+    assert len(select_statements) <= 6
 
 
 def test_competitor_source_hash_must_exist_before_v5_1_version_creation(

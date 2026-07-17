@@ -407,6 +407,30 @@ class AgentCompetitorProfileReadResult(CompetitorProfileV11BaseModel):
         return self
 
 
+class AgentCompetitorProfilePayloadReadResult(CompetitorProfileV11BaseModel):
+    """Saved profile graph without the large shared raw-SKU payloads."""
+
+    status: Literal["available", "profile_unavailable"]
+    preview: bool = False
+    competitor_profile_version_id: str | None = None
+    full: AgentCompetitorProfileSnapshot | None = None
+
+    @model_validator(mode="after")
+    def validate_read(self) -> "AgentCompetitorProfilePayloadReadResult":
+        if self.status == "profile_unavailable":
+            if self.competitor_profile_version_id is not None or self.full is not None:
+                raise ValueError("unavailable profile-only reads cannot expose data")
+            return self
+        if self.competitor_profile_version_id is None or self.full is None:
+            raise ValueError("available profile-only reads require one saved graph")
+        if (
+            self.full.competitor_profile_version_id
+            != self.competitor_profile_version_id
+        ):
+            raise ValueError("profile-only read must lock one version")
+        return self
+
+
 class AgentCompetitorRuntimeProjection(CompetitorProfileV11BaseModel):
     source: Literal["competitor_profile_v1_1"] = "competitor_profile_v1_1"
     adapter_version: Literal["competitor_profile_agent_snapshot_adapter_v2"] = (
@@ -555,6 +579,7 @@ __all__ = [
     "AgentCandidateAnalysisPayload",
     "AgentCandidateAnalysisRecord",
     "AgentCompetitorProfileCompact",
+    "AgentCompetitorProfilePayloadReadResult",
     "AgentCompetitorProfileReadResult",
     "AgentCompetitorProfileSnapshot",
     "AgentCompetitorRuntimeProjection",

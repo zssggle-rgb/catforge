@@ -199,6 +199,7 @@ class SellpointValueV51GenerationService:
                     version.sellpoint_value_profile_version_id
                 ),
                 expected_sku_codes=request.expected_sku_codes,
+                validate_readbacks=True,
             )
             self.repository.db.commit()
         final = self.repository.get_v5_1_profile(
