@@ -30,6 +30,7 @@ ProfileQaTopicCode = Literal[
     "price_support",
     "price_volume_increment",
     "volume_action",
+    "sku_role",
     "competitor_selection",
     "source_pool",
     "battlefield_action",
@@ -54,6 +55,7 @@ TOPIC_PATTERNS: tuple[tuple[ProfileQaTopicCode, tuple[str, ...]], ...] = (
     ("battlefield_action", (r"价值战场|新战场|战场.*增强|相邻战场",)),
     ("competitor_selection", (r"为什么.*对照|为什么.*选|为什么.*没选|竞品|相比.*赢|相比.*输",)),
     ("volume_action", (r"走量|追求销量|改卖点|改价格|销量动作",)),
+    ("sku_role", (r"sku.*角色|产品角色|承担什么角色|产品定位|走量款|溢价款",)),
     ("price_support", (r"价格|溢价|撑得住|价格支撑",)),
     ("retain_investment", (r"值得保留|继续保留|保留什么|哪些投入",)),
 )

@@ -300,6 +300,7 @@ def _write_version(
         ("当前价格为什么撑得住", "price_support"),
         ("降价能增加多少销量", "price_volume_increment"),
         ("如果要走量应该改卖点还是改价格", "volume_action"),
+        ("这个 SKU 应该承担什么产品角色", "sku_role"),
         ("为什么选 TCL 作为对照", "competitor_selection"),
         ("哪些结论来自竞品，哪些来自分析参照", "source_pool"),
         ("应该增强已有价值战场还是进入新战场", "battlefield_action"),

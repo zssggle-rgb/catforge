@@ -188,6 +188,22 @@ class SellpointValueV51QaService:
                 facts=facts,
                 boundary_cn=boundary,
             )
+        if topic == "sku_role":
+            facts = _market_facts(readback, metric="sales")
+            return _screen_answer(
+                readback,
+                question,
+                topic,
+                status if facts else "limited",
+                screen.sku_role_cn,
+                "用于确定本品继续承担价值升级与溢价角色，还是转为低价走量角色。",
+                "first_screen.sku_role_cn",
+                facts=facts,
+                boundary_cn=(
+                    "SKU 角色来自画像已保存的用户价值、投入取舍和周均量价，"
+                    "没有读取外部规划或现场重算。"
+                ),
+            )
         if topic == "competitor_selection":
             candidates = [
                 row
@@ -435,18 +451,30 @@ def _candidate_facts(rows: Sequence[Any]) -> list[ProfileQaFact]:
 
 
 def _archetype_facts(readback: Any) -> list[ProfileQaFact]:
-    return [
-        ProfileQaFact(
-            fact_path=f"values.{value.value_bundle_code}.market_archetypes.{row.method}",
-            summary_cn=row.business_conclusion_cn,
-            record_type="market_archetype",
-            record_id=row.result_hash,
-        )
-        for value in readback.profile.values
-        for row in value.market_archetype_results
-        if row.visible_by_default
-        and _enum_text(row.status) in {"conclusion_available", "partial_conclusion"}
-    ]
+    result: list[ProfileQaFact] = []
+    seen: set[str] = set()
+    for value in readback.profile.values:
+        for row in value.market_archetype_results:
+            if (
+                not row.visible_by_default
+                or _enum_text(row.status)
+                not in {"conclusion_available", "partial_conclusion"}
+                or row.business_conclusion_cn in seen
+            ):
+                continue
+            seen.add(row.business_conclusion_cn)
+            result.append(
+                ProfileQaFact(
+                    fact_path=(
+                        f"values.{value.value_bundle_code}."
+                        f"market_archetypes.{row.method}"
+                    ),
+                    summary_cn=row.business_conclusion_cn,
+                    record_type="market_archetype",
+                    record_id=row.result_hash,
+                )
+            )
+    return result
 
 
 def _evidence_refs(

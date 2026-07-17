@@ -315,6 +315,9 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert report["candidate_count"] == len(source.candidate_pools.formal_competitors)
     assert report["reference_count"] == len(source.candidate_pools.analysis_references)
     assert report["value_accounts"][0]["core_sellpoints_cn"] == ["picture_quality"]
+    assert "当前价格支撑存在压力" in report["first_screen"]["price_support_cn"]
+    assert "若销量优先" in report["first_screen"]["growth_action_cn"]
+    assert "定位取舍" in report["first_screen"]["sku_role_cn"]
     rendered = str(report_result)
     assert "严格 WTP" not in rendered
     assert "无法计算" not in rendered
@@ -332,6 +335,7 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert source.profile_version not in visible_outputs
     assert readback.profile.result_hash not in visible_outputs
     assert source.candidate_pools.result_hash not in visible_outputs
+    assert "**SKU角色**" in visible_outputs
     assert handlers.call_count == 0
 
 
@@ -354,6 +358,7 @@ def test_preview_qa_projects_every_saved_business_topic_without_recomputation(
         "missing_gap": "当前还缺什么竞争能力",
         "price_support": "当前价格有用户价值支撑吗",
         "volume_action": "如果追求销量应该先做什么",
+        "sku_role": "这个 SKU 应该承担什么产品角色",
         "price_volume_increment": "降价能增加多少销量",
         "competitor_selection": "为什么选择这些竞品",
         "source_pool": "正式竞品和分析参照分别有哪些",
@@ -383,6 +388,8 @@ def test_preview_qa_projects_every_saved_business_topic_without_recomputation(
 
     assert answers["price_support"]["profile_facts"]
     assert answers["volume_action"]["profile_facts"]
+    assert answers["sku_role"]["profile_facts"]
+    assert "角色" in answers["sku_role"]["direct_answer_cn"]
     assert (
         "市场关联不解释为随机实验因果"
         in answers["price_volume_increment"]["evidence_boundary_cn"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -49,6 +50,7 @@ class StoredPmFirstScreen(SellpointValueProfileBaseModel):
     competitor_action_cn: str = Field(min_length=1)
     price_support_cn: str = Field(min_length=1)
     growth_action_cn: str = Field(min_length=1)
+    sku_role_cn: str = Field(min_length=1)
 
 
 class StoredPmInvestmentRow(SellpointValueProfileBaseModel):
@@ -168,6 +170,13 @@ def build_stored_profile_pm_report(
         ),
         growth_action_cn=_sanitize(
             str(pm.get("growth_action_cn") or "当前销量动作尚不明确。")
+        ),
+        sku_role_cn=_sanitize(
+            str(
+                pm.get("sku_role_cn")
+                or pm.get("product_role_cn")
+                or "当前画像尚未形成明确的 SKU 角色建议。"
+            )
         ),
     )
     return StoredSellpointValuePmReport(
@@ -341,6 +350,7 @@ def render_stored_profile_short_answer(
                 f"竞品配置怎么处理｜{screen.competitor_action_cn}",
                 f"当前价格是否撑得住｜{screen.price_support_cn}",
                 f"如果要销量｜{screen.growth_action_cn}",
+                f"SKU角色｜{screen.sku_role_cn}",
             ]
         )
     suffix = "\n".join(
@@ -378,13 +388,14 @@ def render_stored_profile_markdown(
     lines = [
         f"# {title}",
         "",
-        "## 一、产品经理先看这五个答案",
+        "## 一、产品经理先看这六个答案",
         "",
         f"1. **哪些投入值得保留**：{screen.retain_cn}",
         f"2. **哪些投入没有转化成用户价值**：{screen.unconverted_cn}",
         f"3. **哪些竞品配置不用跟、哪些缺口要补**：{screen.competitor_action_cn}",
         f"4. **当前价格是否得到用户价值支撑**：{screen.price_support_cn}",
         f"5. **如果追求销量，产品动作是什么**：{screen.growth_action_cn}",
+        f"6. **本品应该承担什么 SKU 角色**：{screen.sku_role_cn}",
         "",
         "## 二、用户价值账",
         "",
@@ -495,6 +506,7 @@ def render_stored_profile_feishu_card(
                 f"**竞品配置怎么处理**：{screen.competitor_action_cn}",
                 f"**价格是否撑得住**：{screen.price_support_cn}",
                 f"**如果要销量**：{screen.growth_action_cn}",
+                f"**SKU角色**：{screen.sku_role_cn}",
             )
         )
     elements: list[dict[str, Any]] = [
@@ -550,6 +562,7 @@ def _v5_1_first_screen(
             competitor_action_cn=message,
             price_support_cn=message,
             growth_action_cn=message,
+            sku_role_cn=message,
         )
     by_action: dict[str, list[str]] = {}
     for row in investments:
@@ -558,66 +571,225 @@ def _v5_1_first_screen(
     unconverted = _unique(by_action.get("unconverted", []))
     no_follow = _unique(by_action.get("do_not_follow", []))
     gaps = _unique(by_action.get("missing_competitive_gap", []))
-    price_conclusions = _unique(
-        result.business_conclusion_cn
-        for value in profile.values
-        if _enum_text(value.value_conclusion.status)
-        in {"conclusion_available", "partial_conclusion"}
-        for result in value.direct_market_results
-        if result.price_comparison is not None
-        and _enum_text(result.status)
-        in {"conclusion_available", "partial_conclusion"}
-    )
-    growth_conclusions = _unique(
-        result.business_conclusion_cn
-        for value in profile.values
-        if _enum_text(value.value_conclusion.status)
-        in {"conclusion_available", "partial_conclusion"}
-        for result in value.market_archetype_results
-        if result.visible_by_default
-        and _enum_text(result.status)
-        in {"conclusion_available", "partial_conclusion"}
-    )
-    if not growth_conclusions:
-        growth_conclusions = _unique(
-            result.business_conclusion_cn
-            for value in profile.values
-            if _enum_text(value.value_conclusion.status)
-            in {"conclusion_available", "partial_conclusion"}
-            for result in value.direct_market_results
-            if result.sales_comparison is not None
-            and _enum_text(result.status)
-            in {"conclusion_available", "partial_conclusion"}
-        )
+    market_position = _v5_1_market_position(profile)
     competitor_parts = []
     if no_follow:
         competitor_parts.append(f"不用为参数对齐而跟进：{'、'.join(no_follow)}。")
     if gaps:
         competitor_parts.append(f"优先评估补齐：{'、'.join(gaps)}。")
+    if not competitor_parts:
+        resource_target = retain or unconverted
+        competitor_parts.append(
+            "现阶段不因竞品纸面参数新增配置预算；"
+            + (
+                f"新增资源优先投向{'、'.join(resource_target)}。"
+                if resource_target
+                else "保持现有产品定义，待形成明确价值缺口后再调整配置。"
+            )
+        )
     return StoredPmFirstScreen(
         retain_cn=(
-            f"继续保留并优先兑现：{'、'.join(retain)}。"
+            f"下一代继续保护{'、'.join(retain)}；这些投入已经形成用户可感知价值。"
             if retain
-            else "现有画像尚未确认值得继续投入的差异化卖点。"
+            else "本轮不新增差异化投入，先保持现有产品定义。"
         ),
         unconverted_cn=(
-            f"先改善体验兑现，不继续堆参数：{'、'.join(unconverted)}。"
+            f"{'、'.join(unconverted)}尚未转成用户体验价值；先改善实际体验兑现，不再追加纸面参数预算。"
             if unconverted
-            else "现有画像没有确认投入已做但用户价值尚未形成的项目。"
+            else "现有投入均未出现明确的价值转化短板，下一步以保持体验稳定为主。"
         ),
-        competitor_action_cn=(
-            " ".join(competitor_parts)
-            or "现有画像没有确认可以不跟或必须补齐的竞品配置。"
+        competitor_action_cn=" ".join(competitor_parts),
+        price_support_cn=market_position["price_support_cn"],
+        growth_action_cn=_v5_1_growth_action(
+            market_position=market_position,
+            retain=retain,
+            unconverted=unconverted,
         ),
-        price_support_cn=(
-            " ".join(price_conclusions)
-            or "现有画像尚未形成当前价格支撑结论。"
-        ),
-        growth_action_cn=(
-            " ".join(growth_conclusions)
-            or "现有画像尚未形成明确的销量动作结论。"
+        sku_role_cn=_v5_1_sku_role(
+            profile,
+            market_position=market_position,
+            retain=retain,
         ),
     )
+
+
+def _v5_1_market_position(profile: Any) -> dict[str, Any]:
+    comparisons = []
+    seen: set[tuple[Any, ...]] = set()
+    for value in profile.values:
+        if _enum_text(value.value_conclusion.status) not in {
+            "conclusion_available",
+            "partial_conclusion",
+        }:
+            continue
+        for result in value.direct_market_results:
+            price = result.price_comparison
+            sales = result.sales_comparison
+            if (
+                price is None
+                or sales is None
+                or _enum_text(result.status)
+                not in {"conclusion_available", "partial_conclusion"}
+            ):
+                continue
+            key = (
+                tuple(result.used_comparator_sku_codes),
+                float(price.gap_abs),
+                float(sales.gap_abs),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            comparisons.append((price, sales))
+    supported = [
+        (price, sales)
+        for price, sales in comparisons
+        if _enum_text(price.direction) == "target_higher"
+        and _enum_text(sales.direction) == "target_higher"
+    ]
+    pressured = [
+        (price, sales)
+        for price, sales in comparisons
+        if _enum_text(price.direction) == "target_higher"
+        and _enum_text(sales.direction) == "target_lower"
+    ]
+    if comparisons and len(supported) == len(comparisons):
+        price_range = _metric_range(
+            [float(price.gap_abs) for price, _ in supported],
+            unit="元",
+        )
+        sales_range = _metric_range(
+            [float(sales.gap_abs) for _, sales in supported],
+            unit="台",
+        )
+        price_support_cn = (
+            f"当前价格有用户价值支撑：{len(supported)}组价值组合对照均显示，"
+            f"本品周均价高{price_range}的同时，周均销量仍高{sales_range}。"
+            "当前无需把降价作为第一动作；该结果属于价值组合的市场表现，不拆给单项参数。"
+        )
+        status = "supported"
+    elif pressured:
+        price_range = _metric_range(
+            [float(price.gap_abs) for price, _ in pressured],
+            unit="元",
+        )
+        sales_range = _metric_range(
+            [abs(float(sales.gap_abs)) for _, sales in pressured],
+            unit="台",
+        )
+        price_support_cn = (
+            f"当前价格支撑存在压力：{len(pressured)}组对照显示，"
+            f"本品周均价高{price_range}时，周均销量低{sales_range}。"
+            "若销量优先，需要在强化用户价值与调整价格角色之间做明确取舍。"
+        )
+        status = "pressured"
+    elif supported:
+        price_support_cn = (
+            f"当前价格获得部分支撑：{len(supported)}组对照同时表现为价格和销量领先，"
+            "但其他对照方向并不一致，暂不据此扩大加价。"
+        )
+        status = "mixed"
+    else:
+        price_support_cn = (
+            "当前不扩大加价，也不直接降价；先按已成立的用户价值维持现有价格角色，"
+            "待新的量价对照形成后再调整。"
+        )
+        status = "unknown"
+    return {
+        "status": status,
+        "comparison_count": len(comparisons),
+        "supported_count": len(supported),
+        "pressured_count": len(pressured),
+        "price_support_cn": price_support_cn,
+    }
+
+
+def _v5_1_growth_action(
+    *,
+    market_position: dict[str, Any],
+    retain: Sequence[str],
+    unconverted: Sequence[str],
+) -> str:
+    if market_position["status"] == "supported":
+        parts = []
+        if retain:
+            parts.append(f"继续做强{'、'.join(retain)}")
+        if unconverted:
+            parts.append(f"优先修复{'、'.join(unconverted)}的价值转化")
+        action = "，并".join(parts) or "保持现有用户价值稳定"
+        return (
+            f"若目标是增加销量，先{action}；现有对照下本品价量同时领先，"
+            "降价不应作为第一动作。只有明确把 SKU 改成走量款时，再单独评估降价。"
+        )
+    if market_position["status"] == "pressured":
+        return (
+            "若销量优先，先验证已成立的用户价值能否补回销量；若仍不能改善，"
+            "再下调价格或把 SKU 调整为走量角色，不能继续加价后等待自然转化。"
+        )
+    if market_position["status"] == "mixed":
+        return (
+            "若目标是增加销量，先做强已成立的用户价值并观察不同对照组的变化；"
+            "在价格与销量方向一致前，不把全面降价或继续加价作为第一动作。"
+        )
+    return (
+        "若目标是增加销量，先保持已成立的用户价值和现有价格角色；"
+        "没有新的量价对照前，不用降价代替产品定义判断。"
+    )
+
+
+def _v5_1_sku_role(
+    profile: Any,
+    *,
+    market_position: dict[str, Any],
+    retain: Sequence[str],
+) -> str:
+    battlefields = [
+        value.battlefield_name_cn or value.battlefield_code
+        for value in profile.values
+        if _enum_text(value.value_conclusion.status)
+        in {"conclusion_available", "partial_conclusion"}
+    ]
+    primary = (
+        Counter(battlefields).most_common(1)[0][0]
+        if battlefields
+        else "用户价值升级"
+    )
+    role_cn = primary if primary.endswith("款") else f"{primary}款"
+    screen_size = _number(
+        profile.competitor_source.target_market.screen_size_inch
+    )
+    size_cn = (
+        f"{screen_size:.0f}英寸"
+        if screen_size is not None
+        else ""
+    )
+    capability_cn = (
+        f"以{'、'.join(retain)}承接用户价值"
+        if retain
+        else "以已成立的用户价值维持产品定位"
+    )
+    if market_position["status"] == "supported":
+        return (
+            f"本品更适合继续承担{size_cn}{role_cn}角色：{capability_cn}，"
+            "承接较高价格并保持销量，不转为低价走量款。"
+        )
+    if market_position["status"] == "pressured":
+        return (
+            f"本品当前处于{size_cn}{role_cn}与走量款的定位取舍点："
+            f"{capability_cn}；若销量压力不能改善，再调整为更明确的走量角色。"
+        )
+    return (
+        f"本品先维持{size_cn}{role_cn}角色：{capability_cn}；"
+        "待量价方向稳定后，再决定是否转成更强溢价款或走量款。"
+    )
+
+
+def _metric_range(values: Sequence[float], *, unit: str) -> str:
+    low = min(values)
+    high = max(values)
+    if round(low, 1) == round(high, 1):
+        return f"{low:.1f}{unit}"
+    return f"{low:.1f}～{high:.1f}{unit}"
 
 
 def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
@@ -717,7 +889,7 @@ def _v5_1_value_row(
         for decision in value.investment_decisions
         if _enum_text(decision.status)
         in {"conclusion_available", "partial_conclusion"}
-        and decision.classification != "table_stake"
+        and decision.classification == "retain"
         and not decision.table_stake_assessment.exclude_from_core_sellpoints
     )
     comparisons = _unique(
