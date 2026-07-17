@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G13 completed；SPV51-G14 pending
+状态：SPV51-G01—G14 completed；SPV51-G15 pending
 
 日期：2026-07-17
 
@@ -153,6 +153,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G14 205 部署
 
 部署 G13 commit 和 migration；不创建版本、不生成画像。验证容器、revision、migration、healthz、readyz、CLI import 和 rollback。
+
+完成状态：completed；关闭回执：`SPV51_G14_closure_receipt.md`。
 
 ### SPV51-G15 65E7Q draft
 
