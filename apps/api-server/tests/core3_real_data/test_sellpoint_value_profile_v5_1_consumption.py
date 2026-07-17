@@ -542,7 +542,7 @@ def test_formal_reader_uses_current_published_version_across_source_batches(
             project_id="project-1",
             category_code="TV",
             batch_id="later-latest-batch",
-            sku_code="TV-TARGET",
+            query="海信65E7Q",
         )
     )
 

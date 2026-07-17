@@ -270,17 +270,30 @@ def _matches_target(row: Any, request: SellpointValueV51ConsumerReadRequest) -> 
     ):
         return False
     if request.query:
-        query = request.query.casefold()
+        query = _normalize_target_text(request.query)
         values = (
             row.sku_code,
             row.model_code,
             row.model_name,
             row.brand_name,
             row.display_name_cn,
+            " ".join(
+                str(value)
+                for value in (row.brand_name, row.model_name)
+                if value
+            ),
         )
-        if not any(query in str(value).casefold() for value in values if value):
+        if not any(
+            query in _normalize_target_text(value)
+            for value in values
+            if value
+        ):
             return False
     return True
+
+
+def _normalize_target_text(value: Any) -> str:
+    return "".join(character for character in str(value).casefold() if character.isalnum())
 
 
 def _target_ref(row: Any) -> dict[str, Any]:
