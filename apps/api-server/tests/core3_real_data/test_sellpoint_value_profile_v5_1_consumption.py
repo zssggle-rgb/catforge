@@ -27,6 +27,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_enhanceme
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_generation import (
     SellpointValueV51GenerationService,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
+    SellpointValueReleaseQualityStatus,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_qa import (
     _investment_work_implication,
 )
@@ -520,6 +523,42 @@ def test_formal_report_reads_only_current_published_v5_1(consumer_session) -> No
     assert report["profile_version"] == "spv-v51-formal"
     assert report["profile_result_hash"] == readback.profile.result_hash
     assert handlers.call_count == 0
+
+
+def test_formal_consumer_becomes_unavailable_after_controlled_current_deactivation(
+    consumer_session,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-first-release-rollback")
+    repository, readback = _generate(consumer_session, source)
+    version_id = readback.persisted.version.sellpoint_value_profile_version_id
+    repository.review_version(
+        sellpoint_value_profile_version_id=version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.READY,
+    )
+    repository.publish_version(
+        sellpoint_value_profile_version_id=version_id,
+        published_by="approver",
+    )
+    reader = SellpointValueV51ConsumerReader(repository)
+    request = SellpointValueV51ConsumerReadRequest(
+        project_id="project-1",
+        category_code="TV",
+        batch_id="batch-1",
+        sku_code="TV-TARGET",
+        access_mode="formal",
+    )
+    assert reader.read(request).status == "available"
+
+    deactivated = repository.deactivate_current_version(
+        sellpoint_value_profile_version_id=version_id,
+        deactivated_by="rollback-approver",
+        reason_cn="首发正式消费异常",
+    )
+
+    assert deactivated.release_status == "published"
+    assert deactivated.is_current is False
+    assert reader.read(request).status == "profile_unavailable"
 
 
 def test_no_conclusion_returns_one_business_message_without_recomputation(

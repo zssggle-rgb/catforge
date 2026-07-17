@@ -16,6 +16,7 @@ from app.services.core3_real_data.analyst.analyst_repository import (
     batch_ids_from_scope,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
+    SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
     SellpointValueDraftBundle,
     SellpointValueProfileReadBundle,
     SellpointValueReleaseQualityStatus,
@@ -58,6 +59,12 @@ class SellpointValueDraftWriteNotAllowedError(SellpointValueProfileRepositoryErr
 
 
 class SellpointValuePublishNotAllowedError(SellpointValueProfileRepositoryError):
+    pass
+
+
+class SellpointValueCurrentDeactivateNotAllowedError(
+    SellpointValueProfileRepositoryError
+):
     pass
 
 
@@ -971,12 +978,6 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             )
             or 0
         )
-        counted = (
-            version.ready_count
-            + version.review_required_count
-            + version.blocked_count
-            + version.failed_count
-        )
         violations = []
         if version.processing_status != "completed":
             violations.append("generation_not_completed")
@@ -984,23 +985,65 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             violations.append("authoritative_sku_count_empty")
         if actual_profile_count != version.sku_count:
             violations.append("profile_count_mismatch")
-        if counted != version.sku_count:
-            violations.append("status_count_mismatch")
         if version.failed_count or version.blocked_count:
             violations.append("failed_or_blocked_profiles_present")
-        if version.release_quality_status == "ready" and (
-            version.ready_count != version.sku_count or version.review_required_count
-        ):
-            violations.append("ready_release_not_fully_ready")
-        if version.release_quality_status == "limited" and (
-            version.review_required_count <= 0
-            or version.ready_count + version.review_required_count != version.sku_count
-        ):
-            violations.append("limited_release_counts_invalid")
+        if version.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+            violations.extend(_v5_1_publish_completeness_violations(version))
+        else:
+            violations.extend(_legacy_publish_completeness_violations(version))
         if violations:
             raise SellpointValuePublishNotAllowedError(
                 "profile version is incomplete: " + ",".join(violations)
             )
+
+    def deactivate_current_version(
+        self,
+        *,
+        sellpoint_value_profile_version_id: str,
+        deactivated_by: str,
+        reason_cn: str,
+    ) -> SellpointValueVersionRecord:
+        """Deactivate a first-release current version without rewriting history.
+
+        This is an explicit rollback to the pre-release serving state when no
+        previous current version exists. The version remains published and its
+        immutable analytical hashes are preserved.
+        """
+
+        actor = deactivated_by.strip()
+        if not actor or actor.lower() == "system":
+            raise SellpointValueCurrentDeactivateNotAllowedError(
+                "current deactivation requires an explicit non-system approver"
+            )
+        reason = reason_cn.strip()
+        if not reason:
+            raise ValueError("current deactivation reason is required")
+        initial = self._version_by_id(
+            sellpoint_value_profile_version_id,
+            for_update=False,
+        )
+        self._lock_batch_release_scope(initial.batch_id)
+        version = self._version_by_id(
+            sellpoint_value_profile_version_id,
+            for_update=True,
+        )
+        if version.release_status != "published" or not version.is_current:
+            raise SellpointValueCurrentDeactivateNotAllowedError(
+                "only current published versions can be deactivated"
+            )
+        rollback_note = f"首发回退：{reason}（操作人：{actor}）"
+        with self.db.begin_nested():
+            version.is_current = False
+            version.release_note_cn = "\n".join(
+                part for part in (version.release_note_cn, rollback_note) if part
+            )
+            self._update_child_release_status(
+                version.sellpoint_value_profile_version_id,
+                release_status="published",
+                is_current=False,
+            )
+            self.db.flush()
+        return SellpointValueVersionRecord.model_validate(version)
 
     def _find_version(
         self,
@@ -1297,6 +1340,78 @@ class SellpointValueProfileRepository(Core3BaseRepository):
                 .where(model.is_current.is_(True))
                 .values(is_current=False)
             )
+
+
+def _legacy_publish_completeness_violations(
+    version: entities.Core3SellpointValueProfileVersion,
+) -> list[str]:
+    counted = (
+        version.ready_count
+        + version.review_required_count
+        + version.blocked_count
+        + version.failed_count
+    )
+    violations = []
+    if counted != version.sku_count:
+        violations.append("status_count_mismatch")
+    if version.release_quality_status == "ready" and (
+        version.ready_count != version.sku_count or version.review_required_count
+    ):
+        violations.append("ready_release_not_fully_ready")
+    if version.release_quality_status == "limited" and (
+        version.review_required_count <= 0
+        or version.ready_count + version.review_required_count != version.sku_count
+    ):
+        violations.append("limited_release_counts_invalid")
+    return violations
+
+
+def _v5_1_publish_completeness_violations(
+    version: entities.Core3SellpointValueProfileVersion,
+) -> list[str]:
+    counts = (
+        version.conclusion_available_count,
+        version.partial_conclusion_count,
+        version.no_conclusion_count,
+        version.invalid_count,
+    )
+    if any(value is None for value in counts):
+        return ["v5_1_conclusion_counts_missing"]
+    available, partial, no_conclusion, invalid = (
+        int(value) for value in counts if value is not None
+    )
+    violations = []
+    if available + partial + no_conclusion + invalid != version.sku_count:
+        violations.append("v5_1_conclusion_count_mismatch")
+    if (
+        version.ready_count != available
+        or version.blocked_count != invalid
+    ):
+        violations.append("v5_1_status_projection_mismatch")
+    if invalid:
+        violations.append("invalid_profiles_present")
+    if version.integrity_error_count:
+        violations.append("integrity_errors_present")
+    if (
+        (version.validation_summary_json or {}).get(
+            "readback_validation_status"
+        )
+        != "completed"
+    ):
+        violations.append("readback_validation_incomplete")
+    if version.release_quality_status == "ready" and (
+        partial
+        or no_conclusion
+        or invalid
+        or available != version.sku_count
+        or version.review_required_count
+    ):
+        violations.append("ready_release_not_fully_ready")
+    if version.release_quality_status == "limited" and not (
+        partial or no_conclusion or version.review_required_count
+    ):
+        violations.append("limited_release_counts_invalid")
+    return violations
 
 
 def _entity_payload(payload: BaseModel | Mapping[str, Any]) -> dict[str, Any]:

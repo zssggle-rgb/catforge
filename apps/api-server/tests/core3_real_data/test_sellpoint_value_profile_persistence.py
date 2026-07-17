@@ -18,6 +18,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SELLPOINT_VALUE_PROFILE_METHOD_VERSION,
     SELLPOINT_VALUE_PROFILE_RULE_VERSION,
     SELLPOINT_VALUE_PROFILE_SCHEMA_VERSION,
+    SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
+    SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION,
+    SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION,
     SellpointValueDraftBundle,
     SellpointValueReleaseQualityStatus,
     SellpointValueVersionDraftCreate,
@@ -26,6 +29,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SkuSellpointValueProfileDraft,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
+    SellpointValueCurrentDeactivateNotAllowedError,
     SellpointValueDraftWriteNotAllowedError,
     SellpointValueImmutableVersionError,
     SellpointValueProfileRepository,
@@ -185,6 +189,143 @@ def _mark_version_ready(
         review_required=limited,
         review_status="review_required" if limited else "auto_pass",
     )
+
+
+def _v5_1_limited_version(
+    session: Session,
+    *,
+    category_code: str,
+    available_count: int,
+    partial_count: int,
+    no_conclusion_count: int,
+    integrity_error_count: int = 0,
+) -> tuple[SellpointValueProfileRepository, str]:
+    project_id = "project-tv" if category_code == "TV" else "project-ac"
+    batch_id = "batch-tv" if category_code == "TV" else "batch-ac"
+    repository = _repository(
+        session,
+        project_id=project_id,
+        category_code=Core3CategoryCode(category_code),
+    )
+    profile_version = (
+        f"spv-v51-{category_code.lower()}-"
+        f"{available_count}-{partial_count}-{no_conclusion_count}"
+    )
+    version = repository.create_version(
+        SellpointValueVersionDraftCreate(
+            project_id=project_id,
+            category_code=category_code,
+            batch_id=batch_id,
+            product_category=category_code,
+            profile_version=profile_version,
+            schema_version=SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION,
+            rule_version=SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION,
+            method_version=SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
+            source_competitor_profile_version_id=f"cp-{category_code.lower()}",
+            source_competitor_profile_method_version=(
+                "competitor_profile_agent_snapshot_v2"
+            ),
+            source_competitor_profile_result_hash=(
+                f"cp-{category_code.lower()}-result"
+            ),
+            conclusion_available_count=0,
+            partial_conclusion_count=0,
+            no_conclusion_count=0,
+            invalid_count=0,
+            integrity_error_count=0,
+            input_fingerprint=f"input-{profile_version}",
+            candidate_universe_fingerprint=f"candidates-{profile_version}",
+            result_hash=f"result-{profile_version}",
+            processing_status="pending",
+        )
+    )
+    statuses = (
+        ["conclusion_available"] * available_count
+        + ["partial_conclusion"] * partial_count
+        + ["no_conclusion"] * no_conclusion_count
+    )
+    for index, status in enumerate(statuses):
+        session.add(
+            entities.Core3SkuSellpointValueProfile(
+                sku_sellpoint_value_profile_id=(
+                    f"profile-{category_code.lower()}-{index}"
+                ),
+                sellpoint_value_profile_version_id=(
+                    version.sellpoint_value_profile_version_id
+                ),
+                project_id=project_id,
+                category_code=category_code,
+                batch_id=batch_id,
+                product_category=category_code,
+                profile_version=profile_version,
+                schema_version=SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION,
+                rule_version=SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION,
+                method_version=SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
+                sku_code=f"{category_code}-G19-{index:04d}",
+                display_name_cn=f"{category_code} G19 {index}",
+                analysis_state=(
+                    "ready" if status == "conclusion_available" else "partial"
+                ),
+                conclusion_status=status,
+                freshness_status="current",
+                profile_confidence=(
+                    Decimal("0.8000")
+                    if status == "conclusion_available"
+                    else Decimal("0.4000")
+                    if status == "partial_conclusion"
+                    else Decimal("0.0000")
+                ),
+                conclusion_available_count=(
+                    1 if status == "conclusion_available" else 0
+                ),
+                partial_conclusion_count=(
+                    1 if status == "partial_conclusion" else 0
+                ),
+                no_conclusion_count=1 if status == "no_conclusion" else 0,
+                invalid_count=0,
+                input_fingerprint=f"profile-input-{category_code}-{index}",
+                result_hash=f"profile-result-{category_code}-{index}",
+                processing_status="success",
+                review_required=False,
+                review_status="auto_pass",
+            )
+        )
+    session.flush()
+    sku_count = len(statuses)
+    repository.update_version_progress(
+        sellpoint_value_profile_version_id=(
+            version.sellpoint_value_profile_version_id
+        ),
+        sku_count=sku_count,
+        ready_count=available_count,
+        review_required_count=0,
+        blocked_count=0,
+        failed_count=0,
+        quality_summary_json={
+            "release_quality_status": "limited",
+            "conclusion_available_count": available_count,
+            "partial_conclusion_count": partial_count,
+            "no_conclusion_count": no_conclusion_count,
+            "invalid_count": 0,
+        },
+        validation_summary_json={
+            "readback_validation_status": "completed",
+            "failed_sku_codes": [],
+            "missing_sku_codes": [],
+            "unexpected_sku_codes": [],
+            "readback_error_sku_codes": [],
+        },
+        release_quality_status=SellpointValueReleaseQualityStatus.LIMITED,
+        processing_status="completed",
+        review_required=False,
+        review_status="auto_pass",
+        conclusion_available_count=available_count,
+        partial_conclusion_count=partial_count,
+        no_conclusion_count=no_conclusion_count,
+        invalid_count=0,
+        integrity_error_count=integrity_error_count,
+    )
+    return repository, version.sellpoint_value_profile_version_id
 
 
 def _version_payload(
@@ -875,6 +1016,243 @@ def test_publish_quality_and_approver_gates(session: Session) -> None:
         published_by="approver",
         allow_limited=True,
     ).is_current is True
+
+
+@pytest.mark.parametrize(
+    (
+        "category_code",
+        "available_count",
+        "partial_count",
+        "no_conclusion_count",
+    ),
+    [
+        ("TV", 282, 66, 29),
+        ("AC", 138, 6, 11),
+    ],
+)
+def test_v5_1_actual_limited_distributions_can_publish(
+    session: Session,
+    category_code: str,
+    available_count: int,
+    partial_count: int,
+    no_conclusion_count: int,
+) -> None:
+    repository, version_id = _v5_1_limited_version(
+        session,
+        category_code=category_code,
+        available_count=available_count,
+        partial_count=partial_count,
+        no_conclusion_count=no_conclusion_count,
+    )
+    repository.review_version(
+        sellpoint_value_profile_version_id=version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.LIMITED,
+    )
+
+    published = repository.publish_version(
+        sellpoint_value_profile_version_id=version_id,
+        published_by="approver",
+        allow_limited=True,
+    )
+
+    assert published.release_status == "published"
+    assert published.is_current is True
+    assert published.sku_count == (
+        available_count + partial_count + no_conclusion_count
+    )
+    assert session.scalar(
+        select(func.count())
+        .select_from(entities.Core3SkuSellpointValueProfile)
+        .where(
+            entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
+            == version_id
+        )
+        .where(entities.Core3SkuSellpointValueProfile.is_current.is_(True))
+    ) == published.sku_count
+
+
+def test_v5_1_publish_rejects_integrity_errors_even_with_complete_distribution(
+    session: Session,
+) -> None:
+    repository, version_id = _v5_1_limited_version(
+        session,
+        category_code="TV",
+        available_count=1,
+        partial_count=1,
+        no_conclusion_count=1,
+        integrity_error_count=1,
+    )
+    repository.review_version(
+        sellpoint_value_profile_version_id=version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.LIMITED,
+    )
+
+    with pytest.raises(
+        SellpointValuePublishNotAllowedError,
+        match="integrity_errors_present",
+    ):
+        repository.publish_version(
+            sellpoint_value_profile_version_id=version_id,
+            published_by="approver",
+            allow_limited=True,
+        )
+
+
+def test_deactivate_current_version_preserves_published_history_and_children(
+    session: Session,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+    bundle = repository.write_draft(
+        _bundle(version.sellpoint_value_profile_version_id)
+    )
+    _mark_version_ready(repository, version.sellpoint_value_profile_version_id)
+    repository.review_version(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.READY,
+    )
+    published = repository.publish_version(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        published_by="approver",
+    )
+    assert repository.get_current_published_profile(
+        batch_id="batch-tv",
+        sku_code="TV001",
+    ) is not None
+
+    deactivated = repository.deactivate_current_version(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        deactivated_by="rollback-approver",
+        reason_cn="首发正式消费异常",
+    )
+
+    assert deactivated.release_status == "published"
+    assert deactivated.is_current is False
+    assert deactivated.result_hash == published.result_hash
+    assert "首发回退：首发正式消费异常（操作人：rollback-approver）" in (
+        deactivated.release_note_cn or ""
+    )
+    assert repository.get_current_published_profile(
+        batch_id="batch-tv",
+        sku_code="TV001",
+    ) is None
+    child_states = set()
+    for model in (
+        entities.Core3SkuSellpointValueProfile,
+        entities.Core3SkuSellpointValueCandidate,
+        entities.Core3SkuSellpointValueItem,
+    ):
+        child_states.update(
+            session.execute(
+                select(model.release_status, model.is_current).where(
+                    model.sellpoint_value_profile_version_id
+                    == version.sellpoint_value_profile_version_id
+                )
+            ).all()
+        )
+    assert child_states == {("published", False)}
+    saved_profile = session.get(
+        entities.Core3SkuSellpointValueProfile,
+        bundle.profile.sku_sellpoint_value_profile_id,
+    )
+    assert saved_profile is not None
+    assert saved_profile.result_hash == bundle.profile.result_hash
+    with pytest.raises(
+        SellpointValueCurrentDeactivateNotAllowedError,
+        match="current published",
+    ):
+        repository.deactivate_current_version(
+            sellpoint_value_profile_version_id=(
+                version.sellpoint_value_profile_version_id
+            ),
+            deactivated_by="rollback-approver",
+            reason_cn="重复回退",
+        )
+
+
+def test_deactivate_current_version_is_atomic_when_child_update_fails(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+    repository.write_draft(_bundle(version.sellpoint_value_profile_version_id))
+    _mark_version_ready(repository, version.sellpoint_value_profile_version_id)
+    repository.review_version(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        reviewed_by="reviewer",
+        release_quality_status=SellpointValueReleaseQualityStatus.READY,
+    )
+    repository.publish_version(
+        sellpoint_value_profile_version_id=version.sellpoint_value_profile_version_id,
+        published_by="approver",
+    )
+
+    def fail_child_update(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("simulated rollback child failure")
+
+    monkeypatch.setattr(
+        repository,
+        "_update_child_release_status",
+        fail_child_update,
+    )
+    with pytest.raises(RuntimeError, match="simulated rollback child failure"):
+        repository.deactivate_current_version(
+            sellpoint_value_profile_version_id=(
+                version.sellpoint_value_profile_version_id
+            ),
+            deactivated_by="rollback-approver",
+            reason_cn="验证事务原子性",
+        )
+    session.expire_all()
+    persisted = session.get(
+        entities.Core3SellpointValueProfileVersion,
+        version.sellpoint_value_profile_version_id,
+    )
+    assert persisted is not None
+    assert persisted.release_status == "published"
+    assert persisted.is_current is True
+    assert set(
+        session.execute(
+            select(
+                entities.Core3SkuSellpointValueProfile.release_status,
+                entities.Core3SkuSellpointValueProfile.is_current,
+            )
+        ).all()
+    ) == {("published", True)}
+
+
+@pytest.mark.parametrize(
+    ("actor", "reason", "message"),
+    [
+        ("system", "回退", "non-system"),
+        ("", "回退", "non-system"),
+        ("approver", "  ", "reason"),
+    ],
+)
+def test_deactivate_current_version_requires_explicit_approval(
+    session: Session,
+    actor: str,
+    reason: str,
+    message: str,
+) -> None:
+    repository = _repository(session)
+    version = repository.create_version(_version_payload())
+
+    with pytest.raises(
+        (SellpointValueCurrentDeactivateNotAllowedError, ValueError),
+        match=message,
+    ):
+        repository.deactivate_current_version(
+            sellpoint_value_profile_version_id=(
+                version.sellpoint_value_profile_version_id
+            ),
+            deactivated_by=actor,
+            reason_cn=reason,
+        )
 
 
 def test_publish_rejects_empty_or_incomplete_profile_version(
