@@ -26,6 +26,10 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_enhanceme
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_generation import (
     SellpointValueV51GenerationService,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
+    StoredSellpointValuePmReport,
+    render_stored_profile_markdown,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
     QuestionConclusionStatus,
     QuestionConclusionStrength,
@@ -315,6 +319,105 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert "严格 WTP" not in rendered
     assert "无法计算" not in rendered
     assert "高1000元" in rendered
+    visible_outputs = "\n".join(
+        (
+            artifacts["short_answer"],
+            render_stored_profile_markdown(
+                StoredSellpointValuePmReport.model_validate(report),
+                title="用户卖点价值分析",
+            ),
+            artifacts["feishu_card_payload"]["body"]["elements"][0]["content"],
+        )
+    )
+    assert source.profile_version not in visible_outputs
+    assert readback.profile.result_hash not in visible_outputs
+    assert source.candidate_pools.result_hash not in visible_outputs
+    assert handlers.call_count == 0
+
+
+def test_preview_qa_projects_every_saved_business_topic_without_recomputation(
+    consumer_session,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-qa-topics")
+    repository, readback = _generate(consumer_session, source)
+    version_id = readback.persisted.version.sellpoint_value_profile_version_id
+    handlers = NoUpstreamHandlers()
+    orchestrator = SopOrchestrators(
+        handlers,  # type: ignore[arg-type]
+        sellpoint_value_profile_repository=repository,
+    )
+    topics = {
+        "retain_investment": "哪些投入值得保留",
+        "capability_investment": "画质能力是否继续投入",
+        "unconverted_investment": "哪些投入没有转化",
+        "do_not_follow": "哪些竞品配置不用跟",
+        "missing_gap": "当前还缺什么竞争能力",
+        "price_support": "当前价格有用户价值支撑吗",
+        "volume_action": "如果追求销量应该先做什么",
+        "price_volume_increment": "降价能增加多少销量",
+        "competitor_selection": "为什么选择这些竞品",
+        "source_pool": "正式竞品和分析参照分别有哪些",
+        "battlefield_action": "应该增强已有价值战场还是进入新战场",
+        "table_stake": "哪些只是基础竞争能力",
+        "version_change": "相比上一版有什么变化",
+        "unsupported": "请预测明年的行业政策",
+    }
+
+    answers = {}
+    for topic_code, question in topics.items():
+        result = orchestrator.sellpoint_value_profile_ask(
+            _context(),
+            sku_code="TV-TARGET",
+            question=question,
+            profile_access_mode="preview",
+            profile_version=source.profile_version,
+            sellpoint_value_profile_version_id=version_id,
+            expected_result_hash=readback.profile.result_hash,
+            topic_code=topic_code,
+        )
+        assert result["status"] == "ok"
+        answer = result["result"]["sellpoint_value_profile_answer"]
+        assert answer["topic_code"] == topic_code
+        assert answer["result_hash"] == readback.profile.result_hash
+        answers[topic_code] = answer
+
+    assert answers["price_support"]["profile_facts"]
+    assert answers["volume_action"]["profile_facts"]
+    assert (
+        "市场关联不解释为随机实验因果"
+        in answers["price_volume_increment"]["evidence_boundary_cn"]
+    )
+    assert answers["competitor_selection"]["profile_facts"]
+    assert "正式竞品" in answers["source_pool"]["direct_answer_cn"]
+    assert answers["battlefield_action"]["profile_facts"]
+    assert answers["table_stake"]["answer_status"] == "limited"
+    assert answers["version_change"]["answer_status"] == "unknown"
+    assert answers["unsupported"]["answer_status"] == "unknown"
+
+    missing_candidate = orchestrator.sellpoint_value_profile_ask(
+        _context(),
+        sku_code="TV-TARGET",
+        question="为什么没有选择这个竞品",
+        profile_access_mode="preview",
+        profile_version=source.profile_version,
+        sellpoint_value_profile_version_id=version_id,
+        topic_code="competitor_selection",
+        candidate_sku_code="TV-NOT-IN-POOL",
+    )["result"]["sellpoint_value_profile_answer"]
+    assert missing_candidate["answer_status"] == "limited"
+    assert "candidate_not_in_formal_pool" in missing_candidate["limitations"]
+
+    hash_mismatch = orchestrator.sellpoint_value_profile_ask(
+        _context(),
+        sku_code="TV-TARGET",
+        question="当前价格有支撑吗",
+        profile_access_mode="preview",
+        profile_version=source.profile_version,
+        sellpoint_value_profile_version_id=version_id,
+        expected_result_hash="sha256:not-the-current-profile",
+    )["result"]["sellpoint_value_profile_answer"]
+    assert hash_mismatch["answer_status"] == "unknown"
+    assert "expected_result_hash_mismatch" in hash_mismatch["limitations"]
     assert handlers.call_count == 0
 
 
@@ -393,6 +496,28 @@ def test_preview_with_only_profile_version_is_rejected_by_agent(
 
     assert result["status"] == "error"
     assert "version id" in result["limitations"][0]
+
+
+def test_version_comparison_is_rejected_instead_of_silently_ignored(
+    consumer_session,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-no-version-diff")
+    repository, _ = _generate(consumer_session, source)
+    handlers = NoUpstreamHandlers()
+
+    result = SopOrchestrators(
+        handlers,  # type: ignore[arg-type]
+        sellpoint_value_profile_repository=repository,
+    ).sellpoint_value_profile_ask(
+        _context(),
+        sku_code="TV-TARGET",
+        question="相比上一版有什么变化",
+        compare_profile_version="spv-v51-previous",
+    )
+
+    assert result["status"] == "error"
+    assert "双版本 id 锁定合同" in result["limitations"][0]
+    assert handlers.call_count == 0
 
 
 def test_invalid_profile_returns_data_error_without_product_conclusion(

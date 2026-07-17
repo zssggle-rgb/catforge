@@ -166,7 +166,7 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
     AbilityDefinition(
         code="sellpoint-value-profile-ask",
         ability_type="sop",
-        description_cn="锁定一份已保存的用户卖点价值画像，回答产品投入、价格、销量、竞品、价值战场和版本变化追问。",
+        description_cn="锁定一份已保存的用户卖点价值画像，回答产品投入、价格、销量、竞品和价值战场追问。",
         required_inputs=("sku_code|query", "question"),
         optional_inputs=(
             "profile_access_mode",
@@ -174,7 +174,6 @@ SOP_ABILITIES: tuple[AbilityDefinition, ...] = (
             "sellpoint_value_profile_version_id",
             "expected_result_hash",
             "candidate_sku_code",
-            "compare_profile_version",
             "topic_code",
         ),
         source_modules=(),

@@ -700,6 +700,80 @@ def test_failed_sku_rolls_back_only_itself_and_version_records_failure(
     )
 
 
+def test_version_progress_batches_integrity_reads_without_per_sku_queries(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _materialization_input(profile_version="spv-v51-progress-pages")
+    repository = _repository(session)
+    saved = SellpointValueV51GenerationService(
+        repository=repository,
+        input_provider=FixtureProvider({"TV-TARGET": source}),
+    ).generate_draft(_request(source), sku_code="TV-TARGET")
+    version_id = saved.persisted.version.sellpoint_value_profile_version_id
+    original = session.scalar(
+        select(entities.Core3SkuSellpointValueProfile).where(
+            entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
+            == version_id
+        )
+    )
+    assert original is not None
+    table = entities.Core3SkuSellpointValueProfile.__table__
+    base_payload = {
+        column.name: getattr(original, column.name)
+        for column in table.c
+        if column.name not in {"created_at", "updated_at"}
+    }
+    expected_sku_codes = ["TV-TARGET"]
+    for index in range(1, 130):
+        sku_code = f"TV-PROGRESS-{index:03d}"
+        expected_sku_codes.append(sku_code)
+        session.add(
+            entities.Core3SkuSellpointValueProfile(
+                **{
+                    **base_payload,
+                    "sku_sellpoint_value_profile_id": f"progress-profile-{index:03d}",
+                    "sku_code": sku_code,
+                    "display_name_cn": sku_code,
+                    "input_fingerprint": f"progress-input-{index:03d}",
+                    "result_hash": f"progress-result-{index:03d}",
+                }
+            )
+        )
+    session.commit()
+    monkeypatch.setattr(
+        repository,
+        "_validate_v5_1_readback",
+        lambda persisted: persisted,
+    )
+    select_statements: list[str] = []
+
+    def count_selects(
+        _connection: Any,
+        _cursor: Any,
+        statement: str,
+        _parameters: Any,
+        _context: Any,
+        _executemany: bool,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            select_statements.append(statement)
+
+    engine = session.get_bind()
+    event.listen(engine, "before_cursor_execute", count_selects)
+    try:
+        progress = repository.refresh_v5_1_version_progress(
+            sellpoint_value_profile_version_id=version_id,
+            expected_sku_codes=sorted(expected_sku_codes),
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count_selects)
+
+    assert progress.sku_count == 130
+    assert progress.conclusion_available_count == 130
+    assert len(select_statements) <= 15
+
+
 def test_competitor_source_hash_must_exist_before_v5_1_version_creation(
     session: Session,
 ) -> None:

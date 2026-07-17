@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import Field
 
@@ -43,20 +42,6 @@ INVESTMENT_ACTION_CN = {
     "missing_competitive_gap": "优先评估补齐",
     "unknown": "暂不作产品取舍",
 }
-
-RELEASE_STATUS_CN = {
-    "draft": "草稿",
-    "reviewed": "已审核",
-    "published": "已发布",
-    "deprecated": "已停用",
-}
-
-FRESHNESS_STATUS_CN = {
-    "current": "数据已更新",
-    "stale": "数据已过期",
-    "unknown": "数据时效待确认",
-}
-
 
 class StoredPmFirstScreen(SellpointValueProfileBaseModel):
     retain_cn: str = Field(min_length=1)
@@ -358,27 +343,14 @@ def render_stored_profile_short_answer(
                 f"如果要销量｜{screen.growth_action_cn}",
             ]
         )
-    trace_lines = [
-        (
-            f"画像版本｜{report.profile_version}（"
-            f"{_release_status_cn(report.release_status)}，"
-            f"{_freshness_status_cn(report.freshness_status)}）｜"
-            f"{_release_time_cn(report)}"
-        ),
-        (
-            f"候选范围编号｜{report.candidate_manifest_hash}｜"
-            f"结果编号 {report.profile_result_hash}"
-        ),
-    ]
     suffix = "\n".join(
         f"{item['label']}：{item['url']}"
         for item in links
         if item.get("url", "").startswith("http")
     )
-    mandatory = "\n".join(trace_lines + ([suffix] if suffix else []))
-    body_limit = max(1, max_chat_chars - len(mandatory) - 1)
+    body_limit = max(1, max_chat_chars - len(suffix) - (1 if suffix else 0))
     body = _compress("\n".join(business_lines), body_limit)
-    return _sanitize(f"{body}\n{mandatory}")
+    return _sanitize(f"{body}\n{suffix}" if suffix else body)
 
 
 def render_stored_profile_markdown(
@@ -405,17 +377,6 @@ def render_stored_profile_markdown(
         return _sanitize("\n".join(lines))
     lines = [
         f"# {title}",
-        "",
-        (
-            f"> 画像版本：{report.profile_version}｜"
-            f"状态：{_release_status_cn(report.release_status)}｜"
-            f"数据状态：{_freshness_status_cn(report.freshness_status)}｜"
-            f"{_release_time_cn(report)}"
-        ),
-        (
-            f"> 候选范围编号：{report.candidate_manifest_hash}｜"
-            f"结果编号：{report.profile_result_hash}"
-        ),
         "",
         "## 一、产品经理先看这五个答案",
         "",
@@ -529,21 +490,11 @@ def render_stored_profile_feishu_card(
     else:
         content = "\n".join(
             (
-            f"**保留什么**：{screen.retain_cn}",
-            f"**哪里没转化**：{screen.unconverted_cn}",
-            f"**竞品配置怎么处理**：{screen.competitor_action_cn}",
-            f"**价格是否撑得住**：{screen.price_support_cn}",
-            f"**如果要销量**：{screen.growth_action_cn}",
-            (
-                f"画像版本：{report.profile_version}｜"
-                f"{_release_status_cn(report.release_status)}｜"
-                f"{_freshness_status_cn(report.freshness_status)}｜"
-                f"{_release_time_cn(report)}"
-            ),
-            (
-                f"候选范围编号：{report.candidate_manifest_hash}｜"
-                f"结果编号：{report.profile_result_hash}"
-            ),
+                f"**保留什么**：{screen.retain_cn}",
+                f"**哪里没转化**：{screen.unconverted_cn}",
+                f"**竞品配置怎么处理**：{screen.competitor_action_cn}",
+                f"**价格是否撑得住**：{screen.price_support_cn}",
+                f"**如果要销量**：{screen.growth_action_cn}",
             )
         )
     elements: list[dict[str, Any]] = [
@@ -1061,26 +1012,6 @@ def _number(value: Any) -> float | None:
 
 def _number_or_dash(value: float | None) -> str:
     return f"{value:,.1f}" if value is not None else "—"
-
-
-def _release_status_cn(value: str) -> str:
-    return RELEASE_STATUS_CN.get(value, "状态待确认")
-
-
-def _freshness_status_cn(value: str) -> str:
-    return FRESHNESS_STATUS_CN.get(value, "数据时效待确认")
-
-
-def _datetime_cn(value: datetime) -> str:
-    aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return aware.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M")
-
-
-def _release_time_cn(report: StoredSellpointValuePmReport) -> str:
-    generated = f"生成时间：{_datetime_cn(report.generated_at)}"
-    if report.published_at is None:
-        return generated
-    return f"{generated}｜发布时间：{_datetime_cn(report.published_at)}"
 
 
 def _compress(value: str, limit: int) -> str:

@@ -248,6 +248,16 @@ class SopOrchestrators:
                 limitations=["画像追问不能为空。"],
                 message_cn="请提供要追问的产品问题。",
             )
+        if compare_profile_version:
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command=command,
+                context=context,
+                limitations=[
+                    "V5.1 画像追问尚未定义双版本 id 锁定合同，不能执行版本对比。"
+                ],
+                message_cn="当前只能追问一份已锁定的用户卖点价值画像。",
+            )
         service = self.sellpoint_value_profile_qa_service
         if service is None:
             return base_result(

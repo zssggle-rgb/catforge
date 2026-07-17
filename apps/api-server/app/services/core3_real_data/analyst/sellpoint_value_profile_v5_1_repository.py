@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -19,6 +19,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_sc
     SellpointValueReleaseQualityStatus,
     SellpointValueVersionDraftCreate,
     SellpointValueVersionRecord,
+    SkuSellpointValueCandidateRecord,
+    SkuSellpointValueItemRecord,
+    SkuSellpointValueProfileRecord,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
@@ -58,6 +61,9 @@ class SellpointValueV51SourceIntegrityError(SellpointValueV51RepositoryError):
 
 class SellpointValueV51ReadbackIntegrityError(SellpointValueV51RepositoryError):
     pass
+
+
+SPV_V5_1_PROGRESS_READ_PAGE_SIZE = 64
 
 
 class SellpointValueV51Repository(SellpointValueProfileRepository):
@@ -113,25 +119,17 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
         version = self._version_by_id(sellpoint_value_profile_version_id)
         if version.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
             raise ValueError("V5.1 progress cannot update a historical V5 version")
-        rows = list(
-            self.db.execute(
-                select(entities.Core3SkuSellpointValueProfile)
-                .where(
-                    entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
-                    == sellpoint_value_profile_version_id
-                )
-                .order_by(entities.Core3SkuSellpointValueProfile.sku_code)
-            ).scalars()
-        )
-        generated_codes = [row.sku_code for row in rows]
-        unexpected_codes = sorted(set(generated_codes) - set(expected))
+        generated_codes: list[str] = []
         hash_or_reference_errors: list[str] = []
-        for row in rows:
+        statuses: Counter[str] = Counter()
+        for row, persisted in self._iter_v5_1_read_bundles(version):
+            generated_codes.append(row.sku_code)
+            statuses[row.conclusion_status] += 1
             try:
-                self._validate_v5_1_readback(self._read_bundle(version, row))
+                self._validate_v5_1_readback(persisted)
             except (ValidationError, SellpointValueV51RepositoryError, ValueError):
                 hash_or_reference_errors.append(row.sku_code)
-        statuses = Counter(row.conclusion_status for row in rows)
+        unexpected_codes = sorted(set(generated_codes) - set(expected))
         local_review_count = int(
             self.db.scalar(
                 select(func.count())
@@ -212,6 +210,86 @@ class SellpointValueV51Repository(SellpointValueProfileRepository):
             invalid_count=statuses["invalid"],
             integrity_error_count=integrity_error_count,
         )
+
+    def _iter_v5_1_read_bundles(
+        self,
+        version: entities.Core3SellpointValueProfileVersion,
+    ) -> Iterator[
+        tuple[
+            entities.Core3SkuSellpointValueProfile,
+            SellpointValueProfileReadBundle,
+        ]
+    ]:
+        profile_model = entities.Core3SkuSellpointValueProfile
+        candidate_model = entities.Core3SkuSellpointValueCandidate
+        item_model = entities.Core3SkuSellpointValueItem
+        version_record = SellpointValueVersionRecord.model_validate(version)
+        offset = 0
+        while True:
+            profiles = list(
+                self.db.execute(
+                    select(profile_model)
+                    .where(
+                        profile_model.sellpoint_value_profile_version_id
+                        == version.sellpoint_value_profile_version_id
+                    )
+                    .order_by(profile_model.sku_code)
+                    .offset(offset)
+                    .limit(SPV_V5_1_PROGRESS_READ_PAGE_SIZE)
+                ).scalars()
+            )
+            if not profiles:
+                return
+            profile_ids = [row.sku_sellpoint_value_profile_id for row in profiles]
+            candidates = list(
+                self.db.execute(
+                    select(candidate_model)
+                    .where(candidate_model.sku_sellpoint_value_profile_id.in_(profile_ids))
+                    .order_by(
+                        candidate_model.sku_sellpoint_value_profile_id,
+                        candidate_model.pool_type,
+                        candidate_model.candidate_sku_code,
+                    )
+                ).scalars()
+            )
+            value_items = list(
+                self.db.execute(
+                    select(item_model)
+                    .where(item_model.sku_sellpoint_value_profile_id.in_(profile_ids))
+                    .order_by(
+                        item_model.sku_sellpoint_value_profile_id,
+                        item_model.battlefield_code,
+                        item_model.normalized_bundle_code,
+                    )
+                ).scalars()
+            )
+            candidates_by_profile: dict[str, list[Any]] = {}
+            for row in candidates:
+                candidates_by_profile.setdefault(
+                    row.sku_sellpoint_value_profile_id, []
+                ).append(row)
+            items_by_profile: dict[str, list[Any]] = {}
+            for row in value_items:
+                items_by_profile.setdefault(
+                    row.sku_sellpoint_value_profile_id, []
+                ).append(row)
+            for profile in profiles:
+                profile_id = profile.sku_sellpoint_value_profile_id
+                yield profile, SellpointValueProfileReadBundle(
+                    version=version_record,
+                    profile=SkuSellpointValueProfileRecord.model_validate(profile),
+                    candidates=[
+                        SkuSellpointValueCandidateRecord.model_validate(row)
+                        for row in candidates_by_profile.get(profile_id, [])
+                    ],
+                    value_items=[
+                        SkuSellpointValueItemRecord.model_validate(row)
+                        for row in items_by_profile.get(profile_id, [])
+                    ],
+                )
+            if len(profiles) < SPV_V5_1_PROGRESS_READ_PAGE_SIZE:
+                return
+            offset += len(profiles)
 
     def _validate_v5_1_readback(
         self,

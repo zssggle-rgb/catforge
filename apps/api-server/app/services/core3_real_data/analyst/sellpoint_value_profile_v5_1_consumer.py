@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import entities
 from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
@@ -105,15 +105,29 @@ class SellpointValueV51ConsumerReader:
                 status="profile_unavailable",
                 access_mode=request.access_mode,
             )
+        profile = entities.Core3SkuSellpointValueProfile
+        target_stmt = select(
+            profile.sku_code,
+            profile.model_code,
+            profile.model_name,
+            profile.brand_name,
+            profile.display_name_cn,
+            profile.profile_version,
+            profile.result_hash,
+        ).where(
+            profile.sellpoint_value_profile_version_id
+            == version.sellpoint_value_profile_version_id
+        )
+        if request.sku_code:
+            target_stmt = target_stmt.where(
+                func.lower(profile.sku_code) == request.sku_code.casefold()
+            )
+        if request.model_name:
+            target_stmt = target_stmt.where(
+                func.lower(profile.model_name) == request.model_name.casefold()
+            )
         rows = list(
-            self.repository.db.execute(
-                select(entities.Core3SkuSellpointValueProfile)
-                .where(
-                    entities.Core3SkuSellpointValueProfile.sellpoint_value_profile_version_id
-                    == version.sellpoint_value_profile_version_id
-                )
-                .order_by(entities.Core3SkuSellpointValueProfile.sku_code)
-            ).scalars()
+            self.repository.db.execute(target_stmt.order_by(profile.sku_code)).all()
         )
         matches = [row for row in rows if _matches_target(row, request)]
         if not matches:
@@ -249,10 +263,7 @@ class SellpointValueV51ConsumerReader:
             )
 
 
-def _matches_target(
-    row: entities.Core3SkuSellpointValueProfile,
-    request: SellpointValueV51ConsumerReadRequest,
-) -> bool:
+def _matches_target(row: Any, request: SellpointValueV51ConsumerReadRequest) -> bool:
     if request.sku_code and row.sku_code.casefold() != request.sku_code.casefold():
         return False
     if request.model_name and (
@@ -273,7 +284,7 @@ def _matches_target(
     return True
 
 
-def _target_ref(row: entities.Core3SkuSellpointValueProfile) -> dict[str, Any]:
+def _target_ref(row: Any) -> dict[str, Any]:
     return {
         "sku_code": row.sku_code,
         "brand_name": row.brand_name,
