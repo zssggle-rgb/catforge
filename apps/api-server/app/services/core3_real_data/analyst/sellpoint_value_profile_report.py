@@ -515,18 +515,28 @@ def render_stored_profile_feishu_card(
     elements: list[dict[str, Any]] = [
         {"tag": "markdown", "content": _sanitize(content)}
     ]
-    actions = [
+    buttons = [
         {
             "tag": "button",
+            "element_id": f"sellpoint_value_link_{index}",
             "text": {"tag": "plain_text", "content": item["label"]},
             "type": "default",
-            "url": item["url"],
+            "size": "medium",
+            "width": "fill",
+            "behaviors": [
+                {
+                    "type": "open_url",
+                    "default_url": item["url"],
+                    "pc_url": item["url"],
+                    "ios_url": item["url"],
+                    "android_url": item["url"],
+                }
+            ],
         }
-        for item in links
+        for index, item in enumerate(links, start=1)
         if item.get("url", "").startswith("http")
     ]
-    if actions:
-        elements.append({"tag": "action", "actions": actions})
+    elements.extend(buttons)
     return {
         "schema": "2.0",
         "config": {

@@ -339,6 +339,7 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
         _context(),
         sku_code="TV-TARGET",
         enable_v5=True,
+        evidence_report_url="https://example.test/sellpoint-value-report",
         preview_profile_version=source.profile_version,
         preview_sellpoint_value_profile_version_id=version_id,
     )
@@ -367,6 +368,24 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
         "summary": {"content": "海信 65E7Q 用户卖点价值分析"},
         "width_mode": "fill",
         "update_multi": True,
+    }
+    report_button = card["body"]["elements"][1]
+    assert report_button == {
+        "tag": "button",
+        "element_id": "sellpoint_value_link_1",
+        "type": "default",
+        "size": "medium",
+        "width": "fill",
+        "text": {"tag": "plain_text", "content": "查看完整画像"},
+        "behaviors": [
+            {
+                "type": "open_url",
+                "default_url": "https://example.test/sellpoint-value-report",
+                "pc_url": "https://example.test/sellpoint-value-report",
+                "ios_url": "https://example.test/sellpoint-value-report",
+                "android_url": "https://example.test/sellpoint-value-report",
+            }
+        ],
     }
     assert answer["result_hash"] == readback.profile.result_hash
     assert report["candidate_manifest_hash"] == source.candidate_pools.result_hash
