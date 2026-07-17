@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G17 completed；SPV51-G18 pending
+状态：SPV51-G01—G18 completed；任务链已停止；发布准备 blocked
 
 日期：2026-07-17
 
@@ -177,6 +177,8 @@ fingerprint 加竞品画像 version/hash；生成新 V5.1 draft；repository 回
 ### SPV51-G18 发布准备审计
 
 只读输出 ready/limited/blocked 判定、V5→V5.1 diff、no_conclusion 清单、发布/回退步骤。停止 heartbeat，等待用户明确批准；不执行 review/publish/current。
+
+完成状态：completed；发布准备结论：blocked。画像数据为 limited 可用，但现有发布完整性校验仍沿用旧 V5 计数，实际拒绝 V5.1 TV `282/66/29/0` 和 AC `138/6/11/0` 分布。关闭回执：`SPV51_G18_closure_receipt.md`；完整审计：`SPV51_G18_publish_readiness_audit.md`；结构化证据：`SPV51_G18_publish_readiness_evidence.json`。未执行 review、publish 或 current；任务链停止，等待用户决定是否另建发布状态机修复 Goal。
 
 ## 4. Heartbeat 提示词
 

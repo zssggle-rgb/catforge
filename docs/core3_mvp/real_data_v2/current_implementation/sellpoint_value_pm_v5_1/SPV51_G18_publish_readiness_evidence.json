@@ -1,0 +1,181 @@
+{
+  "goal": "SPV51-G18",
+  "audit_date": "2026-07-17",
+  "environment": "205",
+  "audit_status": "completed",
+  "release_readiness": "blocked",
+  "data_readiness": "limited_publishable_after_gate_fix",
+  "decision_cn": "画像结果已经有限可用，但现有发布完整性校验仍沿用旧 V5 计数，当前 publish_version 会拒绝 TV 和 AC 两个 V5.1 版本。",
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "versions": {
+    "TV": {
+      "version_id": "37f2ef77-187a-4ee6-b0a7-87708a21856f",
+      "profile_version": "spv_v5_1_tv_full_g17_20260717_r1",
+      "result_hash": "sha256:sellpoint_value_version_result_v5_1:3b5e0ed330b6e4ca6806c6cc0ad01718ceb54e39d6f3dda34bbbd89ea9722e99",
+      "release_status": "draft",
+      "release_quality_status": "limited",
+      "is_current": false,
+      "processing_status": "completed",
+      "sku_count": 377,
+      "conclusion_available_count": 282,
+      "partial_conclusion_count": 66,
+      "no_conclusion_count": 29,
+      "invalid_count": 0,
+      "failed_count": 0,
+      "integrity_error_count": 0,
+      "review_required_count": 0,
+      "source_competitor_profile_version_id": "288b6ce0-b632-478c-9705-8297103da730",
+      "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:db6e58bbf37346dc18d02532905263287d6dbf58be7d6ad8ba8b35dfc98daa89"
+    },
+    "AC": {
+      "version_id": "38d86772-cd31-4b0c-bf4c-cccc64de6aee",
+      "profile_version": "spv_v5_1_ac_full_g17_20260717_r1",
+      "result_hash": "sha256:sellpoint_value_version_result_v5_1:8b1563715921a9b7f252d176c529633c3ead7b5a2ffd881f3fc1883a60d43f71",
+      "release_status": "draft",
+      "release_quality_status": "limited",
+      "is_current": false,
+      "processing_status": "completed",
+      "sku_count": 155,
+      "conclusion_available_count": 138,
+      "partial_conclusion_count": 6,
+      "no_conclusion_count": 11,
+      "invalid_count": 0,
+      "failed_count": 0,
+      "integrity_error_count": 0,
+      "review_required_count": 0,
+      "source_competitor_profile_version_id": "eed759a8-a666-4257-8c4d-3405621a4244",
+      "source_competitor_profile_result_hash": "sha256:competitor_profile_agent_snapshot_version_result_v1:b9cecd9d62402ade393f31b872b4a564895bc6e9985ac7c6ef853b7e2057bbe4"
+    }
+  },
+  "v5_to_v5_1": {
+    "TV": {
+      "old_profile_version": "spv_profile_v5_65e7q_g09_20260713_r5",
+      "old_release_quality_status": "blocked",
+      "old_ready_count": 1,
+      "old_review_required_count": 347,
+      "old_blocked_count": 29,
+      "new_usable_count": 348,
+      "new_no_conclusion_count": 29
+    },
+    "AC": {
+      "old_profile_version": "spv_profile_v5_ac_g10_20260713_r2",
+      "old_release_quality_status": "blocked",
+      "old_ready_count": 0,
+      "old_review_required_count": 144,
+      "old_blocked_count": 11,
+      "new_usable_count": 144,
+      "new_no_conclusion_count": 11
+    },
+    "combined_usable_count": 492,
+    "combined_usable_rate": 0.925,
+    "combined_no_conclusion_count": 40
+  },
+  "publish_gate_blocker": {
+    "code_path": "SellpointValueProfileRepository._assert_publish_completeness",
+    "root_cause": "V5.1 limited release is checked with legacy ready/review/blocked/failed counts instead of the four V5.1 conclusion states.",
+    "TV": {
+      "legacy_counted": 282,
+      "v5_1_conclusion_counted": 377,
+      "sku_count": 377,
+      "actual_error": "profile version is incomplete: status_count_mismatch,limited_release_counts_invalid"
+    },
+    "AC": {
+      "legacy_counted": 138,
+      "v5_1_conclusion_counted": 155,
+      "sku_count": 155,
+      "actual_error": "profile version is incomplete: status_count_mismatch,limited_release_counts_invalid"
+    },
+    "fix_required_before_review_publish_current": true
+  },
+  "current_formal_state": {
+    "sellpoint_value_current_published_versions": 0,
+    "TV_formal_read": "profile_unavailable",
+    "AC_formal_read": "profile_unavailable",
+    "rollback_target": "restore zero current published sellpoint-value versions; do not switch old blocked V5 current"
+  },
+  "preview_consumer_check": {
+    "TV00029112": {
+      "status": "available",
+      "consumer_status": "usable_conclusion",
+      "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:fdc4720e9f04b58049773be516a7f2a2e7742065d2c02c2c6c1e24966c442b1d",
+      "report_same_hash": true,
+      "qa_same_hash": true
+    },
+    "AC00039187": {
+      "status": "available",
+      "consumer_status": "usable_conclusion",
+      "profile_result_hash": "sha256:sellpoint_value_profile_result_v5_1:2c46a4d5ea2aea6230fe5be75e041a57b57caa117e7cf5431f6ce8bccabb4f3f",
+      "report_same_hash": true,
+      "qa_same_hash": true
+    }
+  },
+  "no_conclusion": {
+    "cause": "Every no-conclusion SKU has formal competitors and market references, but its saved V5 source contains zero user-value items.",
+    "TV_count": 29,
+    "AC_count": 11,
+    "TV_competitor_range": [3, 20],
+    "TV_reference_range": [3, 87],
+    "AC_competitor_range": [20, 20],
+    "AC_reference_range": [37, 76],
+    "AC_skus": [
+      ["AC00034959", "美的 KFR-72LW/QJ201-1"],
+      ["AC00036098", "TCL KFR-35GW/JD61+B1"],
+      ["AC00036116", "美的 KFR-35GW/MJD2-1"],
+      ["AC00036291", "奥克斯 KFR-35GW/BPR3AEG28(B1)"],
+      ["AC00036763", "美的 KFR-35GW/MJ1P"],
+      ["AC00036792", "美的 KFR-72LW/MJ1P"],
+      ["AC00036924", "美的 KFR-35GW/JY1"],
+      ["AC00038686", "美的 KFR-72LW/MJ2"],
+      ["AC00039044", "统帅 KFR-35GW/LTB2-1"],
+      ["AC00039082", "晶弘 KFR-35GW/JH5K1FNHAEB1"],
+      ["AC00039655", "小米 KFR-35GW-PG15/N2A1"]
+    ],
+    "TV_skus": [
+      ["TV00009549", "康佳 LED32E330CE"],
+      ["TV00023850", "酷开 50P31"],
+      ["TV00026983", "TCL 75S11-JN"],
+      ["TV00027638", "长虹 85JD900F-G1"],
+      ["TV00027973", "海尔 75D50C"],
+      ["TV00028213", "创维 100H5F PRO"],
+      ["TV00028330", "海信 98D60QD"],
+      ["TV00028377", "海信 100D70QD"],
+      ["TV00028418", "长虹 75JD700H"],
+      ["TV00028712", "酷开 40P3F"],
+      ["TV00029030", "康佳 J40ES"],
+      ["TV00029031", "酷开 32K3"],
+      ["TV00029032", "酷开 43K3"],
+      ["TV00029101", "长虹 50P6S-F"],
+      ["TV00029202", "海信 75D68S"],
+      ["TV00029226", "海尔 65D50CN"],
+      ["TV00030163", "海信 75D30S"],
+      ["TV00030366", "红米 L100RC-AP"],
+      ["TV00030532", "VIDDA 75VX5S"],
+      ["TV00030533", "VIDDA 85VX5S"],
+      ["TV00030547", "海信 85E5S-PRO"],
+      ["TV00030549", "酷开 50K3"],
+      ["TV00030612", "海信 85E52S-PRO"],
+      ["TV00030613", "海信 75E5S"],
+      ["TV00030614", "海信 100E5S-PRO"],
+      ["TV00030615", "海信 85E7S"],
+      ["TV00030618", "海信 85E5S"],
+      ["TV00030619", "海信 100E7S"],
+      ["TV00030696", "酷开 55P3H"]
+    ]
+  },
+  "runtime": {
+    "healthz": "ok",
+    "readyz": "ready",
+    "database": "ok",
+    "api_image": "sha256:537af0f41d79591e8a837df0339f597d805be1b3b626723ae42a604f94e50048",
+    "oom_killed": false,
+    "restart_count": 0
+  },
+  "protection": {
+    "database_transactions": "read_only",
+    "database_writes": 0,
+    "review_publish_current_deprecated": false,
+    "deployment": false,
+    "upstream_rerun_or_modification": false
+  },
+  "required_next_step": "Create a separately authorized lifecycle-fix Goal, deploy it without regenerating profiles, rerun this read-only audit, and only then request explicit limited-release approval."
+}
