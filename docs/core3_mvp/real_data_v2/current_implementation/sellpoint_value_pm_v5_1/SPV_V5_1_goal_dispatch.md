@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G08 completed；SPV51-G09 pending
+状态：SPV51-G01—G09 completed；SPV51-G10 pending
 
 日期：2026-07-17
 
@@ -115,6 +115,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G09 增强量化
 
 把同预算原型、卖得好/差组合、相邻战场、synthetic 和 strict WTP 统一映射到分层结果。严格方法失败只保存技术限制。
+
+完成状态：completed；关闭回执：`SPV51_G09_closure_receipt.md`。
 
 ### SPV51-G10 状态与生命周期
 

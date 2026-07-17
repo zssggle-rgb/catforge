@@ -895,6 +895,205 @@ class ParameterGroupComparisonResult(SellpointValueProfileBaseModel):
         return self
 
 
+class MarketArchetypeMethod(str, Enum):
+    SAME_BUDGET = "same_budget"
+    PERFORMANCE_CONTRAST = "performance_contrast"
+    ADJACENT_BATTLEFIELD = "adjacent_battlefield"
+
+
+class MarketArchetypeGroupSnapshot(SellpointValueProfileBaseModel):
+    role: str = Field(min_length=1)
+    sku_codes: list[str] = Field(default_factory=list)
+    sku_count: int = Field(ge=0)
+    average_price: Decimal | None = Field(default=None, ge=0)
+    average_weekly_sales: Decimal | None = Field(default=None, ge=0)
+    value_bundle_prevalence: dict[str, Decimal] = Field(default_factory=dict)
+    user_outcome_prevalence: dict[str, Decimal] = Field(default_factory=dict)
+    facts: dict[str, Any] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_group(self) -> "MarketArchetypeGroupSnapshot":
+        if self.sku_codes != sorted(set(self.sku_codes)):
+            raise ValueError("market archetype SKU codes must be sorted and unique")
+        if self.sku_count < len(self.sku_codes):
+            raise ValueError(
+                "market archetype representatives cannot exceed sample count"
+            )
+        for mapping in (
+            self.value_bundle_prevalence,
+            self.user_outcome_prevalence,
+        ):
+            if any(value < 0 or value > 1 for value in mapping.values()):
+                raise ValueError(
+                    "market archetype prevalence must be between zero and one"
+                )
+        return self
+
+
+class MarketArchetypeEnhancementResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    method: MarketArchetypeMethod
+    status: QuestionConclusionStatus
+    strength: QuestionConclusionStrength
+    groups: list[MarketArchetypeGroupSnapshot] = Field(default_factory=list)
+    business_conclusion_cn: str = Field(min_length=1)
+    visible_by_default: bool
+    causal_claim: Literal[False] = False
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    source_result_hashes: list[str] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "MarketArchetypeEnhancementResult":
+        roles = [row.role for row in self.groups]
+        if roles != sorted(set(roles)):
+            raise ValueError("market archetype roles must be sorted and unique")
+        if self.source_result_hashes != sorted(set(self.source_result_hashes)):
+            raise ValueError("market archetype source hashes must be sorted and unique")
+        if self.status == QuestionConclusionStatus.NO_CONCLUSION:
+            if (
+                self.strength != QuestionConclusionStrength.NONE
+                or self.visible_by_default
+            ):
+                raise ValueError(
+                    "unavailable archetypes must stay hidden with none strength"
+                )
+        elif self.status in {
+            QuestionConclusionStatus.CONCLUSION_AVAILABLE,
+            QuestionConclusionStatus.PARTIAL_CONCLUSION,
+        }:
+            if not self.groups or self.strength == QuestionConclusionStrength.NONE:
+                raise ValueError("available archetypes require groups and strength")
+            if not self.visible_by_default:
+                raise ValueError(
+                    "available market archetypes are default business results"
+                )
+        if self.review_required or self.review_reasons:
+            raise ValueError(
+                "optional market archetype failure does not require review"
+            )
+        return self
+
+
+class SyntheticMarketBaselineResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    strength: QuestionConclusionStrength
+    source_status: str = Field(min_length=1)
+    donor_sku_codes: list[str] = Field(default_factory=list)
+    donor_count: int = Field(ge=0)
+    effective_donor_count: Decimal | None = Field(default=None, ge=0)
+    price_difference_estimate: Decimal | None = None
+    sales_difference_estimate: Decimal | None = None
+    gate_pass: bool
+    failed_gates: list[str] = Field(default_factory=list)
+    business_conclusion_cn: str = Field(min_length=1)
+    visible_by_default: bool
+    causal_claim: Literal[False] = False
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    source_result_hash: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "SyntheticMarketBaselineResult":
+        if self.donor_sku_codes != sorted(set(self.donor_sku_codes)):
+            raise ValueError("synthetic donor SKU codes must be sorted and unique")
+        if self.donor_count != len(self.donor_sku_codes):
+            raise ValueError("synthetic donor count must match codes")
+        if self.gate_pass != (not self.failed_gates):
+            raise ValueError("synthetic gate flag must match failed gates")
+        effects = (self.price_difference_estimate, self.sales_difference_estimate)
+        if self.status == QuestionConclusionStatus.CONCLUSION_AVAILABLE:
+            if (
+                not self.gate_pass
+                or not any(value is not None for value in effects)
+                or self.strength == QuestionConclusionStrength.NONE
+                or not self.visible_by_default
+            ):
+                raise ValueError("available synthetic baseline requires passed effects")
+        elif self.status == QuestionConclusionStatus.NO_CONCLUSION:
+            if (
+                any(value is not None for value in effects)
+                or self.strength != QuestionConclusionStrength.NONE
+                or self.visible_by_default
+            ):
+                raise ValueError("unavailable synthetic baseline cannot expose effects")
+        if self.review_required or self.review_reasons:
+            raise ValueError("optional synthetic failure does not require review")
+        return self
+
+
+class StrictMarketImpliedWtpResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    method: str = Field(min_length=1)
+    estimate_low: Decimal | None = None
+    estimate_center: Decimal | None = None
+    estimate_high: Decimal | None = None
+    reference_price: Decimal | None = Field(default=None, ge=0)
+    currency: str = Field(min_length=1)
+    pair_count: int = Field(ge=0)
+    model_family_count: int = Field(ge=0)
+    gate_results: dict[str, bool] = Field(default_factory=dict)
+    business_conclusion_cn: str = Field(min_length=1)
+    visible_by_default: bool
+    causal_claim: Literal[False] = False
+    psychological_max_price: Literal[False] = False
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    source_status: str = Field(min_length=1)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "StrictMarketImpliedWtpResult":
+        amounts = (self.estimate_low, self.estimate_center, self.estimate_high)
+        if self.status == QuestionConclusionStatus.CONCLUSION_AVAILABLE:
+            if (
+                any(value is None for value in amounts)
+                or not self.visible_by_default
+                or self.method != "matched_equal_choice_price_gap"
+                or self.pair_count < 2
+                or self.model_family_count < 2
+                or not self.gate_results
+                or not all(self.gate_results.values())
+            ):
+                raise ValueError(
+                    "available strict WTP requires amounts and passed gates"
+                )
+            if not self.estimate_low <= self.estimate_center <= self.estimate_high:  # type: ignore[operator]
+                raise ValueError("strict WTP center must stay inside its interval")
+        elif self.status == QuestionConclusionStatus.NO_CONCLUSION:
+            if (
+                any(value is not None for value in amounts)
+                or self.reference_price is not None
+                or self.visible_by_default
+            ):
+                raise ValueError(
+                    "unavailable strict WTP must stay hidden without amounts"
+                )
+        if self.review_required or self.review_reasons:
+            raise ValueError("optional strict WTP failure does not require review")
+        return self
+
+
 class QuantificationResult(SellpointValueProfileBaseModel):
     layer: QuantificationLayer
     method: str = Field(min_length=1)
@@ -1231,6 +1430,9 @@ __all__ = [
     "LocalCapabilityInvestmentDecision",
     "MarketComparatorObservation",
     "MarketComparisonDirection",
+    "MarketArchetypeEnhancementResult",
+    "MarketArchetypeGroupSnapshot",
+    "MarketArchetypeMethod",
     "MarketMetricCode",
     "MarketMetricComparison",
     "MarketObservationSourceType",
@@ -1255,6 +1457,8 @@ __all__ = [
     "SPV_V5_1_RULE_VERSION",
     "SPV_V5_1_SCHEMA_VERSION",
     "SellpointValueCompetitorSource",
+    "StrictMarketImpliedWtpResult",
+    "SyntheticMarketBaselineResult",
     "SellpointValueAnalysisReference",
     "SellpointValueCandidatePools",
     "TableStakeAssessment",
