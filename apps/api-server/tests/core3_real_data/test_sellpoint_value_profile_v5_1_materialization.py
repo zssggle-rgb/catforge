@@ -20,6 +20,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_aggregati
     aggregate_sku_conclusion,
     aggregate_value_conclusion,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_candidate_pools import (
+    build_sellpoint_value_candidate_pools,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_config import (
     sellpoint_value_v5_1_config,
 )
@@ -373,9 +376,25 @@ def _value_input() -> SellpointValueV51ValueInput:
 def _materialization_input(
     *,
     profile_version: str = "spv-v51-r1",
+    candidate_business_score: Decimal | None = None,
 ) -> SellpointValueV51MaterializationInput:
     source = _competitor_source()
     pools = _candidate_pools()
+    if candidate_business_score is not None:
+        source = source.model_copy(
+            update={
+                "candidates": [
+                    source.candidates[0].model_copy(
+                        update={"business_score": candidate_business_score}
+                    ),
+                    *source.candidates[1:],
+                ]
+            }
+        )
+        pools = build_sellpoint_value_candidate_pools(
+            competitor_source=source,
+            analysis_reference_records=pools.analysis_references,
+        )
     value = _value_input()
     sku_conclusion = aggregate_sku_conclusion(
         SkuConclusionAggregationInput(
@@ -606,6 +625,29 @@ def test_generation_is_idempotent_and_preserves_v5_published_current(
     assert history.release_status == "published"
     assert history.is_current is True
     assert history.result_hash == "v5-history-result"
+
+
+def test_generation_quantizes_candidate_confidence_to_database_precision(
+    session: Session,
+) -> None:
+    source = _materialization_input(
+        profile_version="spv-v51-candidate-confidence",
+        candidate_business_score=Decimal("0.81235"),
+    )
+    saved = SellpointValueV51GenerationService(
+        repository=_repository(session),
+        input_provider=FixtureProvider({"TV-TARGET": source}),
+    ).generate_draft(
+        _request(source),
+        sku_code="TV-TARGET",
+    )
+
+    candidate = next(
+        row
+        for row in saved.persisted.candidates
+        if row.pool_type == "competitor" and row.candidate_sku_code == "TV-C01"
+    )
+    assert candidate.confidence == Decimal("0.8124")
 
 
 def test_typed_readback_rejects_hash_tampering(session: Session) -> None:

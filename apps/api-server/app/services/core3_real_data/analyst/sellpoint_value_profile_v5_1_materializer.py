@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Iterable, Mapping, Sequence
 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
@@ -458,7 +458,7 @@ def _candidate_draft(
             question: ";".join(use.selection_reasons or use.rejection_reasons)
             for question, use in uses
         },
-        confidence=confidence,
+        confidence=confidence.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP),
         evidence_refs_json=evidence_refs,
         limitations_json=sorted(
             {reason for _, use in uses for reason in use.rejection_reasons}
