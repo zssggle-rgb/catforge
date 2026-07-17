@@ -360,9 +360,14 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert report["schema_version"] == "sku_sellpoint_value_pm_report_v1_1"
     assert report["profile_result_hash"] == readback.profile.result_hash
     assert artifacts["result_hash"] == readback.profile.result_hash
-    assert artifacts["feishu_card_payload"]["result_hash"] == (
-        readback.profile.result_hash
-    )
+    card = artifacts["feishu_card_payload"]
+    assert set(card) == {"schema", "config", "header", "body"}
+    assert card["schema"] == "2.0"
+    assert card["config"] == {
+        "summary": {"content": "海信 65E7Q 用户卖点价值分析"},
+        "width_mode": "fill",
+        "update_multi": True,
+    }
     assert answer["result_hash"] == readback.profile.result_hash
     assert report["candidate_manifest_hash"] == source.candidate_pools.result_hash
     assert report["candidate_count"] == len(source.candidate_pools.formal_competitors)
@@ -678,6 +683,12 @@ def test_no_conclusion_returns_one_business_message_without_recomputation(
     answer = result["result"]["sellpoint_value_pm_v5_answer"]
     assert report["consumer_status"] == "data_insufficient"
     assert report["value_accounts"] == []
+    assert set(answer["feishu_card_payload"]) == {
+        "schema",
+        "config",
+        "header",
+        "body",
+    }
     assert (
         answer["short_answer"].count(
             "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"

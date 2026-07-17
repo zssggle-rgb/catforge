@@ -529,21 +529,16 @@ def render_stored_profile_feishu_card(
         elements.append({"tag": "action", "actions": actions})
     return {
         "schema": "2.0",
-        "config": {"wide_screen_mode": True},
+        "config": {
+            "summary": {"content": title},
+            "width_mode": "fill",
+            "update_multi": True,
+        },
         "header": {
             "title": {"tag": "plain_text", "content": title},
             "template": "blue",
         },
         "body": {"elements": elements},
-        "profile_version": report.profile_version,
-        "release_status": report.release_status,
-        "generated_at": report.generated_at.isoformat(),
-        "published_at": (
-            report.published_at.isoformat() if report.published_at else None
-        ),
-        "candidate_manifest_hash": report.candidate_manifest_hash,
-        "result_hash": report.profile_result_hash,
-        "consumer_status": report.consumer_status,
     }
 
 
