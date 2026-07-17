@@ -387,58 +387,68 @@ def render_stored_profile_markdown(
                 ]
             )
         return _sanitize("\n".join(lines))
+    retained = _investment_names(report, "retain")
+    unconverted = _investment_names(report, "unconverted")
+    value_groups = _sellpoint_card_value_groups(report)
+    primary_value = (
+        str(value_groups[0]["perceived_outcome_cn"])
+        if value_groups
+        else "当前画像尚未形成可展示的用户价值结论。"
+    )
     lines = [
         f"# {title}",
         "",
-        "## 一、产品经理先看这六个答案",
+        "## 一、总判断",
         "",
-        f"1. **哪些投入值得保留**：{screen.retain_cn}",
-        f"2. **哪些投入没有转化成用户价值**：{screen.unconverted_cn}",
-        f"3. **哪些竞品配置不用跟、哪些缺口要补**：{screen.competitor_action_cn}",
-        f"4. **当前价格是否得到用户价值支撑**：{screen.price_support_cn}",
-        f"5. **如果追求销量，产品动作是什么**：{screen.growth_action_cn}",
-        f"6. **本品应该承担什么 SKU 角色**：{screen.sku_role_cn}",
+        f"- **用户已经感知到什么价值**：{primary_value}",
+        (
+            "- **哪些非基础卖点在支撑**："
+            + ("、".join(retained) if retained else "当前未确认。")
+        ),
+        f"- **哪里还没有兑现**：{screen.unconverted_cn}",
+        f"- **当前价格和销量是否获得支撑**：{screen.price_support_cn}",
+        f"- **本品应该承担什么角色**：{screen.sku_role_cn}",
         "",
-        "## 二、用户价值账",
+        "## 二、卖点如何形成用户价值",
         "",
     ]
-    if report.value_accounts:
-        for index, row in enumerate(report.value_accounts, start=1):
+    if value_groups:
+        for index, group in enumerate(value_groups, start=1):
             lines.extend(
                 [
-                    f"### {index}. {row.battlefield_name_cn}｜{row.value_bundle_name_cn}",
+                    f"### {index}. {group['battlefield_name_cn']}",
                     "",
-                    f"- 用户实际获得：{row.perceived_outcome_cn}",
                     (
-                        "- 本组重点卖点："
-                        + ("、".join(row.core_sellpoints_cn) or "未形成非基础卖点组合。")
+                        "- 非基础卖点组合："
+                        + (
+                            "、".join(group["sellpoints"])
+                            or "当前未形成可主推的非基础卖点组合。"
+                        )
                     ),
-                    f"- 当前价值状态：{row.value_status_cn}",
+                    f"- 用户获得的价值：{group['perceived_outcome_cn']}",
                     (
-                        "- 产品投入处理："
-                        + ("；".join(row.investment_actions_cn) or "暂未形成明确取舍。")
+                        "- 市场兑现："
+                        + (
+                            f"{group['market_count']} 组价值组合对照均形成支撑，"
+                            f"{group['market_range_cn']}。"
+                            if group["has_market_result"]
+                            else "尚未形成可用的量价结果，先修复实际体验兑现。"
+                        )
                     ),
-                    (
-                        "- 代表产品比较："
-                        + ("；".join(row.representative_comparisons_cn) or "当前没有可展示的代表产品。")
-                    ),
-                    f"- 价格表现：{row.price_performance_cn}",
-                    f"- 销量表现：{row.volume_performance_cn}",
-                    f"- 证据边界：{row.evidence_boundary_cn}",
                     "",
                 ]
             )
     else:
-        lines.extend(["当前画像没有形成可展示的用户价值账。", ""])
-    lines.extend(["## 三、产品投入清单", ""])
+        lines.extend(["当前画像没有形成可展示的卖点与用户价值关系。", ""])
+    lines.extend(["## 三、产品投入怎么取舍", ""])
     if report.investment_decisions:
         lines.extend(
             [
-                "| 产品投入 | 建议动作 | 工作含义 | 可信度 |",
-                "| --- | --- | --- | ---: |",
+                "| 产品投入 | 建议动作 | 为什么 |",
+                "| --- | --- | --- |",
                 *(
                     f"| {row.capability_name_cn} | {row.action_cn} | "
-                    f"{row.business_reason_cn} | {row.confidence:.0%} |"
+                    f"{row.business_reason_cn} |"
                     for row in report.investment_decisions
                 ),
                 "",
@@ -446,35 +456,50 @@ def render_stored_profile_markdown(
         )
     lines.extend(
         [
-            "## 四、分析使用的产品范围",
+            "## 四、价格和销量怎么决策",
             "",
-            f"正式竞品 {report.candidate_count} 款，其他分析参照 {report.reference_count} 款。",
+            f"- **当前价格判断**：{screen.price_support_cn}",
+            f"- **如果目标是增加销量**：{screen.growth_action_cn}",
+            "",
+            "### 哪些卖点价值组合支撑了这个判断",
             "",
         ]
     )
-    if report.full_candidates:
+    market_rows = _market_value_rows(report.value_accounts)
+    if market_rows:
         lines.extend(
             [
-                "| 产品 | 用途 | 可用于什么 | 均价 | 周均销量 |",
-                "| --- | --- | --- | ---: | ---: |",
+                "| 用户价值组合 | 非基础卖点组合 | 代表对照 | 量价结果 |",
+                "| --- | --- | --- | --- |",
                 *(
-                    f"| {row.candidate_name_cn} | {row.relation_cn} | {row.usability_cn} | "
-                    f"{_number_or_dash(row.price)} | {_number_or_dash(row.weekly_sales)} |"
-                    for row in report.full_candidates
+                    f"| {row.value_bundle_name_cn} | "
+                    f"{'、'.join(row.core_sellpoints_cn) or '当前未形成'} | "
+                    f"{_representative_product_names(row)} | "
+                    f"{_business_market_result(row)} |"
+                    for row in market_rows
                 ),
                 "",
             ]
         )
-    business_limitations = _business_report_limitations(report.limitations)
-    if business_limitations:
-        lines.extend(
-            [
-                "## 五、结论边界",
-                "",
-                *(f"- {item}" for item in business_limitations),
-                "",
-            ]
-        )
+    else:
+        lines.extend(["当前没有可直接用于价格和销量决策的量价组合比较。", ""])
+    lines.extend(
+        [
+            "## 五、下一代产品怎么定义",
+            "",
+            f"- **SKU 角色**：{screen.sku_role_cn}",
+            (
+                "- **必须守住的用户价值**："
+                + ("、".join(retained) if retained else "当前未确认。")
+            ),
+            (
+                "- **优先修复的体验**："
+                + ("、".join(unconverted) if unconverted else "当前没有。")
+            ),
+            f"- **竞品配置策略**：{screen.competitor_action_cn}",
+            "",
+        ]
+    )
     if links:
         lines.extend(
             [
@@ -488,6 +513,26 @@ def render_stored_profile_markdown(
             ]
         )
     return _sanitize("\n".join(lines).strip())
+
+
+def _representative_product_names(row: StoredPmValueAccountRow) -> str:
+    names = []
+    for comparison in row.representative_comparisons_cn:
+        match = re.search(r"（([^（）]+)）\s*$", comparison)
+        if match:
+            names.extend(name.strip() for name in match.group(1).split("、"))
+    return "、".join(_unique(names)) or "已保存的同类产品"
+
+
+def _business_market_result(row: StoredPmValueAccountRow) -> str:
+    conclusion = row.price_performance_cn
+    conclusion = re.sub(r"；该结果用于判断市场表现[^。]*。?", "。", conclusion)
+    conclusion = re.sub(
+        r"([0-9]+\.[0-9]+)(?=(?:元|台))",
+        lambda match: f"{float(match.group(1)):.1f}",
+        conclusion,
+    )
+    return conclusion
 
 
 def render_stored_profile_feishu_card(
@@ -1463,7 +1508,9 @@ def _links(
     if selection_compare_url:
         result.append({"label": "查看用户选择对比", "url": selection_compare_url})
     if evidence_report_url:
-        result.append({"label": "查看完整画像", "url": evidence_report_url})
+        result.append(
+            {"label": "查看产品经理完整分析", "url": evidence_report_url}
+        )
     return result
 
 

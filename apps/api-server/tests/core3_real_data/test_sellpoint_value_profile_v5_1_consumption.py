@@ -390,7 +390,7 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
         "type": "default",
         "size": "medium",
         "width": "fill",
-        "text": {"tag": "plain_text", "content": "查看完整画像"},
+        "text": {"tag": "plain_text", "content": "查看产品经理完整分析"},
         "behaviors": [
             {
                 "type": "open_url",
@@ -438,8 +438,16 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert "market_association_not_randomized_causality" not in bounded_markdown
     assert "common_weeks_not_required" not in bounded_markdown
     assert "v4_strict_amount_gate_not_passed" not in bounded_markdown
-    assert "## 五、结论边界" in bounded_markdown
-    assert "不代表单一卖点的实验因果增量" in bounded_markdown
+    assert "## 四、价格和销量怎么决策" in bounded_markdown
+    assert "## 五、下一代产品怎么定义" in bounded_markdown
+    assert "## 四、分析使用的产品范围" not in bounded_markdown
+    assert "## 五、结论边界" not in bounded_markdown
+    assert "正式竞品" not in bounded_markdown
+    assert "不代表单一卖点的实验因果增量" not in bounded_markdown
+    assert "非基础卖点组合" in bounded_markdown
+    assert "用户获得的价值" in bounded_markdown
+    assert "证据边界" not in bounded_markdown
+    assert "可信度" not in bounded_markdown
     assert source.profile_version not in visible_outputs
     assert readback.profile.result_hash not in visible_outputs
     assert source.candidate_pools.result_hash not in visible_outputs
