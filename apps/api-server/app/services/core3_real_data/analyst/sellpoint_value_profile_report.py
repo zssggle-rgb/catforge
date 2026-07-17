@@ -497,24 +497,52 @@ def render_stored_profile_feishu_card(
     links: Sequence[dict[str, str]] = (),
 ) -> dict[str, Any]:
     screen = report.first_screen
+    card_title = _sellpoint_card_title(title)
     if report.consumer_status == "data_insufficient":
         content = "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+        elements: list[dict[str, Any]] = [_card_markdown(content)]
     elif report.consumer_status == "invalid":
         content = "画像数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
+        elements = [_card_markdown(content)]
     else:
-        content = "\n".join(
-            (
-                f"**保留什么**：{screen.retain_cn}",
-                f"**哪里没转化**：{screen.unconverted_cn}",
-                f"**竞品配置怎么处理**：{screen.competitor_action_cn}",
-                f"**价格是否撑得住**：{screen.price_support_cn}",
-                f"**如果要销量**：{screen.growth_action_cn}",
-                f"**SKU角色**：{screen.sku_role_cn}",
+        elements = [
+            _card_markdown(
+                "\n".join(
+                    (
+                        f"**总判断**\n{_compress(screen.sku_role_cn, 260)}",
+                        f"**价格判断**\n{_compress(screen.price_support_cn, 320)}",
+                    )
+                )
+            ),
+            _sellpoint_card_metric_columns(report),
+        ]
+        value_groups = _sellpoint_card_value_groups(report)
+        if value_groups:
+            elements.extend(
+                [
+                    {"tag": "hr"},
+                    _card_markdown("**卖点如何形成用户价值**"),
+                    *(
+                        _card_markdown(_sellpoint_card_value_group_markdown(group))
+                        for group in value_groups[:3]
+                    ),
+                ]
             )
+        elements.extend(
+            [
+                {"tag": "hr"},
+                _card_markdown("**产品经理现在怎么做**"),
+                _sellpoint_card_action_columns(report),
+                _card_markdown(
+                    "\n\n".join(
+                        (
+                            f"**竞品配置**\n{_compress(screen.competitor_action_cn, 260)}",
+                            f"**销量动作**\n{_compress(screen.growth_action_cn, 320)}",
+                        )
+                    )
+                ),
+            ]
         )
-    elements: list[dict[str, Any]] = [
-        {"tag": "markdown", "content": _sanitize(content)}
-    ]
     buttons = [
         {
             "tag": "button",
@@ -540,15 +568,265 @@ def render_stored_profile_feishu_card(
     return {
         "schema": "2.0",
         "config": {
-            "summary": {"content": title},
+            "summary": {"content": card_title},
             "width_mode": "fill",
             "update_multi": True,
         },
         "header": {
-            "title": {"tag": "plain_text", "content": title},
-            "template": "blue",
+            "title": {"tag": "plain_text", "content": card_title},
+            "subtitle": {
+                "tag": "plain_text",
+                "content": _sellpoint_card_subtitle(report),
+            },
+            "template": "turquoise",
         },
         "body": {"elements": elements},
+    }
+
+
+def _sellpoint_card_title(title: str) -> str:
+    return (
+        title[: -len("用户卖点价值分析")] + "用户卖点价值看板"
+        if title.endswith("用户卖点价值分析")
+        else title
+    )
+
+
+def _sellpoint_card_subtitle(report: StoredSellpointValuePmReport) -> str:
+    if report.consumer_status == "data_insufficient":
+        return "现有数据不足，暂不形成产品取舍"
+    if report.consumer_status == "invalid":
+        return "画像数据异常，暂不形成产品取舍"
+    role = report.first_screen.sku_role_cn.split("：", 1)[0].strip("。 ")
+    role = re.sub(r"^本品更适合继续承担", "", role)
+    if role.endswith("角色"):
+        role = role[: -len("角色")]
+    price = report.first_screen.price_support_cn
+    if "有用户价值支撑" in price:
+        price_state = "当前价格有价值支撑"
+    elif "支撑存在压力" in price:
+        price_state = "当前价格支撑承压"
+    else:
+        price_state = "当前价格支撑待判断"
+    return _compress(f"{role or 'SKU角色待明确'}｜{price_state}", 80)
+
+
+def _sellpoint_card_metric_columns(
+    report: StoredSellpointValuePmReport,
+) -> dict[str, Any]:
+    retained = _investment_names(report, "retain")
+    unconverted = _investment_names(report, "unconverted")
+    market_rows = _market_value_rows(report.value_accounts)
+    metrics = [
+        (
+            "已形成用户价值",
+            f"{len(retained)} 项卖点",
+            _name_summary(retained, empty="当前未确认"),
+        ),
+        (
+            "量价支撑",
+            f"{len(market_rows)} 组组合",
+            _market_range_text(market_rows),
+        ),
+        (
+            "待修复价值",
+            f"{len(unconverted)} 项卖点",
+            _name_summary(unconverted, empty="当前没有"),
+        ),
+    ]
+    return _card_column_set(
+        [
+            _card_column(
+                f"**{label}**\n\n**{value}**\n\n{note}",
+                weight=1,
+            )
+            for label, value, note in metrics
+        ]
+    )
+
+
+def _sellpoint_card_value_groups(
+    report: StoredSellpointValuePmReport,
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[StoredPmValueAccountRow]] = {}
+    for row in report.value_accounts:
+        grouped.setdefault(row.battlefield_name_cn, []).append(row)
+    result = []
+    for battlefield_name, rows in grouped.items():
+        sellpoints = _unique(
+            item
+            for row in rows
+            for item in (
+                row.core_sellpoints_cn
+                or [
+                    action.split("：", 1)[0]
+                    for action in row.investment_actions_cn
+                    if action
+                ]
+            )
+        )
+        market_rows = _market_value_rows(rows)
+        result.append(
+            {
+                "battlefield_name_cn": battlefield_name,
+                "sellpoints": sellpoints,
+                "perceived_outcome_cn": _business_perceived_outcome(
+                    rows[0].perceived_outcome_cn
+                ),
+                "market_count": len(market_rows),
+                "market_range_cn": _market_range_text(market_rows),
+                "has_market_result": bool(market_rows),
+            }
+        )
+    return sorted(
+        result,
+        key=lambda item: (
+            not bool(item["has_market_result"]),
+            -int(item["market_count"]),
+            str(item["battlefield_name_cn"]),
+        ),
+    )
+
+
+def _sellpoint_card_value_group_markdown(group: dict[str, Any]) -> str:
+    market_conclusion = (
+        f"{group['market_count']} 组组合对照均形成支撑：{group['market_range_cn']}"
+        if group["has_market_result"]
+        else "尚未形成可用的量价结果，先修复体验兑现。"
+    )
+    return "\n".join(
+        (
+            f"**{group['battlefield_name_cn']}**",
+            "非基础卖点组合："
+            + ("、".join(group["sellpoints"]) or "当前未形成可主推的非基础卖点组合"),
+            f"用户获得的价值：{group['perceived_outcome_cn']}",
+            f"市场兑现：{market_conclusion}",
+        )
+    )
+
+
+def _sellpoint_card_action_columns(
+    report: StoredSellpointValuePmReport,
+) -> dict[str, Any]:
+    retained = _investment_names(report, "retain")
+    unconverted = _investment_names(report, "unconverted")
+    return _card_column_set(
+        [
+            _card_column(
+                "\n".join(
+                    [
+                        "**下一代继续投入**",
+                        *(
+                            f"- {item}"
+                            for item in (retained or ["当前未确认继续投入项"])
+                        ),
+                    ]
+                ),
+                weight=1,
+            ),
+            _card_column(
+                "\n".join(
+                    [
+                        "**先修复，再谈加码**",
+                        *(
+                            f"- {item}"
+                            for item in (unconverted or ["当前没有待修复项"])
+                        ),
+                    ]
+                ),
+                weight=1,
+            ),
+        ]
+    )
+
+
+def _investment_names(
+    report: StoredSellpointValuePmReport,
+    action_code: str,
+) -> list[str]:
+    return _unique(
+        row.capability_name_cn
+        for row in report.investment_decisions
+        if row.action_code == action_code
+    )
+
+
+def _market_value_rows(
+    rows: Sequence[StoredPmValueAccountRow],
+) -> list[StoredPmValueAccountRow]:
+    return [
+        row
+        for row in rows
+        if re.search(r"高[0-9.]+元", row.price_performance_cn)
+        and re.search(r"高[0-9.]+台", row.volume_performance_cn)
+    ]
+
+
+def _market_range_text(rows: Sequence[StoredPmValueAccountRow]) -> str:
+    prices = [
+        float(value)
+        for row in rows
+        for value in re.findall(r"高([0-9.]+)元", row.price_performance_cn)
+    ]
+    sales = [
+        float(value)
+        for row in rows
+        for value in re.findall(r"高([0-9.]+)台", row.volume_performance_cn)
+    ]
+    if not prices or not sales:
+        return "当前尚无可用量价结果"
+    return f"价高 {_number_range(prices)} 元｜量高 {_number_range(sales)} 台"
+
+
+def _number_range(values: Sequence[float]) -> str:
+    low = min(values)
+    high = max(values)
+    if abs(low - high) < 0.05:
+        return f"{low:.1f}"
+    return f"{low:.1f}–{high:.1f}"
+
+
+def _name_summary(values: Sequence[str], *, empty: str) -> str:
+    if not values:
+        return empty
+    summary = "、".join(values[:3])
+    return f"{summary}等" if len(values) > 3 else summary
+
+
+def _business_perceived_outcome(value: str) -> str:
+    result = _sanitize(value)
+    for prefix in (
+        "用户购后反馈只部分支持：",
+        "当前用户购后反馈尚未观察到：",
+    ):
+        if result.startswith(prefix):
+            result = result[len(prefix) :]
+            if "尚未观察到" in prefix:
+                result = f"尚未形成稳定感知：{result}"
+            break
+    return result
+
+
+def _card_markdown(content: str) -> dict[str, Any]:
+    return {"tag": "markdown", "content": _sanitize(content)}
+
+
+def _card_column_set(columns: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "tag": "column_set",
+        "flex_mode": "none",
+        "background_style": "default",
+        "columns": columns,
+    }
+
+
+def _card_column(content: str, *, weight: int) -> dict[str, Any]:
+    return {
+        "tag": "column",
+        "width": "weighted",
+        "weight": weight,
+        "vertical_align": "top",
+        "elements": [_card_markdown(content)],
     }
 
 

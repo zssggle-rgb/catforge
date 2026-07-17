@@ -365,11 +365,25 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert set(card) == {"schema", "config", "header", "body"}
     assert card["schema"] == "2.0"
     assert card["config"] == {
-        "summary": {"content": "海信 65E7Q 用户卖点价值分析"},
+        "summary": {"content": "海信 65E7Q 用户卖点价值看板"},
         "width_mode": "fill",
         "update_multi": True,
     }
-    report_button = card["body"]["elements"][1]
+    assert card["header"]["template"] == "turquoise"
+    assert card["header"]["title"]["content"] == "海信 65E7Q 用户卖点价值看板"
+    assert card["header"]["subtitle"]["content"]
+    card_text = str(card["body"])
+    assert "已形成用户价值" in card_text
+    assert "量价支撑" in card_text
+    assert "待修复价值" in card_text
+    assert "卖点如何形成用户价值" in card_text
+    assert "非基础卖点组合" in card_text
+    assert "产品经理现在怎么做" in card_text
+    report_button = next(
+        element
+        for element in card["body"]["elements"]
+        if element.get("tag") == "button"
+    )
     assert report_button == {
         "tag": "button",
         "element_id": "sellpoint_value_link_1",
@@ -429,7 +443,7 @@ def test_preview_report_and_qa_consume_one_saved_hash_without_upstream(
     assert source.profile_version not in visible_outputs
     assert readback.profile.result_hash not in visible_outputs
     assert source.candidate_pools.result_hash not in visible_outputs
-    assert "**SKU角色**" in visible_outputs
+    assert "**总判断**" in visible_outputs
     assert handlers.call_count == 0
 
 
