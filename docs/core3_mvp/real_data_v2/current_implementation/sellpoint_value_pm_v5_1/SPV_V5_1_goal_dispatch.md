@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.1 串行 Goal 调度
 
-状态：SPV51-G01—G07 completed；SPV51-G08 pending
+状态：SPV51-G01—G08 completed；SPV51-G09 pending
 
 日期：2026-07-17
 
@@ -109,6 +109,8 @@ formal 只读 agent snapshot v2 current published；preview 显式锁版本；�
 ### SPV51-G08 直接量价与参数组
 
 允许 single/small/group 三种证据强度；周均量价直接比较；参数任意不同取值分组。测试 1、2、5 个对照、缺价格/销量行和 HDMI 2.1 基础功能样例。
+
+完成状态：completed；关闭回执：`SPV51_G08_closure_receipt.md`。
 
 ### SPV51-G09 增强量化
 

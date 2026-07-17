@@ -80,6 +80,23 @@ class CandidateSourceType(str, Enum):
     MARKET_REFERENCE = "market_reference"
 
 
+class MarketObservationSourceType(str, Enum):
+    TARGET = "target"
+    COMPETITOR = "competitor"
+    MARKET_REFERENCE = "market_reference"
+
+
+class MarketMetricCode(str, Enum):
+    PRICE = "price"
+    WEEKLY_SALES = "weekly_sales"
+
+
+class MarketComparisonDirection(str, Enum):
+    TARGET_HIGHER = "target_higher"
+    TARGET_LOWER = "target_lower"
+    EQUAL = "equal"
+
+
 class AnalysisReferencePurpose(str, Enum):
     SAME_SIZE_MARKET = "same_size_market"
     SAME_BUDGET_MARKET = "same_budget_market"
@@ -493,6 +510,391 @@ class DirectMarketGap(SellpointValueProfileBaseModel):
         return self
 
 
+class MarketComparatorObservation(SellpointValueProfileBaseModel):
+    category_code: Literal["TV", "AC"]
+    candidate_use: QuestionCandidateUse
+    market: CompetitorProfileSkuMarketFacts
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_observation(self) -> "MarketComparatorObservation":
+        if self.market.product_category != self.category_code:
+            raise ValueError("market comparator must stay within category")
+        if self.market.sku_code != self.candidate_use.candidate_sku_code:
+            raise ValueError("market comparator facts must match candidate use")
+        return self
+
+
+class DirectMarketComparisonInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    method: Literal[
+        "same_claim_different_realization",
+        "direct_comparable",
+        "same_budget_pool",
+        "same_brand_size_ladder",
+        "parameter_configuration",
+    ] = "direct_comparable"
+    target_market: CompetitorProfileSkuMarketFacts
+    comparators: list[MarketComparatorObservation] = Field(default_factory=list)
+    target_evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "DirectMarketComparisonInput":
+        if (
+            self.target_market.sku_code != self.target_sku_code
+            or self.target_market.product_category != self.category_code
+        ):
+            raise ValueError("direct market target facts must match input scope")
+        identities = [
+            (
+                row.candidate_use.source_type,
+                row.candidate_use.candidate_sku_code,
+            )
+            for row in self.comparators
+        ]
+        if len(identities) != len(set(identities)):
+            raise ValueError("market comparator identities must be unique")
+        if any(row.category_code != self.category_code for row in self.comparators):
+            raise ValueError("direct market comparators must stay within category")
+        if any(row.market.sku_code == self.target_sku_code for row in self.comparators):
+            raise ValueError("direct market comparator cannot be the target")
+        return self
+
+
+class MetricCandidateDisposition(SellpointValueProfileBaseModel):
+    candidate_sku_code: str = Field(min_length=1)
+    source_type: CandidateSourceType
+    used_metrics: list[MarketMetricCode] = Field(default_factory=list)
+    skipped_metrics: list[MarketMetricCode] = Field(default_factory=list)
+    skip_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_disposition(self) -> "MetricCandidateDisposition":
+        used = [row.value for row in self.used_metrics]
+        skipped = [row.value for row in self.skipped_metrics]
+        if used != sorted(set(used)) or skipped != sorted(set(skipped)):
+            raise ValueError("metric disposition lists must be sorted and unique")
+        if set(used) & set(skipped):
+            raise ValueError("a candidate metric cannot be used and skipped")
+        if self.skip_reasons != sorted(set(self.skip_reasons)):
+            raise ValueError("metric skip reasons must be sorted and unique")
+        return self
+
+
+class MarketMetricComparison(SellpointValueProfileBaseModel):
+    metric: MarketMetricCode
+    strength: QuestionConclusionStrength
+    target_value: Decimal = Field(ge=0)
+    comparator_average: Decimal = Field(ge=0)
+    comparator_sku_codes: list[str] = Field(min_length=1)
+    comparator_count: int = Field(ge=1)
+    gap_abs: Decimal
+    gap_pct: Decimal | None = None
+    direction: MarketComparisonDirection
+
+    @model_validator(mode="after")
+    def validate_metric(self) -> "MarketMetricComparison":
+        if self.comparator_sku_codes != sorted(set(self.comparator_sku_codes)):
+            raise ValueError("metric comparator SKU codes must be sorted and unique")
+        if self.comparator_count != len(self.comparator_sku_codes):
+            raise ValueError("metric comparator count must match SKU codes")
+        expected_strength = (
+            QuestionConclusionStrength.SINGLE
+            if self.comparator_count == 1
+            else QuestionConclusionStrength.SMALL_GROUP
+            if self.comparator_count <= 4
+            else QuestionConclusionStrength.GROUP
+        )
+        if self.strength != expected_strength:
+            raise ValueError("market metric strength must match comparator count")
+        if self.gap_abs != self.target_value - self.comparator_average:
+            raise ValueError("metric gap must equal target minus comparator average")
+        expected_direction = (
+            MarketComparisonDirection.TARGET_HIGHER
+            if self.gap_abs > 0
+            else MarketComparisonDirection.TARGET_LOWER
+            if self.gap_abs < 0
+            else MarketComparisonDirection.EQUAL
+        )
+        if self.direction != expected_direction:
+            raise ValueError("metric direction must match the calculated gap")
+        if self.comparator_average == 0 and self.gap_pct is not None:
+            raise ValueError("zero comparator average has no percentage gap")
+        if self.comparator_average > 0 and self.gap_pct is None:
+            raise ValueError("positive comparator average requires percentage gap")
+        return self
+
+
+class DirectMarketComparisonResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    method: str = Field(min_length=1)
+    status: QuestionConclusionStatus
+    strength: QuestionConclusionStrength
+    used_comparator_sku_codes: list[str] = Field(default_factory=list)
+    comparator_count: int = Field(ge=0)
+    price_comparison: MarketMetricComparison | None = None
+    sales_comparison: MarketMetricComparison | None = None
+    candidate_dispositions: list[MetricCandidateDisposition] = Field(
+        default_factory=list
+    )
+    business_conclusion_cn: str = Field(min_length=1)
+    causal_claim: Literal[False] = False
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "DirectMarketComparisonResult":
+        codes = self.used_comparator_sku_codes
+        if codes != sorted(set(codes)) or self.comparator_count != len(codes):
+            raise ValueError(
+                "direct market used comparators must be unique and counted"
+            )
+        comparisons = [
+            row
+            for row in (self.price_comparison, self.sales_comparison)
+            if row is not None
+        ]
+        strength_rank = {
+            QuestionConclusionStrength.SINGLE: 1,
+            QuestionConclusionStrength.SMALL_GROUP: 2,
+            QuestionConclusionStrength.GROUP: 3,
+        }
+        expected_strength = (
+            min(comparisons, key=lambda row: strength_rank[row.strength]).strength
+            if comparisons
+            else QuestionConclusionStrength.NONE
+        )
+        if self.strength != expected_strength:
+            raise ValueError("direct market strength must match its weakest metric")
+        available_count = sum(
+            row is not None for row in (self.price_comparison, self.sales_comparison)
+        )
+        expected_status = (
+            QuestionConclusionStatus.NO_CONCLUSION
+            if available_count == 0
+            else QuestionConclusionStatus.CONCLUSION_AVAILABLE
+            if available_count == 2
+            else QuestionConclusionStatus.PARTIAL_CONCLUSION
+        )
+        if self.status != expected_status:
+            raise ValueError("direct market status must match available metrics")
+        if self.review_required or self.review_reasons:
+            raise ValueError("missing direct market metrics do not require review")
+        dispositions = [
+            (row.candidate_sku_code, row.source_type.value)
+            for row in self.candidate_dispositions
+        ]
+        if dispositions != sorted(set(dispositions)):
+            raise ValueError("direct market dispositions must be sorted and unique")
+        return self
+
+
+class ParameterValueObservation(SellpointValueProfileBaseModel):
+    category_code: Literal["TV", "AC"]
+    sku_code: str = Field(min_length=1)
+    source_type: MarketObservationSourceType
+    normalized_value: str | None = None
+    weighted_price: Decimal | None = Field(default=None, ge=0)
+    avg_weekly_sales_volume: Decimal | None = Field(default=None, ge=0)
+    candidate_use: QuestionCandidateUse | None = None
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_observation(self) -> "ParameterValueObservation":
+        if self.normalized_value is not None and not self.normalized_value.strip():
+            raise ValueError("normalized parameter value cannot be blank")
+        if self.source_type == MarketObservationSourceType.TARGET:
+            if self.candidate_use is not None:
+                raise ValueError(
+                    "target parameter observation cannot carry candidate use"
+                )
+        else:
+            if self.candidate_use is None:
+                raise ValueError(
+                    "candidate parameter observation requires candidate use"
+                )
+            if (
+                self.candidate_use.candidate_sku_code != self.sku_code
+                or self.candidate_use.source_type.value != self.source_type.value
+            ):
+                raise ValueError("parameter observation must match candidate use")
+        return self
+
+
+class ParameterGroupComparisonInput(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    parameter_code: str = Field(min_length=1)
+    parameter_name_cn: str = Field(min_length=1)
+    unit: str | None = None
+    target: ParameterValueObservation
+    comparators: list[ParameterValueObservation] = Field(default_factory=list)
+    exclude_from_core_sellpoints: bool = False
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ParameterGroupComparisonInput":
+        if (
+            self.target.source_type != MarketObservationSourceType.TARGET
+            or self.target.sku_code != self.target_sku_code
+            or self.target.category_code != self.category_code
+        ):
+            raise ValueError("parameter target observation must match input scope")
+        identities = [(row.source_type, row.sku_code) for row in self.comparators]
+        if len(identities) != len(set(identities)):
+            raise ValueError("parameter comparator identities must be unique")
+        if any(
+            row.source_type == MarketObservationSourceType.TARGET
+            for row in self.comparators
+        ):
+            raise ValueError("parameter comparators cannot use target identity")
+        if any(row.category_code != self.category_code for row in self.comparators):
+            raise ValueError("parameter comparators must stay within category")
+        if any(row.sku_code == self.target_sku_code for row in self.comparators):
+            raise ValueError("parameter comparator cannot be the target")
+        return self
+
+
+class ParameterCandidateDisposition(SellpointValueProfileBaseModel):
+    candidate_sku_code: str = Field(min_length=1)
+    source_type: CandidateSourceType
+    used: bool
+    skip_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_disposition(self) -> "ParameterCandidateDisposition":
+        if self.skip_reasons != sorted(set(self.skip_reasons)):
+            raise ValueError("parameter skip reasons must be sorted and unique")
+        if (self.used and self.skip_reasons) or (
+            not self.used and not self.skip_reasons
+        ):
+            raise ValueError("used parameter rows cannot have skip reasons")
+        return self
+
+
+class ParameterValueGroup(SellpointValueProfileBaseModel):
+    normalized_value: str = Field(min_length=1)
+    is_target_group: bool
+    sku_codes: list[str] = Field(min_length=1)
+    sku_count: int = Field(ge=1)
+    price_sku_codes: list[str] = Field(default_factory=list)
+    average_price: Decimal | None = Field(default=None, ge=0)
+    sales_sku_codes: list[str] = Field(default_factory=list)
+    average_weekly_sales: Decimal | None = Field(default=None, ge=0)
+    price_gap_to_target_group: Decimal | None = None
+    price_gap_pct_to_target_group: Decimal | None = None
+    sales_gap_to_target_group: Decimal | None = None
+    sales_gap_pct_to_target_group: Decimal | None = None
+
+    @model_validator(mode="after")
+    def validate_group(self) -> "ParameterValueGroup":
+        if self.sku_codes != sorted(set(self.sku_codes)) or self.sku_count != len(
+            self.sku_codes
+        ):
+            raise ValueError("parameter group SKU codes must be unique and counted")
+        for codes, average, label in (
+            (self.price_sku_codes, self.average_price, "price"),
+            (self.sales_sku_codes, self.average_weekly_sales, "sales"),
+        ):
+            if codes != sorted(set(codes)) or not set(codes).issubset(self.sku_codes):
+                raise ValueError(f"parameter group {label} SKU codes are invalid")
+            if bool(codes) != (average is not None):
+                raise ValueError(
+                    f"parameter group {label} average must match SKU codes"
+                )
+        return self
+
+
+class ParameterGroupComparisonResult(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    target_sku_code: str = Field(min_length=1)
+    value_bundle_code: str = Field(min_length=1)
+    parameter_code: str = Field(min_length=1)
+    parameter_name_cn: str = Field(min_length=1)
+    unit: str | None = None
+    target_value: str | None = None
+    status: QuestionConclusionStatus
+    strength: QuestionConclusionStrength
+    distinct_values: list[str] = Field(default_factory=list)
+    different_value_comparator_count: int = Field(ge=0)
+    groups: list[ParameterValueGroup] = Field(default_factory=list)
+    candidate_dispositions: list[ParameterCandidateDisposition] = Field(
+        default_factory=list
+    )
+    core_highlight_eligible: bool
+    business_conclusion_cn: str = Field(min_length=1)
+    causal_claim: Literal[False] = False
+    limitations: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    review_reasons: list[str] = Field(default_factory=list)
+    evidence_refs: list[SellpointValueEvidenceRef] = Field(default_factory=list)
+    result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "ParameterGroupComparisonResult":
+        if self.distinct_values != sorted(set(self.distinct_values)):
+            raise ValueError("parameter distinct values must be sorted and unique")
+        group_values = [row.normalized_value for row in self.groups]
+        if len(group_values) != len(set(group_values)) or set(group_values) != set(
+            self.distinct_values
+        ):
+            raise ValueError("parameter groups must match distinct values")
+        target_groups = [row for row in self.groups if row.is_target_group]
+        if self.target_value is None:
+            if target_groups or self.status != QuestionConclusionStatus.NO_CONCLUSION:
+                raise ValueError(
+                    "missing target parameter value cannot form a conclusion"
+                )
+        elif (
+            len(target_groups) != 1
+            or target_groups[0].normalized_value != self.target_value
+        ):
+            raise ValueError("parameter result requires exactly one target value group")
+        expected_strength = (
+            QuestionConclusionStrength.NONE
+            if self.different_value_comparator_count == 0
+            else QuestionConclusionStrength.DIRECTIONAL
+            if self.different_value_comparator_count == 1
+            else QuestionConclusionStrength.SMALL_GROUP
+            if self.different_value_comparator_count <= 4
+            else QuestionConclusionStrength.GROUP
+        )
+        if self.strength != expected_strength:
+            raise ValueError(
+                "parameter strength must match different-value sample size"
+            )
+        if self.different_value_comparator_count == 0:
+            if self.status != QuestionConclusionStatus.NO_CONCLUSION:
+                raise ValueError(
+                    "parameter comparison requires a different value group"
+                )
+        elif self.status not in {
+            QuestionConclusionStatus.CONCLUSION_AVAILABLE,
+            QuestionConclusionStatus.PARTIAL_CONCLUSION,
+        }:
+            raise ValueError("different parameter values must form a usable conclusion")
+        if self.review_required or self.review_reasons:
+            raise ValueError("missing parameter evidence does not require review")
+        dispositions = [
+            (row.candidate_sku_code, row.source_type.value)
+            for row in self.candidate_dispositions
+        ]
+        if dispositions != sorted(set(dispositions)):
+            raise ValueError("parameter dispositions must be sorted and unique")
+        return self
+
+
 class QuantificationResult(SellpointValueProfileBaseModel):
     layer: QuantificationLayer
     method: str = Field(min_length=1)
@@ -821,10 +1223,23 @@ __all__ = [
     "CapabilityInvestmentQuestionInput",
     "CompetitorProfileCandidateRef",
     "ConclusionDistribution",
+    "DirectMarketComparisonInput",
+    "DirectMarketComparisonResult",
     "DirectMarketGap",
     "InvestmentQuestionCode",
     "InvestmentScopeReview",
     "LocalCapabilityInvestmentDecision",
+    "MarketComparatorObservation",
+    "MarketComparisonDirection",
+    "MarketMetricCode",
+    "MarketMetricComparison",
+    "MarketObservationSourceType",
+    "MetricCandidateDisposition",
+    "ParameterCandidateDisposition",
+    "ParameterGroupComparisonInput",
+    "ParameterGroupComparisonResult",
+    "ParameterValueGroup",
+    "ParameterValueObservation",
     "ProfileReleaseAssessment",
     "QuantificationLayer",
     "QuantificationResult",
