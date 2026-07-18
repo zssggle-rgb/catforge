@@ -489,16 +489,16 @@ def _group_v5_2_sellpoint_rows(
     for row in rows:
         grouped[(row.source_claim_key, row.raw_claim_text)].append(row)
     result = []
-    classification_order = (
-        "core_sellpoint",
-        "user_unrecognized_sellpoint",
-        "basic_sellpoint",
-        "pending_sellpoint",
-    )
     for (source_claim_key, raw_claim_text), members in sorted(grouped.items()):
-        classification = min(
-            (row.classification_code for row in members),
-            key=classification_order.index,
+        member_classes = {row.classification_code for row in members}
+        classification = (
+            "core_sellpoint"
+            if "core_sellpoint" in member_classes
+            else "user_unrecognized_sellpoint"
+            if "user_unrecognized_sellpoint" in member_classes
+            else "basic_sellpoint"
+            if member_classes == {"basic_sellpoint"}
+            else "pending_sellpoint"
         )
         quotes = _unique(
             [
@@ -577,7 +577,7 @@ def _v5_2_source_excerpt_cn(raw_claim_text: str) -> str:
     ]
     if clauses:
         value = value[: min(clauses)]
-    return _compress(value, 42)
+    return value[:60].strip()
 
 
 def _v5_2_user_value_cn(value: str) -> str:
@@ -715,7 +715,7 @@ def _v5_2_sellpoint_action_cn(
     sellpoint_name: str,
     user_values: Sequence[str],
 ) -> str:
-    value = "、".join(user_values)
+    value = _join_user_values_cn(user_values)
     if classification == "core_sellpoint":
         return (
             f"继续主推“{sellpoint_name}”"
@@ -1154,7 +1154,7 @@ def _render_v5_2_markdown(
                 *(
                     f"| {_v5_2_source_claim_cn(row)} | "
                     f"{'、'.join(row.supporting_parameters_cn) or '未关联具体参数'} | "
-                    f"{'、'.join(row.user_values_cn) or '尚未形成稳定用户价值'} | "
+                    f"{_join_user_values_cn(row.user_values_cn) or '尚未形成稳定用户价值'} | "
                     f"{row.market_performance_cn or '尚无可用量价承接'} |"
                     for row in report.sellpoint_rows
                 ),
@@ -1245,7 +1245,7 @@ def _render_v5_2_markdown(
                 "| --- | --- | --- |",
                 *(
                     f"| {_v5_2_source_claim_cn(row)} | {row.product_action_cn} | "
-                    f"{'、'.join(row.user_values_cn) or row.current_user_recognition_cn} |"
+                    f"{_join_user_values_cn(row.user_values_cn) or row.current_user_recognition_cn} |"
                     for row in action_rows
                 ),
                 "",
@@ -1324,7 +1324,9 @@ def _render_v5_2_feishu_card(
                                     (
                                         "用户价值："
                                         + (
-                                            "、".join(row.user_values_cn)
+                                            _join_user_values_cn(
+                                                row.user_values_cn
+                                            )
                                             if row.user_values_cn
                                             else "尚未形成稳定用户价值"
                                         )
@@ -1406,12 +1408,52 @@ def _v5_2_user_value_answer_cn(report: StoredSellpointValuePmReport) -> str:
             if report.sellpoint_rows
             else "本品宣传材料中没有读取到可追溯的产品原始卖点。"
         )
-    statements = [
-        f"“{_v5_2_sellpoint_label(row)}”让用户获得"
-        f"“{'、'.join(row.user_values_cn)}”"
-        for row in rows[:4]
-    ]
-    return "；".join(statements) + "。"
+    realized: dict[str, list[str]] = defaultdict(list)
+    unrecognized: dict[str, list[str]] = defaultdict(list)
+    for row in rows:
+        target = (
+            unrecognized
+            if row.classification_code == "user_unrecognized_sellpoint"
+            else realized
+        )
+        for value in row.user_values_cn:
+            target[value].append(_v5_2_sellpoint_label(row))
+    parts = []
+    if realized:
+        parts.append(
+            "用户已经感知到："
+            + "；".join(
+                f"{_trim_cn_period(value)}（对应{_v5_2_name_examples(names)}）"
+                for value, names in list(realized.items())[:4]
+            )
+        )
+    if unrecognized:
+        parts.append(
+            "尚未形成稳定认知："
+            + "；".join(
+                f"{_trim_cn_period(value)}（对应{_v5_2_name_examples(names)}）"
+                for value, names in list(unrecognized.items())[:3]
+            )
+        )
+    return "。".join(parts) + "。"
+
+
+def _v5_2_name_examples(names: Sequence[str]) -> str:
+    unique = _unique(names)
+    shown = "、".join(unique[:2])
+    return f"{shown}等{len(unique)}项卖点" if len(unique) > 2 else shown
+
+
+def _trim_cn_period(value: str) -> str:
+    return value.rstrip("。；，、 ")
+
+
+def _join_user_values_cn(values: Sequence[str]) -> str:
+    return "；".join(
+        _trim_cn_period(value)
+        for value in values
+        if _trim_cn_period(value)
+    )
 
 
 def _v5_2_classification_summary_cn(

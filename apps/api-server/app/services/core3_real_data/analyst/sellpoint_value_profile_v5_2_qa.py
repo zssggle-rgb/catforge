@@ -204,12 +204,8 @@ def _answer_topic(
                 [],
                 True,
             )
-        direct = "；".join(
-            f"“{_sellpoint_name(row)}”让用户获得“{'、'.join(row.user_values_cn)}”"
-            for row in rows
-        )
         return (
-            direct + "。",
+            _user_sellpoint_value_answer_cn(rows),
             "优先按核心卖点、基础卖点和用户未认知卖点的动作分别修改材料。",
             rows,
             [],
@@ -370,6 +366,45 @@ def _parameter_classification_answer_cn(
         suffix = f"等{len(names)}项" if len(names) > 5 else ""
         parts.append(f"{classification}：{shown}{suffix}")
     return "；".join(parts) + "。"
+
+
+def _user_sellpoint_value_answer_cn(
+    rows: list[StoredPmSellpointRow],
+) -> str:
+    realized: dict[str, list[str]] = {}
+    unrecognized: dict[str, list[str]] = {}
+    for row in rows:
+        target = (
+            unrecognized
+            if row.classification_code == "user_unrecognized_sellpoint"
+            else realized
+        )
+        for value in row.user_values_cn:
+            target.setdefault(value, []).append(_sellpoint_name(row))
+    parts = []
+    if realized:
+        parts.append(
+            "用户已经感知到："
+            + "；".join(
+                f"{value.rstrip('。；，、 ')}（对应{_name_examples(names)}）"
+                for value, names in list(realized.items())[:4]
+            )
+        )
+    if unrecognized:
+        parts.append(
+            "尚未形成稳定认知："
+            + "；".join(
+                f"{value.rstrip('。；，、 ')}（对应{_name_examples(names)}）"
+                for value, names in list(unrecognized.items())[:3]
+            )
+        )
+    return "。".join(parts) + "。"
+
+
+def _name_examples(names: list[str]) -> str:
+    unique = list(dict.fromkeys(names))
+    shown = "、".join(unique[:2])
+    return f"{shown}等{len(unique)}项卖点" if len(unique) > 2 else shown
 
 
 def _parameter_evidence_ids(
