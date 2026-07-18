@@ -172,7 +172,7 @@ def test_v5_2_report_uses_only_saved_source_sellpoints(
     assert "tv_bright_room_dark_detail" not in markdown
     assert "1920分区控光" not in markdown
     assert "产品原始卖点" in markdown
-    assert "用户感知价值" in markdown
+    assert "用户卖点价值" in markdown
     assert "支撑参数" in markdown
 
 
@@ -244,24 +244,56 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
 
     for index, title in enumerate(
         (
-            "本品的用户卖点价值是什么",
-            "卖点怎么分类和处理",
-            "参数在卖点中起什么作用",
-            "价格和销量怎么决策",
+            "这款 SKU 的用户卖点价值",
+            "卖点如何形成这些价值",
+            "市场是否为这些价值买单",
             "产品卖点修改建议",
         ),
         start=1,
     ):
         assert f"{index}. **{title}**" in markdown
-        assert f"## {'一二三四五'[index - 1]}、{title}" in markdown
+        assert f"## {'一二三四'[index - 1]}、{title}" in markdown
     assert "279元" in visible
     assert "62台" in visible
     assert "278.8606元" not in visible
     assert "61.916666台" not in visible
     assert card["schema"] == "2.0"
     assert card["header"]["template"] == "turquoise"
+    card_visible = json.dumps(card, ensure_ascii=False)
+    assert "本品已经形成1项用户卖点价值" in card_visible
+    assert "核心用户卖点价值" not in card_visible
+    assert "市场是否买单" in card_visible
     assert "产品卖点修改建议" in visible
     assert "下一代产品怎么定义" not in visible
+    assert "已经成立的用户价值" not in card_visible
+    assert "产品原始卖点 → 用户感知价值" not in card_visible
+    assert "参数判断" not in card_visible
+    assert "原文：" not in card_visible
+    assert len(card["body"]["elements"]) <= 5
+    presentation_report = report.model_copy(
+        update={
+            "first_screen": report.first_screen.model_copy(
+                update={
+                    "sku_role_cn": (
+                        "本品适合继续承担高端画质升级升级款角色：保持当前定位。"
+                    ),
+                    "price_support_cn": (
+                        "当前价格有用户价值支撑：本品价高279元、量高62台；"
+                        "该结果属于价值组合的市场表现，不拆给单项参数。"
+                    ),
+                }
+            )
+        }
+    )
+    presentation_card = render_stored_profile_feishu_card(
+        presentation_report,
+        title="海信 65E7Q 用户卖点价值分析",
+    )
+    assert "升级升级款" not in presentation_card["header"]["subtitle"]["content"]
+    assert "不拆给单项参数" not in json.dumps(
+        presentation_card,
+        ensure_ascii=False,
+    )
     for internal_term in (
         "画像",
         "result_hash",
