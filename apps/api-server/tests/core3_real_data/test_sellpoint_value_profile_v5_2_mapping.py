@@ -10,6 +10,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_mapping import (
     CompetitorSellpointObservation,
     build_layered_sellpoint_analysis,
+    match_source_sellpoint_value_bundle_codes,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_schemas import (
     CompetitorSellpointFindingType,
@@ -361,6 +362,26 @@ def test_competitor_opportunity_requires_a_source_sellpoint_and_three_signals() 
         result.competitor_sellpoint_findings[0].finding_type
         == CompetitorSellpointFindingType.SELLPOINT_OPPORTUNITY
     )
+
+
+def test_competitor_sellpoint_uses_same_deterministic_value_mapping() -> None:
+    competitor_claim = _source_fact(
+        claim_code="tv_claim_qd_miniled_display",
+        claim_name="量子点 MiniLED 显示",
+        raw_claim_text="量子点MiniLED带来更丰富的色彩层次。",
+        fact_id="competitor-color-claim",
+    )
+    color = _value(
+        definition_code="tv_color_picture_truth",
+        outcome="颜色更真实。",
+        decisions=[_decision("tv_color_picture_truth", "unconverted")],
+    )
+
+    assert match_source_sellpoint_value_bundle_codes(
+        category_code="TV",
+        source_sellpoint=competitor_claim,
+        values=[color],
+    ) == ["bundle-tv_color_picture_truth"]
 
 
 def test_ac_claim_maps_only_to_ac_user_value_definition() -> None:

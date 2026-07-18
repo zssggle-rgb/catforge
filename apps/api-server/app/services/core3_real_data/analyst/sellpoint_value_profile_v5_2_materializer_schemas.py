@@ -38,6 +38,7 @@ class SellpointValueV52SourceHashes(SellpointValueProfileBaseModel):
     user_value_result_hashes: list[str] = Field(default_factory=list)
     competitor_profile_result_hash: str = Field(min_length=1)
     competitor_sku_result_hash: str = Field(min_length=1)
+    competitor_sellpoint_result_hash: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_hashes(self) -> "SellpointValueV52SourceHashes":

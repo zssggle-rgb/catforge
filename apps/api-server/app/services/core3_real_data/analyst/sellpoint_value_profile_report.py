@@ -122,6 +122,17 @@ class StoredPmParameterRow(SellpointValueProfileBaseModel):
     business_reason_cn: str = Field(min_length=1)
 
 
+class StoredPmCompetitorSellpointRow(SellpointValueProfileBaseModel):
+    candidate_sku_code: str = Field(min_length=1)
+    candidate_name_cn: str = Field(min_length=1)
+    sellpoint_name_cn: str = Field(min_length=1)
+    finding_type_code: str = Field(min_length=1)
+    finding_type_cn: str = Field(min_length=1)
+    linked_user_values_cn: list[str] = Field(default_factory=list)
+    business_reason_cn: str = Field(min_length=1)
+    product_action_cn: str = Field(min_length=1)
+
+
 class StoredSellpointValuePmReport(SellpointValueProfileBaseModel):
     schema_version: str = "sku_sellpoint_value_pm_report_v1"
     target: dict[str, Any]
@@ -147,6 +158,9 @@ class StoredSellpointValuePmReport(SellpointValueProfileBaseModel):
     reference_count: int = Field(ge=0)
     sellpoint_rows: list[StoredPmSellpointRow] = Field(default_factory=list)
     parameter_rows: list[StoredPmParameterRow] = Field(default_factory=list)
+    competitor_sellpoint_rows: list[StoredPmCompetitorSellpointRow] = Field(
+        default_factory=list
+    )
     limitations: list[str] = Field(default_factory=list)
 
 
@@ -330,10 +344,16 @@ def build_v5_2_stored_profile_pm_report(
     )
     sellpoints = _v5_2_sellpoint_rows(readback, base_report.value_accounts)
     parameters = _v5_2_parameter_rows(readback)
+    competitor_sellpoints = _v5_2_competitor_sellpoint_rows(
+        readback,
+        candidates=base_report.full_candidates,
+        value_accounts=base_report.value_accounts,
+    )
     first_screen = _v5_2_first_screen(
         base_report.first_screen,
         sellpoints=sellpoints,
         parameters=parameters,
+        competitor_sellpoints=competitor_sellpoints,
         value_accounts=base_report.value_accounts,
     )
     sanitized_values = [
@@ -349,6 +369,7 @@ def build_v5_2_stored_profile_pm_report(
             "investment_decisions": [],
             "sellpoint_rows": sellpoints,
             "parameter_rows": parameters,
+            "competitor_sellpoint_rows": competitor_sellpoints,
             "limitations": list(
                 dict.fromkeys(
                     [
@@ -646,11 +667,74 @@ def _v5_2_parameter_rows(
     )
 
 
+def _v5_2_competitor_sellpoint_rows(
+    readback: SellpointValueV52Readback,
+    *,
+    candidates: Sequence[StoredPmCandidateRow],
+    value_accounts: Sequence[StoredPmValueAccountRow],
+) -> list[StoredPmCompetitorSellpointRow]:
+    candidate_names = {
+        row.candidate_sku_code: row.candidate_name_cn
+        for row in candidates
+        if row.pool_type == "competitor"
+    }
+    values = {row.value_bundle_code: row for row in value_accounts}
+    rows = []
+    for finding in (
+        readback.profile.layered_sellpoint_analysis.competitor_sellpoint_findings
+    ):
+        finding_type = _enum_text(finding.finding_type)
+        sellpoint_name = finding.normalized_claim_name_cn
+        opportunity = finding_type == "sellpoint_opportunity"
+        rows.append(
+            StoredPmCompetitorSellpointRow(
+                candidate_sku_code=finding.candidate_sku_code,
+                candidate_name_cn=candidate_names.get(
+                    finding.candidate_sku_code,
+                    finding.candidate_sku_code,
+                ),
+                sellpoint_name_cn=sellpoint_name,
+                finding_type_code=finding_type,
+                finding_type_cn=(
+                    "可借鉴的竞品卖点"
+                    if opportunity
+                    else "无需跟进的竞品卖点"
+                ),
+                linked_user_values_cn=_unique(
+                    values[code].perceived_outcome_cn
+                    for code in finding.linked_value_bundle_codes
+                    if code in values
+                ),
+                business_reason_cn=(
+                    "该竞品卖点对应本品尚未充分满足的用户价值，"
+                    "且竞品在相关价值和市场表现上更有优势。"
+                    if opportunity
+                    else "竞品虽在宣传该卖点，但现有结果没有显示本品因此失去用户或市场表现。"
+                ),
+                product_action_cn=(
+                    f"核对本品能否兑现“{sellpoint_name}”对应体验；"
+                    "已经具备就补强宣传表达，尚未具备则进入产品改进评估。"
+                    if opportunity
+                    else f"不因竞品宣传“{sellpoint_name}”而新增同类卖点。"
+                ),
+            )
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            0 if row.finding_type_code == "sellpoint_opportunity" else 1,
+            row.candidate_name_cn,
+            row.sellpoint_name_cn,
+        ),
+    )
+
+
 def _v5_2_first_screen(
     base: StoredPmFirstScreen,
     *,
     sellpoints: Sequence[StoredPmSellpointRow],
     parameters: Sequence[StoredPmParameterRow],
+    competitor_sellpoints: Sequence[StoredPmCompetitorSellpointRow],
     value_accounts: Sequence[StoredPmValueAccountRow],
 ) -> StoredPmFirstScreen:
     core = _v5_2_sellpoint_names(sellpoints, "core_sellpoint")
@@ -680,18 +764,28 @@ def _v5_2_first_screen(
         unconverted = "当前没有识别出“已经宣传但用户尚未认知”的卖点。"
     competitor_parts = []
     opportunities = [
-        row.normalized_claim_name_cn
-        for row in sellpoints
-        if row.classification_code == "pending_sellpoint"
+        row.sellpoint_name_cn
+        for row in competitor_sellpoints
+        if row.finding_type_code == "sellpoint_opportunity"
+    ]
+    non_key_competitor_sellpoints = [
+        row.sellpoint_name_cn
+        for row in competitor_sellpoints
+        if row.finding_type_code == "non_key_competitor_sellpoint"
     ]
     if parameter_gaps:
         competitor_parts.append(f"优先处理参数短板：{'、'.join(parameter_gaps)}。")
     if opportunities:
         competitor_parts.append(
-            f"待确认卖点{'、'.join(opportunities)}不进入本轮主推清单。"
+            f"优先评估借鉴竞品卖点：{'、'.join(_unique(opportunities)[:4])}。"
+        )
+    elif non_key_competitor_sellpoints:
+        competitor_parts.append(
+            "以下竞品卖点目前不需要新增同类表达："
+            f"{'、'.join(_unique(non_key_competitor_sellpoints)[:4])}。"
         )
     if not competitor_parts:
-        competitor_parts.append("当前没有需要立即跟进的卖点或参数短板。")
+        competitor_parts.append("当前没有需要立即处理的竞品卖点或参数短板。")
     growth = _v5_2_growth_action_cn(
         price_support_cn=base.price_support_cn,
         core=core,
@@ -1251,6 +1345,21 @@ def _render_v5_2_markdown(
                 "",
             ]
         )
+    if report.competitor_sellpoint_rows:
+        lines.extend(
+            [
+                "### 竞品卖点取舍",
+                "",
+                "| 参照产品 | 竞品卖点 | 判断 | 本品动作 |",
+                "| --- | --- | --- | --- |",
+                *(
+                    f"| {row.candidate_name_cn} | {row.sellpoint_name_cn} | "
+                    f"{row.finding_type_cn} | {row.product_action_cn} |"
+                    for row in report.competitor_sellpoint_rows[:8]
+                ),
+                "",
+            ]
+        )
     lines.extend(
         [
             f"- **价格配合**：{_v5_2_price_action_cn(report)}",
@@ -1496,7 +1605,15 @@ def _v5_2_parameter_summary_cn(report: StoredSellpointValuePmReport) -> str:
 
 
 def _v5_2_action_summary_cn(report: StoredSellpointValuePmReport) -> str:
-    actions = [row.product_action_cn for row in report.sellpoint_rows]
+    opportunities = [
+        row.product_action_cn
+        for row in report.competitor_sellpoint_rows
+        if row.finding_type_code == "sellpoint_opportunity"
+    ]
+    actions = [
+        *opportunities,
+        *(row.product_action_cn for row in report.sellpoint_rows),
+    ]
     return (
         " ".join(actions[:3])
         if actions
@@ -1547,13 +1664,22 @@ def _v5_2_parameter_card_cn(report: StoredSellpointValuePmReport) -> str:
 
 
 def _v5_2_action_card_cn(report: StoredSellpointValuePmReport) -> str:
-    rows = report.sellpoint_rows[:4]
-    if not rows:
-        return "本轮不新增卖点表达，先保持现有材料。"
-    return "\n".join(
+    lines = [
         f"- **{_v5_2_sellpoint_label(row)}**：{row.product_action_cn}"
-        for row in rows
+        for row in report.sellpoint_rows[:3]
+    ]
+    opportunities = [
+        row
+        for row in report.competitor_sellpoint_rows
+        if row.finding_type_code == "sellpoint_opportunity"
+    ]
+    lines.extend(
+        f"- **可借鉴｜{row.sellpoint_name_cn}**：{row.product_action_cn}"
+        for row in opportunities[:2]
     )
+    if not lines:
+        return "本轮不新增卖点表达，先保持现有材料。"
+    return "\n".join(lines)
 
 
 def _v5_2_price_action_cn(report: StoredSellpointValuePmReport) -> str:
@@ -3201,6 +3327,7 @@ def _compress(value: str, limit: int) -> str:
 __all__ = [
     "INTERNAL_LANGUAGE_REPLACEMENTS",
     "StoredPmCandidateRow",
+    "StoredPmCompetitorSellpointRow",
     "StoredPmFirstScreen",
     "StoredPmInvestmentRow",
     "StoredPmParameterRow",

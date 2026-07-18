@@ -21,6 +21,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_materiali
     build_v5_2_source_hashes,
     materialize_sellpoint_value_profile_v5_2,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_mapping import (
+    CompetitorSellpointObservation,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_materializer_schemas import (
     SellpointValueV52MaterializationInput,
     SellpointValueV52VersionRequest,
@@ -75,10 +78,21 @@ class FixtureSourceSellpointReader:
     def __init__(self, result):
         self.result = result
         self.requests = []
+        self.batch_requests = []
 
     def read(self, request):
         self.requests.append(request)
         return self.result
+
+    def read_many(self, requests):
+        self.batch_requests.append(list(requests))
+        return {
+            request.sku_code: SourceSellpointReadResult(
+                status=SourceSellpointState.NO_SOURCE_SELLPOINT,
+                limitations=["m04c_claim_profile_unavailable"],
+            )
+            for request in requests
+        }
 
 
 @pytest.fixture(name="session")
@@ -202,6 +216,24 @@ def test_v5_2_materializer_persists_source_layers_and_binds_source_hashes() -> N
     assert build_v5_2_profile_input_fingerprint(source) != (
         build_v5_2_profile_input_fingerprint(changed)
     )
+    competitor_observation = CompetitorSellpointObservation(
+        candidate_sku_code="TV-C01",
+        source_sellpoint=source.source_sellpoints.source_sellpoints[0],
+        target_has_matching_sellpoint=True,
+        competitor_value_advantage=False,
+        target_value_weakness=False,
+        market_support=True,
+        evidence_refs=[_evidence("pair-TV-C01")],
+    )
+    with_competitor_sellpoint = source.model_copy(
+        update={"competitor_sellpoints": [competitor_observation]}
+    )
+    assert build_v5_2_source_hashes(source) != build_v5_2_source_hashes(
+        with_competitor_sellpoint
+    )
+    assert build_v5_2_profile_input_fingerprint(source) != (
+        build_v5_2_profile_input_fingerprint(with_competitor_sellpoint)
+    )
 
 
 def test_v5_2_production_provider_builds_and_reuses_source_grounded_input() -> None:
@@ -230,6 +262,125 @@ def test_v5_2_production_provider_builds_and_reuses_source_grounded_input() -> N
     )
     assert len(base_provider.load_calls) == 1
     assert claim_reader.requests[0].sku_code == "TV-TARGET"
+    assert [
+        request.sku_code for request in claim_reader.batch_requests[0]
+    ] == [
+        row.candidate_sku_code
+        for row in base.candidate_pools.formal_competitors
+    ]
+
+
+def test_v5_2_provider_builds_competitor_observations_from_formal_pool_only() -> (
+    None
+):
+    base = _materialization_input(profile_version="spv-v52-competitor-claims")
+    value = base.values[0]
+    weak_decision = value.investment_decisions[0].model_copy(
+        update={
+            "capability_code": "tv_bright_room_dark_detail",
+            "classification": "unconverted",
+        }
+    )
+    value = value.model_copy(
+        update={
+            "normalized_bundle_code": "tv_bright_room_dark_detail",
+            "capability_codes": ["tv_bright_room_dark_detail"],
+            "investment_decisions": [weak_decision],
+        }
+    )
+    first = base.candidate_pools.formal_competitors[0]
+    pair = first.pair_facts.model_copy(
+        update={
+            "purchase_pressure_comparison": {
+                "comparison_allowed": True,
+                "shared_anchor_comparisons": [
+                    {
+                        "anchor_code": "PR-PICTURE",
+                        "anchor_cn": "画质",
+                        "target_pressure_level": "high",
+                        "candidate_pressure_level": "low",
+                    }
+                ],
+            },
+            "market_validation": {"level": "strong"},
+        }
+    )
+    first = first.model_copy(update={"pair_facts": pair})
+    pools = base.candidate_pools.model_copy(
+        update={
+            "formal_competitors": [
+                first,
+                *base.candidate_pools.formal_competitors[1:],
+            ]
+        }
+    )
+    base = base.model_copy(update={"values": [value], "candidate_pools": pools})
+    competitor_fact = _source_sellpoints().source_sellpoints[0].model_copy(
+        update={
+            "claim_fact_id": "claim-fact-competitor",
+            "merged_claim_fact_ids": ["claim-fact-competitor"],
+        }
+    )
+    competitor_source = _source_sellpoints().model_copy(
+        update={
+            "lineage": _source_sellpoints().lineage.model_copy(
+                update={"sku_code": first.candidate_sku_code}
+            ),
+            "source_sellpoints": [competitor_fact],
+        }
+    )
+
+    class CompetitorClaimReader:
+        def read(self, request):
+            return SourceSellpointReadResult(
+                status=SourceSellpointState.NO_SOURCE_SELLPOINT,
+                limitations=["m04c_source_sellpoint_unavailable"],
+            )
+
+        def read_many(self, requests):
+            return {
+                request.sku_code: (
+                    competitor_source
+                    if request.sku_code == first.candidate_sku_code
+                    else SourceSellpointReadResult(
+                        status=SourceSellpointState.NO_SOURCE_SELLPOINT,
+                        limitations=["m04c_source_sellpoint_unavailable"],
+                    )
+                )
+                for request in requests
+            }
+
+    provider = SavedV5SellpointValueV52InputProvider(
+        base_provider=FixtureBaseProvider(base),
+        source_sellpoint_reader=CompetitorClaimReader(),
+    )
+    request = provider.build_version_request(
+        project_id="project-1",
+        category_code="TV",
+        batch_id="batch-1",
+        profile_version=base.profile_version,
+        expected_sku_codes=["TV-TARGET"],
+        generated_by="pytest",
+    )
+    source = provider.load_materialization_input(request, "TV-TARGET")
+
+    assert len(source.competitor_sellpoints) == 1
+    observation = source.competitor_sellpoints[0]
+    assert observation.candidate_sku_code == first.candidate_sku_code
+    assert observation.linked_value_bundle_codes == ["VALUE-1"]
+    assert observation.target_has_matching_sellpoint is False
+    assert observation.target_value_weakness is True
+    assert observation.competitor_value_advantage is True
+    assert observation.market_support is True
+    assert {
+        row.candidate_sku_code
+        for row in source.competitor_sellpoints
+    }.issubset(
+        {
+            row.candidate_sku_code
+            for row in base.candidate_pools.formal_competitors
+        }
+    )
 
 
 def test_v5_2_generation_is_idempotent_and_preserves_v5_current(

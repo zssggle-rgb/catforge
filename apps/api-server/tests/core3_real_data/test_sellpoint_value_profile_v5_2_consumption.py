@@ -14,6 +14,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_report import 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_generation import (
     SellpointValueV52GenerationService,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_mapping import (
+    CompetitorSellpointObservation,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_qa import (
     SellpointValueV52QaService,
 )
@@ -198,3 +201,75 @@ def test_v5_2_qa_answers_from_saved_sellpoint_and_rejects_invented_theme(
     assert invented_answer.answer_status == "unknown"
     assert "没有找到" in invented_answer.direct_answer_cn
     assert "用户价值主题" in invented_answer.product_manager_action_cn
+
+
+def test_v5_2_report_projects_saved_competitor_sellpoint_opportunity(
+    session,
+) -> None:
+    source = _source()
+    competitor_fact = (
+        source.source_sellpoints.source_sellpoints[0].model_copy(
+            update={
+                "claim_fact_id": "competitor-claim-1",
+                "merged_claim_fact_ids": ["competitor-claim-1"],
+                "normalized_claim_code": "tv_claim_qd_miniled_display",
+                "normalized_claim_name_cn": "量子点 MiniLED 显示",
+                "raw_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
+                "clean_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
+                "exact_quote_cn": None,
+            }
+        )
+    )
+    source = source.model_copy(
+        update={
+            "base": source.base.model_copy(
+                update={"profile_version": "spv-v52-competitor-report"}
+            ),
+            "competitor_sellpoints": [
+                CompetitorSellpointObservation(
+                    candidate_sku_code="TV-C01",
+                    source_sellpoint=competitor_fact,
+                    target_has_matching_sellpoint=False,
+                    competitor_value_advantage=True,
+                    target_value_weakness=True,
+                    market_support=True,
+                    linked_value_bundle_codes=[
+                        source.base.values[0].value_bundle_code
+                    ],
+                    evidence_refs=competitor_fact.evidence_refs,
+                )
+            ],
+        }
+    )
+    readback = SellpointValueV52GenerationService(
+        repository=_repository(session),
+        input_provider=FixtureProvider({"TV-TARGET": source}),
+    ).generate_draft(_v52_request(source), sku_code="TV-TARGET")
+
+    report = build_v5_2_stored_profile_pm_report(readback)
+    markdown = render_stored_profile_markdown(
+        report,
+        title="海信 65E7Q 用户卖点价值分析",
+    )
+    card = render_stored_profile_feishu_card(
+        report,
+        title="海信 65E7Q 用户卖点价值分析",
+    )
+    visible = markdown + json.dumps(card, ensure_ascii=False)
+
+    assert len(report.competitor_sellpoint_rows) == 1
+    assert (
+        report.competitor_sellpoint_rows[0].finding_type_cn
+        == "可借鉴的竞品卖点"
+    )
+    assert "竞品卖点取舍" in markdown
+    assert "量子点 MiniLED 显示" in visible
+    assert "已经具备就补强宣传表达" in visible
+    answer = SellpointValueV52QaService().answer(
+        readback,
+        question="有哪些竞品卖点值得借鉴？",
+    )
+    assert answer.topic_code == "competitor_sellpoint"
+    assert answer.answer_status == "answered"
+    assert "可借鉴的竞品卖点" in answer.direct_answer_cn
+    assert answer.facts[0].evidence_record_ids

@@ -71,6 +71,22 @@ class M04CSourceSellpointRepository(Protocol):
     ) -> Sequence[entities.Core3SkuClaimFact]:
         """Return exact current M04C facts in deterministic order."""
 
+    def read_many_current_profiles(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+    ) -> dict[str, entities.Core3SkuClaimFactProfile]:
+        """Return current M04C profiles for a bounded SKU set."""
+
+    def list_many_current_facts(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+    ) -> dict[str, list[entities.Core3SkuClaimFact]]:
+        """Return current M04C facts for a bounded SKU set."""
+
 
 class SqlAlchemyM04CSourceSellpointRepository:
     """SQLAlchemy implementation scoped to one project and category."""
@@ -141,6 +157,77 @@ class SqlAlchemyM04CSourceSellpointRepository:
         )
         return list(self.db.execute(stmt).scalars())
 
+    def read_many_current_profiles(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+    ) -> dict[str, entities.Core3SkuClaimFactProfile]:
+        codes = sorted(set(sku_codes))
+        if not codes:
+            return {}
+        taxonomy_version, rule_version = _m04c_versions(self.category_code)
+        stmt = (
+            select(entities.Core3SkuClaimFactProfile)
+            .where(
+                entities.Core3SkuClaimFactProfile.project_id == self.project_id,
+                entities.Core3SkuClaimFactProfile.category_code
+                == self.category_code,
+                entities.Core3SkuClaimFactProfile.product_category
+                == self.category_code,
+                entities.Core3SkuClaimFactProfile.batch_id == batch_id,
+                entities.Core3SkuClaimFactProfile.sku_code.in_(codes),
+                entities.Core3SkuClaimFactProfile.taxonomy_version
+                == taxonomy_version,
+                entities.Core3SkuClaimFactProfile.rule_version == rule_version,
+                entities.Core3SkuClaimFactProfile.is_current.is_(True),
+            )
+            .order_by(entities.Core3SkuClaimFactProfile.sku_code)
+        )
+        rows = list(self.db.execute(stmt).scalars())
+        if len({row.sku_code for row in rows}) != len(rows):
+            raise M04CSourceSellpointIntegrityError(
+                "multiple current M04C profiles found for one SKU"
+            )
+        return {str(row.sku_code): row for row in rows}
+
+    def list_many_current_facts(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: Sequence[str],
+    ) -> dict[str, list[entities.Core3SkuClaimFact]]:
+        codes = sorted(set(sku_codes))
+        if not codes:
+            return {}
+        taxonomy_version, rule_version = _m04c_versions(self.category_code)
+        stmt = (
+            select(entities.Core3SkuClaimFact)
+            .where(
+                entities.Core3SkuClaimFact.project_id == self.project_id,
+                entities.Core3SkuClaimFact.category_code == self.category_code,
+                entities.Core3SkuClaimFact.product_category
+                == self.category_code,
+                entities.Core3SkuClaimFact.batch_id == batch_id,
+                entities.Core3SkuClaimFact.sku_code.in_(codes),
+                entities.Core3SkuClaimFact.taxonomy_version
+                == taxonomy_version,
+                entities.Core3SkuClaimFact.rule_version == rule_version,
+                entities.Core3SkuClaimFact.is_current.is_(True),
+            )
+            .order_by(
+                entities.Core3SkuClaimFact.sku_code,
+                entities.Core3SkuClaimFact.claim_seq.asc().nulls_last(),
+                entities.Core3SkuClaimFact.source_claim_key,
+                entities.Core3SkuClaimFact.claim_code,
+                entities.Core3SkuClaimFact.claim_fact_id,
+            )
+        )
+        grouped: dict[str, list[entities.Core3SkuClaimFact]] = defaultdict(list)
+        for row in self.db.execute(stmt).scalars():
+            grouped[str(row.sku_code)].append(row)
+        return dict(grouped)
+
 
 class M04CSourceSellpointReader:
     """Project source-grounded M04C facts into the SPV V5.2 contract."""
@@ -166,34 +253,96 @@ class M04CSourceSellpointReader:
             batch_id=request.batch_id,
             sku_code=sku_code,
         )
-        if profile is None:
-            return SourceSellpointReadResult(
-                status=SourceSellpointState.NO_SOURCE_SELLPOINT,
-                limitations=["m04c_claim_profile_unavailable"],
+        facts = (
+            self.repository.list_current_facts(
+                batch_id=request.batch_id,
+                sku_code=sku_code,
             )
+            if profile is not None
+            else []
+        )
+        return _build_read_result(profile, facts)
 
-        lineage = _lineage(profile)
-        facts = self.repository.list_current_facts(
-            batch_id=request.batch_id,
-            sku_code=sku_code,
-        )
-        source_sellpoints, discarded, limitations = _project_facts(facts)
-        if not source_sellpoints:
-            return SourceSellpointReadResult(
-                status=SourceSellpointState.NO_SOURCE_SELLPOINT,
-                lineage=lineage,
-                discarded_claim_fact_ids=discarded,
-                limitations=sorted(
-                    {*limitations, "m04c_source_sellpoint_unavailable"}
-                ),
+    def read_many(
+        self,
+        requests: Sequence[M04CSourceSellpointReadRequest],
+    ) -> dict[str, SourceSellpointReadResult]:
+        normalized = [
+            M04CSourceSellpointReadRequest.model_validate(
+                request.model_dump(mode="python")
             )
-        return SourceSellpointReadResult(
-            status=SourceSellpointState.AVAILABLE,
-            lineage=lineage,
-            source_sellpoints=source_sellpoints,
-            discarded_claim_fact_ids=discarded,
-            limitations=limitations,
+            for request in requests
+        ]
+        if not normalized:
+            return {}
+        batch_ids = {request.batch_id for request in normalized}
+        if len(batch_ids) != 1:
+            raise ValueError("M04C batch read requires one batch")
+        for request in normalized:
+            if (
+                request.project_id != self.repository.project_id
+                or request.category_code
+                != _enum_text(self.repository.category_code)
+            ):
+                raise ValueError("M04C batch read scope does not match repository")
+        sku_codes = sorted(
+            {request.sku_code.strip().upper() for request in normalized}
         )
+        profile_reader = getattr(
+            self.repository,
+            "read_many_current_profiles",
+            None,
+        )
+        fact_reader = getattr(
+            self.repository,
+            "list_many_current_facts",
+            None,
+        )
+        if profile_reader is None or fact_reader is None:
+            return {
+                request.sku_code.strip().upper(): self.read(request)
+                for request in normalized
+            }
+        batch_id = normalized[0].batch_id
+        profiles = profile_reader(batch_id=batch_id, sku_codes=sku_codes)
+        facts = fact_reader(batch_id=batch_id, sku_codes=sku_codes)
+        return {
+            sku_code: _build_read_result(
+                profiles.get(sku_code),
+                facts.get(sku_code, []),
+            )
+            for sku_code in sku_codes
+        }
+
+
+def _build_read_result(
+    profile: entities.Core3SkuClaimFactProfile | None,
+    facts: Sequence[entities.Core3SkuClaimFact],
+) -> SourceSellpointReadResult:
+    if profile is None:
+        return SourceSellpointReadResult(
+            status=SourceSellpointState.NO_SOURCE_SELLPOINT,
+            limitations=["m04c_claim_profile_unavailable"],
+        )
+
+    lineage = _lineage(profile)
+    source_sellpoints, discarded, limitations = _project_facts(facts)
+    if not source_sellpoints:
+        return SourceSellpointReadResult(
+            status=SourceSellpointState.NO_SOURCE_SELLPOINT,
+            lineage=lineage,
+            discarded_claim_fact_ids=discarded,
+            limitations=sorted(
+                {*limitations, "m04c_source_sellpoint_unavailable"}
+            ),
+        )
+    return SourceSellpointReadResult(
+        status=SourceSellpointState.AVAILABLE,
+        lineage=lineage,
+        source_sellpoints=source_sellpoints,
+        discarded_claim_fact_ids=discarded,
+        limitations=limitations,
+    )
 
 
 def _project_facts(

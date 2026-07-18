@@ -57,13 +57,14 @@ def _fact(
     claim_code: str = "tv_claim_gaming_low_latency",
     claim_name: str = "游戏/低延迟",
     confidence: str = "0.90",
+    sku_code: str = SKU_CODE,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         claim_fact_id=fact_id,
         project_id=PROJECT_ID,
         category_code="TV",
         batch_id=BATCH_ID,
-        sku_code=SKU_CODE,
+        sku_code=sku_code,
         source_claim_key="raw:88",
         raw_claim_text=raw_claim_text,
         clean_claim_text=raw_claim_text,
@@ -119,6 +120,43 @@ class FakeM04CRepository:
     ) -> list[SimpleNamespace]:
         self.calls.append(("facts", batch_id, sku_code))
         return self.facts
+
+
+class FakeBatchM04CRepository(FakeM04CRepository):
+    def __init__(
+        self,
+        *,
+        profiles: dict[str, SimpleNamespace],
+        facts_by_sku: dict[str, list[SimpleNamespace]],
+    ) -> None:
+        super().__init__()
+        self.profiles = profiles
+        self.facts_by_sku = facts_by_sku
+
+    def read_many_current_profiles(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: list[str],
+    ) -> dict[str, SimpleNamespace]:
+        self.calls.append(("profiles_many", batch_id, ",".join(sku_codes)))
+        return {
+            code: self.profiles[code]
+            for code in sku_codes
+            if code in self.profiles
+        }
+
+    def list_many_current_facts(
+        self,
+        *,
+        batch_id: str,
+        sku_codes: list[str],
+    ) -> dict[str, list[SimpleNamespace]]:
+        self.calls.append(("facts_many", batch_id, ",".join(sku_codes)))
+        return {
+            code: self.facts_by_sku.get(code, [])
+            for code in sku_codes
+        }
 
 
 def _request() -> M04CSourceSellpointReadRequest:
@@ -256,6 +294,46 @@ def test_reader_rejects_cross_project_or_category_requests() -> None:
                 sku_code=SKU_CODE,
             )
         )
+
+
+def test_reader_batches_bounded_skus_in_two_repository_queries() -> None:
+    second_sku = "TV-C02"
+    repository = FakeBatchM04CRepository(
+        profiles={
+            SKU_CODE: _profile(),
+            second_sku: _profile(sku_code=second_sku),
+        },
+        facts_by_sku={
+            SKU_CODE: [_fact("fact-target")],
+            second_sku: [
+                _fact(
+                    "fact-c02",
+                    sku_code=second_sku,
+                    claim_code="tv_claim_qd_miniled_display",
+                    claim_name="量子点 MiniLED 显示",
+                    raw_claim_text="量子点MiniLED带来更丰富的色彩层次。",
+                )
+            ],
+        },
+    )
+    requests = [
+        _request(),
+        M04CSourceSellpointReadRequest(
+            project_id=PROJECT_ID,
+            category_code="TV",
+            batch_id=BATCH_ID,
+            sku_code=second_sku,
+        ),
+    ]
+
+    results = M04CSourceSellpointReader(repository).read_many(requests)
+
+    assert sorted(results) == [second_sku, SKU_CODE]
+    assert results[second_sku].source_sellpoints[0].claim_fact_id == "fact-c02"
+    assert repository.calls == [
+        ("profiles_many", BATCH_ID, f"{second_sku},{SKU_CODE}"),
+        ("facts_many", BATCH_ID, f"{second_sku},{SKU_CODE}"),
+    ]
 
 
 def test_layer_integrity_counts_must_reconcile() -> None:

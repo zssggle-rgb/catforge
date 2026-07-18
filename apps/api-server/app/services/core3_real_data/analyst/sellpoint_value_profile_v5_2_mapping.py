@@ -313,6 +313,35 @@ def _user_value_links(
     )
 
 
+def match_source_sellpoint_value_bundle_codes(
+    *,
+    category_code: Literal["TV", "AC"],
+    source_sellpoint: SourceSellpointFact,
+    values: Sequence[Any],
+) -> list[str]:
+    """Return only saved value bundles supported by one source sellpoint."""
+
+    definitions = _value_definitions(category_code)
+    definitions_by_code = {
+        definition.code: definition for definition in definitions
+    }
+    definitions_by_claim: dict[str, list[Any]] = defaultdict(list)
+    for definition in definitions:
+        for claim_code in definition.claim_codes:
+            definitions_by_claim[claim_code].append(definition)
+    return sorted(
+        {
+            str(value.value_bundle_code)
+            for definition in _matching_definitions(
+                source_sellpoint,
+                definitions_by_claim,
+                definitions_by_code,
+            )
+            for value in _matching_values(definition.code, values)
+        }
+    )
+
+
 def _parameter_assessments(
     *,
     category_code: Literal["TV", "AC"],
@@ -895,4 +924,5 @@ __all__ = [
     "SPV_V5_2_LAYER_MAPPING_VERSION",
     "build_layered_sellpoint_analysis",
     "evaluate_layer_integrity",
+    "match_source_sellpoint_value_bundle_codes",
 ]

@@ -40,6 +40,9 @@ from app.services.core3_real_data.hash_utils import stable_hash
 SPV_V5_2_PROFILE_INPUT_HASH_VERSION = "sellpoint_value_profile_input_v5_2"
 SPV_V5_2_PROFILE_RESULT_HASH_VERSION = "sellpoint_value_profile_result_v5_2"
 SPV_V5_2_MISSING_M04C_HASH_VERSION = "sellpoint_value_missing_m04c_v5_2"
+SPV_V5_2_COMPETITOR_SELLPOINT_HASH_VERSION = (
+    "sellpoint_value_competitor_sellpoints_v5_2"
+)
 
 
 def build_v5_2_source_hashes(
@@ -75,6 +78,19 @@ def build_v5_2_source_hashes(
             base.competitor_source.source_version_result_hash
         ),
         competitor_sku_result_hash=base.competitor_source.source_result_hash,
+        competitor_sellpoint_result_hash=stable_hash(
+            [
+                row.model_dump(mode="json")
+                for row in sorted(
+                    source.competitor_sellpoints,
+                    key=lambda item: (
+                        item.candidate_sku_code,
+                        item.source_sellpoint.claim_fact_id,
+                    ),
+                )
+            ],
+            version=SPV_V5_2_COMPETITOR_SELLPOINT_HASH_VERSION,
+        ),
     )
 
 

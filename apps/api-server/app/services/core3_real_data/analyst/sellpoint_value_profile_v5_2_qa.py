@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import Field
 
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
+    StoredPmCompetitorSellpointRow,
     StoredPmParameterRow,
     StoredPmSellpointRow,
     build_v5_2_stored_profile_pm_report,
@@ -28,6 +29,7 @@ SellpointValueV52QaTopic = Literal[
     "parameter_classification",
     "price_and_volume",
     "sellpoint_action",
+    "competitor_sellpoint",
     "specific_sellpoint",
     "unsupported",
 ]
@@ -64,9 +66,10 @@ class SellpointValueV52QaService:
             raise ValueError("question is required")
         report = build_v5_2_stored_profile_pm_report(readback)
         topic = _route_question(normalized, report.sellpoint_rows)
-        direct, action, rows, parameters, unknown = _answer_topic(
+        direct, action, rows, parameters, competitor_rows, unknown = _answer_topic(
             report.sellpoint_rows,
             report.parameter_rows,
+            report.competitor_sellpoint_rows,
             price_support_cn=report.first_screen.price_support_cn,
             growth_action_cn=report.first_screen.growth_action_cn,
             question=normalized,
@@ -100,6 +103,24 @@ class SellpointValueV52QaService:
                     evidence_record_ids=_parameter_evidence_ids(readback, row),
                 )
                 for row in parameters
+            ),
+            *(
+                SellpointValueV52QaFact(
+                    fact_path=(
+                        "layered_sellpoint_analysis."
+                        "competitor_sellpoint_findings."
+                        f"{row.candidate_sku_code}.{row.sellpoint_name_cn}"
+                    ),
+                    summary_cn=(
+                        f"{row.candidate_name_cn}的“{row.sellpoint_name_cn}”"
+                        f"属于{row.finding_type_cn}。"
+                    ),
+                    evidence_record_ids=_competitor_sellpoint_evidence_ids(
+                        readback,
+                        row,
+                    ),
+                )
+                for row in competitor_rows
             ),
         ]
         payload = {
@@ -136,6 +157,10 @@ def _route_question(
     if re.search(r"是.*卖点|算.*卖点|卖点吗", question, re.IGNORECASE):
         return "specific_sellpoint"
     for topic, pattern in (
+        (
+            "competitor_sellpoint",
+            r"竞品.*卖点|卖点机会|哪些卖点.*跟|借鉴.*卖点",
+        ),
         ("sellpoint_action", r"怎么改|修改建议|怎么写|如何表达|宣传材料"),
         ("price_and_volume", r"价格|销量|走量|降价|溢价"),
         ("parameter_classification", r"参数|配置|基础能力|短板"),
@@ -153,6 +178,7 @@ def _route_question(
 def _answer_topic(
     sellpoints: list[StoredPmSellpointRow],
     parameters: list[StoredPmParameterRow],
+    competitor_sellpoints: list[StoredPmCompetitorSellpointRow],
     *,
     price_support_cn: str,
     growth_action_cn: str,
@@ -163,6 +189,7 @@ def _answer_topic(
     str,
     list[StoredPmSellpointRow],
     list[StoredPmParameterRow],
+    list[StoredPmCompetitorSellpointRow],
     bool,
 ]:
     if topic == "specific_sellpoint":
@@ -174,6 +201,7 @@ def _answer_topic(
                 "需要以本品宣传材料中的原始卖点为准。",
                 [],
                 [],
+                [],
                 True,
             )
         if len(rows) != 1:
@@ -181,6 +209,7 @@ def _answer_topic(
                 "问题同时命中多个产品原始卖点，请指定其中一项。",
                 "使用报告中的原始卖点名称重新提问。",
                 rows,
+                [],
                 [],
                 True,
             )
@@ -192,6 +221,7 @@ def _answer_topic(
             row.product_action_cn,
             rows,
             [],
+            [],
             False,
         )
     if topic == "user_sellpoint_value":
@@ -202,12 +232,14 @@ def _answer_topic(
                 "按现有卖点分类维护宣传材料，不新增缺少依据的价值承诺。",
                 sellpoints,
                 [],
+                [],
                 True,
             )
         return (
             _user_sellpoint_value_answer_cn(rows),
             "优先按核心卖点、基础卖点和用户未认知卖点的动作分别修改材料。",
             rows,
+            [],
             [],
             False,
         )
@@ -216,6 +248,7 @@ def _answer_topic(
             return (
                 "本品宣传材料中没有读取到可追溯的产品原始卖点。",
                 "不从参数或用户价值主题补造卖点名称。",
+                [],
                 [],
                 [],
                 True,
@@ -229,6 +262,7 @@ def _answer_topic(
             "按各卖点保存的产品动作维护主推顺序和表达方式。",
             sellpoints,
             [],
+            [],
             False,
         )
     if topic == "parameter_classification":
@@ -236,6 +270,7 @@ def _answer_topic(
             return (
                 "现有数据没有形成可用的参数分类。",
                 "不把缺失参数判断改写成产品卖点结论。",
+                [],
                 [],
                 [],
                 True,
@@ -246,6 +281,7 @@ def _answer_topic(
             "差异化参数用于证明卖点，基础参数维持竞争，参数短板进入产品评估。",
             [],
             parameters,
+            [],
             False,
         )
     if topic == "price_and_volume":
@@ -254,6 +290,53 @@ def _answer_topic(
             "把该结论作为当前价格和卖点修改的联合决策依据。",
             [],
             [],
+            [],
+            False,
+        )
+    if topic == "competitor_sellpoint":
+        wants_non_key = bool(re.search(r"不需要|不用|无需|不跟", question))
+        selected = [
+            row
+            for row in competitor_sellpoints
+            if row.finding_type_code
+            == (
+                "non_key_competitor_sellpoint"
+                if wants_non_key
+                else "sellpoint_opportunity"
+            )
+        ]
+        if not selected:
+            if not competitor_sellpoints:
+                return (
+                    "当前正式竞品中没有形成可用的竞品卖点取舍结论。",
+                    "不根据单一参数差异补造竞品卖点机会。",
+                    [],
+                    [],
+                    [],
+                    True,
+                )
+            return (
+                (
+                    "当前没有识别出需要本品优先借鉴的竞品卖点；"
+                    "已比较的其他竞品卖点暂未显示造成本品竞争损失。"
+                ),
+                "保持现有卖点结构，不为对齐竞品而新增缺少依据的表达。",
+                [],
+                [],
+                competitor_sellpoints,
+                False,
+            )
+        return (
+            "；".join(
+                f"{row.candidate_name_cn}的“{row.sellpoint_name_cn}”"
+                f"属于{row.finding_type_cn}"
+                for row in selected
+            )
+            + "。",
+            " ".join(row.product_action_cn for row in selected[:3]),
+            [],
+            [],
+            selected,
             False,
         )
     if topic == "sellpoint_action":
@@ -263,6 +346,7 @@ def _answer_topic(
                 "保持现有材料，不新增卖点名称。",
                 [],
                 [],
+                [],
                 True,
             )
         return (
@@ -270,11 +354,13 @@ def _answer_topic(
             "按核心、基础、用户未认知和待确认的顺序修改当前宣传材料。",
             sellpoints,
             [],
+            [],
             False,
         )
     return (
         "现有分析结果没有为这个问题配置可用答案。",
         "请改问用户卖点价值、卖点分类、参数判断、价格销量或卖点修改建议。",
+        [],
         [],
         [],
         True,
@@ -425,6 +511,24 @@ def _parameter_evidence_ids(
         {
             ref.record_id
             for ref in assessment.evidence_refs
+            if ref.record_id
+        }
+    )
+
+
+def _competitor_sellpoint_evidence_ids(
+    readback: SellpointValueV52Readback,
+    row: StoredPmCompetitorSellpointRow,
+) -> list[str]:
+    return sorted(
+        {
+            ref.record_id
+            for finding in (
+                readback.profile.layered_sellpoint_analysis.competitor_sellpoint_findings
+            )
+            if finding.candidate_sku_code == row.candidate_sku_code
+            and finding.normalized_claim_name_cn == row.sellpoint_name_cn
+            for ref in finding.evidence_refs
             if ref.record_id
         }
     )
