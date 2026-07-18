@@ -278,13 +278,17 @@ class SellpointValueV51QaService:
                 facts=facts,
             )
         if topic == "table_stake":
+            rows_by_code = {}
+            for value in readback.profile.values:
+                for row in value.investment_decisions:
+                    if (
+                        row.classification == "table_stake"
+                        and _enum_text(row.status)
+                        in {"conclusion_available", "partial_conclusion"}
+                    ):
+                        rows_by_code.setdefault(row.capability_code, row)
             rows = [
-                row
-                for value in readback.profile.values
-                for row in value.investment_decisions
-                if row.classification == "table_stake"
-                and _enum_text(row.status)
-                in {"conclusion_available", "partial_conclusion"}
+                rows_by_code[code] for code in sorted(rows_by_code)
             ]
             names = list(
                 dict.fromkeys(row.capability_name_cn for row in rows)
@@ -306,7 +310,10 @@ class SellpointValueV51QaService:
                 facts=[
                     ProfileQaFact(
                         fact_path=f"values.{row.value_bundle_code}.investments.{row.capability_code}",
-                        summary_cn=row.business_reason_cn,
+                        summary_cn=(
+                            f"{row.capability_name_cn}："
+                            f"{row.business_reason_cn}"
+                        ),
                         record_type="investment_decision",
                         record_id=row.result_hash,
                     )
