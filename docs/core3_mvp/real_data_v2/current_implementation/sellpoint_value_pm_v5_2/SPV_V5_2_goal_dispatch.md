@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.2 串行 Goal 调度
 
-状态：SPV52-G01—G08 completed
+状态：SPV52-G01—G08 completed；用户批准后的正式发布 completed
 
 日期：2026-07-18
 
@@ -209,3 +209,9 @@
 6. 禁止并发写数据库，保护工作树，只精确暂存；
 7. G07 前禁止 205 写入，G08 前必须先通过 65E7Q；
 8. 任何 review/publish/current 未获新授权一律禁止。
+
+## 5. 用户批准后的正式发布
+
+2026-07-18 用户明确批准 TV、AC V5.2 执行 review、publish 和 current
+切换。两品类已完成正式发布，飞书智能体正式消费已验证。发布详情见
+`SPV52_publish_receipt.md`。
