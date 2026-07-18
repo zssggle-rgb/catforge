@@ -235,6 +235,10 @@ class SellpointValueV52GenerationService:
                 ),
                 expected_sku_codes=base.expected_sku_codes,
                 failed_sku_codes=failed,
+                validate_readbacks=(
+                    not failed
+                    and requested == base.expected_sku_codes
+                ),
             )
             self.repository.db.commit()
         return SellpointValueV52BatchGenerationResult(

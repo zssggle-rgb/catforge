@@ -329,3 +329,18 @@ def test_v5_2_batch_failure_isolated_to_one_sku(session: Session) -> None:
         )
         == 1
     )
+
+
+def test_v5_2_complete_batch_finishes_readback_validation(
+    session: Session,
+) -> None:
+    source = _v52_input(profile_version="spv-v52-complete-batch")
+    result = SellpointValueV52GenerationService(
+        repository=_repository(session),
+        input_provider=FixtureProvider({"TV-TARGET": source}),
+    ).generate_many(_v52_request(source))
+
+    assert result.failed_count == 0
+    assert result.version.processing_status == "completed"
+    assert result.version.release_quality_status == "ready"
+    assert result.version.review_required is False
