@@ -195,7 +195,7 @@
 6. 输出 V5.1→V5.2 diff 和回退方案；
 7. 停止并等待用户决定是否 review/publish/current。
 
-状态：completed；关闭回执：`SPV52_G08_closure_receipt.md`。
+状态：completed；TV/AC 版本级最终 typed readback 已通过；关闭回执：`SPV52_G08_closure_receipt.md`。
 
 ## 4. Heartbeat 提示词
 

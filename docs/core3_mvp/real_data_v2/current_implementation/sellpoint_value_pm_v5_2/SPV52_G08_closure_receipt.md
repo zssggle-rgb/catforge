@@ -7,6 +7,7 @@
 - AC 单 SKU 真实草稿验收通过；
 - AC 全量 155 款、TV 全量 377 款均已生成 V5.2 immutable draft；
 - 合计 532 款，生成失败 0、无效画像 0；
+- TV、AC 版本级最终 typed readback 均已完成，回读错误、缺失 SKU 和意外 SKU 均为 0；
 - 所有写入均为独立 V5.2 draft，未执行 review、publish 或 current 切换；
 - 正式 TV/AC V5.1 current 的版本名和结果 hash 均未变化。
 
@@ -95,12 +96,13 @@ TV 全量版本：
 
 - `spv_v5_2_tv_full_g08_20260718_r1`；
 - 版本 ID：`a5c2516f-1ebe-4903-8fef-abea896af2c6`；
-- `validating / limited / draft / is_current=false`；
-- 377 款在逐 SKU 写入时均已完成 typed readback，随后通过低内存流式全量审计；
-- 为避免重复装载 377 个完整画像，本 Goal 没有再执行第二遍版本级 typed readback，因此版本状态保留为 `validating`；
-- 如后续批准进入 review/publish，先执行一次版本级最终 readback 门禁，再允许生命周期切换。
+- `completed / limited / draft / is_current=false`；
+- 377 款逐 SKU 写入回读和版本级最终 typed readback 均已完成；
+- `readback_error_sku_codes`、缺失 SKU、意外 SKU、失败、无效和完整性错误均为 0；
+- 最终回读耗时约 17 分 33 秒；
+- `limited` 只表示 38 款为部分或无结论，不是程序、结构或回读失败。
 
-TV 的一次性输入冻结约 8 分钟，全量生成总计约 59 分钟；生成按 20 款串行提交，支持断点续跑。完整回归和三类评审没有在 G08 重复执行。
+TV 的一次性输入冻结约 8 分钟，全量生成总计约 59 分钟；生成按 20 款串行提交，支持断点续跑。版本级最终回读只在全量生成后执行一次，完整回归和三类评审没有在 G08 重复执行。
 
 ## 8. 正式版本保护与回退
 
@@ -115,4 +117,6 @@ V5.2 尚未进入正式消费路径。回退只需停用或删除上述未发布
 
 ## 9. 关闭判断
 
-G08 的 AC 单 SKU、TV/AC 全量 draft 和只读审计均已完成；来源缺失被如实保留，结构错误和品类串线均为 0。任务链在此停止，等待用户另行决定是否进入版本级最终 readback、review、publish 和 current 切换。
+G08 的 AC 单 SKU、TV/AC 全量 draft、版本级最终 typed readback 和只读审计均已完成；来源缺失被如实保留，结构错误、回读错误和品类串线均为 0。V5.2 仍为未发布草稿，任务链在此停止，等待用户另行决定是否 review、publish 和 current 切换。
+
+本回执曾在 TV 尚为 `validating` 时提前写为关闭，属于关闭门禁判断错误。2026-07-18 已补做 377 款版本级最终回读，并在 `processing_status=completed` 后重新关闭 G08。
