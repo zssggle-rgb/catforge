@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -412,7 +412,7 @@ def _v5_2_sellpoint_rows(
             if row.sellpoint_fact_id in fact_ids
         ]
         user_values = [
-            row.user_value_cn
+            _v5_2_user_value_cn(row.user_value_cn)
             for row in layered.sellpoint_user_value_links
             if row.sellpoint_fact_id in fact_ids
         ]
@@ -437,7 +437,13 @@ def _v5_2_sellpoint_rows(
                 supporting_parameters_cn=_unique(parameter_names),
                 value_bundle_codes=assessment.value_bundle_codes,
                 user_values_cn=_unique(
-                    [*assessment.user_value_summaries_cn, *user_values]
+                    [
+                        *(
+                            _v5_2_user_value_cn(value)
+                            for value in assessment.user_value_summaries_cn
+                        ),
+                        *user_values,
+                    ]
                 ),
                 current_user_recognition_cn=_V5_2_USER_RECOGNITION_CN[
                     classification
@@ -449,12 +455,20 @@ def _v5_2_sellpoint_rows(
                     classification,
                     fact.exact_quote_cn
                     or fact.normalized_claim_name_cn,
-                    _unique([*assessment.user_value_summaries_cn, *user_values]),
+                    _unique(
+                        [
+                            *(
+                                _v5_2_user_value_cn(value)
+                                for value in assessment.user_value_summaries_cn
+                            ),
+                            *user_values,
+                        ]
+                    ),
                 ),
             )
         )
     return sorted(
-        result,
+        _group_v5_2_sellpoint_rows(result),
         key=lambda row: (
             (
                 "core_sellpoint",
@@ -468,13 +482,131 @@ def _v5_2_sellpoint_rows(
     )
 
 
+def _group_v5_2_sellpoint_rows(
+    rows: Sequence[StoredPmSellpointRow],
+) -> list[StoredPmSellpointRow]:
+    grouped: dict[tuple[str, str], list[StoredPmSellpointRow]] = defaultdict(list)
+    for row in rows:
+        grouped[(row.source_claim_key, row.raw_claim_text)].append(row)
+    result = []
+    classification_order = (
+        "core_sellpoint",
+        "user_unrecognized_sellpoint",
+        "basic_sellpoint",
+        "pending_sellpoint",
+    )
+    for (source_claim_key, raw_claim_text), members in sorted(grouped.items()):
+        classification = min(
+            (row.classification_code for row in members),
+            key=classification_order.index,
+        )
+        quotes = _unique(
+            [
+                row.exact_quote_cn
+                for row in members
+                if row.exact_quote_cn
+            ]
+        )
+        label = (
+            max(quotes, key=len)
+            if quotes
+            else _v5_2_source_excerpt_cn(raw_claim_text)
+        )
+        user_values = _unique(
+            value
+            for row in members
+            for value in row.user_values_cn
+        )
+        result.append(
+            StoredPmSellpointRow(
+                source_claim_key=source_claim_key,
+                raw_claim_text=raw_claim_text,
+                exact_quote_cn=label,
+                normalized_claim_code="|".join(
+                    sorted({row.normalized_claim_code for row in members})
+                ),
+                normalized_claim_name_cn="、".join(
+                    _unique(row.normalized_claim_name_cn for row in members)
+                ),
+                classification_code=classification,
+                classification_cn=_V5_2_SELLPOINT_CLASSIFICATION_CN[
+                    classification
+                ],
+                supporting_parameters_cn=_unique(
+                    value
+                    for row in members
+                    for value in row.supporting_parameters_cn
+                ),
+                value_bundle_codes=sorted(
+                    {
+                        value
+                        for row in members
+                        for value in row.value_bundle_codes
+                    }
+                ),
+                user_values_cn=user_values,
+                current_user_recognition_cn=_V5_2_USER_RECOGNITION_CN[
+                    classification
+                ],
+                market_performance_cn=(
+                    "；".join(
+                        _unique(
+                            row.market_performance_cn
+                            for row in members
+                            if row.market_performance_cn
+                        )
+                    )
+                    or None
+                ),
+                product_action_cn=_v5_2_sellpoint_action_cn(
+                    classification,
+                    label,
+                    user_values,
+                ),
+            )
+        )
+    return result
+
+
+def _v5_2_source_excerpt_cn(raw_claim_text: str) -> str:
+    value = re.sub(r"^【[^】]+】", "", raw_claim_text).strip()
+    clauses = [
+        value.find(separator)
+        for separator in ("，", "；", "。")
+        if value.find(separator) > 0
+    ]
+    if clauses:
+        value = value[: min(clauses)]
+    return _compress(value, 42)
+
+
+def _v5_2_user_value_cn(value: str) -> str:
+    normalized = str(value).strip()
+    for prefix in (
+        "用户购后反馈只部分支持：",
+        "当前用户购后反馈尚未观察到：",
+        "用户购后反馈支持：",
+    ):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :].strip()
+            break
+    return normalized
+
+
 def _v5_2_parameter_rows(
     readback: SellpointValueV52Readback,
 ) -> list[StoredPmParameterRow]:
     layered = readback.profile.layered_sellpoint_analysis
+    label_by_source_key = {
+        row.source_claim_key: (
+            row.exact_quote_cn
+            or _v5_2_source_excerpt_cn(row.raw_claim_text)
+        )
+        for row in layered.source_sellpoints
+    }
     sellpoint_names: dict[str, str] = {}
     for fact in layered.source_sellpoints:
-        name = fact.exact_quote_cn or fact.normalized_claim_name_cn
+        name = label_by_source_key[fact.source_claim_key]
         for fact_id in fact.merged_claim_fact_ids:
             sellpoint_names[fact_id] = name
     result = []

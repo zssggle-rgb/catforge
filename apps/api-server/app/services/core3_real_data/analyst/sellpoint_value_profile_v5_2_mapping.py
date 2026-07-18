@@ -647,12 +647,18 @@ def _matching_values(
     definition_code: str,
     values: Sequence[Any],
 ) -> list[Any]:
+    exact = [
+        value
+        for value in values
+        if definition_code
+        == str(getattr(value, "normalized_bundle_code", ""))
+    ]
+    if exact:
+        return exact
     return [
         value
         for value in values
         if definition_code in set(getattr(value, "capability_codes", ()))
-        or definition_code
-        == str(getattr(value, "normalized_bundle_code", ""))
     ]
 
 
