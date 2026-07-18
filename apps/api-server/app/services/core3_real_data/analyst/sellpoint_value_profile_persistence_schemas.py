@@ -26,8 +26,19 @@ SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION = (
 )
 SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION = "sellpoint_value_profile_rule_v5_1"
 SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION = "sellpoint_value_profile_method_v5_1"
+SELLPOINT_VALUE_PROFILE_V5_2_SCHEMA_VERSION = (
+    "sku_sellpoint_value_decision_profile_v1_2"
+)
+SELLPOINT_VALUE_PROFILE_V5_2_RULE_VERSION = "sellpoint_value_profile_rule_v5_2"
+SELLPOINT_VALUE_PROFILE_V5_2_METHOD_VERSION = "sellpoint_value_profile_method_v5_2"
 SELLPOINT_VALUE_PROFILE_V5_1_COMPETITOR_METHOD_VERSION = (
     "competitor_profile_agent_snapshot_v2"
+)
+SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS = frozenset(
+    {
+        SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
+        SELLPOINT_VALUE_PROFILE_V5_2_METHOD_VERSION,
+    }
 )
 PROFILE_AUTO_PASS_MIN_CONFIDENCE = Decimal("0.6000")
 FORBIDDEN_FACTORY_EXPORT_KEYS = frozenset(
@@ -240,7 +251,7 @@ class SkuSellpointValueProfileDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_profile_quality(self) -> "SkuSellpointValueProfileDraft":
-        if self.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+        if self.method_version in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS:
             _validate_v5_1_profile_fields(self)
         else:
             _validate_low_confidence_review(
@@ -277,14 +288,14 @@ class SkuSellpointValueCandidateDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_candidate_quality(self) -> "SkuSellpointValueCandidateDraft":
-        if self.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+        if self.method_version not in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS:
             _validate_low_confidence_review(
                 self.confidence,
                 self.review_required,
                 self.review_status,
             )
         if (
-            self.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION
+            self.method_version not in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS
             and self.pool_type == "reference"
             and not set(self.eligible_questions_json).issubset(
                 {"parameter_conversion", "battlefield_expansion"}
@@ -337,7 +348,7 @@ class SkuSellpointValueItemDraft(SellpointValuePersistedScope):
 
     @model_validator(mode="after")
     def validate_item_quality(self) -> "SkuSellpointValueItemDraft":
-        if self.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+        if self.method_version in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS:
             if self.conclusion_status is None:
                 raise ValueError("V5.1 value items require conclusion_status")
             if self.direct_market_result_available is None:
@@ -551,20 +562,29 @@ def _validate_low_confidence_review(
 
 
 def _validate_v5_1_version_fields(value: Any) -> None:
-    if value.method_version != SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+    if value.method_version not in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS:
         return
-    if (
-        value.schema_version != SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION
-        or value.rule_version != SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION
-    ):
-        raise ValueError("V5.1 method requires the V5.1 schema and rule")
+    expected_contract = {
+        SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION: (
+            SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION,
+            SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION,
+        ),
+        SELLPOINT_VALUE_PROFILE_V5_2_METHOD_VERSION: (
+            SELLPOINT_VALUE_PROFILE_V5_2_SCHEMA_VERSION,
+            SELLPOINT_VALUE_PROFILE_V5_2_RULE_VERSION,
+        ),
+    }[value.method_version]
+    if (value.schema_version, value.rule_version) != expected_contract:
+        raise ValueError("sellpoint-value method must match its schema and rule")
     if (
         not value.source_competitor_profile_version_id
         or value.source_competitor_profile_method_version
         != SELLPOINT_VALUE_PROFILE_V5_1_COMPETITOR_METHOD_VERSION
         or not value.source_competitor_profile_result_hash
     ):
-        raise ValueError("V5.1 versions require a complete competitor profile source")
+        raise ValueError(
+            "low-gate sellpoint-value versions require a complete competitor source"
+        )
     counts = (
         value.conclusion_available_count,
         value.partial_conclusion_count,
@@ -573,10 +593,12 @@ def _validate_v5_1_version_fields(value: Any) -> None:
         value.integrity_error_count,
     )
     if any(item is None for item in counts):
-        raise ValueError("V5.1 versions require conclusion and integrity counts")
+        raise ValueError(
+            "low-gate sellpoint-value versions require conclusion and integrity counts"
+        )
     conclusion_count = sum(item for item in counts[:4] if item is not None)
     if conclusion_count > value.sku_count:
-        raise ValueError("V5.1 conclusion counts cannot exceed SKU count")
+        raise ValueError("sellpoint-value conclusion counts cannot exceed SKU count")
 
 
 def _validate_v5_1_profile_fields(value: SkuSellpointValueProfileDraft) -> None:
@@ -625,6 +647,13 @@ __all__ = [
     "SELLPOINT_VALUE_PROFILE_METHOD_VERSION",
     "SELLPOINT_VALUE_PROFILE_RULE_VERSION",
     "SELLPOINT_VALUE_PROFILE_SCHEMA_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_1_RULE_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_1_SCHEMA_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_2_METHOD_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_2_RULE_VERSION",
+    "SELLPOINT_VALUE_PROFILE_V5_2_SCHEMA_VERSION",
+    "SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS",
     "SellpointValueDraftBundle",
     "SellpointValueProfileReadBundle",
     "SellpointValueReleaseQualityStatus",

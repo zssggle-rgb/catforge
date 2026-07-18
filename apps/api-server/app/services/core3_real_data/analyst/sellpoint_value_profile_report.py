@@ -22,6 +22,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_materializer_schemas import (
     SellpointValueV51Readback,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_materializer_schemas import (
+    SellpointValueV52Readback,
+)
 
 
 INTERNAL_LANGUAGE_REPLACEMENTS = {
@@ -93,6 +96,32 @@ class StoredPmValueAccountRow(SellpointValueProfileBaseModel):
     evidence_boundary_cn: str = Field(min_length=1)
 
 
+class StoredPmSellpointRow(SellpointValueProfileBaseModel):
+    source_claim_key: str = Field(min_length=1)
+    raw_claim_text: str = Field(min_length=1)
+    exact_quote_cn: str | None = None
+    normalized_claim_code: str = Field(min_length=1)
+    normalized_claim_name_cn: str = Field(min_length=1)
+    classification_code: str = Field(min_length=1)
+    classification_cn: str = Field(min_length=1)
+    supporting_parameters_cn: list[str] = Field(default_factory=list)
+    value_bundle_codes: list[str] = Field(default_factory=list)
+    user_values_cn: list[str] = Field(default_factory=list)
+    current_user_recognition_cn: str = Field(min_length=1)
+    market_performance_cn: str | None = None
+    product_action_cn: str = Field(min_length=1)
+
+
+class StoredPmParameterRow(SellpointValueProfileBaseModel):
+    parameter_code: str = Field(min_length=1)
+    parameter_name_cn: str = Field(min_length=1)
+    normalized_value: str | None = None
+    classification_code: str = Field(min_length=1)
+    classification_cn: str = Field(min_length=1)
+    linked_sellpoints_cn: list[str] = Field(default_factory=list)
+    business_reason_cn: str = Field(min_length=1)
+
+
 class StoredSellpointValuePmReport(SellpointValueProfileBaseModel):
     schema_version: str = "sku_sellpoint_value_pm_report_v1"
     target: dict[str, Any]
@@ -116,6 +145,8 @@ class StoredSellpointValuePmReport(SellpointValueProfileBaseModel):
     full_candidates: list[StoredPmCandidateRow]
     candidate_count: int = Field(ge=0)
     reference_count: int = Field(ge=0)
+    sellpoint_rows: list[StoredPmSellpointRow] = Field(default_factory=list)
+    parameter_rows: list[StoredPmParameterRow] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
 
@@ -211,6 +242,8 @@ def build_stored_profile_pm_report(
 
 def build_v5_1_stored_profile_pm_report(
     readback: SellpointValueV51Readback,
+    *,
+    allow_legacy_sellpoint_fallback: bool = True,
 ) -> StoredSellpointValuePmReport:
     """Project one validated V5.1 readback without recalculating conclusions."""
 
@@ -222,7 +255,10 @@ def build_v5_1_stored_profile_pm_report(
         if _enum_text(value.value_conclusion.status)
         in {"conclusion_available", "partial_conclusion"}
     ]
-    investments = _v5_1_investment_rows(usable_values)
+    investments = _v5_1_investment_rows(
+        usable_values,
+        allow_product_sellpoint_fallback=allow_legacy_sellpoint_fallback,
+    )
     unknown_investments = _v5_1_unknown_investment_names(usable_values)
     candidates = _v5_1_candidate_rows(profile)
     candidate_names = {
@@ -276,6 +312,365 @@ def build_v5_1_stored_profile_pm_report(
             )
         ),
     )
+
+
+def build_v5_2_stored_profile_pm_report(
+    readback: SellpointValueV52Readback,
+) -> StoredSellpointValuePmReport:
+    """Project only saved V5.2 layers into the product-manager report."""
+
+    profile = readback.profile
+    base_readback = SellpointValueV51Readback(
+        profile=profile.base_profile,
+        persisted=readback.persisted,
+    )
+    base_report = build_v5_1_stored_profile_pm_report(
+        base_readback,
+        allow_legacy_sellpoint_fallback=False,
+    )
+    sellpoints = _v5_2_sellpoint_rows(readback, base_report.value_accounts)
+    parameters = _v5_2_parameter_rows(readback)
+    first_screen = _v5_2_first_screen(
+        base_report.first_screen,
+        sellpoints=sellpoints,
+        parameters=parameters,
+        value_accounts=base_report.value_accounts,
+    )
+    sanitized_values = [
+        row.model_copy(update={"core_sellpoints_cn": []})
+        for row in base_report.value_accounts
+    ]
+    return base_report.model_copy(
+        update={
+            "schema_version": "sku_sellpoint_value_pm_report_v1_2",
+            "profile_result_hash": profile.result_hash,
+            "first_screen": first_screen,
+            "value_accounts": sanitized_values,
+            "investment_decisions": [],
+            "sellpoint_rows": sellpoints,
+            "parameter_rows": parameters,
+            "limitations": list(
+                dict.fromkeys(
+                    [
+                        *base_report.limitations,
+                        *profile.source_sellpoints.limitations,
+                        *profile.layered_sellpoint_analysis.limitations,
+                    ]
+                )
+            ),
+        }
+    )
+
+
+_V5_2_SELLPOINT_CLASSIFICATION_CN = {
+    "core_sellpoint": "核心卖点",
+    "basic_sellpoint": "基础卖点",
+    "user_unrecognized_sellpoint": "用户未认知卖点",
+    "pending_sellpoint": "待确认卖点",
+}
+
+_V5_2_PARAMETER_CLASSIFICATION_CN = {
+    "differentiating_parameter": "差异化参数",
+    "basic_parameter": "基础参数",
+    "parameter_gap": "参数短板",
+    "non_key_parameter_difference": "非关键参数差异",
+    "pending_parameter": "待确认参数",
+}
+
+_V5_2_USER_RECOGNITION_CN = {
+    "core_sellpoint": "用户已经感知到对应价值，当前量价表现支持继续主推。",
+    "basic_sellpoint": "用户把它视为同档产品应具备的基础能力。",
+    "user_unrecognized_sellpoint": "产品已经宣传，但用户尚未形成稳定的价值感知。",
+    "pending_sellpoint": "现有数据还不能判断用户是否形成稳定认知。",
+}
+
+
+def _v5_2_sellpoint_rows(
+    readback: SellpointValueV52Readback,
+    value_accounts: Sequence[StoredPmValueAccountRow],
+) -> list[StoredPmSellpointRow]:
+    layered = readback.profile.layered_sellpoint_analysis
+    facts = {
+        (row.source_claim_key, row.normalized_claim_code): row
+        for row in layered.source_sellpoints
+    }
+    value_by_code = {row.value_bundle_code: row for row in value_accounts}
+    result = []
+    for assessment in layered.sellpoint_assessments:
+        fact = facts.get(
+            (assessment.source_claim_key, assessment.normalized_claim_code)
+        )
+        if fact is None:
+            continue
+        fact_ids = set(assessment.source_sellpoint_fact_ids)
+        parameter_names = [
+            _parameter_display_cn(
+                row.parameter_name_cn,
+                row.normalized_value,
+            )
+            for row in layered.sellpoint_parameter_links
+            if row.sellpoint_fact_id in fact_ids
+        ]
+        user_values = [
+            row.user_value_cn
+            for row in layered.sellpoint_user_value_links
+            if row.sellpoint_fact_id in fact_ids
+        ]
+        market_results = [
+            _business_market_result(value_by_code[code])
+            for code in assessment.value_bundle_codes
+            if code in value_by_code
+            and value_by_code[code] in _market_value_rows(value_accounts)
+        ]
+        classification = _enum_text(assessment.classification)
+        result.append(
+            StoredPmSellpointRow(
+                source_claim_key=assessment.source_claim_key,
+                raw_claim_text=fact.raw_claim_text,
+                exact_quote_cn=fact.exact_quote_cn,
+                normalized_claim_code=assessment.normalized_claim_code,
+                normalized_claim_name_cn=fact.normalized_claim_name_cn,
+                classification_code=classification,
+                classification_cn=_V5_2_SELLPOINT_CLASSIFICATION_CN[
+                    classification
+                ],
+                supporting_parameters_cn=_unique(parameter_names),
+                value_bundle_codes=assessment.value_bundle_codes,
+                user_values_cn=_unique(
+                    [*assessment.user_value_summaries_cn, *user_values]
+                ),
+                current_user_recognition_cn=_V5_2_USER_RECOGNITION_CN[
+                    classification
+                ],
+                market_performance_cn=(
+                    "；".join(_unique(market_results)) if market_results else None
+                ),
+                product_action_cn=_v5_2_sellpoint_action_cn(
+                    classification,
+                    fact.exact_quote_cn
+                    or fact.normalized_claim_name_cn,
+                    _unique([*assessment.user_value_summaries_cn, *user_values]),
+                ),
+            )
+        )
+    return sorted(
+        result,
+        key=lambda row: (
+            (
+                "core_sellpoint",
+                "basic_sellpoint",
+                "user_unrecognized_sellpoint",
+                "pending_sellpoint",
+            ).index(row.classification_code),
+            row.source_claim_key,
+            row.normalized_claim_code,
+        ),
+    )
+
+
+def _v5_2_parameter_rows(
+    readback: SellpointValueV52Readback,
+) -> list[StoredPmParameterRow]:
+    layered = readback.profile.layered_sellpoint_analysis
+    sellpoint_names: dict[str, str] = {}
+    for fact in layered.source_sellpoints:
+        name = fact.exact_quote_cn or fact.normalized_claim_name_cn
+        for fact_id in fact.merged_claim_fact_ids:
+            sellpoint_names[fact_id] = name
+    result = []
+    for assessment in layered.parameter_assessments:
+        classification = _enum_text(assessment.classification)
+        result.append(
+            StoredPmParameterRow(
+                parameter_code=assessment.parameter_code,
+                parameter_name_cn=assessment.parameter_name_cn,
+                normalized_value=assessment.normalized_value,
+                classification_code=classification,
+                classification_cn=_V5_2_PARAMETER_CLASSIFICATION_CN[
+                    classification
+                ],
+                linked_sellpoints_cn=_unique(
+                    [
+                        sellpoint_names[fact_id]
+                        for fact_id in assessment.linked_sellpoint_fact_ids
+                        if fact_id in sellpoint_names
+                    ]
+                ),
+                business_reason_cn=_sanitize(assessment.business_reason_cn),
+            )
+        )
+    return sorted(
+        result,
+        key=lambda row: (
+            (
+                "differentiating_parameter",
+                "basic_parameter",
+                "parameter_gap",
+                "non_key_parameter_difference",
+                "pending_parameter",
+            ).index(row.classification_code),
+            row.parameter_code,
+        ),
+    )
+
+
+def _v5_2_first_screen(
+    base: StoredPmFirstScreen,
+    *,
+    sellpoints: Sequence[StoredPmSellpointRow],
+    parameters: Sequence[StoredPmParameterRow],
+    value_accounts: Sequence[StoredPmValueAccountRow],
+) -> StoredPmFirstScreen:
+    core = _v5_2_sellpoint_names(sellpoints, "core_sellpoint")
+    basic = _v5_2_sellpoint_names(sellpoints, "basic_sellpoint")
+    unrecognized = _v5_2_sellpoint_names(
+        sellpoints,
+        "user_unrecognized_sellpoint",
+    )
+    parameter_gaps = [
+        _parameter_display_cn(row.parameter_name_cn, row.normalized_value)
+        for row in parameters
+        if row.classification_code == "parameter_gap"
+    ]
+    retain_parts = []
+    if core:
+        retain_parts.append(f"主推{'、'.join(core)}，并直接说明用户获得的实际好处。")
+    if basic:
+        retain_parts.append(f"{'、'.join(basic)}作为基础卖点保留。")
+    if not retain_parts:
+        retain_parts.append("当前没有形成可单独主推的核心卖点，按已有分类维护卖点材料。")
+    if unrecognized:
+        unconverted = (
+            f"{'、'.join(unrecognized)}已经写进产品宣传，但用户尚未形成稳定认知；"
+            "先改成具体场景和体验结果，再决定是否增加传播资源。"
+        )
+    else:
+        unconverted = "当前没有识别出“已经宣传但用户尚未认知”的卖点。"
+    competitor_parts = []
+    opportunities = [
+        row.normalized_claim_name_cn
+        for row in sellpoints
+        if row.classification_code == "pending_sellpoint"
+    ]
+    if parameter_gaps:
+        competitor_parts.append(f"优先处理参数短板：{'、'.join(parameter_gaps)}。")
+    if opportunities:
+        competitor_parts.append(
+            f"待确认卖点{'、'.join(opportunities)}不进入本轮主推清单。"
+        )
+    if not competitor_parts:
+        competitor_parts.append("当前没有需要立即跟进的卖点或参数短板。")
+    growth = _v5_2_growth_action_cn(
+        price_support_cn=base.price_support_cn,
+        core=core,
+        unrecognized=unrecognized,
+    )
+    return StoredPmFirstScreen(
+        retain_cn="".join(retain_parts),
+        unconverted_cn=unconverted,
+        competitor_action_cn=" ".join(competitor_parts),
+        price_support_cn=_round_market_units_cn(base.price_support_cn),
+        growth_action_cn=growth,
+        sku_role_cn=_v5_2_sku_role_cn(
+            price_support_cn=base.price_support_cn,
+            value_accounts=value_accounts,
+        ),
+    )
+
+
+def _v5_2_sellpoint_action_cn(
+    classification: str,
+    sellpoint_name: str,
+    user_values: Sequence[str],
+) -> str:
+    value = "、".join(user_values)
+    if classification == "core_sellpoint":
+        return (
+            f"继续主推“{sellpoint_name}”"
+            + (f"，紧接着说明用户获得“{value}”。" if value else "。")
+        )
+    if classification == "basic_sellpoint":
+        return f"保留“{sellpoint_name}”，放入基础卖点说明，不承担主卖点任务。"
+    if classification == "user_unrecognized_sellpoint":
+        return (
+            f"重写“{sellpoint_name}”"
+            + (
+                f"，从功能描述改成用户可感知的“{value}”。"
+                if value
+                else "，改成具体使用场景和体验结果。"
+            )
+        )
+    return f"保留“{sellpoint_name}”现有位置，本轮不升级为主卖点。"
+
+
+def _v5_2_growth_action_cn(
+    *,
+    price_support_cn: str,
+    core: Sequence[str],
+    unrecognized: Sequence[str],
+) -> str:
+    actions = []
+    if core:
+        actions.append(f"扩大{'、'.join(core)}的场景化表达")
+    if unrecognized:
+        actions.append(f"重写{'、'.join(unrecognized)}，让用户先看懂实际好处")
+    action = "，并".join(actions) or "保持现有卖点结构"
+    if "价格有用户价值支撑" in price_support_cn:
+        return f"若目标是增加销量，先{action}；当前不把降价作为第一动作。"
+    if "价格支撑存在压力" in price_support_cn:
+        return (
+            f"若目标是增加销量，先{action}；卖点调整后销量仍承压，再评估价格调整。"
+        )
+    return f"若目标是增加销量，先{action}；量价方向明确前不扩大加价。"
+
+
+def _v5_2_sku_role_cn(
+    *,
+    price_support_cn: str,
+    value_accounts: Sequence[StoredPmValueAccountRow],
+) -> str:
+    battlefields = [
+        row.battlefield_name_cn
+        for row in value_accounts
+        if row.battlefield_name_cn
+    ]
+    primary = (
+        Counter(battlefields).most_common(1)[0][0]
+        if battlefields
+        else "用户价值"
+    )
+    if "价格有用户价值支撑" in price_support_cn:
+        return (
+            f"本品适合继续承担{primary}升级款角色：用已确认的用户卖点价值"
+            "支撑当前价格，不转为低价走量款。"
+        )
+    if "价格支撑存在压力" in price_support_cn:
+        return (
+            f"本品需要在{primary}升级款和走量款之间做取舍：先修复卖点表达，"
+            "销量仍承压时再调整价格角色。"
+        )
+    return (
+        f"本品先维持{primary}产品角色：卖点和量价方向明确后，"
+        "再决定强化溢价还是转向走量。"
+    )
+
+
+def _v5_2_sellpoint_names(
+    rows: Sequence[StoredPmSellpointRow],
+    classification_code: str,
+) -> list[str]:
+    return _unique(
+        [
+            row.exact_quote_cn or row.normalized_claim_name_cn
+            for row in rows
+            if row.classification_code == classification_code
+        ]
+    )
+
+
+def _parameter_display_cn(name: str, value: str | None) -> str:
+    normalized = str(value or "").strip()
+    return f"{name}（{normalized}）" if normalized else name
 def build_stored_profile_answer_artifacts(
     report: StoredSellpointValuePmReport,
     *,
@@ -336,6 +731,12 @@ def render_stored_profile_short_answer(
     links: Sequence[dict[str, str]] = (),
     max_chat_chars: int = 900,
 ) -> str:
+    if report.schema_version == "sku_sellpoint_value_pm_report_v1_2":
+        return _render_v5_2_short_answer(
+            report,
+            links=links,
+            max_chat_chars=max_chat_chars,
+        )
     screen = report.first_screen
     business_lines = [f"{_display_name(report.target)} 用户卖点价值结论"]
     if report.consumer_status == "data_insufficient":
@@ -373,12 +774,14 @@ def render_stored_profile_markdown(
     title: str,
     links: Sequence[dict[str, str]] = (),
 ) -> str:
+    if report.schema_version == "sku_sellpoint_value_pm_report_v1_2":
+        return _render_v5_2_markdown(report, title=title, links=links)
     screen = report.first_screen
     if report.consumer_status in {"data_insufficient", "invalid"}:
         message = (
             "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
             if report.consumer_status == "data_insufficient"
-            else "画像数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
+            else "数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
         )
         lines = [f"# {title}", "", message]
         if links:
@@ -552,6 +955,442 @@ def render_stored_profile_markdown(
     return _sanitize("\n".join(lines).strip())
 
 
+def _render_v5_2_short_answer(
+    report: StoredSellpointValuePmReport,
+    *,
+    links: Sequence[dict[str, str]],
+    max_chat_chars: int,
+) -> str:
+    lines = [
+        f"{_display_name(report.target)} 用户卖点价值结论",
+        f"用户卖点价值｜{_v5_2_user_value_answer_cn(report)}",
+        f"卖点分类｜{_v5_2_classification_summary_cn(report)}",
+        f"参数判断｜{_v5_2_parameter_summary_cn(report)}",
+        f"价格和销量｜{report.first_screen.price_support_cn}",
+        f"卖点怎么改｜{_v5_2_action_summary_cn(report)}",
+    ]
+    suffix = "\n".join(
+        f"{item['label']}：{item['url']}"
+        for item in links
+        if item.get("url", "").startswith("http")
+    )
+    body_limit = max(1, max_chat_chars - len(suffix) - (1 if suffix else 0))
+    body = _compress("\n".join(lines), body_limit)
+    return _sanitize(f"{body}\n{suffix}" if suffix else body)
+
+
+def _render_v5_2_markdown(
+    report: StoredSellpointValuePmReport,
+    *,
+    title: str,
+    links: Sequence[dict[str, str]],
+) -> str:
+    if report.consumer_status in {"data_insufficient", "invalid"}:
+        message = (
+            "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+            if report.consumer_status == "data_insufficient"
+            else "数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
+        )
+        return _sanitize(f"# {title}\n\n{message}")
+    market_rows = _market_value_rows(report.value_accounts)
+    lines = [
+        f"# {title}",
+        "",
+        "## 结论总览",
+        "",
+        f"1. **本品的用户卖点价值是什么**：{_v5_2_user_value_answer_cn(report)}",
+        f"2. **卖点怎么分类和处理**：{_v5_2_classification_summary_cn(report)}",
+        f"3. **参数在卖点中起什么作用**：{_v5_2_parameter_summary_cn(report)}",
+        f"4. **价格和销量怎么决策**：{report.first_screen.price_support_cn}",
+        f"5. **产品卖点修改建议**：{_v5_2_action_summary_cn(report)}",
+        "",
+        "## 一、本品的用户卖点价值是什么",
+        "",
+        _v5_2_user_value_answer_cn(report),
+        "",
+        (
+            "下面严格区分三层：产品原始卖点来自本品宣传材料；参数只说明卖点由什么"
+            "能力支撑；用户价值是用户实际感知到的好处。"
+        ),
+        "",
+    ]
+    if report.sellpoint_rows:
+        lines.extend(
+            [
+                "| 产品原始卖点 | 支撑参数 | 用户感知价值 | 市场兑现 |",
+                "| --- | --- | --- | --- |",
+                *(
+                    f"| {_v5_2_source_claim_cn(row)} | "
+                    f"{'、'.join(row.supporting_parameters_cn) or '未关联具体参数'} | "
+                    f"{'、'.join(row.user_values_cn) or '尚未形成稳定用户价值'} | "
+                    f"{row.market_performance_cn or '尚无可用量价承接'} |"
+                    for row in report.sellpoint_rows
+                ),
+                "",
+            ]
+        )
+    lines.extend(["## 二、卖点怎么分类和处理", ""])
+    for code in (
+        "core_sellpoint",
+        "basic_sellpoint",
+        "user_unrecognized_sellpoint",
+        "pending_sellpoint",
+    ):
+        rows = [
+            row for row in report.sellpoint_rows if row.classification_code == code
+        ]
+        if not rows:
+            continue
+        lines.extend(
+            [
+                f"### {_V5_2_SELLPOINT_CLASSIFICATION_CN[code]}",
+                "",
+                *(
+                    f"- **{_v5_2_sellpoint_label(row)}**："
+                    f"{row.current_user_recognition_cn}{row.product_action_cn}"
+                    for row in rows
+                ),
+                "",
+            ]
+        )
+    lines.extend(["## 三、参数在卖点中起什么作用", ""])
+    if report.parameter_rows:
+        lines.extend(
+            [
+                "| 参数 | 分类 | 对应产品卖点 | 产品判断 |",
+                "| --- | --- | --- | --- |",
+                *(
+                    f"| {_parameter_display_cn(row.parameter_name_cn, row.normalized_value)} | "
+                    f"{row.classification_cn} | "
+                    f"{'、'.join(row.linked_sellpoints_cn) or '未关联产品原始卖点'} | "
+                    f"{row.business_reason_cn} |"
+                    for row in report.parameter_rows
+                ),
+                "",
+            ]
+        )
+    else:
+        lines.extend(["现有数据没有形成可用的参数分类。", ""])
+    lines.extend(
+        [
+            "## 四、价格和销量怎么决策",
+            "",
+            f"- **当前价格判断**：{report.first_screen.price_support_cn}",
+            f"- **如果目标是增加销量**：{report.first_screen.growth_action_cn}",
+            "",
+        ]
+    )
+    if market_rows:
+        lines.extend(
+            [
+                "| 用户价值组合 | 对应产品原始卖点 | 价格和销量表现 |",
+                "| --- | --- | --- |",
+                *(
+                    f"| {row.value_bundle_name_cn} | "
+                    f"{_v5_2_sellpoints_for_value(report, row.value_bundle_code)} | "
+                    f"{_business_market_result(row)} |"
+                    for row in market_rows
+                ),
+                "",
+            ]
+        )
+    lines.extend(["## 五、产品卖点修改建议", ""])
+    action_rows = [
+        row
+        for row in report.sellpoint_rows
+        if row.classification_code
+        in {
+            "core_sellpoint",
+            "basic_sellpoint",
+            "user_unrecognized_sellpoint",
+            "pending_sellpoint",
+        }
+    ]
+    if action_rows:
+        lines.extend(
+            [
+                "| 当前产品原始卖点 | 建议动作 | 修改后的表达重点 |",
+                "| --- | --- | --- |",
+                *(
+                    f"| {_v5_2_source_claim_cn(row)} | {row.product_action_cn} | "
+                    f"{'、'.join(row.user_values_cn) or row.current_user_recognition_cn} |"
+                    for row in action_rows
+                ),
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            f"- **价格配合**：{_v5_2_price_action_cn(report)}",
+            f"- **SKU 角色**：{report.first_screen.sku_role_cn}",
+            "",
+        ]
+    )
+    if links:
+        lines.extend(
+            [
+                "## 相关链接",
+                "",
+                *(
+                    f"- [{item['label']}]({item['url']})"
+                    for item in links
+                    if item.get("url", "").startswith("http")
+                ),
+            ]
+        )
+    return _sanitize("\n".join(lines).strip())
+
+
+def _render_v5_2_feishu_card(
+    report: StoredSellpointValuePmReport,
+    *,
+    card_title: str,
+    links: Sequence[dict[str, str]],
+) -> dict[str, Any]:
+    if report.consumer_status in {"data_insufficient", "invalid"}:
+        content = (
+            "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
+            if report.consumer_status == "data_insufficient"
+            else "数据完整性异常，暂不能形成该 SKU 的用户卖点价值结论。"
+        )
+        elements: list[dict[str, Any]] = [_card_markdown(content)]
+    else:
+        core = _v5_2_sellpoint_names(report.sellpoint_rows, "core_sellpoint")
+        basic = _v5_2_sellpoint_names(report.sellpoint_rows, "basic_sellpoint")
+        unrecognized = _v5_2_sellpoint_names(
+            report.sellpoint_rows,
+            "user_unrecognized_sellpoint",
+        )
+        parameter_gaps = [
+            _parameter_display_cn(row.parameter_name_cn, row.normalized_value)
+            for row in report.parameter_rows
+            if row.classification_code == "parameter_gap"
+        ]
+        elements = [
+            _card_markdown(
+                "**答案｜这款 SKU 的用户卖点价值**\n"
+                + _compress(_v5_2_user_value_answer_cn(report), 520)
+            ),
+            _card_markdown(
+                f"**核心卖点 {len(core)} 项**　｜　"
+                f"**基础卖点 {len(basic)} 项**　｜　"
+                f"**用户未认知卖点 {len(unrecognized)} 项**　｜　"
+                f"**参数短板 {len(parameter_gaps)} 项**"
+            ),
+        ]
+        if report.sellpoint_rows:
+            elements.extend(
+                [
+                    {"tag": "hr"},
+                    _card_markdown("**产品原始卖点 → 用户感知价值**"),
+                    *(
+                        _card_markdown(
+                            "\n".join(
+                                (
+                                    f"**{_v5_2_sellpoint_label(row)}｜{row.classification_cn}**",
+                                    f"原文：{_compress(row.raw_claim_text, 180)}",
+                                    (
+                                        "用户价值："
+                                        + (
+                                            "、".join(row.user_values_cn)
+                                            if row.user_values_cn
+                                            else "尚未形成稳定用户价值"
+                                        )
+                                    ),
+                                )
+                            )
+                        )
+                        for row in report.sellpoint_rows[:5]
+                    ),
+                ]
+            )
+        if report.parameter_rows:
+            elements.extend(
+                [
+                    {"tag": "hr"},
+                    _card_markdown("**参数判断**"),
+                    _card_markdown(_v5_2_parameter_card_cn(report)),
+                ]
+            )
+        elements.extend(
+            [
+                {"tag": "hr"},
+                _card_markdown(
+                    "**价格和销量**\n"
+                    + _compress(report.first_screen.price_support_cn, 380)
+                    + "\n"
+                    + _compress(report.first_screen.growth_action_cn, 380)
+                ),
+                {"tag": "hr"},
+                _card_markdown("**产品卖点修改建议**"),
+                _card_markdown(_v5_2_action_card_cn(report)),
+            ]
+        )
+    elements.extend(
+        {
+            "tag": "button",
+            "element_id": f"sellpoint_value_v52_link_{index}",
+            "text": {"tag": "plain_text", "content": item["label"]},
+            "type": "default",
+            "size": "medium",
+            "width": "fill",
+            "behaviors": [
+                {
+                    "type": "open_url",
+                    "default_url": item["url"],
+                    "pc_url": item["url"],
+                    "ios_url": item["url"],
+                    "android_url": item["url"],
+                }
+            ],
+        }
+        for index, item in enumerate(links, start=1)
+        if item.get("url", "").startswith("http")
+    )
+    return {
+        "schema": "2.0",
+        "config": {
+            "summary": {"content": card_title},
+            "width_mode": "fill",
+            "update_multi": True,
+        },
+        "header": {
+            "title": {"tag": "plain_text", "content": card_title},
+            "subtitle": {
+                "tag": "plain_text",
+                "content": _sellpoint_card_subtitle(report),
+            },
+            "template": "turquoise",
+        },
+        "body": {"elements": elements},
+    }
+
+
+def _v5_2_user_value_answer_cn(report: StoredSellpointValuePmReport) -> str:
+    rows = [row for row in report.sellpoint_rows if row.user_values_cn]
+    if not rows:
+        return (
+            "本品已有产品原始卖点，但当前没有卖点形成可确认的用户感知价值。"
+            if report.sellpoint_rows
+            else "本品宣传材料中没有读取到可追溯的产品原始卖点。"
+        )
+    statements = [
+        f"“{_v5_2_sellpoint_label(row)}”让用户获得"
+        f"“{'、'.join(row.user_values_cn)}”"
+        for row in rows[:4]
+    ]
+    return "；".join(statements) + "。"
+
+
+def _v5_2_classification_summary_cn(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    parts = []
+    for code in (
+        "core_sellpoint",
+        "basic_sellpoint",
+        "user_unrecognized_sellpoint",
+        "pending_sellpoint",
+    ):
+        names = _v5_2_sellpoint_names(report.sellpoint_rows, code)
+        if names:
+            parts.append(
+                f"{_V5_2_SELLPOINT_CLASSIFICATION_CN[code]}：{'、'.join(names)}"
+            )
+    return "；".join(parts) + ("。" if parts else "当前没有可分类的产品原始卖点。")
+
+
+def _v5_2_parameter_summary_cn(report: StoredSellpointValuePmReport) -> str:
+    parts = []
+    for code in (
+        "differentiating_parameter",
+        "basic_parameter",
+        "parameter_gap",
+        "non_key_parameter_difference",
+        "pending_parameter",
+    ):
+        names = [
+            _parameter_display_cn(row.parameter_name_cn, row.normalized_value)
+            for row in report.parameter_rows
+            if row.classification_code == code
+        ]
+        if names:
+            parts.append(
+                f"{_V5_2_PARAMETER_CLASSIFICATION_CN[code]}：{'、'.join(names)}"
+            )
+    return "；".join(parts) + ("。" if parts else "当前没有形成可用的参数分类。")
+
+
+def _v5_2_action_summary_cn(report: StoredSellpointValuePmReport) -> str:
+    actions = [row.product_action_cn for row in report.sellpoint_rows]
+    return (
+        " ".join(actions[:3])
+        if actions
+        else "本轮不新增卖点表达，先保持现有材料。"
+    )
+
+
+def _v5_2_source_claim_cn(row: StoredPmSellpointRow) -> str:
+    return _compress(row.raw_claim_text, 180)
+
+
+def _v5_2_sellpoint_label(row: StoredPmSellpointRow) -> str:
+    return row.exact_quote_cn or row.normalized_claim_name_cn
+
+
+def _v5_2_sellpoints_for_value(
+    report: StoredSellpointValuePmReport,
+    value_bundle_code: str,
+) -> str:
+    names = [
+        _v5_2_sellpoint_label(row)
+        for row in report.sellpoint_rows
+        if value_bundle_code in row.value_bundle_codes
+    ]
+    return "、".join(_unique(names)) or "尚未关联产品原始卖点"
+
+
+def _v5_2_parameter_card_cn(report: StoredSellpointValuePmReport) -> str:
+    lines = []
+    for code in (
+        "differentiating_parameter",
+        "basic_parameter",
+        "parameter_gap",
+        "non_key_parameter_difference",
+        "pending_parameter",
+    ):
+        names = [
+            _parameter_display_cn(row.parameter_name_cn, row.normalized_value)
+            for row in report.parameter_rows
+            if row.classification_code == code
+        ]
+        if names:
+            lines.append(
+                f"**{_V5_2_PARAMETER_CLASSIFICATION_CN[code]}**："
+                f"{'、'.join(names[:5])}"
+            )
+    return "\n".join(lines)
+
+
+def _v5_2_action_card_cn(report: StoredSellpointValuePmReport) -> str:
+    rows = report.sellpoint_rows[:4]
+    if not rows:
+        return "本轮不新增卖点表达，先保持现有材料。"
+    return "\n".join(
+        f"- **{_v5_2_sellpoint_label(row)}**：{row.product_action_cn}"
+        for row in rows
+    )
+
+
+def _v5_2_price_action_cn(report: StoredSellpointValuePmReport) -> str:
+    price = report.first_screen.price_support_cn
+    if "价格有用户价值支撑" in price:
+        return "卖点修改后先保持当前价格，不把降价作为第一动作。"
+    if "价格支撑存在压力" in price:
+        return "先完成卖点修改；销量仍承压时，再评估价格调整。"
+    return "保持当前价格角色，量价方向明确后再决定调整。"
+
+
 def _representative_product_names(row: StoredPmValueAccountRow) -> str:
     names = []
     for comparison in row.representative_comparisons_cn:
@@ -574,6 +1413,12 @@ def render_stored_profile_feishu_card(
     links: Sequence[dict[str, str]] = (),
 ) -> dict[str, Any]:
     card_title = _sellpoint_card_title(title)
+    if report.schema_version == "sku_sellpoint_value_pm_report_v1_2":
+        return _render_v5_2_feishu_card(
+            report,
+            card_title=card_title,
+            links=links,
+        )
     if report.consumer_status == "data_insufficient":
         content = "现有数据不足，暂不能形成该 SKU 的用户卖点价值结论。"
         elements: list[dict[str, Any]] = [_card_markdown(content)]
@@ -1455,7 +2300,11 @@ def _metric_range(values: Sequence[float], *, unit: str) -> str:
     return f"{low:.0f}～{high:.0f}{unit}"
 
 
-def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
+def _v5_1_investment_rows(
+    values: Sequence[Any],
+    *,
+    allow_product_sellpoint_fallback: bool = True,
+) -> list[StoredPmInvestmentRow]:
     candidates: dict[tuple[str, str], list[tuple[Any, Any]]] = {}
     for value in values:
         for decision in value.investment_decisions:
@@ -1489,10 +2338,14 @@ def _v5_1_investment_rows(values: Sequence[Any]) -> list[StoredPmInvestmentRow]:
             StoredPmInvestmentRow(
                 capability_code=decision.capability_code,
                 capability_name_cn=decision.capability_name_cn,
-                product_sellpoint_cn=_v5_1_product_sellpoint_cn(
-                    decision.capability_code,
-                    decision.capability_name_cn,
-                    parameter.target_value if parameter is not None else None,
+                product_sellpoint_cn=(
+                    _v5_1_product_sellpoint_cn(
+                        decision.capability_code,
+                        decision.capability_name_cn,
+                        parameter.target_value if parameter is not None else None,
+                    )
+                    if allow_product_sellpoint_fallback
+                    else None
                 ),
                 perceived_user_value_cn=_capability_perceived_user_value(
                     decision.capability_code,
@@ -2176,11 +3029,14 @@ __all__ = [
     "StoredPmCandidateRow",
     "StoredPmFirstScreen",
     "StoredPmInvestmentRow",
+    "StoredPmParameterRow",
+    "StoredPmSellpointRow",
     "StoredPmValueAccountRow",
     "StoredSellpointValuePmReport",
     "build_stored_profile_answer_artifacts",
     "build_stored_profile_pm_report",
     "build_v5_1_stored_profile_pm_report",
+    "build_v5_2_stored_profile_pm_report",
     "render_stored_profile_feishu_card",
     "render_stored_profile_markdown",
     "render_stored_profile_short_answer",

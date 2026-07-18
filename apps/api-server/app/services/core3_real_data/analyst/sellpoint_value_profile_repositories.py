@@ -16,7 +16,7 @@ from app.services.core3_real_data.analyst.analyst_repository import (
     batch_ids_from_scope,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
-    SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION,
+    SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS,
     SellpointValueDraftBundle,
     SellpointValueProfileReadBundle,
     SellpointValueReleaseQualityStatus,
@@ -987,7 +987,7 @@ class SellpointValueProfileRepository(Core3BaseRepository):
             violations.append("profile_count_mismatch")
         if version.failed_count or version.blocked_count:
             violations.append("failed_or_blocked_profiles_present")
-        if version.method_version == SELLPOINT_VALUE_PROFILE_V5_1_METHOD_VERSION:
+        if version.method_version in SELLPOINT_VALUE_LOW_GATE_METHOD_VERSIONS:
             violations.extend(_v5_1_publish_completeness_violations(version))
         else:
             violations.extend(_legacy_publish_completeness_violations(version))
