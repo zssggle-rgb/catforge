@@ -109,6 +109,8 @@ def _candidate(
     sku_code = f"TV-C{rank}"
     return SimpleNamespace(
         candidate_sku_code=sku_code,
+        candidate_snapshot_ref=f"snapshot-{sku_code}",
+        candidate_snapshot_result_hash=f"snapshot-hash-{sku_code}",
         source_rank=rank,
         selected_rank=selected_rank,
         analysis=_analysis(sku_code, rank),
@@ -136,6 +138,8 @@ def _full() -> SimpleNamespace:
             avg_weekly_sales_volume=Decimal("45"),
             sales_volume_total=Decimal("900"),
         ),
+        target_snapshot_ref="snapshot-TV-TARGET",
+        target_snapshot_result_hash="snapshot-hash-TV-TARGET",
         candidates=[
             _candidate(2),
             _candidate(4, selected_rank=3),
@@ -194,6 +198,7 @@ class StrictSavedRepository:
         self.read_result = read or _read()
         self.version = version or _version()
         self.calls: list[tuple[str, Any]] = []
+        self.fact_briefs: dict[str, dict[str, Any]] = {}
 
     def read_agent_profile_payload(self, **kwargs: Any) -> SimpleNamespace:
         self.calls.append(("read_agent_profile_payload", kwargs))
@@ -202,6 +207,19 @@ class StrictSavedRepository:
     def get_version_by_id(self, version_id: str) -> SimpleNamespace:
         self.calls.append(("get_version_by_id", version_id))
         return self.version
+
+    def read_agent_sku_fact_briefs(
+        self,
+        *,
+        snapshot_result_hashes: dict[str, str],
+    ) -> dict[str, dict[str, Any]]:
+        self.calls.append(
+            ("read_agent_sku_fact_briefs", snapshot_result_hashes)
+        )
+        return {
+            snapshot_ref: self.fact_briefs.get(snapshot_ref, {})
+            for snapshot_ref in snapshot_result_hashes
+        }
 
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f"adapter attempted a non-saved source: {name}")
@@ -261,7 +279,72 @@ def test_formal_adapter_maps_all_saved_candidates_pair_facts_and_hashes() -> Non
             },
         ),
         ("get_version_by_id", "cp-version-1"),
+        (
+            "read_agent_sku_fact_briefs",
+            {
+                "snapshot-TV-C1": "snapshot-hash-TV-C1",
+                "snapshot-TV-C2": "snapshot-hash-TV-C2",
+                "snapshot-TV-C3": "snapshot-hash-TV-C3",
+                "snapshot-TV-C4": "snapshot-hash-TV-C4",
+                "snapshot-TV-TARGET": "snapshot-hash-TV-TARGET",
+            },
+        ),
     ]
+
+
+def test_adapter_reads_typed_parameter_facts_once_and_reuses_snapshot_cache() -> None:
+    repository = StrictSavedRepository()
+    repository.fact_briefs = {
+        snapshot_ref: {
+            "sections": {
+                "parameter_fact": {
+                    "core_params": {
+                        "picture": {
+                            "mini_led_flag": {
+                                "normalized_value": True,
+                                "value_presence": "present",
+                                "evidence_ids": [f"evidence-{snapshot_ref}"],
+                            },
+                            "quantum_dot_flag": {
+                                "normalized_value": False,
+                                "value_presence": "derived_false",
+                            },
+                        }
+                    }
+                }
+            }
+        }
+        for snapshot_ref in (
+            "snapshot-TV-TARGET",
+            "snapshot-TV-C1",
+            "snapshot-TV-C2",
+            "snapshot-TV-C3",
+            "snapshot-TV-C4",
+        )
+    }
+    adapter = SellpointValueCompetitorProfileAdapter(repository)
+
+    first = adapter.read(_request())
+    second = adapter.read(_request())
+
+    assert first.source is not None
+    assert second.source is not None
+    assert [
+        (row.parameter_code, row.fact_status)
+        for row in first.source.target_parameter_facts
+    ] == [
+        ("mini_led_flag", "known_present"),
+        ("quantum_dot_flag", "known_absent"),
+    ]
+    assert first.source.candidates[0].parameter_facts[0].evidence_ids == [
+        "evidence-snapshot-TV-C1"
+    ]
+    assert (
+        [call[0] for call in repository.calls].count(
+            "read_agent_sku_fact_briefs"
+        )
+        == 1
+    )
 
 
 def test_preview_is_explicitly_locked_to_one_non_current_draft() -> None:
@@ -418,4 +501,5 @@ def test_adapter_import_graph_and_runtime_are_saved_profile_only() -> None:
     assert {call[0] for call in repository.calls} == {
         "read_agent_profile_payload",
         "get_version_by_id",
+        "read_agent_sku_fact_briefs",
     }

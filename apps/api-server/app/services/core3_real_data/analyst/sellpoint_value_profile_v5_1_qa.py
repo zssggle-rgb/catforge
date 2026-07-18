@@ -286,7 +286,15 @@ class SellpointValueV51QaService:
                 and _enum_text(row.status)
                 in {"conclusion_available", "partial_conclusion"}
             ]
-            direct = "；".join(row.business_reason_cn for row in rows)
+            names = list(
+                dict.fromkeys(row.capability_name_cn for row in rows)
+            )
+            direct = (
+                f"{'、'.join(names)}属于当前同尺寸同价格层的基础竞争能力；"
+                "产品需要继续保持，但不把它们单独作为核心卖点或加价理由。"
+                if names
+                else ""
+            )
             return _make_answer(
                 readback,
                 question=question,

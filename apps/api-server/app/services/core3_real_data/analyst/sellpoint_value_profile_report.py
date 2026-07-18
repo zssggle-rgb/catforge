@@ -390,6 +390,7 @@ def render_stored_profile_markdown(
             )
         return _sanitize("\n".join(lines))
     realized_links = _sellpoint_value_links(report, "retain")
+    table_stake_links = _sellpoint_value_links(report, "table_stake")
     unconverted_links = _sellpoint_value_links(report, "unconverted")
     answer = _user_sellpoint_value_answer(report)
     realized_products = _link_product_names(realized_links)
@@ -400,7 +401,16 @@ def render_stored_profile_markdown(
         "",
         "## 结论总览",
         "",
-        f"- **用户卖点价值是什么**：{answer}",
+        (
+            f"- **用户卖点价值是什么**：{answer}"
+            + (
+                " 同时，"
+                + "、".join(_link_product_names(table_stake_links))
+                + "属于基础竞争能力，需要保持，但不作为用户愿意多付钱的核心理由。"
+                if table_stake_links
+                else ""
+            )
+        ),
         f"- **卖点与用户价值如何对应**：{_sellpoint_mapping_summary(realized_links)}",
         f"- **哪些卖点没有转化**：{_unconverted_sellpoint_summary(unconverted_links)}",
         f"- **价格和销量怎么决策**：{screen.price_support_cn}",
@@ -414,6 +424,10 @@ def render_stored_profile_markdown(
             "产品卖点是产品提供的具体能力或配置；用户卖点价值是该卖点已经"
             "转化为用户实际感知到的好处，并且获得市场价格或销量承接。"
         ),
+        "",
+        "### 这款 SKU 的完整卖点价值账",
+        "",
+        *_sellpoint_classification_ledger_table(report),
         "",
         "## 二、卖点与用户价值如何对应",
         "",
@@ -509,6 +523,16 @@ def render_stored_profile_markdown(
                     else "当前没有需要移出首屏的卖点。"
                 )
             ),
+            (
+                "- **基础能力**："
+                + (
+                    f"{'、'.join(_link_product_names(table_stake_links))}继续保持，"
+                    "不放在首屏承担差异化和加价任务。"
+                    if table_stake_links
+                    else "当前没有形成可确认的基础能力清单。"
+                )
+            ),
+            f"- **竞品配置取舍**：{screen.competitor_action_cn}",
             f"- **产品角色**：{screen.sku_role_cn}",
             "",
         ]
@@ -558,6 +582,7 @@ def render_stored_profile_feishu_card(
         elements = [_card_markdown(content)]
     else:
         realized_links = _sellpoint_value_links(report, "retain")
+        table_stake_links = _sellpoint_value_links(report, "table_stake")
         unconverted_links = _sellpoint_value_links(report, "unconverted")
         realized_groups = _sellpoint_value_mapping_groups(realized_links)
         realized_products = _link_product_names(realized_links)
@@ -574,6 +599,7 @@ def render_stored_profile_feishu_card(
             ),
             _card_markdown(
                 f"**已形成用户卖点价值 {len(realized_groups)} 组**　｜　"
+                f"**基础能力 {len(table_stake_links)} 项**　｜　"
                 f"**尚未转化 {len(unconverted_links)} 项**　｜　"
                 f"**量价支撑 {len(market_rows)} 组组合**"
             ),
@@ -593,6 +619,17 @@ def render_stored_profile_feishu_card(
                         _card_markdown(_sellpoint_value_link_markdown(row))
                         for row in unconverted_links[:2]
                     ),
+                ]
+            )
+        classification_markdown = _sellpoint_classification_ledger_markdown(
+            report
+        )
+        if classification_markdown:
+            elements.extend(
+                [
+                    {"tag": "hr"},
+                    _card_markdown("**这款 SKU 的完整卖点价值账**"),
+                    _card_markdown(classification_markdown),
                 ]
             )
         elements.extend(
@@ -1160,6 +1197,7 @@ def _v5_1_first_screen(
     for row in investments:
         by_action.setdefault(row.action_code, []).append(row.capability_name_cn)
     retain = _unique(by_action.get("retain", []))
+    table_stakes = _unique(by_action.get("table_stake", []))
     unconverted = _unique(by_action.get("unconverted", []))
     no_follow = _unique(by_action.get("do_not_follow", []))
     gaps = _unique(by_action.get("missing_competitive_gap", []))
@@ -1170,6 +1208,10 @@ def _v5_1_first_screen(
         competitor_parts.append(f"不用为参数对齐而跟进：{'、'.join(no_follow)}。")
     if gaps:
         competitor_parts.append(f"优先评估补齐：{'、'.join(gaps)}。")
+    if table_stakes:
+        competitor_parts.append(
+            f"作为基础能力继续保持，但不单独承担溢价：{'、'.join(table_stakes)}。"
+        )
     if not competitor_parts:
         resource_target = retain or unconverted
         competitor_parts.append(
@@ -1475,6 +1517,12 @@ def _v5_1_product_sellpoint_cn(
     capability_name_cn: str,
     target_value: str | None,
 ) -> str | None:
+    if capability_code.startswith("param:"):
+        return re.sub(
+            r"\s*(?:标记|状态)$",
+            "",
+            capability_name_cn,
+        ).strip()
     target = str(target_value or "").strip()
     facts = _target_fact_map(target)
     if capability_code == "tv_bright_room_dark_detail":
@@ -1526,6 +1574,73 @@ def _v5_1_product_sellpoint_cn(
     if generic:
         return generic
     return target if target and len(target) <= 80 else capability_name_cn
+
+
+_SELLPOINT_CLASSIFICATION_LEDGER = (
+    (
+        "retain",
+        "已形成用户卖点价值",
+        "继续作为重点卖点，说明它给用户带来的实际好处。",
+    ),
+    (
+        "table_stake",
+        "基础竞争能力",
+        "产品需要保持，但不单独承担差异化和加价任务。",
+    ),
+    (
+        "unconverted",
+        "尚未转化成用户价值",
+        "先修复用户体验或卖点表达，不继续堆叠同类参数。",
+    ),
+    (
+        "do_not_follow",
+        "当前不用跟的竞品配置",
+        "本品当前竞争表现没有因此受损，不为纸面参数对齐追加投入。",
+    ),
+    (
+        "missing_competitive_gap",
+        "需要评估补齐的能力",
+        "进入产品和卖点缺口评估，确认是否影响当前竞争表现。",
+    ),
+)
+
+
+def _sellpoint_classification_ledger_rows(
+    report: StoredSellpointValuePmReport,
+) -> list[tuple[str, list[str], str]]:
+    rows = []
+    for action_code, label, implication in _SELLPOINT_CLASSIFICATION_LEDGER:
+        names = _link_product_names(_sellpoint_value_links(report, action_code))
+        if names:
+            rows.append((label, names, implication))
+    return rows
+
+
+def _sellpoint_classification_ledger_markdown(
+    report: StoredSellpointValuePmReport,
+) -> str:
+    return "\n".join(
+        f"**{label}**：{'、'.join(names)}\n{implication}"
+        for label, names, implication in _sellpoint_classification_ledger_rows(
+            report
+        )
+    )
+
+
+def _sellpoint_classification_ledger_table(
+    report: StoredSellpointValuePmReport,
+) -> list[str]:
+    rows = _sellpoint_classification_ledger_rows(report)
+    if not rows:
+        return ["当前画像没有形成可展示的卖点或参数分类。"]
+    return [
+        "| 分类 | 卖点或参数 | 对产品经理意味着什么 |",
+        "| --- | --- | --- |",
+        *(
+            f"| {label} | {'、'.join(names)} | {implication} |"
+            for label, names, implication in rows
+        ),
+    ]
 
 
 def _target_fact_map(value: str) -> dict[str, str]:

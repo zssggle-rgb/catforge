@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +21,7 @@ from app.services.core3_real_data.analyst.competitor_profile_agent_snapshot_sche
     AgentCompetitorProfileSnapshot,
     AgentPairIndexItem,
     AgentSkuSnapshot,
+    decode_agent_sku_payload,
 )
 from app.services.core3_real_data.analyst.competitor_profile_repositories import (
     CompetitorProfileDraftWriteNotAllowedError,
@@ -231,6 +233,64 @@ class CompetitorProfileAgentSnapshotRepository(CompetitorProfileV11Repository):
             competitor_profile_version_id=version.competitor_profile_version_id,
             full=full,
         )
+
+    def read_agent_sku_fact_briefs(
+        self,
+        *,
+        snapshot_result_hashes: Mapping[str, str],
+    ) -> dict[str, dict[str, Any]]:
+        """Read verified fact briefs for explicitly referenced shared snapshots.
+
+        The sellpoint-value adapter needs parameter facts but must not reload the
+        complete competitor analysis graph. Snapshot references and result
+        hashes come from an already-verified profile payload, so both are
+        checked again before the compressed source payload is decoded.
+        """
+
+        expected = {
+            str(snapshot_ref).strip(): str(result_hash).strip()
+            for snapshot_ref, result_hash in snapshot_result_hashes.items()
+            if str(snapshot_ref).strip() and str(result_hash).strip()
+        }
+        if len(expected) != len(snapshot_result_hashes):
+            raise ValueError("snapshot fact-brief reads require non-empty identities")
+        if not expected:
+            return {}
+
+        model = entities.Core3CompetitorProfileSkuSnapshot
+        rows = list(
+            self.db.execute(
+                select(model)
+                .where(model.competitor_profile_sku_snapshot_id.in_(sorted(expected)))
+                .where(model.project_id == self.project_id)
+                .where(model.category_code == self.category_code.value)
+                .where(model.method_version == AGENT_SNAPSHOT_METHOD_VERSION)
+            ).scalars()
+        )
+        result: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            snapshot = AgentSkuSnapshot.model_validate(row.snapshot_json)
+            snapshot_ref = snapshot.snapshot_ref
+            expected_hash = expected.get(snapshot_ref)
+            if (
+                expected_hash is None
+                or snapshot_ref != row.competitor_profile_sku_snapshot_id
+                or snapshot.result_hash != row.result_hash
+                or snapshot.result_hash != expected_hash
+                or snapshot.project_id != self.project_id
+                or snapshot.category_code != self.category_code.value
+            ):
+                raise CompetitorProfileV11IntegrityError(
+                    "saved agent SKU fact brief differs from its referenced snapshot"
+                )
+            result[snapshot_ref] = deepcopy(
+                decode_agent_sku_payload(snapshot).fact_brief
+            )
+        if set(result) != set(expected):
+            raise CompetitorProfileV11IntegrityError(
+                "saved agent profile is missing referenced SKU fact briefs"
+            )
+        return result
 
     def _resolve_agent_version(
         self,

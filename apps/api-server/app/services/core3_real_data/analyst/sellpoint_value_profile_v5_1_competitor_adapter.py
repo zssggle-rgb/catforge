@@ -28,6 +28,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
     SPV_V5_1_COMPETITOR_FACT_GROUPS,
     CompetitorProfileCandidateRef,
+    CompetitorProfileParameterFact,
     CompetitorProfilePairFacts,
     CompetitorProfileSkuMarketFacts,
     SellpointValueCompetitorSource,
@@ -94,6 +95,10 @@ class SellpointValueCompetitorProfileAdapter:
         repository: CompetitorProfileAgentSnapshotRepository,
     ) -> None:
         self.repository = repository
+        self._parameter_fact_cache: dict[
+            tuple[str, str],
+            list[CompetitorProfileParameterFact],
+        ] = {}
 
     def read(
         self,
@@ -134,8 +139,16 @@ class SellpointValueCompetitorProfileAdapter:
             version=version,
         )
         full = read.full
+        parameter_facts = self._read_parameter_facts(full)
         candidates = [
-            _candidate_ref(row, category_code=request.category_code)
+            _candidate_ref(
+                row,
+                category_code=request.category_code,
+                parameter_facts=parameter_facts.get(
+                    (row.candidate_snapshot_ref, row.candidate_snapshot_result_hash),
+                    [],
+                ),
+            )
             for row in sorted(full.candidates, key=lambda item: item.source_rank)
         ]
         source = SellpointValueCompetitorSource(
@@ -151,6 +164,10 @@ class SellpointValueCompetitorProfileAdapter:
             release_scope_key=version.release_scope_key,
             target_sku_code=target_sku_code,
             target_market=_target_market(full.target),
+            target_parameter_facts=parameter_facts.get(
+                (full.target_snapshot_ref, full.target_snapshot_result_hash),
+                [],
+            ),
             candidates=candidates,
             priority_order=list(full.priority_order),
             source_version_result_hash=version.result_hash,
@@ -160,6 +177,42 @@ class SellpointValueCompetitorProfileAdapter:
             status="available",
             source=source,
         )
+
+    def _read_parameter_facts(
+        self,
+        profile: Any,
+    ) -> dict[tuple[str, str], list[CompetitorProfileParameterFact]]:
+        identities = {
+            (profile.target_snapshot_ref, profile.target_snapshot_result_hash),
+            *(
+                (
+                    row.candidate_snapshot_ref,
+                    row.candidate_snapshot_result_hash,
+                )
+                for row in profile.candidates
+            ),
+        }
+        missing = {
+            snapshot_ref: result_hash
+            for snapshot_ref, result_hash in identities
+            if (snapshot_ref, result_hash) not in self._parameter_fact_cache
+        }
+        if missing:
+            briefs = self.repository.read_agent_sku_fact_briefs(
+                snapshot_result_hashes=missing
+            )
+            for snapshot_ref, result_hash in missing.items():
+                self._parameter_fact_cache[(snapshot_ref, result_hash)] = (
+                    _parameter_facts_from_brief(
+                        briefs[snapshot_ref],
+                        snapshot_ref=snapshot_ref,
+                        snapshot_result_hash=result_hash,
+                    )
+                )
+        return {
+            identity: list(self._parameter_fact_cache[identity])
+            for identity in identities
+        }
 
 
 def _assert_source_integrity(
@@ -236,7 +289,12 @@ def _assert_source_integrity(
         )
 
 
-def _candidate_ref(row: Any, *, category_code: Literal["TV", "AC"]):
+def _candidate_ref(
+    row: Any,
+    *,
+    category_code: Literal["TV", "AC"],
+    parameter_facts: list[CompetitorProfileParameterFact],
+):
     analysis = row.analysis
     pair_values: dict[str, Any] = {}
     available: list[str] = []
@@ -265,12 +323,113 @@ def _candidate_ref(row: Any, *, category_code: Literal["TV", "AC"]):
         business_score=analysis.business_score,
         pair_result_hash=row.result_hash,
         market=_candidate_market(analysis.candidate, category_code=category_code),
+        parameter_facts=parameter_facts,
         pair_facts=CompetitorProfilePairFacts(
             **pair_values,
             available_fact_groups=available,
             unavailable_fact_groups=unavailable,
         ),
     )
+
+
+def _parameter_facts_from_brief(
+    fact_brief: Any,
+    *,
+    snapshot_ref: str,
+    snapshot_result_hash: str,
+) -> list[CompetitorProfileParameterFact]:
+    if not isinstance(fact_brief, dict):
+        return []
+    sections = fact_brief.get("sections")
+    if not isinstance(sections, dict):
+        sections = fact_brief
+    parameter_fact = sections.get("parameter_fact")
+    if not isinstance(parameter_fact, dict):
+        return []
+    core_params = parameter_fact.get("core_params")
+    if not isinstance(core_params, dict):
+        return []
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    _collect_parameter_payloads(core_params, grouped)
+    result = []
+    for parameter_code in sorted(grouped):
+        payloads = grouped[parameter_code]
+        statuses = {_parameter_fact_status(payload) for payload in payloads}
+        if "contradicted" in statuses or len(
+            statuses & {"known_present", "known_absent"}
+        ) > 1:
+            status = "contradicted"
+        elif "known_present" in statuses:
+            status = "known_present"
+        elif "known_absent" in statuses:
+            status = "known_absent"
+        else:
+            status = "missing"
+        representative = sorted(
+            payloads,
+            key=lambda payload: (
+                _parameter_fact_status(payload) != status,
+                str(payload.get("normalized_value") or ""),
+            ),
+        )[0]
+        evidence_ids = sorted(
+            {
+                str(evidence_id).strip()
+                for payload in payloads
+                for evidence_id in payload.get("evidence_ids") or []
+                if str(evidence_id).strip()
+            }
+        )
+        result.append(
+            CompetitorProfileParameterFact(
+                parameter_code=parameter_code,
+                fact_status=status,
+                normalized_value=representative.get("normalized_value"),
+                numeric_value=representative.get("numeric_value"),
+                value_text=representative.get("value_text"),
+                unit=representative.get("unit"),
+                evidence_ids=evidence_ids,
+                source_snapshot_ref=snapshot_ref,
+                source_snapshot_result_hash=snapshot_result_hash,
+            )
+        )
+    return result
+
+
+def _collect_parameter_payloads(
+    value: Any,
+    result: dict[str, list[dict[str, Any]]],
+) -> None:
+    if not isinstance(value, dict):
+        return
+    for key, child in value.items():
+        if not isinstance(child, dict):
+            continue
+        if {
+            "value_presence",
+            "normalized_value",
+            "numeric_value",
+            "value_text",
+        } & set(child):
+            result.setdefault(str(key), []).append(child)
+        else:
+            _collect_parameter_payloads(child, result)
+
+
+def _parameter_fact_status(payload: dict[str, Any]) -> str:
+    flags = {
+        str(value).strip().lower()
+        for value in payload.get("quality_flags") or []
+    }
+    if any("conflict" in value or "contradict" in value for value in flags):
+        return "contradicted"
+    presence = str(payload.get("value_presence") or "").strip().lower()
+    if presence == "present":
+        return "known_present"
+    if presence == "derived_false":
+        return "known_absent"
+    return "missing"
 
 
 def _pair_fact_value(

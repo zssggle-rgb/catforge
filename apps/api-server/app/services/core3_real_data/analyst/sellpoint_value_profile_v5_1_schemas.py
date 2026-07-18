@@ -190,12 +190,41 @@ class CompetitorProfileCandidateRef(SellpointValueProfileBaseModel):
     business_score: Decimal = Field(ge=0, le=1)
     pair_result_hash: str = Field(min_length=1)
     market: CompetitorProfileSkuMarketFacts
+    parameter_facts: list["CompetitorProfileParameterFact"] = Field(
+        default_factory=list
+    )
     pair_facts: CompetitorProfilePairFacts
 
     @model_validator(mode="after")
     def validate_candidate(self) -> "CompetitorProfileCandidateRef":
         if self.market.sku_code != self.candidate_sku_code:
             raise ValueError("competitor market facts must match candidate SKU")
+        codes = [row.parameter_code for row in self.parameter_facts]
+        if len(codes) != len(set(codes)):
+            raise ValueError("competitor parameter facts must be unique")
+        return self
+
+
+class CompetitorProfileParameterFact(SellpointValueProfileBaseModel):
+    parameter_code: str = Field(min_length=1)
+    fact_status: Literal[
+        "known_present",
+        "known_absent",
+        "missing",
+        "contradicted",
+    ]
+    normalized_value: Any | None = None
+    numeric_value: Decimal | None = None
+    value_text: str | None = None
+    unit: str | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    source_snapshot_ref: str = Field(min_length=1)
+    source_snapshot_result_hash: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_fact(self) -> "CompetitorProfileParameterFact":
+        if self.evidence_ids != sorted(set(self.evidence_ids)):
+            raise ValueError("parameter evidence IDs must be sorted and unique")
         return self
 
 
@@ -212,6 +241,9 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
     release_scope_key: str = Field(min_length=1)
     target_sku_code: str = Field(min_length=1)
     target_market: CompetitorProfileSkuMarketFacts
+    target_parameter_facts: list[CompetitorProfileParameterFact] = Field(
+        default_factory=list
+    )
     candidates: list[CompetitorProfileCandidateRef] = Field(default_factory=list)
     priority_order: list[str] = Field(default_factory=list, max_length=3)
     source_version_result_hash: str = Field(min_length=1)
@@ -236,6 +268,9 @@ class SellpointValueCompetitorSource(SellpointValueProfileBaseModel):
             or self.target_market.product_category != self.category_code
         ):
             raise ValueError("competitor source target market must match source scope")
+        target_codes = [row.parameter_code for row in self.target_parameter_facts]
+        if len(target_codes) != len(set(target_codes)):
+            raise ValueError("target parameter facts must be unique")
         codes = [row.candidate_sku_code for row in self.candidates]
         if len(codes) != len(set(codes)):
             raise ValueError("competitor source candidates must be unique")
@@ -1751,6 +1786,7 @@ __all__ = [
     "CandidateSourceType",
     "CapabilityInvestmentQuestionInput",
     "CompetitorProfileCandidateRef",
+    "CompetitorProfileParameterFact",
     "ConclusionDistribution",
     "DirectMarketComparisonInput",
     "DirectMarketComparisonResult",

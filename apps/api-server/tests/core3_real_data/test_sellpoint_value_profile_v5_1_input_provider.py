@@ -21,7 +21,11 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_input_pro
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_materializer import (
     materialize_sellpoint_value_profile_v5_1,
 )
+from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
+    _v5_1_investment_rows,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
+    CompetitorProfileParameterFact,
     QuantificationLayer,
 )
 from tests.core3_real_data.test_sellpoint_value_profile_v5_1_candidate_pools import (
@@ -47,14 +51,15 @@ class SavedProfileRepository:
 
 
 class FormalCompetitorAdapter:
-    def __init__(self) -> None:
+    def __init__(self, source: Any | None = None) -> None:
         self.requests: list[Any] = []
+        self.source = source or _source()
 
     def read(self, request: Any) -> SellpointValueCompetitorReadResult:
         self.requests.append(request)
         return SellpointValueCompetitorReadResult(
             status="available",
-            source=_source(),
+            source=self.source,
         )
 
 
@@ -327,6 +332,87 @@ def test_saved_v5_provider_builds_one_formal_v5_1_graph() -> None:
     assert materialized.profile.input_fingerprint
     assert materialized.persistence_bundle.profile.release_status == "draft"
     assert materialized.persistence_bundle.profile.is_current is False
+
+
+def test_saved_parameter_prevalence_generates_table_stake_classification() -> None:
+    source = _source()
+    target_fact = CompetitorProfileParameterFact(
+        parameter_code="mini_led_flag",
+        fact_status="known_present",
+        normalized_value=True,
+        source_snapshot_ref="snapshot-target",
+        source_snapshot_result_hash="snapshot-hash-target",
+    )
+    candidates = []
+    for candidate in source.candidates:
+        candidate_fact = CompetitorProfileParameterFact(
+            parameter_code="mini_led_flag",
+            fact_status="known_present",
+            normalized_value=True,
+            source_snapshot_ref=f"snapshot-{candidate.candidate_sku_code}",
+            source_snapshot_result_hash=(
+                f"snapshot-hash-{candidate.candidate_sku_code}"
+            ),
+        )
+        candidates.append(
+            candidate.model_copy(
+                update={
+                    "market": candidate.market.model_copy(
+                        update={"price_band_in_size_tier": "high"}
+                    ),
+                    "parameter_facts": [candidate_fact],
+                }
+            )
+        )
+    source = source.model_copy(
+        update={
+            "target_market": source.target_market.model_copy(
+                update={"price_band_in_size_tier": "high"}
+            ),
+            "target_parameter_facts": [target_fact],
+            "candidates": candidates,
+        }
+    )
+    provider = SavedV5SellpointValueV51InputProvider(
+        repository=SavedProfileRepository(_bundle()),
+        competitor_adapter=FormalCompetitorAdapter(source),
+        source_profile_version=SOURCE_PROFILE_VERSION,
+    )
+
+    request = provider.build_version_request(
+        project_id=PROJECT_ID,
+        category_code="TV",
+        batch_id=BATCH_ID,
+        profile_version="spv-v5-1-table-stake",
+        expected_sku_codes=[TARGET_SKU_CODE],
+        generated_by="table-stake-bridge-test",
+    )
+    materialization_input = provider.load_materialization_input(
+        request,
+        TARGET_SKU_CODE,
+    )
+    picture = next(
+        row
+        for row in materialization_input.values
+        if row.value_bundle_code == "picture-upgrade"
+    )
+    decisions = {
+        row.capability_code: row for row in picture.investment_decisions
+    }
+
+    table_stake = decisions["param:mini_led_flag"]
+    assert table_stake.classification == "table_stake"
+    assert table_stake.capability_name_cn == "MiniLED 标记"
+    assert table_stake.table_stake_assessment.known_count == 5
+    assert table_stake.table_stake_assessment.present_count == 5
+    assert table_stake.table_stake_assessment.prevalence == Decimal("1")
+    assert table_stake.table_stake_assessment.exclude_from_core_sellpoints
+    report_rows = _v5_1_investment_rows([picture])
+    table_stake_row = next(
+        row for row in report_rows if row.action_code == "table_stake"
+    )
+    assert table_stake_row.product_sellpoint_cn == "MiniLED"
+    assert table_stake_row.action_cn == "保持基础竞争能力"
 
 
 def test_multi_sku_request_freezes_light_scope_and_retains_one_graph() -> None:

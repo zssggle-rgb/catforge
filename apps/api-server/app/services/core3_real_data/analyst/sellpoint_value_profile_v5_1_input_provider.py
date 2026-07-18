@@ -22,6 +22,15 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.services.core3_real_data.analyst.claim_value_pm_category_config import (
+    AC_VALUE_UNITS,
+)
+from app.services.core3_real_data.analyst.claim_value_pm_service import (
+    TV_VALUE_UNITS,
+)
+from app.services.core3_real_data.analyst.claim_value_pm_v4_service import (
+    V4_EXTRA_VALUE_UNITS,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
     SELLPOINT_VALUE_PROFILE_METHOD_VERSION,
     SELLPOINT_VALUE_PROFILE_RULE_VERSION,
@@ -31,6 +40,9 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories i
     SellpointValueProfileRepository,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    CapabilityCandidateFact,
+    CapabilityComparisonScope,
+    CapabilityInvestmentInput,
     SellpointValueEvidenceRef,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_aggregation import (
@@ -63,6 +75,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_investmen
     SPV_V5_1_INVESTMENT_METHOD_VERSION,
     SPV_V5_1_LOCAL_REVIEW_METHOD_VERSION,
     build_local_investment_review_overlays,
+    classify_local_capability_investment,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_market_comparison import (
     SPV_V5_1_DIRECT_MARKET_METHOD_VERSION,
@@ -80,6 +93,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_materiali
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas import (
     AnalysisReferencePurpose,
+    CapabilityInvestmentQuestionInput,
     CandidateSourceType,
     CompetitorProfileSkuMarketFacts,
     DirectMarketComparisonInput,
@@ -105,6 +119,10 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_schemas i
     TableStakeAssessmentStatus,
     ValueConclusionAggregationInput,
     ValueQuantificationStack,
+)
+from app.services.core3_real_data.m03b_param_profile_service import (
+    AC_PARAM_TAXONOMY_V0_1,
+    TV_PARAM_TAXONOMY_V0_1,
 )
 from app.services.core3_real_data.hash_utils import stable_hash
 
@@ -644,6 +662,7 @@ def _value_input(
     investment_decisions = _investment_decisions(
         bundle=bundle,
         item=item,
+        competitor_source=competitor_source,
         capability_status_overrides=capability_status_overrides,
         evidence_ref=evidence_ref,
     )
@@ -939,6 +958,7 @@ def _investment_decisions(
     *,
     bundle: SellpointValueSavedV5GenerationSource,
     item: Any,
+    competitor_source: Any,
     capability_status_overrides: Mapping[str, str],
     evidence_ref: SellpointValueEvidenceRef,
 ) -> list[LocalCapabilityInvestmentDecision]:
@@ -1061,7 +1081,276 @@ def _investment_decisions(
                 ),
             )
         )
-    return sorted(result, key=lambda row: row.capability_code)
+    result.extend(
+        _classified_parameter_investments(
+            bundle=bundle,
+            item=item,
+            competitor_source=competitor_source,
+        )
+    )
+    return sorted(
+        result,
+        key=lambda row: (
+            row.capability_code,
+            row.question_code.value,
+        ),
+    )
+
+
+def _classified_parameter_investments(
+    *,
+    bundle: SellpointValueSavedV5GenerationSource,
+    item: Any,
+    competitor_source: Any,
+) -> list[LocalCapabilityInvestmentDecision]:
+    """Classify saved atomic parameter facts with the existing six-way model."""
+
+    definitions = _value_unit_definitions(bundle.profile.category_code)
+    target_facts = {
+        fact.parameter_code: fact
+        for fact in competitor_source.target_parameter_facts
+    }
+    candidates, scope = _parameter_comparison_scope(
+        item=item,
+        competitor_source=competitor_source,
+        target_facts=target_facts,
+    )
+    result = []
+    seen: set[str] = set()
+    for raw in item.investment_decisions_json:
+        if not isinstance(raw, Mapping):
+            continue
+        parent_code = str(raw.get("capability_code") or "").strip()
+        definition = definitions.get(parent_code)
+        if definition is None:
+            continue
+        for parameter_code in definition.param_codes:
+            if parameter_code in seen:
+                continue
+            seen.add(parameter_code)
+            target_fact = target_facts.get(parameter_code)
+            if target_fact is None or target_fact.fact_status == "missing":
+                continue
+            candidate_facts = [
+                _capability_candidate_fact(
+                    candidate=candidate,
+                    parameter_code=parameter_code,
+                )
+                for candidate in candidates
+            ]
+            question_code = (
+                InvestmentQuestionCode.CONFIGURATION_FOLLOW
+                if target_fact.fact_status == "known_absent"
+                else InvestmentQuestionCode.INVESTMENT_CONVERSION
+            )
+            investment = CapabilityInvestmentInput(
+                capability_code=f"param:{parameter_code}",
+                capability_name_cn=_parameter_name_cn(
+                    bundle.profile.category_code,
+                    parameter_code,
+                ),
+                capability_kind="capability",
+                parent_capability_code=parent_code,
+                target_fact_status=target_fact.fact_status,
+                target_value=_parameter_display_value(target_fact),
+                investment_level="standard",
+                candidate_facts=candidate_facts,
+                comparison_scope=scope,
+                current_competitive_performance=(
+                    _configuration_performance(
+                        competitor_source=competitor_source,
+                        candidate_facts=candidate_facts,
+                    )
+                    if question_code == InvestmentQuestionCode.CONFIGURATION_FOLLOW
+                    else "unknown"
+                ),
+                evidence_refs=[
+                    _parameter_evidence_ref(
+                        target_fact,
+                        sku_code=bundle.profile.sku_code,
+                    )
+                ],
+                limitations=[],
+            )
+            decision = classify_local_capability_investment(
+                CapabilityInvestmentQuestionInput(
+                    project_id=bundle.profile.project_id,
+                    category_code=bundle.profile.category_code,
+                    target_sku_code=bundle.profile.sku_code,
+                    question_code=question_code,
+                    value_bundle_code=item.value_bundle_code,
+                    investment=investment,
+                )
+            )
+            if decision.classification != "unknown" or decision.review_required:
+                result.append(decision)
+    return result
+
+
+def _value_unit_definitions(category_code: str) -> dict[str, Any]:
+    values = (
+        AC_VALUE_UNITS
+        if category_code == "AC"
+        else (*TV_VALUE_UNITS, *V4_EXTRA_VALUE_UNITS)
+    )
+    return {definition.code: definition for definition in values}
+
+
+def _parameter_comparison_scope(
+    *,
+    item: Any,
+    competitor_source: Any,
+    target_facts: Mapping[str, Any],
+) -> tuple[list[Any], CapabilityComparisonScope]:
+    target = competitor_source.target_market
+    product_form = _product_form(
+        category_code=competitor_source.category_code,
+        parameter_facts=target_facts,
+    )
+    candidates = [
+        candidate
+        for candidate in competitor_source.candidates
+        if candidate.market.size_tier == target.size_tier
+        and candidate.market.price_band_in_size_tier
+        == target.price_band_in_size_tier
+        and (
+            competitor_source.category_code != "AC"
+            or _product_form(
+                category_code="AC",
+                parameter_facts={
+                    fact.parameter_code: fact
+                    for fact in candidate.parameter_facts
+                },
+            )
+            == product_form
+        )
+    ]
+    candidate_scope_ids = [
+        candidate.candidate_sku_code for candidate in candidates
+    ]
+    payload = {
+        "category_code": competitor_source.category_code,
+        "price_band": target.price_band_in_size_tier,
+        "product_form": product_form,
+        "size_relation": (
+            "same_size"
+            if competitor_source.category_code == "TV" and target.size_tier
+            else "same_capacity_and_form"
+            if target.size_tier and product_form
+            else None
+        ),
+        "battlefield_codes": [item.battlefield_code],
+        "competitor_roles": sorted(
+            {candidate.role for candidate in candidates}
+        ),
+        "candidate_scope_ids": candidate_scope_ids,
+    }
+    return candidates, CapabilityComparisonScope(
+        **payload,
+        scope_hash=stable_hash(
+            payload,
+            version="sellpoint_value_parameter_scope_v5_1",
+        ),
+    )
+
+
+def _product_form(
+    *,
+    category_code: str,
+    parameter_facts: Mapping[str, Any],
+) -> str | None:
+    if category_code == "TV":
+        return "television"
+    installation = parameter_facts.get("installation_type")
+    if installation is None or installation.fact_status != "known_present":
+        return None
+    value = _parameter_display_value(installation)
+    return str(value).strip() or None
+
+
+def _capability_candidate_fact(
+    *,
+    candidate: Any,
+    parameter_code: str,
+) -> CapabilityCandidateFact:
+    fact = next(
+        (
+            row
+            for row in candidate.parameter_facts
+            if row.parameter_code == parameter_code
+        ),
+        None,
+    )
+    if fact is None:
+        return CapabilityCandidateFact(
+            candidate_sku_code=candidate.candidate_sku_code,
+            fact_status="missing",
+        )
+    return CapabilityCandidateFact(
+        candidate_sku_code=candidate.candidate_sku_code,
+        fact_status=fact.fact_status,
+        normalized_value=_parameter_display_value(fact),
+        evidence_refs=[
+            _parameter_evidence_ref(
+                fact,
+                sku_code=candidate.candidate_sku_code,
+            )
+        ],
+    )
+
+
+def _parameter_evidence_ref(
+    fact: Any,
+    *,
+    sku_code: str,
+) -> SellpointValueEvidenceRef:
+    return SellpointValueEvidenceRef(
+        module_code="competitor_profile_agent_snapshot",
+        record_type="sku_parameter_fact",
+        record_id=f"{sku_code}:{fact.parameter_code}",
+        result_hash=fact.source_snapshot_result_hash,
+        evidence_ids=list(fact.evidence_ids),
+    )
+
+
+def _parameter_display_value(fact: Any) -> Any:
+    for value in (fact.normalized_value, fact.numeric_value, fact.value_text):
+        if value not in (None, ""):
+            return value
+    return False if fact.fact_status == "known_absent" else None
+
+
+def _parameter_name_cn(category_code: str, parameter_code: str) -> str:
+    taxonomy = (
+        AC_PARAM_TAXONOMY_V0_1
+        if category_code == "AC"
+        else TV_PARAM_TAXONOMY_V0_1
+    )
+    definition = taxonomy.params_by_code.get(parameter_code)
+    return definition.param_name if definition is not None else parameter_code
+
+
+def _configuration_performance(
+    *,
+    competitor_source: Any,
+    candidate_facts: Sequence[CapabilityCandidateFact],
+) -> str:
+    target_sales = competitor_source.target_market.avg_weekly_sales_volume
+    present_codes = {
+        fact.candidate_sku_code
+        for fact in candidate_facts
+        if fact.fact_status == "known_present"
+    }
+    present_sales = [
+        candidate.market.avg_weekly_sales_volume
+        for candidate in competitor_source.candidates
+        if candidate.candidate_sku_code in present_codes
+        and candidate.market.avg_weekly_sales_volume is not None
+    ]
+    if target_sales is None or not present_sales:
+        return "unknown"
+    average = sum(present_sales, Decimal("0")) / Decimal(len(present_sales))
+    return "not_weaker" if target_sales >= average else "weaker"
 
 
 def _quantification_stack(
