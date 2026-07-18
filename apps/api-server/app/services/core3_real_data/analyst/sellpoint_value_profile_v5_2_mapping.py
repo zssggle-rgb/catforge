@@ -60,6 +60,25 @@ _GENERIC_BRACKET_TITLES = {
     "其他卖点",
 }
 
+_USER_VALUE_CN_BY_DEFINITION = {
+    "tv_bright_room_dark_detail": "白天客厅画面仍清楚，暗场层次更完整、光晕更少。",
+    "tv_gaming_motion_fluency": "游戏操作更跟手，高速画面更流畅、拖影更少。",
+    "tv_color_picture_truth": "色彩更自然准确，人物和画面还原更真实。",
+    "tv_cinema_soundstage": "对白更清楚，声场和包围感带来更强影院沉浸。",
+    "tv_system_interaction_efficiency": "开机、切换、投屏和语音操作更流畅省事。",
+    "tv_large_screen_immersion": "大屏观看更有临场感，客厅观影更沉浸。",
+    "tv_long_viewing_comfort": "长时间观看更舒适，反光、频闪和眼疲劳更少。",
+    "ac_capacity_space_fit": "制冷制热能力与房间面积更匹配。",
+    "ac_energy_cost_control": "长期使用更省电，用电成本更可控。",
+    "ac_sleep_quiet_comfort": "夜间运行更安静，睡眠不易被打扰。",
+    "ac_comfortable_airflow": "送风更柔和，减少冷风直吹的不适。",
+    "ac_clean_air_health": "空气更洁净，日常清洁和维护更省心。",
+    "ac_large_space_coverage": "大空间降温升温更快，覆盖更均匀。",
+    "ac_installation_fit": "安装更适配现有空间，减少尺寸和位置限制。",
+    "ac_smart_operation": "远程、语音和自动调节让操作更省事。",
+    "ac_seasonal_reliability": "极端天气和潮湿环境下运行更稳定。",
+}
+
 
 class CompetitorSellpointObservation(SellpointValueProfileBaseModel):
     candidate_sku_code: str = Field(min_length=1)
@@ -261,9 +280,9 @@ def _user_value_links(
 
     links: list[SellpointUserValueLink] = []
     for sellpoint in source_sellpoints:
-        for definition in definitions_by_claim.get(
-            sellpoint.normalized_claim_code,
-            [],
+        for definition in _matching_definitions(
+            sellpoint,
+            definitions_by_claim,
         ):
             for value in _matching_values(definition.code, values):
                 evidence = _dedupe_evidence(
@@ -276,7 +295,7 @@ def _user_value_links(
                     SellpointUserValueLink(
                         sellpoint_fact_id=sellpoint.claim_fact_id,
                         value_bundle_code=str(value.value_bundle_code),
-                        user_value_cn=str(value.perceived_outcome_cn),
+                        user_value_cn=_definition_user_value_cn(definition),
                         perceived_status=_perceived_status(
                             definition.code,
                             value,
@@ -419,9 +438,9 @@ def _sellpoint_assessments(
     for sellpoint in source_sellpoints:
         if sellpoint.service_separate:
             continue
-        definitions = definitions_by_claim.get(
-            sellpoint.normalized_claim_code,
-            [],
+        definitions = _matching_definitions(
+            sellpoint,
+            definitions_by_claim,
         )
         mapped_values = [
             value
@@ -660,6 +679,31 @@ def _matching_values(
         for value in values
         if definition_code in set(getattr(value, "capability_codes", ()))
     ]
+
+
+def _matching_definitions(
+    sellpoint: SourceSellpointFact,
+    definitions_by_claim: Mapping[str, Sequence[Any]],
+) -> list[Any]:
+    definitions = list(
+        definitions_by_claim.get(sellpoint.normalized_claim_code, ())
+    )
+    if sellpoint.normalized_claim_code not in {
+        "tv_claim_high_refresh_rate",
+        "tv_claim_high_refresh",
+    }:
+        return definitions
+    raw = sellpoint.raw_claim_text.lower()
+    if re.search(r"游戏|高刷|刷新率|运动|流畅|低延迟|hdmi", raw):
+        return definitions
+    return []
+
+
+def _definition_user_value_cn(definition: Any) -> str:
+    return _USER_VALUE_CN_BY_DEFINITION.get(
+        str(definition.code),
+        str(definition.name_cn),
+    )
 
 
 def _perceived_status(

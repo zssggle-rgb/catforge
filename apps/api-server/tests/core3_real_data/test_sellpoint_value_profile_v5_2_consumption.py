@@ -122,7 +122,7 @@ def test_v5_2_report_uses_only_saved_source_sellpoints(
     )
     assert report.sellpoint_rows[0].classification_cn == "核心卖点"
     assert report.sellpoint_rows[0].user_values_cn == [
-        "白天客厅不用拉窗帘也能看清，暗场层次更完整"
+        "白天客厅画面仍清楚，暗场层次更完整、光晕更少。"
     ]
     assert "picture_quality" not in markdown
     assert "tv_bright_room_dark_detail" not in markdown

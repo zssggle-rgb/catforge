@@ -244,12 +244,9 @@ def _answer_topic(
                 [],
                 True,
             )
-        direct = "；".join(
-            f"{row.classification_cn}：{_parameter_name(row)}"
-            for row in parameters
-        )
+        direct = _parameter_classification_answer_cn(parameters)
         return (
-            direct + "。",
+            direct,
             "差异化参数用于证明卖点，基础参数维持竞争，参数短板进入产品评估。",
             [],
             parameters,
@@ -295,9 +292,11 @@ def _matching_sellpoints(
     normalized = _normalize(question)
     result = []
     for row in rows:
-        aliases = {
-            _normalize(row.normalized_claim_name_cn),
+        exact_aliases = {
             _normalize(row.exact_quote_cn or ""),
+        }
+        standardized_aliases = {
+            _normalize(row.normalized_claim_name_cn),
             *(
                 _normalize(part)
                 for part in re.split(
@@ -306,7 +305,18 @@ def _matching_sellpoints(
                 )
             ),
         }
-        aliases = {alias for alias in aliases if len(alias) >= 2}
+        aliases = {
+            *(
+                alias
+                for alias in exact_aliases
+                if len(alias) >= 2
+            ),
+            *(
+                alias
+                for alias in standardized_aliases
+                if len(alias) >= 4
+            ),
+        }
         if any(alias in normalized for alias in aliases):
             result.append(row)
     return result
@@ -332,13 +342,34 @@ def _sellpoint_evidence_ids(
         {
             fact_id
             for fact in readback.profile.layered_sellpoint_analysis.source_sellpoints
-            if (
-                fact.source_claim_key == row.source_claim_key
-                and fact.normalized_claim_code == row.normalized_claim_code
-            )
+            if fact.source_claim_key == row.source_claim_key
             for fact_id in fact.merged_claim_fact_ids
         }
     )
+
+
+def _parameter_classification_answer_cn(
+    rows: list[StoredPmParameterRow],
+) -> str:
+    parts = []
+    for classification in (
+        "差异化参数",
+        "基础参数",
+        "参数短板",
+        "非关键参数差异",
+        "待确认参数",
+    ):
+        names = [
+            _parameter_name(row)
+            for row in rows
+            if row.classification_cn == classification
+        ]
+        if not names:
+            continue
+        shown = "、".join(names[:5])
+        suffix = f"等{len(names)}项" if len(names) > 5 else ""
+        parts.append(f"{classification}：{shown}{suffix}")
+    return "；".join(parts) + "。"
 
 
 def _parameter_evidence_ids(
