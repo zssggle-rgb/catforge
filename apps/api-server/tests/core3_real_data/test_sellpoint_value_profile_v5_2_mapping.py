@@ -389,6 +389,69 @@ def test_ac_claim_maps_only_to_ac_user_value_definition() -> None:
     assert result.sellpoint_user_value_links[0].internal_value_theme_codes == [
         "ac_sleep_quiet_comfort"
     ]
+
+
+def test_picture_chip_claim_does_not_map_to_system_operation_value() -> None:
+    source = _source_fact(
+        claim_code="tv_claim_chip_performance",
+        claim_name="芯片/处理器性能",
+        raw_claim_text="信芯AI画质芯片提升控光精度，支持场景画质自适应。",
+    )
+    result = build_layered_sellpoint_analysis(
+        category_code="TV",
+        target_sku_code="TV0001",
+        source_sellpoints=_source_result([source]),
+        values=[
+            _value(
+                definition_code="tv_bright_room_dark_detail",
+                outcome="画质提升",
+                decisions=[_decision("tv_bright_room_dark_detail", "retain")],
+            ),
+            _value(
+                definition_code="tv_system_interaction_efficiency",
+                outcome="系统操作省事",
+                decisions=[
+                    _decision("tv_system_interaction_efficiency", "retain")
+                ],
+            ),
+        ],
+        target_parameter_facts=[],
+    )
+
+    assert {
+        code
+        for row in result.sellpoint_user_value_links
+        for code in row.internal_value_theme_codes
+    } == {"tv_bright_room_dark_detail"}
+
+
+def test_flicker_frequency_is_not_treated_as_gaming_refresh_value() -> None:
+    source = _source_fact(
+        claim_code="tv_claim_high_refresh_rate",
+        claim_name="高刷新率",
+        raw_claim_text="智感调光适配环境明暗，20000Hz超高频无可见屏闪，护眼舒适。",
+    )
+    result = build_layered_sellpoint_analysis(
+        category_code="TV",
+        target_sku_code="TV0001",
+        source_sellpoints=_source_result([source]),
+        values=[
+            _value(
+                definition_code="tv_gaming_motion_fluency",
+                outcome="游戏流畅",
+                decisions=[
+                    _decision("tv_gaming_motion_fluency", "unconverted")
+                ],
+            )
+        ],
+        target_parameter_facts=[],
+    )
+
+    assert result.sellpoint_user_value_links == []
+    assert (
+        result.sellpoint_assessments[0].classification
+        == SellpointClassification.PENDING_SELLPOINT
+    )
     assert all(
         not code.startswith("tv_")
         for row in result.sellpoint_user_value_links

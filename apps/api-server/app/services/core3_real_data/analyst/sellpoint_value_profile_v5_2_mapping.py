@@ -274,7 +274,9 @@ def _user_value_links(
     values: Sequence[Any],
 ) -> list[SellpointUserValueLink]:
     definitions_by_claim: dict[str, list[Any]] = defaultdict(list)
-    for definition in _value_definitions(category_code):
+    definitions = _value_definitions(category_code)
+    definitions_by_code = {definition.code: definition for definition in definitions}
+    for definition in definitions:
         for claim_code in definition.claim_codes:
             definitions_by_claim[claim_code].append(definition)
 
@@ -283,6 +285,7 @@ def _user_value_links(
         for definition in _matching_definitions(
             sellpoint,
             definitions_by_claim,
+            definitions_by_code,
         ):
             for value in _matching_values(definition.code, values):
                 evidence = _dedupe_evidence(
@@ -421,7 +424,9 @@ def _sellpoint_assessments(
     values: Sequence[Any],
 ) -> list[ProductSellpointAssessment]:
     definitions_by_claim: dict[str, list[Any]] = defaultdict(list)
-    for definition in _value_definitions(category_code):
+    definitions = _value_definitions(category_code)
+    definitions_by_code = {definition.code: definition for definition in definitions}
+    for definition in definitions:
         for claim_code in definition.claim_codes:
             definitions_by_claim[claim_code].append(definition)
     parameter_classification = {
@@ -441,6 +446,7 @@ def _sellpoint_assessments(
         definitions = _matching_definitions(
             sellpoint,
             definitions_by_claim,
+            definitions_by_code,
         )
         mapped_values = [
             value
@@ -684,16 +690,39 @@ def _matching_values(
 def _matching_definitions(
     sellpoint: SourceSellpointFact,
     definitions_by_claim: Mapping[str, Sequence[Any]],
+    definitions_by_code: Mapping[str, Any],
 ) -> list[Any]:
     definitions = list(
         definitions_by_claim.get(sellpoint.normalized_claim_code, ())
     )
+    raw = sellpoint.raw_claim_text.lower()
+    if sellpoint.normalized_claim_code == "tv_claim_chip_performance":
+        if re.search(r"画质|控光|色彩|清晰|场景画质", raw) and not re.search(
+            r"开机|系统|操作|投屏|语音|运行|切换",
+            raw,
+        ):
+            definition = definitions_by_code.get("tv_bright_room_dark_detail")
+            return [definition] if definition is not None else []
+    if sellpoint.normalized_claim_code == "tv_claim_dolby_audio_video":
+        if re.search(r"色彩|色准|潘通|pantone", raw) and not re.search(
+            r"声音|音响|声道|声场|低音|对白|包围",
+            raw,
+        ):
+            definition = definitions_by_code.get("tv_color_picture_truth")
+            return [definition] if definition is not None else []
+    if (
+        sellpoint.normalized_claim_code == "tv_claim_theater_scene"
+        and not re.search(
+            r"影院|沉浸|声场|音响|声道|对白|包围|客厅观影",
+            raw,
+        )
+    ):
+        return []
     if sellpoint.normalized_claim_code not in {
         "tv_claim_high_refresh_rate",
         "tv_claim_high_refresh",
     }:
         return definitions
-    raw = sellpoint.raw_claim_text.lower()
     if re.search(r"游戏|高刷|刷新率|运动|流畅|低延迟|hdmi", raw):
         return definitions
     return []
