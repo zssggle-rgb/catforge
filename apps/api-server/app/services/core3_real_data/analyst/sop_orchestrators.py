@@ -996,6 +996,7 @@ class SopOrchestrators:
         competitor_profile_release_scope_key: str | None = None,
         allow_draft_preview: bool = False,
         legacy_live_analysis: bool = False,
+        allow_legacy_fallback_if_profile_unavailable: bool = False,
         **_: Any,
     ) -> dict[str, Any]:
         if legacy_live_analysis:
@@ -1011,7 +1012,7 @@ class SopOrchestrators:
                 max_chat_chars=max_chat_chars,
                 report_title=report_title,
             )
-        return self._competitor_set_from_profile(
+        profile_result = self._competitor_set_from_profile(
             context,
             query=query,
             sku_code=sku_code,
@@ -1028,6 +1029,23 @@ class SopOrchestrators:
             allow_draft_preview=allow_draft_preview,
             requested_top_n=top_n,
         )
+        if (
+            allow_legacy_fallback_if_profile_unavailable
+            and _is_profile_unavailable_result(profile_result)
+        ):
+            return self._competitor_set_legacy(
+                context,
+                query=query,
+                sku_code=sku_code,
+                model_name=model_name,
+                limit=limit,
+                answer_style=answer_style,
+                with_report=with_report,
+                top_n=top_n,
+                max_chat_chars=max_chat_chars,
+                report_title=report_title,
+            )
+        return profile_result
 
     def _competitor_set_from_profile(
         self,
@@ -2207,6 +2225,15 @@ def _profile_unavailable_result(
         ),
         limitations=[message_cn],
         message_cn=message_cn,
+    )
+
+
+def _is_profile_unavailable_result(result: dict[str, Any]) -> bool:
+    competitor_set = (result.get("result") or {}).get("competitor_set") or {}
+    return (
+        result.get("status") == AnalystStatus.NOT_FOUND.value
+        and competitor_set.get("source") == "competitor_profile_v1_1"
+        and competitor_set.get("status") == "profile_unavailable"
     )
 
 
