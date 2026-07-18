@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.2 串行 Goal 调度
 
-状态：SPV52-G01—G07 completed；SPV52-G08 pending
+状态：SPV52-G01—G08 completed
 
 日期：2026-07-18
 
@@ -194,6 +194,8 @@
 5. `unsourced/parameter_as_sellpoint/value_theme_as_sellpoint/hash mismatch/dangling` 均为 0；
 6. 输出 V5.1→V5.2 diff 和回退方案；
 7. 停止并等待用户决定是否 review/publish/current。
+
+状态：completed；关闭回执：`SPV52_G08_closure_receipt.md`。
 
 ## 4. Heartbeat 提示词
 
