@@ -66,8 +66,10 @@ from app.services.core3_real_data.analyst.replacement_pressure import (
     ReplacementPressureInput,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
+    StoredSellpointValuePmReport,
     build_stored_profile_answer_artifacts,
     build_v5_1_stored_profile_pm_report,
+    build_v5_2_stored_profile_pm_report,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_repositories import (
     SellpointValueProfileRepository,
@@ -87,6 +89,21 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_qa import
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_1_repository import (
     SellpointValueV51Repository,
     SellpointValueV51RepositoryError,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_consumer import (
+    SellpointValueV52ConsumerIntegrityError,
+    SellpointValueV52ConsumerReadRequest,
+    SellpointValueV52ConsumerReader,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_materializer_schemas import (
+    SellpointValueV52Readback,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_qa import (
+    SellpointValueV52QaService,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_repository import (
+    SellpointValueV52Repository,
+    SellpointValueV52RepositoryError,
 )
 
 
@@ -195,11 +212,22 @@ class SopOrchestrators:
             if self.sellpoint_value_v5_1_repository is not None
             else None
         )
+        self.sellpoint_value_v5_2_repository = (
+            SellpointValueV52Repository(sellpoint_value_profile_repository.context)
+            if sellpoint_value_profile_repository is not None
+            else None
+        )
+        self.sellpoint_value_v5_2_reader = (
+            SellpointValueV52ConsumerReader(self.sellpoint_value_v5_2_repository)
+            if self.sellpoint_value_v5_2_repository is not None
+            else None
+        )
         self.sellpoint_value_profile_qa_service = (
             SellpointValueV51QaService(self.sellpoint_value_v5_1_reader)
             if self.sellpoint_value_v5_1_reader is not None
             else None
         )
+        self.sellpoint_value_v5_2_qa_service = SellpointValueV52QaService()
 
     def dispatch(
         self, command: str, context: AnalystContext, **kwargs: Any
@@ -258,8 +286,9 @@ class SopOrchestrators:
                 ],
                 message_cn="当前只能追问一份已锁定的用户卖点价值画像。",
             )
-        service = self.sellpoint_value_profile_qa_service
-        if service is None:
+        legacy_service = self.sellpoint_value_profile_qa_service
+        v5_2_reader = self.sellpoint_value_v5_2_reader
+        if legacy_service is None and v5_2_reader is None:
             return base_result(
                 status=AnalystStatus.NOT_FOUND,
                 command=command,
@@ -272,8 +301,63 @@ class SopOrchestrators:
             if profile_version or sellpoint_value_profile_version_id
             else "formal"
         )
+        if v5_2_reader is not None:
+            try:
+                v5_2_read = v5_2_reader.read(
+                    SellpointValueV52ConsumerReadRequest(
+                        project_id=context.project_id,
+                        category_code=context.category_code,
+                        batch_id=context.batch_id,
+                        access_mode=access_mode,
+                        query=query,
+                        sku_code=sku_code,
+                        model_name=model_name,
+                        profile_version=profile_version,
+                        sellpoint_value_profile_version_id=(
+                            sellpoint_value_profile_version_id
+                        ),
+                    )
+                )
+            except (
+                ValueError,
+                SellpointValueV52ConsumerIntegrityError,
+                SellpointValueV52RepositoryError,
+            ) as exc:
+                return base_result(
+                    status=AnalystStatus.ERROR,
+                    command=command,
+                    context=context,
+                    limitations=[str(exc)],
+                    message_cn="用户卖点价值画像读取条件不完整或画像数据异常。",
+                )
+            if v5_2_read.status == "ambiguous":
+                return base_result(
+                    status=AnalystStatus.AMBIGUOUS,
+                    command=command,
+                    context=context,
+                    result={"candidates": v5_2_read.candidates},
+                    limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
+                    message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
+                )
+            if v5_2_read.status == "available":
+                assert v5_2_read.readback is not None
+                return self._sellpoint_value_v5_2_qa_result(
+                    context,
+                    command=command,
+                    readback=v5_2_read.readback,
+                    question=question,
+                    expected_result_hash=expected_result_hash,
+                )
+        if legacy_service is None:
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command=command,
+                context=context,
+                limitations=["当前已发布画像中没有匹配的 SKU，且不会临时重算。"],
+                message_cn="当前已发布画像中没有找到该 SKU。",
+            )
         try:
-            answer = service.answer(
+            answer = legacy_service.answer(
                 project_id=context.project_id,
                 category_code=context.category_code,
                 batch_id=context.batch_id,
@@ -354,6 +438,85 @@ class SopOrchestrators:
             ],
         )
 
+    def _sellpoint_value_v5_2_qa_result(
+        self,
+        context: AnalystContext,
+        *,
+        command: str,
+        readback: SellpointValueV52Readback,
+        question: str,
+        expected_result_hash: str | None,
+    ) -> dict[str, Any]:
+        profile = readback.profile
+        base_profile = profile.base_profile
+        if (
+            expected_result_hash is not None
+            and expected_result_hash != profile.result_hash
+        ):
+            return base_result(
+                status=AnalystStatus.ERROR,
+                command=command,
+                context=context,
+                limitations=["expected_result_hash_mismatch"],
+                message_cn="指定的画像结果已变化，请使用当前正式结果重新提问。",
+            )
+        answer = self.sellpoint_value_v5_2_qa_service.answer(
+            readback,
+            question=question,
+        )
+        facts = [
+            {
+                "record_type": "v5_2_profile_fact",
+                "source_record_id": row.fact_path,
+                "summary_cn": row.summary_cn,
+                "evidence_record_ids": row.evidence_record_ids,
+            }
+            for row in answer.facts
+        ]
+        limitations = (
+            ["saved_profile_has_no_answer"]
+            if answer.answer_status == "unknown"
+            else []
+        )
+        payload = {
+            **answer.model_dump(mode="json"),
+            "sku_code": base_profile.target.sku_code,
+            "profile_version": base_profile.profile_version,
+            "release_status": readback.persisted.version.release_status,
+            "result_hash": profile.result_hash,
+            "profile_facts": facts,
+            "work_implication_cn": answer.product_manager_action_cn,
+            "limitations": limitations,
+        }
+        return base_result(
+            status=AnalystStatus.OK,
+            command=command,
+            context=context,
+            target={"sku_code": base_profile.target.sku_code},
+            result={"sellpoint_value_profile_answer": payload},
+            sop_steps=[
+                {"step_code": code, "status": "ok", "run_count": 1}
+                for code in SOP_STEP_MAP[command]
+            ],
+            atoms_used=[],
+            evidence=[
+                {
+                    "source": "sku_sellpoint_value_profile",
+                    "profile_version": base_profile.profile_version,
+                    "release_status": readback.persisted.version.release_status,
+                    "result_hash": profile.result_hash,
+                    "answer_hash": answer.answer_hash,
+                }
+            ],
+            limitations=limitations,
+            answer_outline=[
+                answer.direct_answer_cn,
+                *(row.summary_cn for row in answer.facts),
+                answer.product_manager_action_cn,
+                answer.evidence_boundary_cn,
+            ],
+        )
+
     def sellpoint_value_pm_v5(
         self,
         context: AnalystContext,
@@ -379,8 +542,9 @@ class SopOrchestrators:
                 limitations=["V5 默认关闭，必须由显式命令参数启用。"],
                 message_cn="用户卖点价值 V5 默认关闭；请使用显式 enable_v5 参数。",
             )
-        reader = self.sellpoint_value_v5_1_reader
-        if reader is None:
+        legacy_reader = self.sellpoint_value_v5_1_reader
+        v5_2_reader = self.sellpoint_value_v5_2_reader
+        if legacy_reader is None and v5_2_reader is None:
             return base_result(
                 status=AnalystStatus.NOT_FOUND,
                 command="sellpoint-value-pm-v5",
@@ -394,8 +558,66 @@ class SopOrchestrators:
             or preview_sellpoint_value_profile_version_id
             else "formal"
         )
+        if v5_2_reader is not None:
+            try:
+                v5_2_read = v5_2_reader.read(
+                    SellpointValueV52ConsumerReadRequest(
+                        project_id=context.project_id,
+                        category_code=context.category_code,
+                        batch_id=context.batch_id,
+                        access_mode=access_mode,
+                        query=query,
+                        sku_code=sku_code,
+                        model_name=model_name,
+                        profile_version=preview_profile_version,
+                        sellpoint_value_profile_version_id=(
+                            preview_sellpoint_value_profile_version_id
+                        ),
+                    )
+                )
+            except (
+                ValueError,
+                SellpointValueV52ConsumerIntegrityError,
+                SellpointValueV52RepositoryError,
+            ) as exc:
+                return base_result(
+                    status=AnalystStatus.ERROR,
+                    command="sellpoint-value-pm-v5",
+                    context=context,
+                    limitations=[str(exc)],
+                    message_cn="用户卖点价值画像读取条件不完整或画像数据异常。",
+                )
+            if v5_2_read.status == "ambiguous":
+                return base_result(
+                    status=AnalystStatus.AMBIGUOUS,
+                    command="sellpoint-value-pm-v5",
+                    context=context,
+                    result={"candidates": v5_2_read.candidates},
+                    limitations=["匹配到多个已保存画像，请用 sku_code 唯一指定。"],
+                    message_cn="匹配到多个用户卖点价值画像，请明确 SKU。",
+                )
+            if v5_2_read.status == "available":
+                assert v5_2_read.readback is not None
+                report = build_v5_2_stored_profile_pm_report(v5_2_read.readback)
+                return self._sellpoint_value_pm_v5_result(
+                    context,
+                    report=report,
+                    with_report=with_report,
+                    max_chat_chars=max_chat_chars,
+                    report_title=report_title,
+                    selection_compare_url=selection_compare_url,
+                    evidence_report_url=evidence_report_url,
+                )
+        if legacy_reader is None:
+            return base_result(
+                status=AnalystStatus.NOT_FOUND,
+                command="sellpoint-value-pm-v5",
+                context=context,
+                limitations=["当前已发布画像中没有匹配的 SKU，且不会临时重算。"],
+                message_cn="当前已发布画像中没有找到该 SKU。",
+            )
         try:
-            read = reader.read(
+            read = legacy_reader.read(
                 SellpointValueV51ConsumerReadRequest(
                     project_id=context.project_id,
                     category_code=context.category_code,
@@ -446,6 +668,27 @@ class SopOrchestrators:
             )
         assert read.readback is not None
         report = build_v5_1_stored_profile_pm_report(read.readback)
+        return self._sellpoint_value_pm_v5_result(
+            context,
+            report=report,
+            with_report=with_report,
+            max_chat_chars=max_chat_chars,
+            report_title=report_title,
+            selection_compare_url=selection_compare_url,
+            evidence_report_url=evidence_report_url,
+        )
+
+    def _sellpoint_value_pm_v5_result(
+        self,
+        context: AnalystContext,
+        *,
+        report: StoredSellpointValuePmReport,
+        with_report: str,
+        max_chat_chars: int,
+        report_title: str | None,
+        selection_compare_url: str | None,
+        evidence_report_url: str | None,
+    ) -> dict[str, Any]:
         answer = build_stored_profile_answer_artifacts(
             report,
             with_report=with_report,

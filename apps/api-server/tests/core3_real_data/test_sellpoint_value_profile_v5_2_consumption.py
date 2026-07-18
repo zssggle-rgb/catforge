@@ -6,10 +6,18 @@ from decimal import Decimal
 import pytest
 
 from app.services.core3_real_data.analyst import sellpoint_value_profile_report
+from app.services.core3_real_data.analyst.analyst_schemas import AnalystContext
+from app.services.core3_real_data.analyst.sellpoint_value_profile_persistence_schemas import (
+    SellpointValueReleaseQualityStatus,
+)
 from app.services.core3_real_data.analyst.sellpoint_value_profile_report import (
     build_v5_2_stored_profile_pm_report,
     render_stored_profile_feishu_card,
     render_stored_profile_markdown,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_consumer import (
+    SellpointValueV52ConsumerReadRequest,
+    SellpointValueV52ConsumerReader,
 )
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_generation import (
     SellpointValueV52GenerationService,
@@ -20,6 +28,7 @@ from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_mapping i
 from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_qa import (
     SellpointValueV52QaService,
 )
+from app.services.core3_real_data.analyst.sop_orchestrators import SopOrchestrators
 from tests.core3_real_data.test_sellpoint_value_profile_v5_1_materialization import (
     session as _v5_1_session,
 )
@@ -98,6 +107,38 @@ def _readback(session):
     ).generate_draft(_v52_request(source), sku_code="TV-TARGET")
 
 
+class _NoUpstreamHandlers:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def __getattr__(self, name: str):
+        self.call_count += 1
+        raise AssertionError(f"V5.2 consumer attempted upstream analysis: {name}")
+
+
+def _publish_current(session, readback):
+    repository = _repository(session)
+    quality = SellpointValueReleaseQualityStatus(
+        readback.persisted.version.release_quality_status
+    )
+    repository.review_version(
+        sellpoint_value_profile_version_id=(
+            readback.persisted.version.sellpoint_value_profile_version_id
+        ),
+        reviewed_by="v5-2-reviewer",
+        release_quality_status=quality,
+    )
+    published = repository.publish_version(
+        sellpoint_value_profile_version_id=(
+            readback.persisted.version.sellpoint_value_profile_version_id
+        ),
+        published_by="v5-2-approver",
+        allow_limited=quality == SellpointValueReleaseQualityStatus.LIMITED,
+    )
+    session.commit()
+    return repository, published
+
+
 def test_v5_2_report_uses_only_saved_source_sellpoints(
     session,
     monkeypatch: pytest.MonkeyPatch,
@@ -133,6 +174,58 @@ def test_v5_2_report_uses_only_saved_source_sellpoints(
     assert "产品原始卖点" in markdown
     assert "用户感知价值" in markdown
     assert "支撑参数" in markdown
+
+
+def test_formal_reader_and_agent_prefer_current_published_v5_2(session) -> None:
+    readback = _readback(session)
+    repository, published = _publish_current(session, readback)
+    handlers = _NoUpstreamHandlers()
+    context = AnalystContext(
+        project_id="project-1",
+        category_code="TV",
+        batch_id="batch-1",
+        product_category="TV",
+    )
+
+    direct = SellpointValueV52ConsumerReader(repository).read(
+        SellpointValueV52ConsumerReadRequest(
+            project_id="project-1",
+            category_code="TV",
+            batch_id="later-context-batch",
+            sku_code="TV-TARGET",
+        )
+    )
+    orchestrator = SopOrchestrators(
+        handlers,  # type: ignore[arg-type]
+        sellpoint_value_profile_repository=repository,
+    )
+    report_result = orchestrator.sellpoint_value_pm_v5(
+        context,
+        sku_code="TV-TARGET",
+        enable_v5=True,
+    )
+    qa_result = orchestrator.sellpoint_value_profile_ask(
+        context,
+        sku_code="TV-TARGET",
+        question="这款产品的用户卖点价值是什么？",
+    )
+
+    assert published.release_status == "published"
+    assert published.is_current is True
+    assert direct.status == "available"
+    assert direct.readback is not None
+    assert direct.readback.profile.result_hash == readback.profile.result_hash
+    assert report_result["status"] == "ok"
+    report = report_result["result"]["sellpoint_value_pm_v5"]
+    assert report["schema_version"] == "sku_sellpoint_value_pm_report_v1_2"
+    assert report["profile_version"] == readback.profile.base_profile.profile_version
+    assert report["profile_result_hash"] == readback.profile.result_hash
+    assert qa_result["status"] == "ok"
+    answer = qa_result["result"]["sellpoint_value_profile_answer"]
+    assert answer["schema_version"] == "sellpoint_value_profile_answer_v1_2"
+    assert answer["profile_version"] == readback.profile.base_profile.profile_version
+    assert answer["result_hash"] == readback.profile.result_hash
+    assert handlers.call_count == 0
 
 
 def test_v5_2_total_and_detail_match_and_market_units_are_rounded(

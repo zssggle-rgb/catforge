@@ -1,0 +1,318 @@
+"""Strict read boundary for saved V5.2 sellpoint-value profiles."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Literal
+
+from pydantic import Field, model_validator
+from sqlalchemy import func, select
+
+from app.models import entities
+from app.services.core3_real_data.analyst.sellpoint_value_profile_schemas import (
+    SellpointValueProfileBaseModel,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_materializer_schemas import (
+    SellpointValueV52Readback,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_repository import (
+    SellpointValueV52Repository,
+)
+from app.services.core3_real_data.analyst.sellpoint_value_profile_v5_2_schemas import (
+    SPV_V5_2_METHOD_VERSION,
+    SPV_V5_2_RULE_VERSION,
+    SPV_V5_2_SCHEMA_VERSION,
+)
+
+
+class SellpointValueV52ConsumerIntegrityError(RuntimeError):
+    """Raised when a saved V5.2 consumer scope is internally inconsistent."""
+
+
+class SellpointValueV52ConsumerReadRequest(SellpointValueProfileBaseModel):
+    project_id: str = Field(min_length=1)
+    category_code: Literal["TV", "AC"]
+    batch_id: str = Field(min_length=1)
+    access_mode: Literal["formal", "preview"] = "formal"
+    sku_code: str | None = Field(default=None, min_length=1)
+    model_name: str | None = Field(default=None, min_length=1)
+    query: str | None = Field(default=None, min_length=1)
+    profile_version: str | None = Field(default=None, min_length=1)
+    sellpoint_value_profile_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SellpointValueV52ConsumerReadRequest":
+        if not any((self.sku_code, self.model_name, self.query)):
+            raise ValueError("V5.2 consumer reads require a target selector")
+        version_selectors = (
+            self.profile_version,
+            self.sellpoint_value_profile_version_id,
+        )
+        if self.access_mode == "formal" and any(version_selectors):
+            raise ValueError("formal V5.2 reads cannot select a version")
+        if self.access_mode == "preview" and not all(version_selectors):
+            raise ValueError(
+                "preview V5.2 reads require profile_version and version id"
+            )
+        return self
+
+
+class SellpointValueV52ConsumerReadResult(SellpointValueProfileBaseModel):
+    status: Literal["available", "profile_unavailable", "ambiguous"]
+    access_mode: Literal["formal", "preview"]
+    readback: SellpointValueV52Readback | None = None
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_result(self) -> "SellpointValueV52ConsumerReadResult":
+        if self.status == "available":
+            if self.readback is None or self.candidates:
+                raise ValueError("available V5.2 reads require one readback")
+        elif self.readback is not None:
+            raise ValueError("unavailable V5.2 reads cannot expose a readback")
+        if self.status == "ambiguous" and len(self.candidates) < 2:
+            raise ValueError("ambiguous V5.2 reads require multiple targets")
+        if self.status == "profile_unavailable" and self.candidates:
+            raise ValueError("unavailable V5.2 reads cannot expose candidates")
+        return self
+
+
+class SellpointValueV52ConsumerReader:
+    """Read only current published V5.2 or one explicitly locked preview."""
+
+    def __init__(self, repository: SellpointValueV52Repository) -> None:
+        self.repository = repository
+
+    def read(
+        self,
+        request: SellpointValueV52ConsumerReadRequest,
+    ) -> SellpointValueV52ConsumerReadResult:
+        request = SellpointValueV52ConsumerReadRequest.model_validate(
+            request.model_dump(mode="python")
+        )
+        self._assert_repository_scope(request)
+        version = self._resolve_version(request)
+        if version is None:
+            return SellpointValueV52ConsumerReadResult(
+                status="profile_unavailable",
+                access_mode=request.access_mode,
+            )
+        profile = entities.Core3SkuSellpointValueProfile
+        target_stmt = select(
+            profile.sku_code,
+            profile.model_code,
+            profile.model_name,
+            profile.brand_name,
+            profile.display_name_cn,
+            profile.profile_version,
+            profile.result_hash,
+        ).where(
+            profile.sellpoint_value_profile_version_id
+            == version.sellpoint_value_profile_version_id
+        )
+        if request.sku_code:
+            target_stmt = target_stmt.where(
+                func.lower(profile.sku_code) == request.sku_code.casefold()
+            )
+        if request.model_name:
+            target_stmt = target_stmt.where(
+                func.lower(profile.model_name) == request.model_name.casefold()
+            )
+        rows = list(
+            self.repository.db.execute(target_stmt.order_by(profile.sku_code)).all()
+        )
+        matches = [row for row in rows if _matches_target(row, request)]
+        if not matches:
+            return SellpointValueV52ConsumerReadResult(
+                status="profile_unavailable",
+                access_mode=request.access_mode,
+            )
+        if len(matches) > 1:
+            return SellpointValueV52ConsumerReadResult(
+                status="ambiguous",
+                access_mode=request.access_mode,
+                candidates=[_target_ref(row) for row in matches],
+            )
+        row = matches[0]
+        readback = self.repository.get_v5_2_profile(
+            batch_id=version.batch_id,
+            profile_version=version.profile_version,
+            sku_code=row.sku_code,
+        )
+        if readback is None:
+            raise SellpointValueV52ConsumerIntegrityError(
+                "V5.2 profile index has no typed readback"
+            )
+        self._assert_readback(version, readback, request)
+        return SellpointValueV52ConsumerReadResult(
+            status="available",
+            access_mode=request.access_mode,
+            readback=readback,
+        )
+
+    def _assert_repository_scope(
+        self,
+        request: SellpointValueV52ConsumerReadRequest,
+    ) -> None:
+        repository_category = _enum_value(self.repository.category_code)
+        if request.project_id != self.repository.project_id:
+            raise ValueError("V5.2 consumer project does not match repository")
+        if request.category_code != repository_category:
+            raise ValueError("V5.2 consumer category does not match repository")
+
+    def _resolve_version(
+        self,
+        request: SellpointValueV52ConsumerReadRequest,
+    ) -> entities.Core3SellpointValueProfileVersion | None:
+        stmt = (
+            select(entities.Core3SellpointValueProfileVersion)
+            .where(
+                entities.Core3SellpointValueProfileVersion.project_id
+                == request.project_id
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.category_code
+                == request.category_code
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.schema_version
+                == SPV_V5_2_SCHEMA_VERSION
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.rule_version
+                == SPV_V5_2_RULE_VERSION
+            )
+            .where(
+                entities.Core3SellpointValueProfileVersion.method_version
+                == SPV_V5_2_METHOD_VERSION
+            )
+        )
+        if request.access_mode == "formal":
+            stmt = stmt.where(
+                entities.Core3SellpointValueProfileVersion.release_status
+                == "published",
+                entities.Core3SellpointValueProfileVersion.is_current.is_(True),
+            )
+        else:
+            stmt = stmt.where(
+                entities.Core3SellpointValueProfileVersion.batch_id
+                == request.batch_id,
+                entities.Core3SellpointValueProfileVersion.sellpoint_value_profile_version_id
+                == request.sellpoint_value_profile_version_id,
+                entities.Core3SellpointValueProfileVersion.profile_version
+                == request.profile_version,
+            )
+        versions = list(self.repository.db.execute(stmt).scalars())
+        if len(versions) > 1:
+            raise SellpointValueV52ConsumerIntegrityError(
+                "multiple V5.2 versions occupy one consumer scope"
+            )
+        if not versions:
+            return None
+        version = versions[0]
+        if request.access_mode == "preview" and not (
+            (version.release_status == "draft" and not version.is_current)
+            or (version.release_status == "published" and version.is_current)
+        ):
+            raise SellpointValueV52ConsumerIntegrityError(
+                "preview V5.2 version is not an allowed immutable state"
+            )
+        return version
+
+    @staticmethod
+    def _assert_readback(
+        version: entities.Core3SellpointValueProfileVersion,
+        readback: SellpointValueV52Readback,
+        request: SellpointValueV52ConsumerReadRequest,
+    ) -> None:
+        persisted = readback.persisted.version
+        profile = readback.profile
+        if (
+            persisted.sellpoint_value_profile_version_id
+            != version.sellpoint_value_profile_version_id
+            or profile.base_profile.profile_version != version.profile_version
+            or persisted.result_hash != version.result_hash
+            or profile.base_profile.project_id != request.project_id
+            or profile.base_profile.category_code != request.category_code
+            or profile.base_profile.batch_id != version.batch_id
+        ):
+            raise SellpointValueV52ConsumerIntegrityError(
+                "V5.2 typed readback crossed its locked version scope"
+            )
+        if request.access_mode == "formal" and (
+            persisted.release_status != "published" or not persisted.is_current
+        ):
+            raise SellpointValueV52ConsumerIntegrityError(
+                "formal V5.2 readback is not current published"
+            )
+        if request.access_mode == "preview" and (
+            persisted.sellpoint_value_profile_version_id
+            != request.sellpoint_value_profile_version_id
+            or persisted.profile_version != request.profile_version
+        ):
+            raise SellpointValueV52ConsumerIntegrityError(
+                "preview V5.2 readback differs from the explicit lock"
+            )
+
+
+def _matches_target(
+    row: Any,
+    request: SellpointValueV52ConsumerReadRequest,
+) -> bool:
+    if request.sku_code and row.sku_code.casefold() != request.sku_code.casefold():
+        return False
+    if request.model_name and (
+        not row.model_name or row.model_name.casefold() != request.model_name.casefold()
+    ):
+        return False
+    if request.query:
+        query = _normalize_target_text(request.query)
+        values = (
+            row.sku_code,
+            row.model_code,
+            row.model_name,
+            row.brand_name,
+            row.display_name_cn,
+            " ".join(
+                str(value)
+                for value in (row.brand_name, row.model_name)
+                if value
+            ),
+        )
+        if not any(
+            query in _normalize_target_text(value)
+            for value in values
+            if value
+        ):
+            return False
+    return True
+
+
+def _normalize_target_text(value: Any) -> str:
+    return "".join(character for character in str(value).casefold() if character.isalnum())
+
+
+def _target_ref(row: Any) -> dict[str, Any]:
+    return {
+        "sku_code": row.sku_code,
+        "brand_name": row.brand_name,
+        "model_name": row.model_name,
+        "display_name_cn": row.display_name_cn,
+        "profile_version": row.profile_version,
+        "result_hash": row.result_hash,
+    }
+
+
+def _enum_value(value: Any) -> Any:
+    return value.value if isinstance(value, Enum) else value
+
+
+__all__ = [
+    "SellpointValueV52ConsumerIntegrityError",
+    "SellpointValueV52ConsumerReadRequest",
+    "SellpointValueV52ConsumerReadResult",
+    "SellpointValueV52ConsumerReader",
+]
