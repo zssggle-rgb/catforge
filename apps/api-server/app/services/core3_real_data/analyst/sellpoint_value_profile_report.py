@@ -572,7 +572,7 @@ def _v5_2_source_excerpt_cn(raw_claim_text: str) -> str:
     value = re.sub(r"^【[^】]+】", "", raw_claim_text).strip()
     clauses = [
         value.find(separator)
-        for separator in ("，", "；", "。")
+        for separator in ("，", "；", "。", "+")
         if value.find(separator) > 0
     ]
     if clauses:
