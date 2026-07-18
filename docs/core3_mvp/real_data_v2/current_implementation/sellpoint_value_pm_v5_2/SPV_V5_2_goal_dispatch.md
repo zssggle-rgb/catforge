@@ -1,6 +1,6 @@
 # 用户卖点价值画像 V5.2 串行 Goal 调度
 
-状态：SPV52-G01—G06 completed；SPV52-G07 pending
+状态：SPV52-G01—G07 completed；SPV52-G08 pending
 
 日期：2026-07-18
 
@@ -180,6 +180,8 @@
 - 正式 V5.1 current 未变化。
 
 失败即停止，不创建 AC 或全量写入。
+
+状态：completed；关闭回执：`SPV52_G07_closure_receipt.md`。
 
 ### SPV52-G08 AC 与全量 draft
 
