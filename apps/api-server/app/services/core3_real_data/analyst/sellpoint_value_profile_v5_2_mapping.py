@@ -650,22 +650,44 @@ def _parameter_classification(
 def _competitor_sellpoint_findings(
     observations: Sequence[CompetitorSellpointObservation],
 ) -> list[CompetitorSellpointFinding]:
-    findings = []
+    grouped: dict[
+        tuple[str, str],
+        list[CompetitorSellpointObservation],
+    ] = defaultdict(list)
     for row in observations:
-        if row.target_has_matching_sellpoint:
+        grouped[
+            (
+                row.candidate_sku_code,
+                row.source_sellpoint.normalized_claim_code,
+            )
+        ].append(row)
+    findings = []
+    for members in grouped.values():
+        if any(row.target_has_matching_sellpoint for row in members):
             continue
+        representative = sorted(
+            members,
+            key=lambda row: (
+                -row.source_sellpoint.confidence,
+                row.source_sellpoint.claim_fact_id,
+            ),
+        )[0]
         opportunity = (
-            row.competitor_value_advantage
-            and row.target_value_weakness
-            and row.market_support
+            any(row.competitor_value_advantage for row in members)
+            and any(row.target_value_weakness for row in members)
+            and any(row.market_support for row in members)
         )
         findings.append(
             CompetitorSellpointFinding(
-                candidate_sku_code=row.candidate_sku_code,
-                source_sellpoint_fact_id=row.source_sellpoint.claim_fact_id,
-                normalized_claim_code=row.source_sellpoint.normalized_claim_code,
+                candidate_sku_code=representative.candidate_sku_code,
+                source_sellpoint_fact_id=(
+                    representative.source_sellpoint.claim_fact_id
+                ),
+                normalized_claim_code=(
+                    representative.source_sellpoint.normalized_claim_code
+                ),
                 normalized_claim_name_cn=(
-                    row.source_sellpoint.normalized_claim_name_cn
+                    representative.source_sellpoint.normalized_claim_name_cn
                 ),
                 finding_type=(
                     CompetitorSellpointFindingType.SELLPOINT_OPPORTUNITY
@@ -673,7 +695,11 @@ def _competitor_sellpoint_findings(
                     else CompetitorSellpointFindingType.NON_KEY_COMPETITOR_SELLPOINT
                 ),
                 linked_value_bundle_codes=sorted(
-                    set(row.linked_value_bundle_codes)
+                    {
+                        code
+                        for row in members
+                        for code in row.linked_value_bundle_codes
+                    }
                 ),
                 business_reason_cn=(
                     "竞品原始卖点对应本品尚未满足的用户价值，并获得市场表现支撑。"
@@ -682,8 +708,16 @@ def _competitor_sellpoint_findings(
                 ),
                 evidence_refs=_dedupe_evidence(
                     [
-                        *row.source_sellpoint.evidence_refs,
-                        *row.evidence_refs,
+                        *(
+                            ref
+                            for row in members
+                            for ref in row.source_sellpoint.evidence_refs
+                        ),
+                        *(
+                            ref
+                            for row in members
+                            for ref in row.evidence_refs
+                        ),
                     ]
                 ),
             )

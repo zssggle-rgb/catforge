@@ -384,6 +384,51 @@ def test_competitor_sellpoint_uses_same_deterministic_value_mapping() -> None:
     ) == ["bundle-tv_color_picture_truth"]
 
 
+def test_competitor_findings_merge_repeated_source_claims_per_candidate() -> None:
+    first = _source_fact(
+        claim_code="tv_claim_ai_model",
+        claim_name="AI 大模型/智能能力",
+        raw_claim_text="AI大模型让内容推荐更懂用户。",
+        fact_id="competitor-ai-1",
+    )
+    second = _source_fact(
+        claim_code="tv_claim_ai_model",
+        claim_name="AI 大模型/智能能力",
+        raw_claim_text="全场景AI助手提升交互效率。",
+        fact_id="competitor-ai-2",
+    )
+    observations = [
+        CompetitorSellpointObservation(
+            candidate_sku_code="TV-C01",
+            source_sellpoint=fact,
+            target_has_matching_sellpoint=False,
+            competitor_value_advantage=False,
+            target_value_weakness=False,
+            market_support=True,
+            evidence_refs=[_evidence("pair-TV-C01", "COMPETITOR")],
+        )
+        for fact in (first, second)
+    ]
+
+    result = build_layered_sellpoint_analysis(
+        category_code="TV",
+        target_sku_code="TV-TARGET",
+        source_sellpoints=_source_result([]),
+        values=[],
+        target_parameter_facts=[],
+        competitor_sellpoints=observations,
+    )
+
+    assert len(result.competitor_sellpoint_findings) == 1
+    finding = result.competitor_sellpoint_findings[0]
+    assert finding.normalized_claim_code == "tv_claim_ai_model"
+    assert {ref.record_id for ref in finding.evidence_refs} == {
+        "competitor-ai-1",
+        "competitor-ai-2",
+        "pair-TV-C01",
+    }
+
+
 def test_ac_claim_maps_only_to_ac_user_value_definition() -> None:
     source = _source_fact(
         claim_code="ac_claim_quiet_sleep",
