@@ -1195,7 +1195,13 @@ def _v5_1_first_screen(
         )
     by_action: dict[str, list[str]] = {}
     for row in investments:
-        by_action.setdefault(row.action_code, []).append(row.capability_name_cn)
+        label = (
+            row.product_sellpoint_cn or row.capability_name_cn
+            if row.action_code
+            in {"table_stake", "do_not_follow", "missing_competitive_gap"}
+            else row.capability_name_cn
+        )
+        by_action.setdefault(row.action_code, []).append(label)
     retain = _unique(by_action.get("retain", []))
     table_stakes = _unique(by_action.get("table_stake", []))
     unconverted = _unique(by_action.get("unconverted", []))

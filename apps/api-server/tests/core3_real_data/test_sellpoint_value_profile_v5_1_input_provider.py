@@ -402,7 +402,7 @@ def test_saved_parameter_prevalence_generates_table_stake_classification() -> No
 
     table_stake = decisions["param:mini_led_flag"]
     assert table_stake.classification == "table_stake"
-    assert table_stake.capability_name_cn == "MiniLED 标记"
+    assert table_stake.capability_name_cn == "MiniLED"
     assert table_stake.table_stake_assessment.known_count == 5
     assert table_stake.table_stake_assessment.present_count == 5
     assert table_stake.table_stake_assessment.prevalence == Decimal("1")

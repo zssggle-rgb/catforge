@@ -133,6 +133,10 @@ SPV_V5_1_PARAMETER_INPUT_METHOD_VERSION = (
     "sellpoint_value_saved_parameter_input_v5_1"
 )
 
+_PARAMETER_BUSINESS_NAMES = {
+    "display_tech_class": "显示技术类型",
+}
+
 SPV_V5_1_PRODUCTION_METHOD_VERSIONS = {
     "aggregation_sku": SPV_V5_1_SKU_AGGREGATION_VERSION,
     "aggregation_value": SPV_V5_1_VALUE_AGGREGATION_VERSION,
@@ -1327,7 +1331,15 @@ def _parameter_name_cn(category_code: str, parameter_code: str) -> str:
         else TV_PARAM_TAXONOMY_V0_1
     )
     definition = taxonomy.params_by_code.get(parameter_code)
-    return definition.param_name if definition is not None else parameter_code
+    name = (
+        definition.param_name
+        if definition is not None
+        else _PARAMETER_BUSINESS_NAMES.get(parameter_code, parameter_code)
+    )
+    for suffix in (" 标记", " 状态"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+    return name
 
 
 def _configuration_performance(
