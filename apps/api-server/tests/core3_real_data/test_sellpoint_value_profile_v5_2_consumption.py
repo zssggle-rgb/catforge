@@ -93,9 +93,7 @@ def _source():
         }
     )
     return source.model_copy(
-        update={
-            "base": source.base.model_copy(update={"values": [value]})
-        }
+        update={"base": source.base.model_copy(update={"values": [value]})}
     )
 
 
@@ -173,7 +171,42 @@ def test_v5_2_report_uses_only_saved_source_sellpoints(
     assert "1920分区控光" not in markdown
     assert "产品原始卖点" in markdown
     assert "用户卖点价值" in markdown
-    assert "支撑参数" in markdown
+    assert "关键参数或能力" in markdown
+    assert report.parameter_rows == []
+    for hidden_parameter in (
+        "mini_led_flag",
+        "anti_glare_flag",
+        "eye_care_certification",
+        "usb_port_count",
+        "待确认参数",
+        "### 参数明细",
+    ):
+        assert hidden_parameter not in markdown
+
+
+def test_v5_2_renderer_filters_legacy_internal_parameter_labels(session) -> None:
+    report = build_v5_2_stored_profile_pm_report(_readback(session))
+    polluted_row = report.sellpoint_rows[0].model_copy(
+        update={
+            "supporting_parameters_cn": [
+                "anti_glare_flag",
+                "eye_care_certification",
+                "usb_port_count（2）",
+                "控光分区（1920）",
+            ]
+        }
+    )
+    report = report.model_copy(update={"sellpoint_rows": [polluted_row]})
+
+    markdown = render_stored_profile_markdown(
+        report,
+        title="海信 65E7Q 用户卖点价值分析",
+    )
+
+    assert "控光分区（1920）" in markdown
+    assert "anti_glare_flag" not in markdown
+    assert "eye_care_certification" not in markdown
+    assert "usb_port_count" not in markdown
 
 
 def test_formal_reader_and_agent_prefer_current_published_v5_2(session) -> None:
@@ -244,9 +277,9 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
 
     for index, title in enumerate(
         (
-            "这款 SKU 的用户卖点价值",
-            "卖点如何形成这些价值",
-            "市场是否为这些价值买单",
+            "原始卖点转化结果",
+            "SKU 最终用户卖点价值",
+            "用户卖点价值量化",
             "产品卖点修改建议",
         ),
         start=1,
@@ -260,9 +293,14 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert card["schema"] == "2.0"
     assert card["header"]["template"] == "turquoise"
     card_visible = json.dumps(card, ensure_ascii=False)
-    assert "本品已经形成1项用户卖点价值" in card_visible
+    assert "SKU 最终用户卖点价值" in card_visible
     assert "核心用户卖点价值" not in card_visible
-    assert "市场是否买单" in card_visible
+    assert "市场是否买单" not in card_visible
+    assert "用户卖点价值量化" in card_visible
+    assert "符合该价值问题的参照 SKU" in card_visible
+    assert "竞品品牌 型号1" in visible
+    assert "参照 SKU 选择方法" in markdown
+    assert "为什么符合" in markdown
     assert "产品卖点修改建议" in visible
     assert "下一代产品怎么定义" not in visible
     assert "已经成立的用户价值" not in card_visible
@@ -270,6 +308,10 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert "参数判断" not in card_visible
     assert "原文：" not in card_visible
     assert len(card["body"]["elements"]) <= 5
+    assert (
+        sum(element["tag"] == "column_set" for element in card["body"]["elements"]) >= 3
+    )
+    assert report.value_accounts[0].reference_sku_names_cn == ["竞品品牌 型号1"]
     presentation_report = report.model_copy(
         update={
             "first_screen": report.first_screen.model_copy(
@@ -294,6 +336,11 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
         presentation_card,
         ensure_ascii=False,
     )
+    presentation_markdown = render_stored_profile_markdown(
+        presentation_report,
+        title="海信 65E7Q 用户卖点价值分析",
+    )
+    assert "不拆给单项参数" not in presentation_markdown
     for internal_term in (
         "画像",
         "result_hash",
@@ -332,18 +379,16 @@ def test_v5_2_report_projects_saved_competitor_sellpoint_opportunity(
     session,
 ) -> None:
     source = _source()
-    competitor_fact = (
-        source.source_sellpoints.source_sellpoints[0].model_copy(
-            update={
-                "claim_fact_id": "competitor-claim-1",
-                "merged_claim_fact_ids": ["competitor-claim-1"],
-                "normalized_claim_code": "tv_claim_qd_miniled_display",
-                "normalized_claim_name_cn": "量子点 MiniLED 显示",
-                "raw_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
-                "clean_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
-                "exact_quote_cn": None,
-            }
-        )
+    competitor_fact = source.source_sellpoints.source_sellpoints[0].model_copy(
+        update={
+            "claim_fact_id": "competitor-claim-1",
+            "merged_claim_fact_ids": ["competitor-claim-1"],
+            "normalized_claim_code": "tv_claim_qd_miniled_display",
+            "normalized_claim_name_cn": "量子点 MiniLED 显示",
+            "raw_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
+            "clean_claim_text": "量子点MiniLED带来更丰富的色彩层次。",
+            "exact_quote_cn": None,
+        }
     )
     source = source.model_copy(
         update={
@@ -358,9 +403,7 @@ def test_v5_2_report_projects_saved_competitor_sellpoint_opportunity(
                     competitor_value_advantage=True,
                     target_value_weakness=True,
                     market_support=True,
-                    linked_value_bundle_codes=[
-                        source.base.values[0].value_bundle_code
-                    ],
+                    linked_value_bundle_codes=[source.base.values[0].value_bundle_code],
                     evidence_refs=competitor_fact.evidence_refs,
                 )
             ],
@@ -383,11 +426,9 @@ def test_v5_2_report_projects_saved_competitor_sellpoint_opportunity(
     visible = markdown + json.dumps(card, ensure_ascii=False)
 
     assert len(report.competitor_sellpoint_rows) == 1
-    assert (
-        report.competitor_sellpoint_rows[0].finding_type_cn
-        == "可借鉴的竞品卖点"
-    )
-    assert "竞品卖点取舍" in markdown
+    assert report.competitor_sellpoint_rows[0].finding_type_cn == "可借鉴的竞品卖点"
+    assert "竞品卖点取舍" not in markdown
+    assert "可补强的卖点方向" in markdown
     assert "量子点 MiniLED 显示" in visible
     assert "已经具备就补强宣传表达" in visible
     answer = SellpointValueV52QaService().answer(
