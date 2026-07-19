@@ -266,18 +266,41 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
 ) -> None:
     report = build_v5_2_stored_profile_pm_report(_readback(session))
     market_questions = (
-        ("影音用户愿为画质升级付费支撑卖点组合", 370, 46, "TCL 65Q9L PRO"),
-        ("画质配置解释加价支撑卖点组合", 427, 57, "TCL 65Q9L PRO"),
-        ("同尺寸画质越级获得感支撑卖点组合", 262, 76, "小米 L65MC-SP"),
-        ("贵得值的体验升级支撑卖点组合", 279, 62, "创维 65A7H PRO"),
+        (
+            "影音用户愿为画质升级付费支撑卖点组合",
+            370,
+            46,
+            ["TCL 65Q9L PRO", "创维 65A7H PRO"],
+        ),
+        (
+            "画质配置解释加价支撑卖点组合",
+            427,
+            57,
+            ["TCL 65Q9L PRO"],
+        ),
+        (
+            "同尺寸画质越级获得感支撑卖点组合",
+            262,
+            76,
+            ["TCL 65Q9L PRO", "小米 L65MC-SP"],
+        ),
+        (
+            "贵得值的体验升级支撑卖点组合",
+            279,
+            62,
+            ["TCL 65Q9L PRO", "小米 L65MC-SP", "创维 65A7H PRO"],
+        ),
     )
     market_rows = [
         report.value_accounts[0].model_copy(
             update={
                 "value_bundle_code": f"market-question-{index}",
                 "value_bundle_name_cn": name,
-                "reference_sku_codes": [f"TV-C{index}"],
-                "reference_sku_names_cn": [reference],
+                "reference_sku_codes": [
+                    f"TV-C{index}-{reference_index}"
+                    for reference_index in range(1, len(references) + 1)
+                ],
+                "reference_sku_names_cn": references,
                 "price_performance_cn": (
                     f"本品周均价较参照组平均水平高{price}.0000元。"
                 ),
@@ -286,7 +309,7 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
                 ),
             }
         )
-        for index, (name, price, sales, reference) in enumerate(
+        for index, (name, price, sales, references) in enumerate(
             market_questions,
             start=1,
         )
@@ -306,7 +329,27 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert "### 结论 2｜这些价值是否支撑当前价格和销量" in markdown
     assert "## 一、SKU 形成了什么用户卖点价值" in markdown
     assert "## 二、这些价值是否支撑当前价格和销量" in markdown
+    assert "### 2.2 各价值问题的详细量化" in markdown
+    assert "### 2.3 完整量化表" in markdown
     assert "## 三、产品卖点修改建议" in markdown
+    assert "#### 2.2.1 影音用户是否愿意为画质升级付费" in markdown
+    assert "**符合该价值问题的参照SKU：2款**" in markdown
+    assert "在高端画质升级、影音性能和画质升级付费理由上与本品重合" in markdown
+    assert "在高端画质、客厅影音和沉浸体验上与本品重合" in markdown
+    assert "周均价高370元" in markdown
+    assert "周均销量高46台" in markdown
+    assert "“影音用户愿意为画质升级付费”这一用户卖点价值获得市场支撑" in markdown
+    assert (
+        "| 影音用户是否愿意为画质升级付费 | TCL 65Q9L PRO、创维 65A7H PRO |"
+    ) in markdown
+    assert "| 画质价值能否解释当前加价 | TCL 65Q9L PRO |" in markdown
+    assert (
+        "| 同尺寸产品是否形成画质越级感 | TCL 65Q9L PRO、小米 L65MC-SP |"
+    ) in markdown
+    assert (
+        "| 整体体验升级是否让用户觉得贵得值 | "
+        "TCL 65Q9L PRO、小米 L65MC-SP、创维 65A7H PRO |"
+    ) in markdown
     assert "279元" in visible
     assert "62台" in visible
     assert "278.8606元" not in visible
@@ -342,7 +385,10 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert (
         sum(element["tag"] == "column_set" for element in card["body"]["elements"]) >= 3
     )
-    assert report.value_accounts[0].reference_sku_names_cn == ["TCL 65Q9L PRO"]
+    assert report.value_accounts[0].reference_sku_names_cn == [
+        "TCL 65Q9L PRO",
+        "创维 65A7H PRO",
+    ]
     presentation_report = report.model_copy(
         update={
             "first_screen": report.first_screen.model_copy(

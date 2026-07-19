@@ -1330,8 +1330,6 @@ def _render_v5_2_markdown(
             "",
             f"**总体判断：** {_v5_2_market_support_conclusion_cn(report)}",
             "",
-            "### 2.2 各价值问题的量价对照",
-            "",
             (
                 "**参照产品选择逻辑：** 先筛选能够回答同一个用户卖点价值问题的产品，"
                 "再要求尺寸和购买价格范围可比、周均价格与销量数据完整；"
@@ -1341,17 +1339,68 @@ def _render_v5_2_markdown(
         ]
     )
     if market_rows:
+        lines.extend(["### 2.2 各价值问题的详细量化", ""])
+        for index, row in enumerate(market_rows, start=1):
+            reference_names = _v5_2_reference_sku_names(row)
+            lines.extend(
+                [
+                    (f"#### 2.2.{index} {_v5_2_document_value_question_cn(row)}"),
+                    "",
+                    (f"**符合该价值问题的参照SKU：{len(reference_names)}款**"),
+                    "",
+                ]
+            )
+            for reference_index, reference_name in enumerate(
+                reference_names,
+                start=1,
+            ):
+                lines.extend(
+                    [
+                        f"**{reference_name}**",
+                        "",
+                        _v5_2_reference_sku_reason_cn(
+                            report,
+                            row,
+                            reference_name=reference_name,
+                            reference_index=reference_index,
+                        ),
+                        "",
+                    ]
+                )
+            lines.extend(
+                [
+                    "**量价比较**",
+                    "",
+                    f"相对以上{len(reference_names)}款参照SKU的平均水平：",
+                    "",
+                    (
+                        f"- {_v5_2_target_model_cn(report)}周均价"
+                        f"{_v5_2_market_gap_cn(row, unit='元')}。"
+                    ),
+                    (
+                        f"- {_v5_2_target_model_cn(report)}周均销量"
+                        f"{_v5_2_market_gap_cn(row, unit='台')}。"
+                    ),
+                    "",
+                    "**结论**",
+                    "",
+                    _v5_2_document_market_conclusion_cn(report, row),
+                    "",
+                ]
+            )
         lines.extend(
             [
-                "| 用户卖点价值问题 | 符合该问题的参照 SKU | 为什么符合 | 价格表现 | 销量表现 | 量化结论 |",
+                "### 2.3 完整量化表",
+                "",
+                "| 用户卖点价值问题 | 符合该问题的参照SKU | 为什么符合 | 价格表现 | 销量表现 | 结论 |",
                 "| --- | --- | --- | --- | --- | --- |",
                 *(
-                    f"| {_v5_2_value_question_cn(row)} | "
+                    f"| {_v5_2_document_value_question_cn(row)} | "
                     f"{'、'.join(_v5_2_reference_sku_names(row))} | "
                     f"{_v5_2_reference_selection_basis_cn(row)} | "
                     f"{_v5_2_market_gap_cn(row, unit='元')} | "
                     f"{_v5_2_market_gap_cn(row, unit='台')} | "
-                    f"{_v5_2_market_result_cn(row)} |"
+                    f"{_v5_2_document_market_table_conclusion_cn(row)} |"
                     for row in market_rows
                 ),
                 "",
@@ -1740,9 +1789,83 @@ def _v5_2_value_question_cn(row: StoredPmValueAccountRow) -> str:
     return value or row.battlefield_name_cn
 
 
+def _v5_2_document_value_question_cn(row: StoredPmValueAccountRow) -> str:
+    name = row.value_bundle_name_cn
+    if "影音用户愿" in name:
+        return "影音用户是否愿意为画质升级付费"
+    if "画质配置解释" in name:
+        return "画质价值能否解释当前加价"
+    if "同尺寸" in name:
+        return "同尺寸产品是否形成画质越级感"
+    if "贵得值" in name or "体验升级" in name:
+        return "整体体验升级是否让用户觉得贵得值"
+    return _v5_2_value_question_cn(row)
+
+
 def _v5_2_reference_sku_names(row: StoredPmValueAccountRow) -> list[str]:
     return _unique(row.reference_sku_names_cn) or _unique(
         _representative_product_names(row).split("、")
+    )
+
+
+def _v5_2_reference_sku_reason_cn(
+    report: StoredSellpointValuePmReport,
+    row: StoredPmValueAccountRow,
+    *,
+    reference_name: str,
+    reference_index: int,
+) -> str:
+    name = row.value_bundle_name_cn
+    size = _v5_2_target_size_cn(report)
+    same_size = f"同为{size}产品" if size else "同尺寸"
+    same_size_high_price = f"同为{size}高价产品" if size else "同尺寸高价产品"
+    if "影音用户愿" in name:
+        if reference_index == 1:
+            return (
+                f"{same_size_high_price}，在高端画质升级、影音性能和"
+                "画质升级付费理由上与本品重合。"
+            )
+        return f"{same_size_high_price}，在高端画质、客厅影音和沉浸体验上与本品重合。"
+    if "画质配置解释" in name:
+        return f"{same_size}且处于同一高端画质战场，配置和画质卖点可以直接比较。"
+    if "同尺寸" in name:
+        return f"{same_size}，处于可比购买范围，并覆盖画质升级比较。"
+    if "贵得值" in name or "体验升级" in name:
+        roles = (
+            "代表配置型升级方案，可用于判断配置升级能否形成用户价值。",
+            "价格最贴近本品，代表价格贴身型升级方案。",
+            "代表客厅影音与沉浸体验型升级方案。",
+        )
+        if reference_index <= len(roles):
+            return roles[reference_index - 1]
+    candidate = next(
+        (
+            item
+            for item in report.full_candidates
+            if item.candidate_name_cn == reference_name
+        ),
+        None,
+    )
+    if candidate is not None:
+        return (
+            f"{candidate.relation_cn}，能够回答"
+            f"“{_v5_2_document_value_question_cn(row)}”这一价值问题。"
+        )
+    return (
+        f"与本品处于可比购买范围，能够回答"
+        f"“{_v5_2_document_value_question_cn(row)}”这一价值问题。"
+    )
+
+
+def _v5_2_target_size_cn(report: StoredSellpointValuePmReport) -> str | None:
+    model_name = str(report.target.get("model_name") or "")
+    match = re.search(r"(?<!\d)(\d{2,3})(?=[A-Za-z])", model_name)
+    return f"{match.group(1)}英寸" if match else None
+
+
+def _v5_2_target_model_cn(report: StoredSellpointValuePmReport) -> str:
+    return str(
+        report.target.get("model_name") or report.target.get("sku_code") or "本品"
     )
 
 
@@ -1751,16 +1874,13 @@ def _v5_2_reference_selection_basis_cn(
 ) -> str:
     name = row.value_bundle_name_cn
     if "影音用户愿" in name:
-        return (
-            "同处可比尺寸和价格范围，并在高端画质升级、影音任务及相关采购理由上重合，"
-            "且周均量价完整"
-        )
+        return "同尺寸、同高价购买范围，并在画质升级、影音任务和采购理由上重合"
     if "画质配置解释" in name:
-        return "同尺寸、同高端画质战场，画质配置和卖点表达可直接比较，且周均量价完整"
+        return "同尺寸、同高端画质战场，配置和画质卖点可以直接比较"
     if "同尺寸" in name:
-        return "同尺寸、同画质升级战场并处于可比购买范围，且周均量价完整"
+        return "同尺寸、处于可比购买范围，并覆盖画质升级比较"
     if "贵得值" in name or "体验升级" in name:
-        return "处于可比购买范围，并覆盖配置、价格或场景体验型升级方案，且周均量价完整"
+        return "分别代表配置型、价格贴身型和场景体验型升级方案"
     return (
         f"与本品处于可比购买范围，并在{row.battlefield_name_cn}相关用户价值、"
         "采购理由或任务场景上符合本次问题，且周均量价完整"
@@ -1788,6 +1908,55 @@ def _v5_2_market_result_cn(row: StoredPmValueAccountRow) -> str:
     if price.startswith("高") and sales.startswith("低"):
         return "该用户卖点价值尚未完全承接当前价格，销量表现存在压力"
     return "该用户卖点价值已形成市场对照，需结合价格和销量方向判断"
+
+
+def _v5_2_document_market_conclusion_cn(
+    report: StoredSellpointValuePmReport,
+    row: StoredPmValueAccountRow,
+) -> str:
+    if not (
+        _v5_2_market_gap_cn(row, unit="元").startswith("高")
+        and _v5_2_market_gap_cn(row, unit="台").startswith("高")
+    ):
+        return _v5_2_market_result_cn(row) + "。"
+    target = _v5_2_target_model_cn(report)
+    name = row.value_bundle_name_cn
+    if "影音用户愿" in name:
+        return (
+            f"{target}的画质升级卖点组合在更高价格下仍获得更高销量，"
+            "“影音用户愿意为画质升级付费”这一用户卖点价值获得市场支撑。"
+        )
+    if "画质配置解释" in name:
+        return (
+            f"{target}在画质配置可比的情况下保持更高价格和更高销量，"
+            "当前画质价值能够支撑价格。"
+        )
+    if "同尺寸" in name:
+        return (
+            f"{target}在同尺寸画质升级比较中保持更高价格和更高销量，"
+            "本品形成较强的画质升级选择。"
+        )
+    if "贵得值" in name or "体验升级" in name:
+        return (
+            f"{target}相对不同升级方案仍保持更高价格和更高销量，"
+            "整体价值组合获得量价支撑。"
+        )
+    return _v5_2_market_result_cn(row) + "。"
+
+
+def _v5_2_document_market_table_conclusion_cn(
+    row: StoredPmValueAccountRow,
+) -> str:
+    name = row.value_bundle_name_cn
+    if "影音用户愿" in name:
+        return "画质升级价值获得量价支撑"
+    if "画质配置解释" in name:
+        return "当前画质价值能够支撑价格"
+    if "同尺寸" in name:
+        return "本品形成较强画质升级选择"
+    if "贵得值" in name or "体验升级" in name:
+        return "整体价值组合获得量价支撑"
+    return _v5_2_card_market_judgment_cn(row)
 
 
 def _v5_2_card_conclusion_columns(
