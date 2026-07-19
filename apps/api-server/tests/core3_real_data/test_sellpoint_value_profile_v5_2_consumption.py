@@ -265,6 +265,33 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     session,
 ) -> None:
     report = build_v5_2_stored_profile_pm_report(_readback(session))
+    market_questions = (
+        ("影音用户愿为画质升级付费支撑卖点组合", 370, 46, "TCL 65Q9L PRO"),
+        ("画质配置解释加价支撑卖点组合", 427, 57, "TCL 65Q9L PRO"),
+        ("同尺寸画质越级获得感支撑卖点组合", 262, 76, "小米 L65MC-SP"),
+        ("贵得值的体验升级支撑卖点组合", 279, 62, "创维 65A7H PRO"),
+    )
+    market_rows = [
+        report.value_accounts[0].model_copy(
+            update={
+                "value_bundle_code": f"market-question-{index}",
+                "value_bundle_name_cn": name,
+                "reference_sku_codes": [f"TV-C{index}"],
+                "reference_sku_names_cn": [reference],
+                "price_performance_cn": (
+                    f"本品周均价较参照组平均水平高{price}.0000元。"
+                ),
+                "volume_performance_cn": (
+                    f"本品周均销量较参照组平均水平高{sales}.0000台。"
+                ),
+            }
+        )
+        for index, (name, price, sales, reference) in enumerate(
+            market_questions,
+            start=1,
+        )
+    ]
+    report = report.model_copy(update={"value_accounts": market_rows})
     markdown = render_stored_profile_markdown(
         report,
         title="海信 65E7Q 用户卖点价值分析",
@@ -275,17 +302,11 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     )
     visible = markdown + json.dumps(card, ensure_ascii=False)
 
-    for index, title in enumerate(
-        (
-            "原始卖点转化结果",
-            "SKU 最终用户卖点价值",
-            "用户卖点价值量化",
-            "产品卖点修改建议",
-        ),
-        start=1,
-    ):
-        assert f"{index}. **{title}**" in markdown
-        assert f"## {'一二三四'[index - 1]}、{title}" in markdown
+    assert "### 结论 1｜SKU 形成了什么用户卖点价值" in markdown
+    assert "### 结论 2｜这些价值是否支撑当前价格和销量" in markdown
+    assert "## 一、SKU 形成了什么用户卖点价值" in markdown
+    assert "## 二、这些价值是否支撑当前价格和销量" in markdown
+    assert "## 三、产品卖点修改建议" in markdown
     assert "279元" in visible
     assert "62台" in visible
     assert "278.8606元" not in visible
@@ -293,15 +314,25 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert card["schema"] == "2.0"
     assert card["header"]["template"] == "turquoise"
     card_visible = json.dumps(card, ensure_ascii=False)
-    assert "SKU 最终用户卖点价值" in card_visible
+    assert "结论 1｜SKU 形成了什么用户卖点价值" in card_visible
+    assert "结论 2｜这些价值是否支撑当前价格和销量" in card_visible
     assert "核心用户卖点价值" not in card_visible
     assert "市场是否买单" not in card_visible
     assert "用户卖点价值量化" in card_visible
-    assert "符合该价值问题的参照 SKU" in card_visible
-    assert "竞品品牌 型号1" in visible
-    assert "参照 SKU 选择方法" in markdown
+    for name, *_ in market_questions:
+        assert name.removesuffix("支撑卖点组合") in card_visible
+    assert "TCL 65Q9L PRO" not in card_visible
+    assert "小米 L65MC-SP" not in card_visible
+    assert "创维 65A7H PRO" not in card_visible
+    assert "符合该问题的参照 SKU" not in card_visible
+    assert "产品卖点修改建议" not in card_visible
+    assert "用户尚未稳定认知" not in card_visible
+    assert "参照产品选择逻辑" in markdown
     assert "为什么符合" in markdown
-    assert "产品卖点修改建议" in visible
+    assert "TCL 65Q9L PRO" in markdown
+    assert "小米 L65MC-SP" in markdown
+    assert "创维 65A7H PRO" in markdown
+    assert "产品卖点修改建议" in markdown
     assert "下一代产品怎么定义" not in visible
     assert "已经成立的用户价值" not in card_visible
     assert "产品原始卖点 → 用户感知价值" not in card_visible
@@ -311,7 +342,7 @@ def test_v5_2_total_and_detail_match_and_market_units_are_rounded(
     assert (
         sum(element["tag"] == "column_set" for element in card["body"]["elements"]) >= 3
     )
-    assert report.value_accounts[0].reference_sku_names_cn == ["竞品品牌 型号1"]
+    assert report.value_accounts[0].reference_sku_names_cn == ["TCL 65Q9L PRO"]
     presentation_report = report.model_copy(
         update={
             "first_screen": report.first_screen.model_copy(
