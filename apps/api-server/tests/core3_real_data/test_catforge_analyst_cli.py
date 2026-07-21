@@ -5672,8 +5672,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "markdown",
         "table",
         "hr",
-        "button",
-        "button",
+        "column_set",
     ]
     assert card["body"]["elements"][0]["content"].startswith("**结论：优先盯")
     assert card["body"]["elements"][2]["content"] == "**多维评分雷达图**"
@@ -5714,8 +5713,12 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
     assert "业务拆解" not in card_json
     assert "两款产品共同争夺" not in card_json
     assert "会影响同一批用户的最终候选清单" not in card_json
-    report_button = card["body"]["elements"][-2]
+    action_row = card["body"]["elements"][-1]
+    assert action_row["tag"] == "column_set"
+    assert [column["weight"] for column in action_row["columns"]] == [1, 1]
+    report_button = action_row["columns"][0]["elements"][0]
     assert report_button["tag"] == "button"
+    assert report_button["text"]["content"] == "查看分析依据"
     assert report_button["behaviors"][0] == {
         "type": "open_url",
         "default_url": "https://my.feishu.cn/docx/ReportToken",
@@ -5723,7 +5726,7 @@ def test_competitor_dashboard_payload_and_feishu_card_include_report_action() ->
         "ios_url": "https://my.feishu.cn/docx/ReportToken",
         "android_url": "https://my.feishu.cn/docx/ReportToken",
     }
-    compare_button = card["body"]["elements"][-1]
+    compare_button = action_row["columns"][1]["elements"][0]
     assert compare_button["tag"] == "button"
     assert compare_button["element_id"] == "view_product_compare"
     assert compare_button["text"]["content"] == "查看详细对比结果"

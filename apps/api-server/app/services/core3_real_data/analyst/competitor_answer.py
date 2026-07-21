@@ -1598,16 +1598,17 @@ def render_feishu_card_payload(dashboard_payload: dict[str, Any]) -> dict[str, A
         elements.append({"tag": "hr"})
         elements.append(_feishu_markdown("**竞品市场验证**"))
         elements.append(_feishu_competitor_market_table(target, competitors))
-    evidence_action = _feishu_report_action(dashboard_payload)
-    if evidence_action:
+    actions = [
+        action
+        for action in (
+            _feishu_report_action(dashboard_payload),
+            _feishu_product_compare_action(dashboard_payload),
+        )
+        if action is not None
+    ]
+    if actions:
         elements.append({"tag": "hr"})
-    if evidence_action:
-        elements.append(evidence_action)
-    compare_action = _feishu_product_compare_action(dashboard_payload)
-    if compare_action:
-        if not evidence_action:
-            elements.append({"tag": "hr"})
-        elements.append(compare_action)
+        elements.append(_feishu_action_row(actions))
     card = {
         "schema": "2.0",
         "config": {
@@ -8521,18 +8522,51 @@ def _feishu_open_url_button(
     }
 
 
+def _feishu_action_row(actions: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(actions) == 1:
+        return actions[0]
+    return {
+        "tag": "column_set",
+        "flex_mode": "none",
+        "background_style": "default",
+        "columns": [
+            {
+                "tag": "column",
+                "width": "weighted",
+                "weight": 1,
+                "vertical_align": "top",
+                "elements": [action],
+            }
+            for action in actions
+        ],
+    }
+
+
+def _is_feishu_action_element(element: dict[str, Any]) -> bool:
+    if element.get("tag") == "button":
+        return True
+    if element.get("tag") != "column_set":
+        return False
+    return any(
+        isinstance(nested, dict) and nested.get("tag") == "button"
+        for column in element.get("columns") or []
+        if isinstance(column, dict)
+        for nested in column.get("elements") or []
+    )
+
+
 def _trim_feishu_card(card: dict[str, Any]) -> dict[str, Any]:
     max_bytes = 30_000
     if len(json.dumps(card, ensure_ascii=False).encode("utf-8")) <= max_bytes:
         return card
     source_elements = list((card.get("body") or {}).get("elements") or [])
-    action_buttons = [
+    action_elements = [
         element
         for element in source_elements
-        if isinstance(element, dict) and element.get("tag") == "button"
+        if isinstance(element, dict) and _is_feishu_action_element(element)
     ]
     elements = list(source_elements[:4])
-    elements.extend(button for button in action_buttons if button not in elements)
+    elements.extend(action for action in action_elements if action not in elements)
     compact = {**card, "body": {"elements": elements}}
     if len(json.dumps(compact, ensure_ascii=False).encode("utf-8")) <= max_bytes:
         return compact
@@ -8545,7 +8579,7 @@ def _trim_feishu_card(card: dict[str, Any]) -> dict[str, Any]:
             "content": "卡片内容过长，已降级为摘要。可继续查看分析依据或产品详情对比。",
         }
     ]
-    fallback_elements.extend(action_buttons)
+    fallback_elements.extend(action_elements)
     return {
         "schema": "2.0",
         "config": {"summary": {"content": summary}},

@@ -195,18 +195,36 @@ def test_oversized_card_keeps_available_evidence_and_compare_buttons() -> None:
         "body": {
             "elements": [
                 {"tag": "markdown", "content": "很长的内容" * 10_000},
-                {"tag": "button", "element_id": "view_report"},
-                {"tag": "button", "element_id": "view_product_compare"},
+                {
+                    "tag": "column_set",
+                    "columns": [
+                        {
+                            "tag": "column",
+                            "elements": [
+                                {"tag": "button", "element_id": "view_report"}
+                            ],
+                        },
+                        {
+                            "tag": "column",
+                            "elements": [
+                                {
+                                    "tag": "button",
+                                    "element_id": "view_product_compare",
+                                }
+                            ],
+                        },
+                    ],
+                },
             ]
         },
     }
 
     compact = competitor_answer._trim_feishu_card(card)
 
+    action_row = compact["body"]["elements"][-1]
+    assert action_row["tag"] == "column_set"
     button_ids = [
-        row.get("element_id")
-        for row in compact["body"]["elements"]
-        if row.get("tag") == "button"
+        column["elements"][0]["element_id"] for column in action_row["columns"]
     ]
     assert button_ids == ["view_report", "view_product_compare"]
 
