@@ -229,6 +229,160 @@ def test_oversized_card_keeps_available_evidence_and_compare_buttons() -> None:
     assert button_ids == ["view_report", "view_product_compare"]
 
 
+def test_anchor_comparison_leads_with_score_reason_and_saved_match_evidence() -> None:
+    competitors = [
+        _anchor_competitor("华为", "VISION智慧屏 5 PRO 65", 14, ["强", "强", "强"]),
+        _anchor_competitor("TCL", "65Q9L PRO", 13, ["中", "中", "强"]),
+        _anchor_competitor("创维", "65A7H PRO", 10, ["不足", "不足", "中"]),
+    ]
+
+    assert competitor_answer._anchor_process_row_labels(competitors) == [
+        "得分结论",
+        "得分原因",
+        "逐项得分依据",
+        "竞品判断",
+    ]
+    values = [
+        competitor_answer._anchor_process_values(
+            {"competitor_item": item},
+            target_anchor_summary="画质配置解释加价、贵得值的体验升级、客厅换新一步到位",
+        )
+        for item in competitors
+    ]
+
+    assert values[0]["得分结论"] == "14/15｜强可替代"
+    assert values[0]["得分原因"].endswith("候选支撑为强证据3项")
+    assert values[1]["得分结论"] == "13/15｜强可替代"
+    assert values[1]["得分原因"].endswith("候选支撑为强证据1项、中证据2项")
+    assert values[2]["得分结论"] == "10/15｜中等可替代"
+    assert values[2]["得分原因"].endswith("候选支撑为中证据1项、证据不足2项")
+    assert "候选中证据，本品强证据" in values[1]["逐项得分依据"]
+    assert "候选证据不足，本品强证据" in values[2]["逐项得分依据"]
+
+
+def test_all_second_chapter_dimensions_lead_with_result_and_reason() -> None:
+    item = _competitor()
+    item.update(
+        {
+            "purchase_pool": {
+                "level": "P0",
+                "score": 1.0,
+                "reason_cn": "同65英寸、同价格带购买池",
+            },
+            "weighted_overlap": {
+                "battlefield": 0.8,
+                "user_task": 0.6,
+                "target_group": 0.4,
+            },
+            "matched_dimensions": {
+                "battlefield": ["高端画质升级"],
+                "user_task": ["影院沉浸观影"],
+                "target_group": ["高端影音体验用户"],
+            },
+            "market_validation": {
+                "level": "strong",
+                "level_cn": "强验证",
+                "summary_cn": "候选连续成交，具备真实分流基础",
+                "candidate_weighted_price": 5637,
+                "avg_weekly_sales_volume": 217,
+                "overlap_week_count": 8,
+            },
+            "selection_gate": {
+                "selection_reason_cn": "六个主体维度均有有效证据，综合得分进入前三",
+            },
+        }
+    )
+    item["replacement_pressure"]["affected_purchase_reasons"] = ["画质配置解释加价"]
+    product = {
+        "sku": item["candidate"],
+        "sections": {},
+        "competitor_item": item,
+    }
+
+    overview = competitor_answer._score_overview_values(product)
+    assert list(overview)[:3] == ["综合分", "排名原因", "竞争角色"]
+    assert "六个主体维度" in overview["排名原因"]
+
+    purchase_pool = competitor_answer._purchase_pool_process_values(product)
+    assert list(purchase_pool) == [
+        "得分结论",
+        "得分原因",
+        "尺寸与价格依据",
+        "竞品判断",
+    ]
+    assert purchase_pool["得分结论"] == "20/20｜同一购买决策"
+    assert "同65英寸、同价格带" in purchase_pool["得分原因"]
+
+    for profile_type, expected_score in (
+        ("battlefield", "20/25｜加权重合80%"),
+        ("task", "9/15｜加权重合60%"),
+        ("group", "6/15｜加权重合40%"),
+    ):
+        labels = [
+            "得分结论",
+            "得分原因",
+            "与本品重合",
+            "各产品主项",
+            "各产品辅项",
+            "竞品判断",
+        ]
+        values = competitor_answer._semantic_process_values(
+            product, profile_type=profile_type, row_labels=labels
+        )
+        assert list(values)[:2] == ["得分结论", "得分原因"]
+        assert values["得分结论"] == expected_score
+        assert "双方主辅角色加权后" in values["得分原因"]
+
+    pressure = competitor_answer._pressure_process_values(product)
+    assert list(pressure)[:2] == ["得分结论", "得分原因"]
+    assert pressure["得分结论"] == "8/10｜价值替代压力"
+    assert pressure["影响的成交理由"] == "画质配置解释加价"
+
+    market = competitor_answer._market_validation_process_values(product)
+    assert list(market)[:2] == ["验证结论", "判断原因"]
+    assert market["验证结论"] == "强验证"
+    assert "均价5,637元；周均销量217台；重叠在售8周" in market["量价依据"]
+
+
+def _anchor_competitor(
+    brand_name: str,
+    model_name: str,
+    score: int,
+    evidence_levels: list[str],
+) -> dict[str, object]:
+    anchors = ["画质配置解释加价", "贵得值的体验升级", "客厅换新一步到位"]
+    level_text = {"强": "强证据", "中": "中证据", "不足": "证据不足"}
+    return {
+        "candidate": {"brand_name": brand_name, "model_name": model_name},
+        "value_anchor": {
+            "score": score / 15,
+            "anchor_substitutability_score": score,
+            "anchor_substitutability_level": "strong" if score >= 13 else "medium",
+            "shared_anchors": anchors,
+            "primary_direct_eligible": True,
+        },
+        "anchor_substitutability": {
+            "anchor_substitutability_score": score,
+            "anchor_substitutability_level": "strong" if score >= 13 else "medium",
+            "shared_anchors": anchors,
+            "primary_direct_eligible": True,
+            "match_details": [
+                {
+                    "score": 5,
+                    "match_type": "exact_substitute",
+                    "target_anchor_cn": anchor,
+                    "candidate_anchor_cn": anchor,
+                    "evidence_comparison_cn": (
+                        "候选覆盖同一核心成交理由，证据强度为"
+                        f"{level_text[level]}，可与目标的强证据形成同类替代。"
+                    ),
+                }
+                for anchor, level in zip(anchors, evidence_levels, strict=True)
+            ],
+        },
+    }
+
+
 def _product(
     name: str,
     price: int,

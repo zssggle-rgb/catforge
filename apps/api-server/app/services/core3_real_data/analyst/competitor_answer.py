@@ -684,9 +684,7 @@ def render_competitor_answer_from_saved_agent_analysis(
         raise ValueError("saved candidate analysis cannot contain duplicates")
     if len(priority_order) > 3 or not set(priority_order).issubset(candidate_codes):
         raise ValueError("saved priority order must reference at most three candidates")
-    by_code = {
-        str((row.get("candidate") or {}).get("sku_code")): row for row in frozen
-    }
+    by_code = {str((row.get("candidate") or {}).get("sku_code")): row for row in frozen}
     top_competitors = [by_code[sku_code] for sku_code in priority_order]
     buckets = _bucket_competitors(frozen)
     target_name = _display_name(target)
@@ -1036,11 +1034,19 @@ def _profile_v11_candidate_display(
     selection = row.selection_assessment
     score = row.score_breakdown.ranking_score
     market_strength = str(row.market_validation.market_validation_strength)
+    market_level = _profile_v11_market_level(market_strength)
+    sales_snapshot = row.market_validation.sales_overlap_snapshot
+    candidate_identity = _profile_v11_identity(row.candidate_snapshot)
+    candidate_identity["price_gap_to_target"] = row.market_validation.price_gap
+    if row.market_validation.price_ratio is not None:
+        candidate_identity["price_gap_pct_to_target"] = (
+            row.market_validation.price_ratio - Decimal("1")
+        )
     return {
         "rank": row.recall_rank,
         "recall_rank": row.recall_rank,
         "recall_sources": row.recall_sources,
-        "candidate": _profile_v11_identity(row.candidate_snapshot),
+        "candidate": candidate_identity,
         "candidate_fact_brief": _profile_v11_target_fact_brief(row.candidate_snapshot),
         "business_score": score,
         "competitor_score": score,
@@ -1118,16 +1124,24 @@ def _profile_v11_candidate_display(
             ),
         },
         "market_validation": {
-            "level": _profile_v11_market_level(market_strength),
+            "level": market_level,
+            "level_cn": {
+                "strong": "强验证",
+                "medium": "有成交验证",
+                "weak": "验证不足",
+            }[market_level],
             "strength": market_strength,
             "summary_cn": row.market_validation.conclusion.audit_summary_cn,
             "target_weighted_price": row.market_validation.target_weighted_price,
             "candidate_weighted_price": row.market_validation.candidate_weighted_price,
             "price_gap": row.market_validation.price_gap,
             "price_ratio": row.market_validation.price_ratio,
-            "sales_overlap_snapshot": (
-                row.market_validation.sales_overlap_snapshot.model_dump(mode="json")
+            "avg_weekly_sales_volume": (
+                sales_snapshot.candidate_overlap_weekly_volume
+                or sales_snapshot.candidate_overall_weekly_volume
             ),
+            "overlap_week_count": len(sales_snapshot.overlap_weeks),
+            "sales_overlap_snapshot": sales_snapshot.model_dump(mode="json"),
         },
         "role": primary_role,
         "role_cn": role_cn,
@@ -1231,11 +1245,20 @@ def _profile_v11_overlap_structure(
 def _profile_v11_value_anchor(row: AgentCandidateAnalysis) -> dict[str, Any]:
     anchor = row.value_anchor_analysis
     return {
+        "target_core_anchors": [
+            item.model_dump(mode="json") for item in anchor.target_core_anchors
+        ],
+        "candidate_core_anchors": [
+            item.model_dump(mode="json") for item in anchor.candidate_core_anchors
+        ],
         "shared_anchors": anchor.shared_anchors,
         "target_stronger_anchors": anchor.target_stronger_anchors,
         "candidate_stronger_anchors": anchor.candidate_stronger_anchors,
         "weak_expression_anchors": anchor.weak_expression_anchors,
         "proposition_only_anchors": anchor.proposition_only_anchors,
+        "match_details": [
+            item.model_dump(mode="json") for item in anchor.match_details
+        ],
         "anchor_substitutability_score": anchor.anchor_substitutability_score,
         "anchor_substitutability_level": anchor.anchor_substitutability_level,
         "score": anchor.score.normalized_score,
@@ -1884,8 +1907,9 @@ def _analysis_process_lines(
             _comparison_table_lines(
                 products,
                 [
-                    "竞争角色",
                     "综合分",
+                    "排名原因",
+                    "竞争角色",
                     "购买池",
                     "价值战场",
                     "用户任务",
@@ -1893,7 +1917,6 @@ def _analysis_process_lines(
                     "关键价值锚点",
                     "替代压力",
                     "市场验证",
-                    "排序判断",
                 ],
                 _score_overview_values,
             ),
@@ -1903,10 +1926,10 @@ def _analysis_process_lines(
     lines.extend(
         _analysis_section_lines(
             "### 2.2 购买池比较",
-            "购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策；这是竞品成立的前置条件。",
+            "先看购买池得分和得分原因，再看尺寸、价格带和预算关系；购买池回答双方是否会进入同一次购买决策，是竞品成立的前置条件。",
             _comparison_table_lines(
                 products,
-                ["尺寸/价格带", "均价", "购买池判断", "价差/预算关系", "维度得分"],
+                ["得分结论", "得分原因", "尺寸与价格依据", "竞品判断"],
                 _purchase_pool_process_values,
             ),
             "同尺寸或邻近价格带候选优先进入正面对标；价格明显上探或下探时，需要通过替代压力说明其分流方式。",
@@ -1918,22 +1941,15 @@ def _analysis_process_lines(
     target_anchor_summary = _target_anchor_summary(top_competitors)
     anchor_section = _analysis_section_lines(
         "### 2.6 关键价值锚点可替代性比较",
-        "关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖、强化或绕开；只看 SKU 级成交理由画像和 pair 级可替代性，不用参数标签直接拼结论。",
+        "先看得分及得分原因，再逐项比较目标 SKU 的核心成交理由被候选覆盖、强化或绕开的依据；只读取画像已经保存的判断，不用参数标签拼结论，也不在报告阶段重新评分。",
         _comparison_table_lines(
             products,
-            [
-                "目标核心锚点",
-                "候选覆盖情况",
-                "候选更强锚点",
-                "弱表达/复核",
-                "维度得分",
-                "排序含义",
-            ],
+            _anchor_process_row_labels(top_competitors),
             lambda product: _anchor_process_values(
                 product, target_anchor_summary=target_anchor_summary
             ),
         ),
-        "锚点可替代性不足的候选可以作为价格或场景参考，但不能成为首选直接竞品。",
+        "同样覆盖核心成交理由，不等于可替代强度相同；证据强度和逐项匹配质量会形成不同得分，应先按得分原因判断替代强弱，再决定是否作为直接竞品。",
     )
     pressure_supplement = _purchase_pressure_supplement_lines(top_competitors)
     if pressure_supplement:
@@ -1948,10 +1964,10 @@ def _analysis_process_lines(
     lines.extend(
         _analysis_section_lines(
             "### 2.7 替代压力比较",
-            "替代压力回答竞品通过什么方式改变本品成交：价值替代、价格压制、配置标杆、场景心智、品牌生态、下探或上探替代。",
+            "先看压力得分和形成原因，再看竞品具体影响哪些成交理由；替代压力回答竞品通过什么方式改变本品成交。",
             _comparison_table_lines(
                 products,
-                ["主压力类型", "辅助压力", "压力得分", "强替代话术", "成交影响"],
+                _pressure_process_row_labels(top_competitors),
                 _pressure_process_values,
             ),
             "替代压力低于 5/10 时只能作为复核或弱压力说明，不输出高确定性强替代结论。",
@@ -1960,10 +1976,10 @@ def _analysis_process_lines(
     lines.extend(
         _analysis_section_lines(
             "### 2.8 市场验证比较",
-            "市场验证只回答候选是否具备真实线上成交和分流基础；它不直接进入主体综合分。",
+            "先看市场验证结论和判断原因，再看量价事实；市场验证只回答候选是否具备真实线上成交和分流基础，不直接进入主体综合分。",
             _comparison_table_lines(
                 products,
-                ["周均销量", "重叠在售周", "验证等级", "真实分流判断", "排序作用"],
+                ["验证结论", "判断原因", "量价依据", "竞品判断"],
                 _market_validation_process_values,
             ),
             "销量用于验证竞品有效性，不把销量高但购买池或成交理由偏离的 SKU 排成直接竞品。",
@@ -2059,8 +2075,9 @@ def _score_overview_values(product: dict[str, Any]) -> dict[str, str]:
     item = product.get("competitor_item")
     if not item:
         return {
-            "竞争角色": "本品基准",
             "综合分": "本品不参与竞品排序",
+            "排名原因": "本品是所有候选的比较基准",
+            "竞争角色": "被比较目标",
             "购买池": "本品基准",
             "价值战场": "本品主战场基准",
             "用户任务": "本品主任务基准",
@@ -2068,22 +2085,35 @@ def _score_overview_values(product: dict[str, Any]) -> dict[str, str]:
             "关键价值锚点": "目标核心成交理由基准",
             "替代压力": "被替代对象",
             "市场验证": "本品市场表现基准",
-            "排序判断": "作为比较目标",
         }
     score = _candidate_score_breakdown(item)
     market = item.get("market_validation") or {}
     return {
-        "竞争角色": _report_role_cn(item),
         "综合分": f"{score['total']}/100",
-        "购买池": f"{score['purchase_pool']}/20；{item['purchase_pool']['reason_cn']}",
+        "排名原因": _candidate_overall_score_reason(item),
+        "竞争角色": _report_role_cn(item),
+        "购买池": (
+            f"{score['purchase_pool']}/20；"
+            f"{_purchase_pool_reason(item.get('purchase_pool') or {})}"
+        ),
         "价值战场": f"{score['battlefield']}/25",
         "用户任务": f"{score['user_task']}/15",
         "目标客群": f"{score['target_group']}/15",
         "关键价值锚点": f"{score['value_anchor']}/15",
         "替代压力": f"{score['replacement_pressure']}/10；{(item.get('replacement_pressure') or {}).get('type_cn') or '替代压力待复核'}",
         "市场验证": market.get("level_cn") or "验证不足",
-        "排序判断": _candidate_sort_reason(item),
     }
+
+
+def _candidate_overall_score_reason(item: dict[str, Any]) -> str:
+    selection_gate = item.get("selection_gate") or {}
+    ranking_trace = item.get("ranking_trace") or {}
+    saved_reason = str(
+        selection_gate.get("selection_reason_cn")
+        or ranking_trace.get("selection_reason_cn")
+        or ""
+    ).strip()
+    return saved_reason or _candidate_sort_reason(item)
 
 
 def _purchase_pool_process_values(product: dict[str, Any]) -> dict[str, str]:
@@ -2111,24 +2141,63 @@ def _purchase_pool_process_values(product: dict[str, Any]) -> dict[str, str]:
     )
     if not item:
         return {
-            "尺寸/价格带": f"{_format_number(size) or '未知'}寸；{size_tier}；{price_band}",
-            "均价": _format_money(price) or "未知",
-            "购买池判断": "本品所在尺寸价格池",
-            "价差/预算关系": "本品基准",
-            "维度得分": "本品不评分",
+            "得分结论": "本品是比较基准",
+            "得分原因": "本品不参与竞品评分",
+            "尺寸与价格依据": (
+                f"{_format_number(size) or '未知'}寸；{size_tier}；{price_band}；"
+                f"均价{_format_money(price) or '未知'}"
+            ),
+            "竞品判断": "用于界定候选是否进入同一次购买决策",
         }
     score = _candidate_score_breakdown(item)
     candidate = item.get("candidate") or {}
+    purchase_pool = item.get("purchase_pool") or {}
+    purchase_reason = _purchase_pool_reason(purchase_pool)
     return {
-        "尺寸/价格带": f"{_format_number(size) or _format_number(candidate.get('screen_size_inch')) or '未知'}寸；{size_tier}；{price_band}",
-        "均价": _format_money(
-            price or candidate.get("weighted_price") or candidate.get("price_wavg")
-        )
-        or "未知",
-        "购买池判断": item["purchase_pool"]["reason_cn"],
-        "价差/预算关系": _price_gap_phrase(candidate.get("price_gap_pct_to_target")),
-        "维度得分": f"{score['purchase_pool']}/20",
+        "得分结论": (
+            f"{score['purchase_pool']}/20｜"
+            f"{_purchase_pool_level_cn(purchase_pool, score['purchase_pool'])}"
+        ),
+        "得分原因": (
+            f"{purchase_reason}；"
+            f"{_price_gap_phrase(candidate.get('price_gap_pct_to_target'))}"
+        ),
+        "尺寸与价格依据": (
+            f"{_format_number(size) or _format_number(candidate.get('screen_size_inch')) or '未知'}寸；"
+            f"{size_tier}；{price_band}；"
+            f"均价{_format_money(price or candidate.get('weighted_price') or candidate.get('price_wavg')) or '未知'}"
+        ),
+        "竞品判断": _purchase_pool_judgement(score["purchase_pool"]),
     }
+
+
+def _purchase_pool_reason(purchase_pool: dict[str, Any]) -> str:
+    conclusion = purchase_pool.get("conclusion") or {}
+    return str(
+        purchase_pool.get("reason_cn")
+        or purchase_pool.get("summary_cn")
+        or conclusion.get("audit_summary_cn")
+        or "当前画像未保存购买池得分原因"
+    )
+
+
+def _purchase_pool_level_cn(purchase_pool: dict[str, Any], score: int) -> str:
+    level = str(purchase_pool.get("level") or "")
+    if level == "unknown":
+        return "购买池待判断"
+    if level in {"P0", "P1"} or score >= 17:
+        return "同一购买决策"
+    if level in {"P2", "P3"} or score >= 11:
+        return "相邻购买决策"
+    return "购买池偏离"
+
+
+def _purchase_pool_judgement(score: int) -> str:
+    if score >= 17:
+        return "会与本品进入同一次购买决策"
+    if score >= 11:
+        return "具备购买池竞争关系，需结合用户价值替代强度判断"
+    return "购买池偏离，只作为跨预算或跨场景参照"
 
 
 def _semantic_analysis_section(
@@ -2137,37 +2206,40 @@ def _semantic_analysis_section(
     configs = {
         "battlefield": {
             "heading": "### 2.3 价值战场比较",
-            "criterion": "价值战场比较本品和竞品是否争夺同一类付费场景，主/辅关系高于简单重合数量。",
+            "criterion": "先看得分及加权重合原因，再比较各产品的主辅价值战场；相同战场名称不代表得分相同，双方主辅角色权重会影响结果。",
             "rows": [
-                "主价值战场",
-                "辅/机会价值战场",
+                "得分结论",
+                "得分原因",
                 "与本品重合",
-                "维度得分",
-                "业务判断",
+                "各产品主价值战场",
+                "各产品辅/机会价值战场",
+                "竞品判断",
             ],
             "conclusion": "价值战场越接近，竞品越容易在同一价值解释框架下拦截本品。",
         },
         "task": {
             "heading": "### 2.4 用户任务比较",
-            "criterion": "用户任务比较同一批用户买产品时要完成的核心用途是否交叉。",
+            "criterion": "先看得分及加权重合原因，再比较各产品的主辅用户任务；相同任务名称不代表得分相同，双方主辅角色权重会影响结果。",
             "rows": [
-                "主用户任务",
-                "辅/观察用户任务",
+                "得分结论",
+                "得分原因",
                 "与本品重合",
-                "维度得分",
-                "业务判断",
+                "各产品主用户任务",
+                "各产品辅/观察用户任务",
+                "竞品判断",
             ],
             "conclusion": "主任务交叉越强，导购和详情页越需要解释本品在该任务上的不可替代收益。",
         },
         "group": {
             "heading": "### 2.5 目标客群比较",
-            "criterion": "目标客群比较本品和竞品是否争夺同一批核心人群或相邻升级人群。",
+            "criterion": "先看得分及加权重合原因，再比较各产品的主辅目标客群；相同客群名称不代表得分相同，双方主辅角色权重会影响结果。",
             "rows": [
-                "主目标客群",
-                "辅/观察目标客群",
+                "得分结论",
+                "得分原因",
                 "与本品重合",
-                "维度得分",
-                "业务判断",
+                "各产品主目标客群",
+                "各产品辅/观察目标客群",
+                "竞品判断",
             ],
             "conclusion": "核心客群相同会放大正面对标压力；客群偏离时应降级为场景或价格参考。",
         },
@@ -2221,11 +2293,12 @@ def _semantic_process_values(
     item = product.get("competitor_item")
     if not item:
         return {
-            row_labels[0]: primary,
-            row_labels[1]: secondary,
-            row_labels[2]: "本品基准",
-            row_labels[3]: "本品不评分",
-            row_labels[4]: "作为横向比较的目标画像",
+            row_labels[0]: "本品是比较基准",
+            row_labels[1]: "本品不参与竞品评分",
+            row_labels[2]: "本品自身",
+            row_labels[3]: primary,
+            row_labels[4]: secondary,
+            row_labels[5]: "用于判断候选是否争夺同一价值、任务或客群",
         }
     score = _candidate_score_breakdown(item)
     max_points = {"battlefield": 25, "task": 15, "group": 15}[profile_type]
@@ -2234,20 +2307,57 @@ def _semantic_process_values(
         "task": "user_task",
         "group": "target_group",
     }[profile_type]
-    matched = (
-        _join_cn((item.get("matched_dimensions") or {}).get(dimension_key, [])[:6])
-        or "重合不足"
+    matched_items = _unique_strings(
+        (item.get("matched_dimensions") or {}).get(dimension_key, [])[:6]
     )
-    overlap = _pct_or_unknown((item.get("weighted_overlap") or {}).get(dimension_key))
+    matched = _join_cn(matched_items) or "重合不足"
+    overlap_value = (item.get("weighted_overlap") or {}).get(dimension_key)
+    overlap = _pct_or_unknown(overlap_value)
     return {
-        row_labels[0]: primary,
-        row_labels[1]: secondary,
-        row_labels[2]: f"{matched}；加权重合{overlap}",
-        row_labels[3]: f"{score[score_key]}/{max_points}",
-        row_labels[4]: "主辅重合可支撑正面对标"
-        if matched != "重合不足"
-        else "重合不足，排序需降级解释",
+        row_labels[0]: f"{score[score_key]}/{max_points}｜加权重合{overlap}",
+        row_labels[1]: _semantic_score_reason(
+            matched_items=matched_items,
+            overlap=overlap,
+            score=score[score_key],
+            max_points=max_points,
+        ),
+        row_labels[2]: matched,
+        row_labels[3]: primary,
+        row_labels[4]: secondary,
+        row_labels[5]: _semantic_competitor_judgement(
+            profile_type=profile_type,
+            score=score[score_key],
+            max_points=max_points,
+        ),
     }
+
+
+def _semantic_score_reason(
+    *, matched_items: list[str], overlap: str, score: int, max_points: int
+) -> str:
+    matched = _join_cn(matched_items)
+    if not matched:
+        return f"画像未形成稳定重合项；加权重合{overlap}，对应{score}/{max_points}"
+    return (
+        f"双方主辅角色加权后重合{overlap}，对应{score}/{max_points}；"
+        f"命中{len(matched_items)}项：{matched}"
+    )
+
+
+def _semantic_competitor_judgement(
+    *, profile_type: str, score: int, max_points: int
+) -> str:
+    ratio = Decimal(score) / Decimal(max_points)
+    subject = {
+        "battlefield": "同一付费场景",
+        "task": "同一使用任务",
+        "group": "同一核心人群",
+    }[profile_type]
+    if ratio >= Decimal("0.75"):
+        return f"高度争夺{subject}，可支撑正面对标"
+    if ratio >= Decimal("0.50"):
+        return f"部分争夺{subject}，需结合其他维度判断"
+    return f"对{subject}的重合不足，不宜单独据此认定直接竞品"
 
 
 def _semantic_labels_by_relation(
@@ -2278,43 +2388,209 @@ def _anchor_process_values(
     item = product.get("competitor_item")
     if not item:
         return {
-            "目标核心锚点": target_anchor_summary,
-            "候选覆盖情况": "本品基准",
-            "候选更强锚点": "不适用",
-            "弱表达/复核": "不适用",
-            "维度得分": "本品不评分",
-            "排序含义": "目标核心锚点用于判断竞品是否可替代",
+            "得分结论": "本品是比较基准",
+            "得分原因": "本品不参与竞品评分",
+            "逐项得分依据": f"目标核心成交理由：{target_anchor_summary}",
+            "差异与复核": "不适用",
+            "竞品判断": "用于判断候选能否替代本品",
         }
-    anchor = item.get("value_anchor") or {}
+    anchor = _anchor_detail_source(item)
     score = _candidate_score_breakdown(item)
-    weak = _join_cn((anchor.get("weak_expression_anchors") or [])[:4])
-    requires_review = "需复核" if anchor.get("requires_review") else "无需额外复核"
     eligible = (
         "可进入直接竞品判断"
         if anchor.get("primary_direct_eligible", True)
         else "不得升级为首选直接竞品"
     )
     return {
-        "目标核心锚点": target_anchor_summary,
-        "候选覆盖情况": _join_cn((anchor.get("shared_anchors") or [])[:5])
-        or "目标核心锚点覆盖不足",
-        "候选更强锚点": _join_cn((anchor.get("candidate_stronger_anchors") or [])[:4])
-        or "未形成候选更强锚点",
-        "弱表达/复核": _join_cn([weak, requires_review]) if weak else requires_review,
-        "维度得分": f"{score['value_anchor']}/15",
-        "排序含义": eligible,
+        "得分结论": (
+            f"{score['value_anchor']}/15｜"
+            f"{_anchor_substitutability_level_cn(anchor, score['value_anchor'])}"
+        ),
+        "得分原因": _anchor_score_reason(anchor),
+        "逐项得分依据": _anchor_match_evidence(anchor),
+        "差异与复核": _anchor_difference_and_review(anchor),
+        "竞品判断": eligible,
     }
+
+
+def _anchor_process_row_labels(
+    top_competitors: list[dict[str, Any]],
+) -> list[str]:
+    labels = ["得分结论", "得分原因", "逐项得分依据"]
+    if any(
+        _anchor_has_difference_or_review(_anchor_detail_source(item))
+        for item in top_competitors[:3]
+    ):
+        labels.append("差异与复核")
+    labels.append("竞品判断")
+    return labels
+
+
+def _anchor_detail_source(item: dict[str, Any]) -> dict[str, Any]:
+    detailed = item.get("anchor_substitutability") or {}
+    if detailed.get("match_details") or detailed.get("anchor_substitution_summary_cn"):
+        return detailed
+    return item.get("value_anchor") or detailed
+
+
+def _anchor_has_difference_or_review(anchor: dict[str, Any]) -> bool:
+    return bool(
+        anchor.get("target_stronger_anchors")
+        or anchor.get("candidate_stronger_anchors")
+        or anchor.get("weak_expression_anchors")
+        or anchor.get("proposition_only_anchors")
+        or anchor.get("requires_review")
+    )
+
+
+def _anchor_substitutability_level_cn(anchor: dict[str, Any], score: int) -> str:
+    level = str(anchor.get("anchor_substitutability_level") or "")
+    if not level:
+        level = "strong" if score >= 13 else "medium" if score >= 10 else "partial"
+    return {
+        "strong": "强可替代",
+        "medium": "中等可替代",
+        "partial": "部分可替代",
+        "insufficient": "可替代性不足",
+        "blocked": "当前无法评分",
+    }.get(level, "可替代性待判断")
+
+
+def _anchor_score_reason(anchor: dict[str, Any]) -> str:
+    details = [
+        row for row in anchor.get("match_details") or [] if isinstance(row, dict)
+    ]
+    if not details:
+        shared = _unique_strings(_coerce_list(anchor.get("shared_anchors")))
+        return (
+            f"覆盖{len(shared)}项核心成交理由，逐项证据强度未在当前画像中保存"
+            if shared
+            else "目标核心成交理由覆盖不足"
+        )
+    covered_types = {"exact_substitute", "adjacent_substitute", "candidate_stronger"}
+    covered = sum(str(row.get("match_type") or "") in covered_types for row in details)
+    exact = sum(
+        str(row.get("match_type") or "") in {"exact_substitute", "candidate_stronger"}
+        for row in details
+    )
+    strength_counts: dict[str, int] = {}
+    for row in details:
+        strength = _anchor_evidence_strength_cn(row, side="candidate")
+        if strength:
+            strength_counts[strength] = strength_counts.get(strength, 0) + 1
+    strength_order = ["强证据", "中证据", "弱证据", "证据不足"]
+    strength_summary = "、".join(
+        f"{label}{strength_counts[label]}项"
+        for label in strength_order
+        if strength_counts.get(label)
+    )
+    parts = [f"覆盖{covered}/{len(details)}项核心成交理由"]
+    if exact:
+        parts.append(f"其中{exact}项为同一成交理由")
+    if strength_summary:
+        parts.append(f"候选支撑为{strength_summary}")
+    return "；".join(parts)
+
+
+def _anchor_match_evidence(anchor: dict[str, Any]) -> str:
+    details = [
+        row for row in anchor.get("match_details") or [] if isinstance(row, dict)
+    ]
+    if not details:
+        return (
+            _join_cn(_coerce_list(anchor.get("shared_anchors"))[:5])
+            or "目标核心成交理由覆盖不足"
+        )
+    rows: list[str] = []
+    for detail in details[:5]:
+        comparison = detail.get("evidence_comparison") or {}
+        target_name = str(
+            detail.get("target_anchor_cn")
+            or comparison.get("target_anchor_cn")
+            or detail.get("target_anchor_code")
+            or "未命名成交理由"
+        )
+        relation = {
+            "exact_substitute": "同一成交理由",
+            "candidate_stronger": "同一成交理由，候选支撑更强",
+            "adjacent_substitute": "相邻成交理由",
+            "target_only": "候选未覆盖",
+            "weak_expression": "候选仅弱表达",
+            "proposition_only": "候选仅有宣传表达，尚未形成用户承接",
+            "unsupported": "候选未形成正向支撑",
+        }.get(str(detail.get("match_type") or ""), "匹配关系待确认")
+        candidate_strength = _anchor_evidence_strength_cn(detail, side="candidate")
+        target_strength = _anchor_evidence_strength_cn(detail, side="target")
+        strength_parts = []
+        if candidate_strength:
+            strength_parts.append(f"候选{candidate_strength}")
+        if target_strength:
+            strength_parts.append(f"本品{target_strength}")
+        suffix = f"（{'，'.join(strength_parts)}）" if strength_parts else ""
+        rows.append(f"{target_name}：{relation}{suffix}")
+    return "；".join(rows)
+
+
+def _anchor_evidence_strength_cn(detail: dict[str, Any], *, side: str) -> str:
+    comparison = detail.get("evidence_comparison") or {}
+    raw = detail.get(f"{side}_evidence_strength") or comparison.get(
+        f"{side}_evidence_strength"
+    )
+    mapped = {
+        "strong": "强证据",
+        "medium": "中证据",
+        "weak": "弱证据",
+        "insufficient": "证据不足",
+    }.get(str(raw or "").lower())
+    if mapped:
+        return mapped
+    summary = str(
+        detail.get("evidence_comparison_cn") or comparison.get("summary_cn") or ""
+    )
+    patterns = (
+        (r"证据强度为(强证据|中证据|弱证据|证据不足)", "candidate"),
+        (r"候选为(强证据|中证据|弱证据|证据不足)", "candidate"),
+        (r"目标(?:为|的)(强证据|中证据|弱证据|证据不足)", "target"),
+    )
+    for pattern, pattern_side in patterns:
+        if pattern_side != side:
+            continue
+        match = re.search(pattern, summary)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _anchor_difference_and_review(anchor: dict[str, Any]) -> str:
+    parts: list[str] = []
+    target_only = _join_cn(_coerce_list(anchor.get("target_stronger_anchors"))[:4])
+    candidate_stronger = _join_cn(
+        _coerce_list(anchor.get("candidate_stronger_anchors"))[:4]
+    )
+    weak = _join_cn(_coerce_list(anchor.get("weak_expression_anchors"))[:4])
+    proposition = _join_cn(_coerce_list(anchor.get("proposition_only_anchors"))[:4])
+    if target_only:
+        parts.append(f"候选未覆盖：{target_only}")
+    if candidate_stronger:
+        parts.append(f"候选更强：{candidate_stronger}")
+    if weak:
+        parts.append(f"仅弱表达：{weak}")
+    if proposition:
+        parts.append(f"尚未形成用户承接：{proposition}")
+    if anchor.get("requires_review"):
+        parts.append("当前结果需要复核")
+    return "；".join(parts) or "无"
 
 
 def _pressure_process_values(product: dict[str, Any]) -> dict[str, str]:
     item = product.get("competitor_item")
     if not item:
         return {
-            "主压力类型": "被替代对象",
+            "得分结论": "本品是压力承接对象",
+            "得分原因": "本品不参与竞品压力评分",
+            "影响的成交理由": "本品核心成交理由是候选压力的比较基准",
             "辅助压力": "不适用",
-            "压力得分": "本品不评分",
-            "强替代话术": "不适用",
-            "成交影响": "本品是压力承接对象",
+            "竞品判断": "用于判断候选会通过什么方式影响本品成交",
         }
     pressure = item.get("replacement_pressure") or {}
     score = _candidate_score_breakdown(item)
@@ -2332,12 +2608,40 @@ def _pressure_process_values(product: dict[str, Any]) -> dict[str, str]:
         else "只能输出弱压力/复核判断"
     )
     return {
-        "主压力类型": pressure.get("type_cn") or "替代压力待复核",
+        "得分结论": (
+            f"{score['replacement_pressure']}/10｜"
+            f"{pressure.get('type_cn') or '替代压力待复核'}"
+        ),
+        "得分原因": pressure.get("reason_cn") or _candidate_sort_reason(item),
+        "影响的成交理由": (
+            _join_cn(_coerce_list(pressure.get("affected_purchase_reasons"))[:5])
+            or "当前画像未保存受影响的具体成交理由"
+        ),
         "辅助压力": auxiliary_names or "无稳定辅助压力",
-        "压力得分": f"{score['replacement_pressure']}/10",
-        "强替代话术": strong_allowed,
-        "成交影响": pressure.get("reason_cn") or _candidate_sort_reason(item),
+        "竞品判断": strong_allowed,
     }
+
+
+def _pressure_process_row_labels(
+    top_competitors: list[dict[str, Any]],
+) -> list[str]:
+    labels = ["得分结论", "得分原因"]
+    if any(
+        _coerce_list(
+            (item.get("replacement_pressure") or {}).get("affected_purchase_reasons")
+        )
+        for item in top_competitors[:3]
+    ):
+        labels.append("影响的成交理由")
+    if any(
+        _coerce_list(
+            (item.get("replacement_pressure") or {}).get("auxiliary_pressure_types")
+        )
+        for item in top_competitors[:3]
+    ):
+        labels.append("辅助压力")
+    labels.append("竞品判断")
+    return labels
 
 
 def _purchase_pressure_supplement_lines(
@@ -2378,35 +2682,69 @@ def _market_validation_process_values(product: dict[str, Any]) -> dict[str, str]
         weekly = metrics.get("avg_weekly_sales_volume") or sku.get(
             "avg_weekly_sales_volume"
         )
+        price = (
+            metrics.get("price_wavg")
+            or metrics.get("price_latest")
+            or sku.get("weighted_price")
+            or sku.get("price_wavg")
+        )
         return {
-            "周均销量": f"{_format_unit_count(weekly) or '未知'}台",
-            "重叠在售周": "本品基准",
-            "验证等级": "本品市场表现",
-            "真实分流判断": "作为被分流目标",
-            "排序作用": "不参与竞品排序",
+            "验证结论": "本品市场表现基准",
+            "判断原因": "本品是被比较目标，不参与候选市场验证",
+            "量价依据": (
+                f"均价{_format_money(price) or '未知'}；"
+                f"周均销量{_format_unit_count(weekly) or '未知'}台"
+            ),
+            "竞品判断": "用于判断候选是否具备真实成交和分流基础",
         }
     market = item.get("market_validation") or {}
-    weekly = market.get("avg_weekly_sales_volume")
+    sales_snapshot = market.get("sales_overlap_snapshot") or {}
+    weekly = (
+        market.get("avg_weekly_sales_volume")
+        or sales_snapshot.get("candidate_overlap_weekly_volume")
+        or sales_snapshot.get("candidate_overall_weekly_volume")
+        or (item.get("candidate") or {}).get("avg_weekly_sales_volume")
+    )
+    overlap_week_count = market.get("overlap_week_count")
+    if overlap_week_count is None:
+        overlap_week_count = len(sales_snapshot.get("overlap_weeks") or [])
+    price = (
+        market.get("candidate_weighted_price")
+        or (item.get("candidate") or {}).get("weighted_price")
+        or (item.get("candidate") or {}).get("price_wavg")
+    )
     level = market.get("level_cn") or "验证不足"
     return {
-        "周均销量": f"{_format_unit_count(weekly) or '未知'}台",
-        "重叠在售周": f"{_format_number(market.get('overlap_week_count')) or '0'}周",
-        "验证等级": level,
-        "真实分流判断": market.get("summary_cn") or "市场验证待补充",
-        "排序作用": "增强置信"
-        if market.get("level") in {"strong", "medium"}
-        else "降低置信，不单独清零",
+        "验证结论": level,
+        "判断原因": market.get("summary_cn") or "市场验证原因待补充",
+        "量价依据": (
+            f"均价{_format_money(price) or '未知'}；"
+            f"周均销量{_format_unit_count(weekly) or '未知'}台；"
+            f"重叠在售{_format_number(overlap_week_count) or '0'}周"
+        ),
+        "竞品判断": _market_validation_judgement(
+            level=str(market.get("level") or ""),
+            overlap_week_count=int(overlap_week_count or 0),
+        ),
     }
+
+
+def _market_validation_judgement(*, level: str, overlap_week_count: int) -> str:
+    if level == "strong" and overlap_week_count > 0:
+        return "共同在售期成交充分，增强竞品判断置信"
+    if level in {"strong", "medium"}:
+        return "已有真实成交；共同在售周不足，仅作方向性市场验证"
+    return "成交验证不足，降低置信但不单独否定竞品关系"
 
 
 def _candidate_pool_appendix_lines(
     top_competitors: list[dict[str, Any]], all_competitors: list[dict[str, Any]]
 ) -> list[str]:
     lines = [
-        "判断口径：候选池只解释哪些 SKU 被纳入或排除；未进入 Top 3 的候选不再放在主分析章节前面。",
+        "判断口径：先看候选综合分和入选结果，再看入选或未选原因；候选池只解释哪些 SKU 被纳入或排除。",
         "",
-        "| 候选 SKU | 是否 Top 3 | 竞争角色 | 综合分 | 购买池 | 市场验证 | 入选或未选原因 |",
-        "| --- | --- | --- | ---: | --- | --- | --- |",
+        "| 候选 SKU | 综合分 | 入选结果 | 入选或未选原因 | 竞争角色 | 购买池 | 市场验证 |",
+        "| --- | ---: | --- | --- | --- | --- | --- |",
     ]
     top_codes = {
         str((item.get("candidate") or {}).get("sku_code") or "")
@@ -2432,18 +2770,17 @@ def _candidate_pool_appendix_lines(
             + " | ".join(
                 [
                     _markdown_cell(_display_name(candidate)),
-                    selected,
-                    _markdown_cell(_report_role_cn(item)),
                     str(score["total"]),
+                    selected,
+                    _markdown_cell(reason),
+                    _markdown_cell(_report_role_cn(item)),
                     _markdown_cell(
-                        (item.get("purchase_pool") or {}).get("reason_cn")
-                        or "购买池待判断"
+                        _purchase_pool_reason(item.get("purchase_pool") or {})
                     ),
                     _markdown_cell(
                         (item.get("market_validation") or {}).get("level_cn")
                         or "验证不足"
                     ),
-                    _markdown_cell(reason),
                 ]
             )
             + " |"

@@ -5345,10 +5345,22 @@ def test_competitor_set_xiaoao_answer_prioritizes_business_pressure() -> None:
     assert "### 2.1 候选 SKU 综合评分" not in markdown
     assert "### 2.4 用户任务和目标客群评分依据" not in markdown
     assert "### 2.5 关键价值锚点、替代压力和市场验证依据" not in markdown
-    assert (
-        "判断口径：购买池判断本品和竞品是否会进入同一次尺寸、价格和预算决策" in markdown
-    )
-    assert "判断口径：关键价值锚点比较目标 SKU 的核心成交理由是否被候选覆盖" in markdown
+    assert "判断口径：先看购买池得分和得分原因，再看尺寸、价格带和预算关系" in markdown
+    assert "判断口径：先看得分及得分原因，再逐项比较目标 SKU 的核心成交理由" in markdown
+    for section_heading, next_heading in (
+        ("### 2.2 购买池比较", "### 2.3 价值战场比较"),
+        ("### 2.3 价值战场比较", "### 2.4 用户任务比较"),
+        ("### 2.4 用户任务比较", "### 2.5 目标客群比较"),
+        ("### 2.5 目标客群比较", "### 2.6 关键价值锚点可替代性比较"),
+        ("### 2.6 关键价值锚点可替代性比较", "### 2.7 替代压力比较"),
+        ("### 2.7 替代压力比较", "### 2.8 市场验证比较"),
+    ):
+        section = markdown.split(section_heading, 1)[1].split(next_heading, 1)[0]
+        assert section.index("| 得分结论 |") < section.index("| 得分原因 |")
+    market_section = markdown.split("### 2.8 市场验证比较", 1)[1].split(
+        "### 2.9 候选池与未选原因附录", 1
+    )[0]
+    assert market_section.index("| 验证结论 |") < market_section.index("| 判断原因 |")
     assert "## 三、四个产品详情链接" not in markdown
     assert "## 四、四个产品横向详细对比" in markdown
     assert (
