@@ -26,12 +26,11 @@ WITH scope AS (
     SELECT sku_code,brand_name,model_name,clean_sku_id,clean_hash,field_conflicts_json,quality_status
     FROM core3_clean_sku JOIN scope USING(sku_code)
     WHERE project_id=:'project' AND category_code='TV' AND batch_id=:'batch') s
-  UNION ALL SELECT 'parameter',p.sku_code,to_jsonb(p) FROM (
-    SELECT sku_code,model_name,param_values_json,profile_hash,rule_version,seed_version,evidence_ids
-    FROM core3_sku_param_profile JOIN scope USING(sku_code)
-    WHERE project_id=:'project' AND category_code='TV' AND batch_id=:'batch' AND rule_version='m03b_tv_param_profile_v0.2') p
-  UNION ALL SELECT 'claim_profile',p.sku_code,to_jsonb(p) FROM (
-    SELECT p.sku_code,p.batch_id,p.brand_name,p.fact_claim_codes,p.profile_hash,p.rule_version,p.taxonomy_version
+  UNION ALL SELECT 'parameter',p.sku_code,to_jsonb(p)-ARRAY['created_at','updated_at']
+    FROM core3_sku_param_profile p JOIN scope USING(sku_code)
+    WHERE project_id=:'project' AND category_code='TV' AND batch_id=:'batch' AND rule_version='m03b_tv_param_profile_v0.2'
+  UNION ALL SELECT 'claim_profile',p.sku_code,to_jsonb(p)-ARRAY['created_at','updated_at'] FROM (
+    SELECT p.*
     FROM core3_sku_claim_fact_profile p JOIN scope USING(sku_code)
     WHERE p.project_id=:'project' AND p.category_code='TV' AND p.is_current
       AND (p.batch_id=:'batch' OR (p.sku_code,p.batch_id) IN (SELECT * FROM serving_claim))
@@ -48,6 +47,9 @@ WITH scope AS (
       AND (c.batch_id=:'batch' OR (c.sku_code,c.batch_id) IN (SELECT * FROM serving_claim))
       AND c.rule_version IN ('m04c_tv_claim_fact_profile_v0.1','m04c_tv_claim_fact_profile_v0.2')) c
   UNION ALL SELECT 'serving_claim',s.sku_code,to_jsonb(s) FROM serving_claim s
+  UNION ALL SELECT 'claim_position',p.sku_code,to_jsonb(p)-ARRAY['created_at','updated_at']
+    FROM core3_sku_claim_dimension_position p JOIN serving_claim s USING(sku_code,batch_id)
+    WHERE p.project_id=:'project' AND p.category_code='TV' AND p.is_current AND p.rule_version='m04c_tv_claim_fact_profile_v0.2'
   UNION ALL SELECT 'comment_profile',p.sku_code,to_jsonb(p)-ARRAY['created_at','updated_at','evidence_examples_json'] FROM comments p
   UNION ALL SELECT 'comment_counts',c.sku_code,jsonb_build_object('clean_rows',count(*),
       'distinct_comment_ids',count(DISTINCT c.comment_id),'rows_without_comment_id',count(*) FILTER (WHERE c.comment_id IS NULL))

@@ -12,11 +12,20 @@ PROFILES = {
     "value-battlefield": ("m11c_value_battlefield_service", "M11CProfileBuilder", "battlefields", "m11c_tv_value_battlefield_profile_v0.4"),
 }
 ALLOCATION = "semantic_market_graph_service"
+VALUE = "m12c_claim_value_quantification_service"
+VALUE_SYMBOLS = ["_market_state", "ClaimState", "CommentState", "SemanticState", "ParamProfileState",
+                 "_param_profile_values", "_row_wtp_input_guard", "_row_param_support_level", "_merge_claim_states",
+                 "_row_canonical_claim_name", "_row_canonical_claim_code", "_build_pools", "_pool_and_metric_rows",
+                 "_quantification_rows", "_attribution_rows", "_dimension_summary_rows"]
 ALLOCATION_SYMBOLS = ["M11DSemanticInputs", "_resolve_population", "_build_sku_market_map", "_build_relation_candidates",
                       "_build_allocations_and_checks", "_build_summaries_and_contributions"]
 STDLIB = {"collections", "dataclasses", "datetime", "decimal", "enum", "functools", "hashlib", "itertools", "json",
           "math", "re", "statistics", "typing"}
-MODULES = {v[0] for v in PROFILES.values()} | {"constants", "hash_utils", ALLOCATION}
+REASON = "purchase_reason_context_builder"
+REASON_MODULES = {REASON, "purchase_reason_profile_schemas", "purchase_reason_anchor_taxonomy",
+                  "purchase_reason_anchor_candidate_generator", "purchase_reason_profile_scoring", "purchase_reason_input_quality",
+                  "purchase_reason_establishment", "purchase_reason_pressure", "purchase_reason_anchor_quality"}
+MODULES = {v[0] for v in PROFILES.values()} | {"constants", "hash_utils", ALLOCATION, VALUE} | REASON_MODULES
 PREFIX = "app.services.core3_real_data."
 
 
@@ -53,17 +62,31 @@ class RuntimeNames(ast.NodeVisitor):
 
 def package(source, out):
     modules = {m: ast.parse((source / (m + ".py")).read_text()) for m in MODULES}
+    # Only the context assembly and snapshot formatters cross the packaging boundary.
+    # The offline subclass supplies typed row lookups from the frozen snapshot.
+    builder = next(n for n in modules[REASON].body if isinstance(n, ast.ClassDef) and n.name == "SkuPurchaseReasonContextBuilder")
+    builder.bases = []
+    builder.body = [n for n in builder.body if isinstance(n, ast.FunctionDef) and (n.name == "build_context" or n.name.endswith("_snapshot"))]
+    class EntityKeys(ast.NodeTransformer):
+        def visit_Attribute(self, node):
+            if isinstance(node.value, ast.Name) and node.value.id == "entities":
+                return ast.copy_location(ast.Constant(node.attr), node)
+            return self.generic_visit(node)
+    EntityKeys().visit(builder)
     symbols = {m: {n: node for node in tree.body for n in names(node)} for m, tree in modules.items()}
     chosen = defaultdict(set)
     todo = [(m, n) for m, builder, _, _ in PROFILES.values() for n in (builder, "_build_sku_inputs")]
     todo += [(ALLOCATION, n) for n in ALLOCATION_SYMBOLS]
+    todo += [(VALUE, n) for n in VALUE_SYMBOLS]
+    todo += [(REASON, builder.name), ("purchase_reason_anchor_candidate_generator", "AnchorCandidateGenerator"),
+             ("purchase_reason_profile_scoring", "PurchaseReasonProfileScoringService")]
     while todo:
         module, name = todo.pop()
         if name in chosen[module]:
             continue
         node = symbols[module][name]
         chosen[module].add(name)
-        if isinstance(node, ast.ImportFrom) and node.module not in STDLIB:
+        if isinstance(node, ast.ImportFrom) and node.module not in STDLIB | {"pydantic"}:
             other = (node.module or "").removeprefix(PREFIX)
             if other not in MODULES:
                 raise ValueError("non-rule import: " + str(node.module) + "." + name)
@@ -75,6 +98,8 @@ def package(source, out):
         else:
             visitor = RuntimeNames()
             visitor.visit(node)
+            if module == "purchase_reason_profile_schemas":
+                visitor.used.update(n.id for n in ast.walk(node) if isinstance(n, ast.Name))
             todo.extend((module, n) for n in visitor.used & symbols[module].keys())
     hashes = {}
     for module, selected in sorted(chosen.items()):
