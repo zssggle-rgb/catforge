@@ -1,0 +1,178 @@
+api_version: gbrain-schema-pack-v1
+name: catforge-sku
+version: 1.0.0
+description: Versioned category definitions, SKU facts and evidence-backed assessments
+extends: gbrain-base-v2
+page_types:
+  - name: sku
+    primitive: entity
+    path_prefixes:
+      - catforge/sku/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: parameter
+    primitive: concept
+    path_prefixes:
+      - catforge/parameter/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: claim
+    primitive: concept
+    path_prefixes:
+      - catforge/claim/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-topic
+    primitive: concept
+    path_prefixes:
+      - catforge/comment-topic/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: user-task
+    primitive: concept
+    path_prefixes:
+      - catforge/user-task/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: target-group
+    primitive: concept
+    path_prefixes:
+      - catforge/target-group/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: value-battlefield
+    primitive: concept
+    path_prefixes:
+      - catforge/value-battlefield/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: purchase-reason
+    primitive: concept
+    path_prefixes:
+      - catforge/purchase-reason/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-parameter
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-parameter/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-claim
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-claim/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-fact
+    primitive: annotation
+    path_prefixes:
+      - catforge/comment-fact/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-window
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-window/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-week
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-week/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-profile
+    primitive: annotation
+    path_prefixes:
+      - catforge/comment-profile/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-cohort
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-cohort/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-profile
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-profile/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: semantic-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/semantic-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-allocation
+    primitive: annotation
+    path_prefixes:
+      - catforge/market-allocation/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: claim-value-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/claim-value-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: competitor-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/competitor-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: source-sellpoint-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/source-sellpoint-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: input-snapshot
+    primitive: temporal
+    path_prefixes:
+      - catforge/input-snapshot/
+    aliases: []
+    extractable: false
+    expert_routing: false
+link_types:
+  - name: defines
+  - name: considers
+  - name: observed_for
+  - name: measures
+  - name: expresses_claim
+  - name: about_topic
+  - name: supports
+  - name: contradicts
+  - name: cites_evidence
+  - name: uses_snapshot
+  - name: has_member
+  - name: assesses_sku
+  - name: assesses_dimension
+  - name: includes_assessment
+  - name: compares_to
+  - name: uses_cohort
+  - name: based_on
