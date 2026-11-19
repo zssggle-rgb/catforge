@@ -2,8 +2,13 @@
 import argparse
 from collections import defaultdict
 from decimal import Decimal
+import fcntl
+from hashlib import sha256
 import json
+import os
 from pathlib import Path
+import re
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace as Row
 
 from graph import verified
@@ -13,16 +18,48 @@ from snapshot import atomic_write, canonical, digest
 DOMAINS = {"user-task": "user_task", "target-group": "target_group", "value-battlefield": "battlefield"}
 
 
-def frozen(out, name, sid):
-    data = json.loads((out / (name + ".json")).read_text())
+def frozen(out, name, sid, revision=None):
+    if revision is not None and not re.fullmatch("[a-f0-9]{64}", revision):
+        raise ValueError("invalid result revision")
+    path = out / (name + ".json") if revision is None else out / "revisions" / name / (revision + ".json")
+    data = json.loads(path.read_text())
+    if revision and digest(data) != revision:
+        raise ValueError("result revision hash mismatch: " + name)
     if data["snapshot_id"] != sid:
         raise ValueError("mixed input snapshots: " + name)
     return data
 
 
+def check_parents(result, expected):
+    for name, fingerprint in expected.items():
+        if result.get("inputs", {}).get(name) != fingerprint:
+            raise ValueError("stale derived input: " + name)
+
+
 def save(out, name, value):
     value = json.loads(json.dumps(value, default=jsonable))
-    atomic_write(out / (name + ".json"), canonical(value))
+    body = canonical(value)
+    latest = out / (name + ".json")
+    revisions = out / "revisions" / name
+    revisions.mkdir(parents=True, exist_ok=True)
+    revision = revisions / (sha256(body.encode()).hexdigest() + ".json")
+    with (revisions / ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if latest.exists():
+            # Preserve canonical files produced by earlier releases on their first update.
+            checksum = sha256()
+            with latest.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1 << 20), b""):
+                    checksum.update(chunk)
+            previous = revisions / (checksum.hexdigest() + ".json")
+            if not previous.exists():
+                os.link(latest, previous)
+        if not revision.exists():
+            atomic_write(revision, body)
+        with TemporaryDirectory(dir=out) as tmp:
+            link = Path(tmp) / latest.name
+            os.link(revision, link)
+            os.replace(link, latest)
     return value
 
 
@@ -75,6 +112,8 @@ def quantify(snapshot, out):
     manifest, _, facts = verified(snapshot)
     allocation = frozen(out, "allocation", snapshot.name)
     positioning = frozen(out, "value-battlefield", snapshot.name)
+    positioning_hash = digest(positioning)
+    check_parents(allocation, {"value-battlefield": positioning_hash})
     weights = defaultdict(dict)
     for r in allocation["allocations"]:
         if r["dimension_type"] == "battlefield" and Decimal(str(r["allocation_weight"])) > 0:
@@ -125,7 +164,7 @@ def quantify(snapshot, out):
     attrs = rules._attribution_rows(quant_by_sku_context=by_context, markets=markets, **common)
     summaries = rules._dimension_summary_rows(quant_rows=rows, dimension_spaces=spaces, **common)
     return save(out, "claim-value", {"snapshot_id": snapshot.name, "rule_version": common["rule_version"],
-               "inputs": {"allocation": digest(allocation), "value-battlefield": digest(positioning)},
+               "inputs": {"allocation": digest(allocation), "value-battlefield": positioning_hash},
                "members": sorted(markets), "pools": pool_rows, "metrics": metrics, "values": rows, "attributions": attrs, "summaries": summaries})
 
 

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from graph import verified
 from snapshot import digest
-from value import frozen, save
+from value import check_parents, frozen, save
 from skillrules.constants import Core3CategoryCode
 from skillrules.purchase_reason_context_builder import SkuPurchaseReasonContextBuilder
 from skillrules.purchase_reason_anchor_candidate_generator import AnchorCandidateGenerator
@@ -63,17 +63,20 @@ def reasons(snapshot, out, skus, use_value=True, all_members=False):
     manifest, _, data = verified(snapshot)
     indexes = defaultdict(lambda: defaultdict(list))
     parents = {}
-    def index(name, families):
+    def index(name, families, dependencies=()):
         result = frozen(out, name, snapshot.name)
+        check_parents(result, {dependency: parents[dependency] for dependency in dependencies})
         parents[name] = digest(result)
         for field, family in families:
             for row in result[field]:
                 indexes[row["sku_code"]][family].append(row)
     for name in ("user-task", "target-group", "value-battlefield"):
         index(name, [("profiles", name)])
-    index("allocation", [("allocations", "allocations"), ("contributions", "contributions")])
-    if use_value:
-        index("claim-value", [("values", "values"), ("attributions", "attributions")])
+    index("allocation", [("allocations", "allocations"), ("contributions", "contributions")],
+          ("user-task", "target-group", "value-battlefield"))
+    value_available = use_value and (out / "claim-value.json").is_file()
+    if value_available:
+        index("claim-value", [("values", "values"), ("attributions", "attributions")], ("allocation", "value-battlefield"))
     taxonomy = tv_purchase_reason_anchor_taxonomy_v0_1()
     generator = AnchorCandidateGenerator(taxonomy)
     scorer = PurchaseReasonProfileScoringService()
@@ -95,6 +98,9 @@ def reasons(snapshot, out, skus, use_value=True, all_members=False):
                          "missing_inputs": ctx.missing_input_reasons_json})
     return save(out, "purchase-reason" if use_value else "purchase-reason-without-value", {
                 "snapshot_id": snapshot.name, "inputs": parents, "rule_version": "m12d_sku_purchase_reason_profile_v0.1",
+                "project_id": manifest["project_id"], "category_code": manifest["category_code"], "batch_id": manifest["batch_id"],
+                "claim_value_status": "available" if value_available else "missing" if use_value else "withheld_for_replay",
+                "interpretation": "Inferred purchase reasons; observed buyer motivation remains unknown.",
                 "taxonomy": taxonomy.model_dump(mode="json"), "profiles": profiles})
 
 

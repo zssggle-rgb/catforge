@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "scope": [
     "project_id",
     "category_code"
@@ -80,6 +80,7 @@
       "snapshot_id"
     ],
     "business-goal": ["sku_code", "goal_id", "revision"],
+    "battlefield-analysis": ["sku_code", "snapshot_id", "rule_version"],
     "sku-profile": [
       "sku_code",
       "kind",
@@ -252,6 +253,7 @@
     },
     "assesses_sku": {
       "from": [
+        "battlefield-analysis",
         "sku-profile",
         "semantic-assessment",
         "market-allocation",
