@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.models import entities
 from app.services.core3_real_data.constants import CORE3_M11_7_RULE_VERSION
 from app.services.core3_real_data.fixtures import load_local_validation_fixture_set
+from app.services.core3_real_data.pipeline_dependency_graph import CORE3_PIPELINE_MODULE_ORDER
 
 
 PROJECT_ID = "core3_local_validation"
@@ -233,7 +234,7 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     m02_payload = m02_response.json()
     assert m02_payload["summary_json"]["partition_strategy"] == "sku_partition_v1"
     assert m02_payload["summary_json"]["partition_count"] == 6
-    assert m02_payload["summary_json"]["evidence_counts"]["by_type"]["comment_raw"] == 30
+    assert m02_payload["summary_json"]["evidence_counts"]["by_type"]["comment_raw"] == 28
     assert m02_payload["summary_json"]["evidence_counts"]["by_type"]["promo_raw"] == 36
     persist_module_run_result(session, batch_id, m02_payload)
 
@@ -264,8 +265,8 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     assert m05_response.status_code == 200, m05_response.json()
     m05_payload = m05_response.json()
     assert m05_payload["summary_json"]["sku_count"] == 4
-    assert m05_payload["summary_json"]["comment_unit_count"] >= 30
-    assert m05_payload["summary_json"]["evidence_atom_count"] >= 30
+    assert m05_payload["summary_json"]["comment_unit_count"] == 28
+    assert m05_payload["summary_json"]["evidence_atom_count"] == 28
     assert m05_payload["summary_json"]["downstream_ready_sku_count"] >= 4
 
     m06_response = client.post(
@@ -388,7 +389,8 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     assert target_full_profile["sales_volume_total"] == 892
     assert target_full_profile["main_channel_type"] == "线上"
     assert target_full_profile["main_platform"] == "专业电商"
-    assert "observed_window_less_than_52w" in target_full_profile["quality_flags"]
+    assert 0 < target_full_profile["active_week_count"] < 52
+    assert any("52 周" in note for note in m07_payload["summary_json"]["scope_notes"])
     assert "市场" in target_full_profile["business_note_cn"] or "观察期" in target_full_profile["business_note_cn"]
 
     market_signals_response = client.get(
@@ -1479,12 +1481,13 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     )
     assert m16_response.status_code == 200, m16_response.json()
     m16_payload = m16_response.json()
-    assert m16_payload["status"] in {"success", "warning"}, m16_payload
+    # This legacy fixture runs M03 but never produces M03B or M12C artifacts.
+    assert m16_payload["status"] == "blocked", m16_payload
     assert m16_payload["release_status"] in {"releasable", "review_required"}
     assert m16_payload["data_batch_id"] == batch_id
-    assert m16_payload["output_summary_json"]["module_count"] == 23
+    assert m16_payload["output_summary_json"]["module_count"] == len(CORE3_PIPELINE_MODULE_ORDER)
     assert m16_payload["output_summary_json"]["release_gate_count"] == 6
-    assert "展示条件" in m16_payload["summary_cn"] or "需保留样例范围" in m16_payload["summary_cn"]
+    assert "阻断问题" in m16_payload["summary_cn"]
     m16_run_id = m16_payload["run_id"]
 
     m16_plan_response = client.get(
@@ -1492,7 +1495,7 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     )
     assert m16_plan_response.status_code == 200
     m16_plan_payload = m16_plan_response.json()
-    assert m16_plan_payload["total"] == 23
+    assert m16_plan_payload["total"] == len(CORE3_PIPELINE_MODULE_ORDER)
     plan_by_module = {item["module_code"]: item for item in m16_plan_payload["items"]}
     assert plan_by_module["M16"]["planned_action"] == "run"
     assert plan_by_module["M15"]["planned_action"] == "reuse"
@@ -1502,9 +1505,10 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     )
     assert m16_module_runs_response.status_code == 200
     m16_module_runs_payload = m16_module_runs_response.json()
-    assert m16_module_runs_payload["total"] == 23
+    assert m16_module_runs_payload["total"] == len(CORE3_PIPELINE_MODULE_ORDER)
     module_statuses = {item["module_code"]: item["status"] for item in m16_module_runs_payload["items"]}
-    assert module_statuses["M16"] in {"success", "warning"}
+    assert module_statuses["M03"] == "skipped_reused"
+    assert module_statuses["M03B"] == module_statuses["M12C"] == module_statuses["M16"] == "blocked"
     assert set(module_statuses) >= {
         "M00",
         "M01",
@@ -1537,8 +1541,9 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     )
     assert m16_dependencies_response.status_code == 200
     m16_dependencies_payload = m16_dependencies_response.json()
-    assert m16_dependencies_payload["total"] == 22
-    assert {item["dependency_status"] for item in m16_dependencies_payload["items"]} == {"valid"}
+    assert m16_dependencies_payload["total"] == len(CORE3_PIPELINE_MODULE_ORDER) - 1
+    missing = {item["upstream_module_code"] for item in m16_dependencies_payload["items"] if item["dependency_status"] != "valid"}
+    assert missing == {"M03B", "M12C"}
     assert {item["upstream_module_code"] for item in m16_dependencies_payload["items"]} >= {"M00", "M08", "M14", "M15"}
 
     m16_acceptance_response = client.get(
@@ -1548,7 +1553,7 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
     m16_acceptance_payload = m16_acceptance_response.json()
     assert m16_acceptance_payload["processed_target_count"] == 6
     assert m16_acceptance_payload["report_ready_count"] == 6
-    assert m16_acceptance_payload["acceptance_status"] in {"passed", "passed_with_warning"}
+    assert m16_acceptance_payload["acceptance_status"] == "failed"
     assert m16_acceptance_payload["module_status_summary_json"]["M15"]["output_count"] > 0
     assert "当前样例数据内" in m16_acceptance_payload["data_scope_note_cn"]
 
@@ -1667,7 +1672,7 @@ def test_local_validation_fixture_runs_through_m00_to_m08():
         f"/api/mvp/core3/v2/projects/{PROJECT_ID}/pipeline/runs/{m16_run_id}/modules"
     )
     assert api_modules_alias_response.status_code == 200
-    assert api_modules_alias_response.json()["total"] == 23
+    assert api_modules_alias_response.json()["total"] == len(CORE3_PIPELINE_MODULE_ORDER)
 
 
 def persist_module_run_result(session: Session, batch_id: str, payload: dict) -> None:

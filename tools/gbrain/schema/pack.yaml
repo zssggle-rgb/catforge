@@ -1,0 +1,373 @@
+api_version: gbrain-schema-pack-v1
+name: catforge-sku
+version: 1.1.0
+description: Versioned category definitions, SKU facts and evidence-backed assessments
+extends: gbrain-base-v2
+page_types:
+  - name: business-goal
+    primitive: entity
+    path_prefixes: [catforge/business-goal/]
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku
+    primitive: entity
+    path_prefixes:
+      - catforge/sku/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: parameter
+    primitive: concept
+    path_prefixes:
+      - catforge/parameter/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: claim
+    primitive: concept
+    path_prefixes:
+      - catforge/claim/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-topic
+    primitive: concept
+    path_prefixes:
+      - catforge/comment-topic/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: user-task
+    primitive: concept
+    path_prefixes:
+      - catforge/user-task/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: target-group
+    primitive: concept
+    path_prefixes:
+      - catforge/target-group/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: value-battlefield
+    primitive: concept
+    path_prefixes:
+      - catforge/value-battlefield/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: purchase-reason
+    primitive: concept
+    path_prefixes:
+      - catforge/purchase-reason/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-parameter
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-parameter/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-claim
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-claim/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-fact
+    primitive: annotation
+    path_prefixes:
+      - catforge/comment-fact/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-window
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-window/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-week
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-week/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: comment-profile
+    primitive: annotation
+    path_prefixes:
+      - catforge/comment-profile/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-cohort
+    primitive: temporal
+    path_prefixes:
+      - catforge/market-cohort/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: sku-profile
+    primitive: annotation
+    path_prefixes:
+      - catforge/sku-profile/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: semantic-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/semantic-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: market-allocation
+    primitive: annotation
+    path_prefixes:
+      - catforge/market-allocation/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: claim-value-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/claim-value-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: competitor-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/competitor-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: source-sellpoint-assessment
+    primitive: annotation
+    path_prefixes:
+      - catforge/source-sellpoint-assessment/
+    aliases: []
+    extractable: false
+    expert_routing: false
+  - name: input-snapshot
+    primitive: temporal
+    path_prefixes:
+      - catforge/input-snapshot/
+    aliases: []
+    extractable: false
+    expert_routing: false
+link_types:
+  - name: targets_sku
+  - name: focuses_on
+  - name: defines
+  - name: considers
+  - name: observed_for
+  - name: measures
+  - name: expresses_claim
+  - name: about_topic
+  - name: supports
+  - name: contradicts
+  - name: cites_evidence
+  - name: uses_snapshot
+  - name: has_member
+  - name: assesses_sku
+  - name: assesses_dimension
+  - name: includes_assessment
+  - name: compares_to
+  - name: uses_cohort
+  - name: based_on
+frontmatter_links:
+  - page_type: business-goal
+    fields: [targets_sku]
+    link_type: targets_sku
+  - page_type: business-goal
+    fields: [focuses_on]
+    link_type: focuses_on
+  - page_type: input-snapshot
+    fields: [defines]
+    link_type: defines
+  - page_type: value-battlefield
+    fields: [considers]
+    link_type: considers
+  - page_type: user-task
+    fields: [considers]
+    link_type: considers
+  - page_type: target-group
+    fields: [considers]
+    link_type: considers
+  - page_type: sku-parameter
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: sku-claim
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: comment-fact
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: comment-profile
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: market-window
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: market-week
+    fields: [observed_for]
+    link_type: observed_for
+  - page_type: sku-parameter
+    fields: [measures]
+    link_type: measures
+  - page_type: sku-claim
+    fields: [expresses_claim]
+    link_type: expresses_claim
+  - page_type: comment-fact
+    fields: [about_topic]
+    link_type: about_topic
+  - page_type: sku-claim
+    fields: [supports]
+    link_type: supports
+  - page_type: comment-fact
+    fields: [supports]
+    link_type: supports
+  - page_type: comment-fact
+    fields: [contradicts]
+    link_type: contradicts
+  - page_type: sku-parameter
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: sku-claim
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: comment-fact
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: comment-profile
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: market-window
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: semantic-assessment
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: source-sellpoint-assessment
+    fields: [cites_evidence]
+    link_type: cites_evidence
+  - page_type: market-cohort
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: market-week
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: sku-parameter
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: sku-claim
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: comment-fact
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: comment-profile
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: market-window
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: sku-profile
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: semantic-assessment
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: market-allocation
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: claim-value-assessment
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: competitor-assessment
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: source-sellpoint-assessment
+    fields: [uses_snapshot]
+    link_type: uses_snapshot
+  - page_type: market-cohort
+    fields: [has_member]
+    link_type: has_member
+  - page_type: sku-profile
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: semantic-assessment
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: market-allocation
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: claim-value-assessment
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: competitor-assessment
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: source-sellpoint-assessment
+    fields: [assesses_sku]
+    link_type: assesses_sku
+  - page_type: semantic-assessment
+    fields: [assesses_dimension]
+    link_type: assesses_dimension
+  - page_type: market-allocation
+    fields: [assesses_dimension]
+    link_type: assesses_dimension
+  - page_type: sku-profile
+    fields: [includes_assessment]
+    link_type: includes_assessment
+  - page_type: competitor-assessment
+    fields: [compares_to]
+    link_type: compares_to
+  - page_type: source-sellpoint-assessment
+    fields: [compares_to]
+    link_type: compares_to
+  - page_type: semantic-assessment
+    fields: [uses_cohort]
+    link_type: uses_cohort
+  - page_type: market-allocation
+    fields: [uses_cohort]
+    link_type: uses_cohort
+  - page_type: claim-value-assessment
+    fields: [uses_cohort]
+    link_type: uses_cohort
+  - page_type: competitor-assessment
+    fields: [uses_cohort]
+    link_type: uses_cohort
+  - page_type: source-sellpoint-assessment
+    fields: [uses_cohort]
+    link_type: uses_cohort
+  - page_type: input-snapshot
+    fields: [based_on]
+    link_type: based_on
+  - page_type: semantic-assessment
+    fields: [based_on]
+    link_type: based_on
+  - page_type: market-allocation
+    fields: [based_on]
+    link_type: based_on
+  - page_type: claim-value-assessment
+    fields: [based_on]
+    link_type: based_on
+  - page_type: competitor-assessment
+    fields: [based_on]
+    link_type: based_on
+  - page_type: source-sellpoint-assessment
+    fields: [based_on]
+    link_type: based_on
+  - page_type: sku-profile
+    fields: [based_on]
+    link_type: based_on

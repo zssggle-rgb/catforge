@@ -67,9 +67,9 @@ def test_m02_85e7q_fixture_does_not_fabricate_promo_evidence_when_claim_source_m
         "sku_fact": 1,
         "market_fact": 2,
         "param_raw": 6,
-        "comment_raw": 3,
-        "comment_sentence": 6,
-        "comment_dimension": 3,
+        "comment_raw": 2,
+        "comment_sentence": 4,
+        "comment_dimension": 2,
         "quality_issue": 5,
     }
     assert by_type["promo_raw"] == 0

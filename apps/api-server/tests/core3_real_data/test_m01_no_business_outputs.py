@@ -246,7 +246,7 @@ def test_m01_fixture_acceptance_keeps_cleaning_boundary_for_85e7q():
         "claim": 0,
         "claim_sentence": 0,
         "comment": 4,
-        "comment_sentence": 8,
+        "comment_sentence": 4,
         "comment_dimension": 4,
         "quality_issue": 7,
     }

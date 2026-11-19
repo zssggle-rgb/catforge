@@ -1,0 +1,318 @@
+{
+  "version": "1.1",
+  "scope": [
+    "project_id",
+    "category_code"
+  ],
+  "keys": {
+    "sku": [
+      "sku_code"
+    ],
+    "parameter": [
+      "code",
+      "taxonomy_version"
+    ],
+    "claim": [
+      "code",
+      "taxonomy_version"
+    ],
+    "comment-topic": [
+      "code",
+      "taxonomy_version"
+    ],
+    "user-task": [
+      "code",
+      "taxonomy_version"
+    ],
+    "target-group": [
+      "code",
+      "taxonomy_version"
+    ],
+    "value-battlefield": [
+      "code",
+      "taxonomy_version"
+    ],
+    "purchase-reason": [
+      "code",
+      "taxonomy_version"
+    ],
+    "source": [
+      "evidence_id",
+      "source_hash"
+    ],
+    "input-snapshot": [
+      "content_hash"
+    ],
+    "market-cohort": [
+      "sku_code",
+      "purpose",
+      "window",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "market-week": [
+      "sku_code",
+      "week",
+      "snapshot_id"
+    ],
+    "sku-parameter": [
+      "sku_code",
+      "code",
+      "snapshot_id"
+    ],
+    "sku-claim": [
+      "sku_code",
+      "source_id",
+      "snapshot_id"
+    ],
+    "comment-fact": [
+      "sku_code",
+      "source_id",
+      "snapshot_id"
+    ],
+    "comment-profile": [
+      "sku_code",
+      "snapshot_id"
+    ],
+    "market-window": [
+      "sku_code",
+      "window",
+      "snapshot_id"
+    ],
+    "business-goal": ["sku_code", "goal_id", "revision"],
+    "sku-profile": [
+      "sku_code",
+      "kind",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "semantic-assessment": [
+      "sku_code",
+      "kind",
+      "code",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "market-allocation": [
+      "sku_code",
+      "kind",
+      "code",
+      "population",
+      "window",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "claim-value-assessment": [
+      "sku_code",
+      "code",
+      "context",
+      "pool",
+      "window",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "competitor-assessment": [
+      "sku_code",
+      "candidate_sku",
+      "pool",
+      "window",
+      "snapshot_id",
+      "rule_version"
+    ],
+    "source-sellpoint-assessment": [
+      "sku_code",
+      "source_id",
+      "candidate_sku",
+      "snapshot_id",
+      "rule_version"
+    ]
+  },
+  "relations": {
+    "targets_sku": {"from": ["business-goal"], "to": ["sku"], "cardinality": "one"},
+    "focuses_on": {"from": ["business-goal"], "to": ["value-battlefield"], "cardinality": "one"},
+    "defines": {
+      "from": [
+        "input-snapshot"
+      ],
+      "to": [
+        "parameter",
+        "claim",
+        "comment-topic",
+        "user-task",
+        "target-group",
+        "value-battlefield",
+        "purchase-reason"
+      ],
+      "cardinality": "many"
+    },
+    "considers": {
+      "from": [
+        "value-battlefield",
+        "user-task",
+        "target-group"
+      ],
+      "to": [
+        "parameter",
+        "claim",
+        "comment-topic",
+        "user-task",
+        "target-group"
+      ],
+      "cardinality": "many"
+    },
+    "observed_for": {
+      "from": [
+        "sku-parameter",
+        "sku-claim",
+        "comment-fact",
+        "comment-profile",
+        "market-window",
+        "market-week"
+      ],
+      "to": [
+        "sku"
+      ],
+      "cardinality": "one"
+    },
+    "measures": {
+      "from": [
+        "sku-parameter"
+      ],
+      "to": [
+        "parameter"
+      ],
+      "cardinality": "one"
+    },
+    "expresses_claim": {
+      "from": [
+        "sku-claim"
+      ],
+      "to": [
+        "claim"
+      ],
+      "cardinality": "one"
+    },
+    "about_topic": {
+      "from": [
+        "comment-fact"
+      ],
+      "to": [
+        "comment-topic"
+      ],
+      "cardinality": "one"
+    },
+    "supports": {
+      "from": [
+        "sku-claim",
+        "comment-fact"
+      ],
+      "to": [
+        "parameter",
+        "claim",
+        "sku-parameter"
+      ],
+      "cardinality": "many"
+    },
+    "contradicts": {
+      "from": [
+        "comment-fact"
+      ],
+      "to": [
+        "parameter",
+        "claim"
+      ],
+      "cardinality": "many"
+    },
+    "cites_evidence": {
+      "from": [
+        "*"
+      ],
+      "to": [
+        "source"
+      ],
+      "cardinality": "many"
+    },
+    "uses_snapshot": {
+      "from": [
+        "*"
+      ],
+      "to": [
+        "input-snapshot"
+      ],
+      "cardinality": "one"
+    },
+    "has_member": {
+      "from": [
+        "market-cohort"
+      ],
+      "to": [
+        "sku"
+      ],
+      "cardinality": "many"
+    },
+    "assesses_sku": {
+      "from": [
+        "sku-profile",
+        "semantic-assessment",
+        "market-allocation",
+        "claim-value-assessment",
+        "competitor-assessment",
+        "source-sellpoint-assessment"
+      ],
+      "to": [
+        "sku"
+      ],
+      "cardinality": "one"
+    },
+    "assesses_dimension": {
+      "from": [
+        "semantic-assessment",
+        "market-allocation"
+      ],
+      "to": [
+        "user-task",
+        "target-group",
+        "value-battlefield",
+        "purchase-reason"
+      ],
+      "cardinality": "one"
+    },
+    "includes_assessment": {
+      "from": [
+        "sku-profile"
+      ],
+      "to": [
+        "semantic-assessment"
+      ],
+      "cardinality": "many"
+    },
+    "compares_to": {
+      "from": [
+        "competitor-assessment",
+        "source-sellpoint-assessment"
+      ],
+      "to": [
+        "sku"
+      ],
+      "cardinality": "one"
+    },
+    "uses_cohort": {
+      "from": [
+        "*"
+      ],
+      "to": [
+        "market-cohort"
+      ],
+      "cardinality": "many"
+    },
+    "based_on": {
+      "from": [
+        "*"
+      ],
+      "to": [
+        "*"
+      ],
+      "cardinality": "many"
+    }
+  }
+}

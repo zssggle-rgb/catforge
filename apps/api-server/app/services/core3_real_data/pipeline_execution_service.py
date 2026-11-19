@@ -340,7 +340,7 @@ class PipelineExecutionService:
                 upstream_run = module_runs.get(upstream)
                 status = (
                     Core3PipelineDependencyStatus.VALID.value
-                    if upstream_run and upstream_run.output_hash
+                    if upstream_run and upstream_run.output_count > 0 and upstream_run.output_hash
                     else Core3PipelineDependencyStatus.MISSING.value
                 )
                 snapshots.append(
