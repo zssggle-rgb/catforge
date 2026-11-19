@@ -4,11 +4,19 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from graph import Graph, blob, restore, verified
-from position_graph import add_goal
+from position_graph import add_goal, matched_comments
 from snapshot import changes, digest, persist, read_scope
 
 
 class FactsTest(unittest.TestCase):
+    def test_shared_source_is_not_a_scoring_match(self):
+        rows = [("display", {"source": "one", "topic": "picture"}), ("sound", {"source": "one", "topic": "audio"})]
+        def matcher(atoms, topic):
+            return {"fact_count": sum(a["topic"] == topic for a in atoms)}
+        self.assertEqual(matched_comments(rows, "picture", matcher, 1), ["display"])
+        with self.assertRaises(ValueError):
+            matched_comments(rows, "picture", matcher, 2)
+
     def test_scope_and_changes(self):
         with self.assertRaises(ValueError):
             read_scope("'", "b", "s", [])
