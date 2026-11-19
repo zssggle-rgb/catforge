@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "scope": [
     "project_id",
     "category_code"
@@ -79,6 +79,7 @@
       "window",
       "snapshot_id"
     ],
+    "business-goal": ["sku_code", "goal_id", "revision"],
     "sku-profile": [
       "sku_code",
       "kind",
@@ -127,6 +128,8 @@
     ]
   },
   "relations": {
+    "targets_sku": {"from": ["business-goal"], "to": ["sku"], "cardinality": "one"},
+    "focuses_on": {"from": ["business-goal"], "to": ["value-battlefield"], "cardinality": "one"},
     "defines": {
       "from": [
         "input-snapshot"

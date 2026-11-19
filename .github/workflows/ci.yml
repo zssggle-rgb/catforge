@@ -14,6 +14,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv run --extra dev python -m pytest
+      - name: Check SKU snapshot and graph contracts
+        working-directory: tools/gbrain
+        run: python -m unittest discover
 
   frontend:
     runs-on: ubuntu-latest

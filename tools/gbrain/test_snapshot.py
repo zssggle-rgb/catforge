@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from graph import Graph, blob, restore, verified
+from position_graph import add_goal
 from snapshot import changes, digest, persist, read_scope
 
 
@@ -41,3 +42,34 @@ class FactsTest(unittest.TestCase):
                 graph.edge(fact, "observed_for", b)
             with self.assertRaises(ValueError):
                 graph.edge(a, "measures", b)
+            self.assertEqual(graph.edges[fact]["observed_for"], {a})
+            with self.assertRaises(ValueError):
+                graph.node("sku", {"sku_code": "A", "project_id": "other"}, {})
+            with self.assertRaises(ValueError):
+                graph.node("sku", {"sku_code": "A"}, {"category_code": "AC"})
+            with self.assertRaises(ValueError):
+                graph.edge(fact, "based_on", "catforge/foreign/missing")
+            old = graph.node("input-snapshot", {"content_hash": "old"}, {})
+            with self.assertRaises(ValueError):
+                graph.edge(fact, "uses_snapshot", old)
+            current = graph.node("input-snapshot", {"content_hash": "s"}, {})
+            graph.edge(fact, "uses_snapshot", current)
+
+    def test_goal_preserves_profile_and_versions(self):
+        with TemporaryDirectory() as tmp:
+            graph = Graph(Path(tmp), {"project_id": "p", "category_code": "TV"})
+            sku = graph.node("sku", {"sku_code": "A"}, {})
+            battlefield = graph.node("value-battlefield", {"code": "film", "taxonomy_version": "v1"}, {})
+            key = {"sku_code": "A", "kind": "value-battlefield", "rule_version": "m1", "snapshot_id": "s"}
+            profile = graph.node("sku-profile", key, {"score": 0.7})
+            original = dict(graph.nodes)
+            goal = dict(sku_code="A", goal_id="g", revision="1", battlefield_code="film", taxonomy_version="v1",
+                        valid_from="2026-11-01", valid_until="2026-12-01", owner="PM", source_ref="sample",
+                        objective="Assess campaign fit")
+            node = add_goal(graph, goal, sku, {"film": battlefield})
+            other = add_goal(graph, {**goal, "revision": "2"}, sku, {"film": battlefield})
+            self.assertNotEqual(node, other)
+            self.assertEqual(graph.nodes[profile], original[profile])
+            self.assertEqual(graph.edges[node]["focuses_on"], {battlefield})
+            with self.assertRaises(ValueError):
+                add_goal(graph, {**goal, "valid_until": "2025-01-01"}, sku, {"film": battlefield})

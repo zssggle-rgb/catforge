@@ -1,9 +1,15 @@
 api_version: gbrain-schema-pack-v1
 name: catforge-sku
-version: 1.0.0
+version: 1.1.0
 description: Versioned category definitions, SKU facts and evidence-backed assessments
 extends: gbrain-base-v2
 page_types:
+  - name: business-goal
+    primitive: entity
+    path_prefixes: [catforge/business-goal/]
+    aliases: []
+    extractable: false
+    expert_routing: false
   - name: sku
     primitive: entity
     path_prefixes:
@@ -159,6 +165,8 @@ page_types:
     extractable: false
     expert_routing: false
 link_types:
+  - name: targets_sku
+  - name: focuses_on
   - name: defines
   - name: considers
   - name: observed_for
@@ -177,6 +185,12 @@ link_types:
   - name: uses_cohort
   - name: based_on
 frontmatter_links:
+  - page_type: business-goal
+    fields: [targets_sku]
+    link_type: targets_sku
+  - page_type: business-goal
+    fields: [focuses_on]
+    link_type: focuses_on
   - page_type: input-snapshot
     fields: [defines]
     link_type: defines

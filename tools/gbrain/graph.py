@@ -36,6 +36,10 @@ def blob(value):
     return base64.b64encode(gzip.compress(canonical(value).encode(), mtime=0)).decode()
 
 
+def page_slug(kind, identity):
+    return "catforge/" + kind + "/" + digest([identity[f] for f in CONTRACT["scope"] + CONTRACT["keys"][kind]])
+
+
 class Graph:
     def __init__(self, root, manifest):
         self.root = root
@@ -44,8 +48,12 @@ class Graph:
         self.edges = defaultdict(lambda: defaultdict(set))
 
     def node(self, kind, key, attributes):
+        if any(key.get(k, v) != v for k, v in self.scope.items()):
+            raise ValueError("cross-scope node")
         identity = {**self.scope, **key}
-        slug = "catforge/" + kind + "/" + digest([identity[f] for f in CONTRACT["scope"] + CONTRACT["keys"][kind]])
+        if any(k in attributes and attributes[k] != v for k, v in identity.items()):
+            raise ValueError("attributes conflict with identity for " + kind)
+        slug = page_slug(kind, identity)
         value = (kind, identity, attributes)
         if slug in self.nodes and self.nodes[slug] != value:
             raise ValueError("conflicting natural key for " + kind)
@@ -57,15 +65,22 @@ class Graph:
             return
         rule = CONTRACT["relations"][verb]
         for side, slug in [("from", src), ("to", dst)]:
-            if "*" not in rule[side] and self.nodes[slug][0] not in rule[side]:
+            if slug not in self.nodes or ("*" not in rule[side] and self.nodes[slug][0] not in rule[side]):
                 raise ValueError("invalid " + verb + " endpoint")
+        source_key, dest_key = self.nodes[src][1], self.nodes[dst][1]
+        if "snapshot_id" in source_key and "snapshot_id" in dest_key and source_key["snapshot_id"] != dest_key["snapshot_id"]:
+            raise ValueError("cross-snapshot dependency")
+        if verb == "uses_snapshot" and source_key.get("snapshot_id") != dest_key["content_hash"]:
+            raise ValueError("wrong snapshot")
         targets = self.edges[src][verb]
-        targets.add(dst)
-        if rule["cardinality"] == "one" and len(targets) > 1:
+        if rule["cardinality"] == "one" and targets and dst not in targets:
             raise ValueError("ambiguous " + verb)
+        targets.add(dst)
 
-    def save(self):
+    def save(self, selection=None):
         for slug, (kind, key, attrs) in self.nodes.items():
+            if selection is not None and slug not in selection:
+                continue
             lines = ["---", "type: " + kind, "title: " + json.dumps(str(attrs.get("label") or key.get("code") or key.get("sku_code") or kind), ensure_ascii=False)]
             for verb, targets in sorted(self.edges[slug].items()):
                 lines.append(verb + ":")
@@ -74,7 +89,7 @@ class Graph:
             atomic_write(self.root / (slug + ".md"), "\n".join(lines))
 
 
-def project(directory, out):
+def project(directory, out, *, render=True):
     manifest, definitions, records = verified(directory)
     sid = digest(manifest)
     g = Graph(out, manifest)
@@ -163,6 +178,8 @@ def project(directory, out):
         g.edge(pool, "uses_snapshot", snap)
         for code in members:
             g.edge(pool, "has_member", sku_nodes[code])
+    if not render:
+        return g
     g.save()
     return len(g.nodes)
 
