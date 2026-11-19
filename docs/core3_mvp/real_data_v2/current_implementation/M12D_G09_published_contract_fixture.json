@@ -1,0 +1,1727 @@
+{
+  "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+  "category_code": "TV",
+  "batch_id": "m00_20260623014631_c8630747",
+  "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+  "fixture_scope": "Redacted G09 contract projection for regression tests. Source keys in lineage are synthetic. Raw evidence and internal row identifiers are omitted.",
+  "sample_contracts": [
+    {
+      "lookup_key": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029112"
+      },
+      "found": true,
+      "consumption_state": "published_degraded",
+      "downstream_action": "degraded_pair_scoring",
+      "profile": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029112",
+        "display_name_cn": "海信 65E7Q",
+        "status": "ready_degraded",
+        "profile_confidence": "0.5000",
+        "confidence_level": "medium",
+        "core_reasons_cn": [
+          "画质配置解释加价",
+          "同尺寸画质越级获得感",
+          "贵得值的体验升级",
+          "影音用户愿为画质升级付费"
+        ],
+        "core_payment_anchors": [
+          "picture_upgrade_justifies_price",
+          "same_size_picture_step_up",
+          "worth_paying_more_for_experience_upgrade",
+          "av_user_willing_to_pay_for_picture"
+        ],
+        "supporting_anchors": [
+          "gaming_device_fit_reduces_risk",
+          "sports_motion_stability",
+          "big_screen_cinema_substitution",
+          "living_room_upgrade_one_step"
+        ],
+        "weak_expression_anchors": [
+          "same_price_core_config_gain",
+          "family_operation_less_friction"
+        ],
+        "risk_drag_anchors": [],
+        "review_required": true,
+        "review_status": "review_required",
+        "review_reasons": [
+          "missing_or_partial_inputs"
+        ],
+        "degradation_reasons": [
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs"
+        ],
+        "source_batch_ids": [
+          "m00_20260623014631_c8630747",
+          "m00_20260619084551_857df63b",
+          "m00_20260613004311_d548f6dc"
+        ],
+        "anchors": [
+          {
+            "anchor_code": "picture_upgrade_justifies_price",
+            "anchor_cn": "画质配置解释加价",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 10,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "same_price_core_config_gain",
+            "anchor_cn": "同价位核心配置获得感",
+            "anchor_family_code": "budget_configuration",
+            "anchor_rank": 30,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "claim_position",
+              "comment_perception",
+              "param_fact"
+            ]
+          },
+          {
+            "anchor_code": "same_size_picture_step_up",
+            "anchor_cn": "同尺寸画质越级获得感",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 40,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "worth_paying_more_for_experience_upgrade",
+            "anchor_cn": "贵得值的体验升级",
+            "anchor_family_code": "premium_upgrade",
+            "anchor_rank": 50,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "av_user_willing_to_pay_for_picture",
+            "anchor_cn": "影音用户愿为画质升级付费",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 60,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "gaming_device_fit_reduces_risk",
+            "anchor_cn": "游戏设备适配降低踩坑风险",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 70,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "sports_motion_stability",
+            "anchor_cn": "体育/运动画面流畅更稳",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 80,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "big_screen_cinema_substitution",
+            "anchor_cn": "大屏影音替代影院感",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 90,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "living_room_upgrade_one_step",
+            "anchor_cn": "客厅换新一步到位",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 100,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "family_operation_less_friction",
+            "anchor_cn": "家庭多设备使用更省操作",
+            "anchor_family_code": "operation_convenience",
+            "anchor_rank": 120,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "param_fact",
+              "semantic_scene"
+            ]
+          }
+        ],
+        "source_refs": [
+          {
+            "module_code": "M03B",
+            "table_name": "core3_sku_param_profile",
+            "record_id": "fixture-1",
+            "extra": {
+              "rule_version": "m03b_tv_param_profile_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_dimension_position",
+            "record_id": "fixture-2",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact",
+            "record_id": "fixture-3",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact_profile",
+            "record_id": "fixture-4",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-5",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_sku_comment_fact_profile",
+            "record_id": "fixture-6",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M07",
+            "table_name": "core3_sku_market_profile",
+            "record_id": "fixture-7",
+            "extra": {
+              "rule_version": "m07_market_profile_v1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m09c_sku_user_task_profile",
+            "record_id": "fixture-8",
+            "extra": {
+              "rule_version": "m09c_tv_user_task_profile_v0.2",
+              "taxonomy_version": "m09c_tv_user_task_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m10c_sku_target_group_profile",
+            "record_id": "fixture-9",
+            "extra": {
+              "rule_version": "m10c_tv_target_group_profile_v0.2",
+              "taxonomy_version": "m10c_tv_target_group_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_sku_value_battlefield_profile",
+            "record_id": "fixture-10",
+            "extra": {
+              "rule_version": "m11c_tv_value_battlefield_profile_v0.3",
+              "taxonomy_version": "m11c_tv_value_battlefield_taxonomy_v0.2"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_allocation",
+            "record_id": "fixture-11",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_sku_contribution",
+            "record_id": "fixture-12",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_contribution_attribution",
+            "record_id": "fixture-13",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_value_quantification",
+            "record_id": "fixture-14",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "lookup_key": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029936"
+      },
+      "found": true,
+      "consumption_state": "published_degraded",
+      "downstream_action": "degraded_pair_scoring",
+      "profile": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029936",
+        "display_name_cn": "创维 65A7H PRO",
+        "status": "ready_degraded",
+        "profile_confidence": "0.5000",
+        "confidence_level": "medium",
+        "core_reasons_cn": [
+          "画质配置解释加价",
+          "同尺寸画质越级获得感",
+          "贵得值的体验升级",
+          "影音用户愿为画质升级付费"
+        ],
+        "core_payment_anchors": [
+          "picture_upgrade_justifies_price",
+          "same_size_picture_step_up",
+          "worth_paying_more_for_experience_upgrade",
+          "av_user_willing_to_pay_for_picture"
+        ],
+        "supporting_anchors": [
+          "gaming_device_fit_reduces_risk",
+          "sports_motion_stability",
+          "big_screen_cinema_substitution",
+          "living_room_upgrade_one_step"
+        ],
+        "weak_expression_anchors": [
+          "family_operation_less_friction",
+          "new_home_aesthetic_fit"
+        ],
+        "risk_drag_anchors": [],
+        "review_required": true,
+        "review_status": "review_required",
+        "review_reasons": [
+          "missing_or_partial_inputs"
+        ],
+        "degradation_reasons": [
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs"
+        ],
+        "source_batch_ids": [
+          "m00_20260623014631_c8630747",
+          "m00_20260619084551_857df63b",
+          "m00_20260613004311_d548f6dc"
+        ],
+        "anchors": [
+          {
+            "anchor_code": "picture_upgrade_justifies_price",
+            "anchor_cn": "画质配置解释加价",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 10,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "same_size_picture_step_up",
+            "anchor_cn": "同尺寸画质越级获得感",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 40,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "worth_paying_more_for_experience_upgrade",
+            "anchor_cn": "贵得值的体验升级",
+            "anchor_family_code": "premium_upgrade",
+            "anchor_rank": 50,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "av_user_willing_to_pay_for_picture",
+            "anchor_cn": "影音用户愿为画质升级付费",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 60,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "gaming_device_fit_reduces_risk",
+            "anchor_cn": "游戏设备适配降低踩坑风险",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 70,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "sports_motion_stability",
+            "anchor_cn": "体育/运动画面流畅更稳",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 80,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "big_screen_cinema_substitution",
+            "anchor_cn": "大屏影音替代影院感",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 90,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "living_room_upgrade_one_step",
+            "anchor_cn": "客厅换新一步到位",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 100,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "family_operation_less_friction",
+            "anchor_cn": "家庭多设备使用更省操作",
+            "anchor_family_code": "operation_convenience",
+            "anchor_rank": 120,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "new_home_aesthetic_fit",
+            "anchor_cn": "新家客厅审美适配",
+            "anchor_family_code": "space_aesthetic",
+            "anchor_rank": 130,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "fact_claim",
+              "semantic_scene"
+            ]
+          }
+        ],
+        "source_refs": [
+          {
+            "module_code": "M03B",
+            "table_name": "core3_sku_param_profile",
+            "record_id": "fixture-1",
+            "extra": {
+              "rule_version": "m03b_tv_param_profile_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_dimension_position",
+            "record_id": "fixture-2",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact",
+            "record_id": "fixture-3",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact_profile",
+            "record_id": "fixture-4",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-5",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_sku_comment_fact_profile",
+            "record_id": "fixture-6",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M07",
+            "table_name": "core3_sku_market_profile",
+            "record_id": "fixture-7",
+            "extra": {
+              "rule_version": "m07_market_profile_v1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m09c_sku_user_task_profile",
+            "record_id": "fixture-8",
+            "extra": {
+              "rule_version": "m09c_tv_user_task_profile_v0.2",
+              "taxonomy_version": "m09c_tv_user_task_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m10c_sku_target_group_profile",
+            "record_id": "fixture-9",
+            "extra": {
+              "rule_version": "m10c_tv_target_group_profile_v0.2",
+              "taxonomy_version": "m10c_tv_target_group_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_sku_value_battlefield_profile",
+            "record_id": "fixture-10",
+            "extra": {
+              "rule_version": "m11c_tv_value_battlefield_profile_v0.3",
+              "taxonomy_version": "m11c_tv_value_battlefield_taxonomy_v0.2"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_allocation",
+            "record_id": "fixture-11",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_sku_contribution",
+            "record_id": "fixture-12",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_contribution_attribution",
+            "record_id": "fixture-13",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_value_quantification",
+            "record_id": "fixture-14",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "lookup_key": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00027801"
+      },
+      "found": true,
+      "consumption_state": "published_degraded",
+      "downstream_action": "degraded_pair_scoring",
+      "profile": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00027801",
+        "display_name_cn": "TCL 65Q9L PRO",
+        "status": "ready_degraded",
+        "profile_confidence": "0.5000",
+        "confidence_level": "medium",
+        "core_reasons_cn": [
+          "画质配置解释加价",
+          "同尺寸画质越级获得感",
+          "贵得值的体验升级"
+        ],
+        "core_payment_anchors": [
+          "picture_upgrade_justifies_price",
+          "same_size_picture_step_up",
+          "worth_paying_more_for_experience_upgrade"
+        ],
+        "supporting_anchors": [
+          "av_user_willing_to_pay_for_picture",
+          "gaming_device_fit_reduces_risk",
+          "sports_motion_stability",
+          "big_screen_cinema_substitution",
+          "living_room_upgrade_one_step"
+        ],
+        "weak_expression_anchors": [
+          "family_operation_less_friction",
+          "new_home_aesthetic_fit"
+        ],
+        "risk_drag_anchors": [],
+        "review_required": true,
+        "review_status": "review_required",
+        "review_reasons": [
+          "missing_or_partial_inputs"
+        ],
+        "degradation_reasons": [
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs"
+        ],
+        "source_batch_ids": [
+          "m00_20260623014631_c8630747",
+          "m00_20260619084551_857df63b",
+          "m00_20260613004311_d548f6dc"
+        ],
+        "anchors": [
+          {
+            "anchor_code": "picture_upgrade_justifies_price",
+            "anchor_cn": "画质配置解释加价",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 10,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "same_size_picture_step_up",
+            "anchor_cn": "同尺寸画质越级获得感",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 40,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "worth_paying_more_for_experience_upgrade",
+            "anchor_cn": "贵得值的体验升级",
+            "anchor_family_code": "premium_upgrade",
+            "anchor_rank": 50,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "av_user_willing_to_pay_for_picture",
+            "anchor_cn": "影音用户愿为画质升级付费",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 60,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "gaming_device_fit_reduces_risk",
+            "anchor_cn": "游戏设备适配降低踩坑风险",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 70,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "sports_motion_stability",
+            "anchor_cn": "体育/运动画面流畅更稳",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 80,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "big_screen_cinema_substitution",
+            "anchor_cn": "大屏影音替代影院感",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 90,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "living_room_upgrade_one_step",
+            "anchor_cn": "客厅换新一步到位",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 100,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "family_operation_less_friction",
+            "anchor_cn": "家庭多设备使用更省操作",
+            "anchor_family_code": "operation_convenience",
+            "anchor_rank": 120,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "new_home_aesthetic_fit",
+            "anchor_cn": "新家客厅审美适配",
+            "anchor_family_code": "space_aesthetic",
+            "anchor_rank": 130,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "fact_claim",
+              "semantic_scene"
+            ]
+          }
+        ],
+        "source_refs": [
+          {
+            "module_code": "M03B",
+            "table_name": "core3_sku_param_profile",
+            "record_id": "fixture-1",
+            "extra": {
+              "rule_version": "m03b_tv_param_profile_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_dimension_position",
+            "record_id": "fixture-2",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact",
+            "record_id": "fixture-3",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact_profile",
+            "record_id": "fixture-4",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-5",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_sku_comment_fact_profile",
+            "record_id": "fixture-6",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M07",
+            "table_name": "core3_sku_market_profile",
+            "record_id": "fixture-7",
+            "extra": {
+              "rule_version": "m07_market_profile_v1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m09c_sku_user_task_profile",
+            "record_id": "fixture-8",
+            "extra": {
+              "rule_version": "m09c_tv_user_task_profile_v0.2",
+              "taxonomy_version": "m09c_tv_user_task_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m10c_sku_target_group_profile",
+            "record_id": "fixture-9",
+            "extra": {
+              "rule_version": "m10c_tv_target_group_profile_v0.2",
+              "taxonomy_version": "m10c_tv_target_group_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_sku_value_battlefield_profile",
+            "record_id": "fixture-10",
+            "extra": {
+              "rule_version": "m11c_tv_value_battlefield_profile_v0.3",
+              "taxonomy_version": "m11c_tv_value_battlefield_taxonomy_v0.2"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_allocation",
+            "record_id": "fixture-11",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_sku_contribution",
+            "record_id": "fixture-12",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_contribution_attribution",
+            "record_id": "fixture-13",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_value_quantification",
+            "record_id": "fixture-14",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "lookup_key": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029020"
+      },
+      "found": true,
+      "consumption_state": "published_degraded",
+      "downstream_action": "degraded_pair_scoring",
+      "profile": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00029020",
+        "display_name_cn": "小米 L65MC-SP",
+        "status": "ready_degraded",
+        "profile_confidence": "0.5000",
+        "confidence_level": "medium",
+        "core_reasons_cn": [
+          "画质配置解释加价",
+          "同尺寸画质越级获得感",
+          "贵得值的体验升级",
+          "影音用户愿为画质升级付费"
+        ],
+        "core_payment_anchors": [
+          "picture_upgrade_justifies_price",
+          "same_size_picture_step_up",
+          "worth_paying_more_for_experience_upgrade",
+          "av_user_willing_to_pay_for_picture"
+        ],
+        "supporting_anchors": [
+          "gaming_device_fit_reduces_risk",
+          "sports_motion_stability",
+          "big_screen_cinema_substitution",
+          "living_room_upgrade_one_step",
+          "family_operation_less_friction"
+        ],
+        "weak_expression_anchors": [
+          "new_home_aesthetic_fit"
+        ],
+        "risk_drag_anchors": [],
+        "review_required": true,
+        "review_status": "review_required",
+        "review_reasons": [
+          "missing_or_partial_inputs"
+        ],
+        "degradation_reasons": [
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs"
+        ],
+        "source_batch_ids": [
+          "m00_20260623014631_c8630747",
+          "m00_20260619084551_857df63b",
+          "m00_20260613004311_d548f6dc"
+        ],
+        "anchors": [
+          {
+            "anchor_code": "picture_upgrade_justifies_price",
+            "anchor_cn": "画质配置解释加价",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 10,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "same_size_picture_step_up",
+            "anchor_cn": "同尺寸画质越级获得感",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 40,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "worth_paying_more_for_experience_upgrade",
+            "anchor_cn": "贵得值的体验升级",
+            "anchor_family_code": "premium_upgrade",
+            "anchor_rank": 50,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "av_user_willing_to_pay_for_picture",
+            "anchor_cn": "影音用户愿为画质升级付费",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 60,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "gaming_device_fit_reduces_risk",
+            "anchor_cn": "游戏设备适配降低踩坑风险",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 70,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "sports_motion_stability",
+            "anchor_cn": "体育/运动画面流畅更稳",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 80,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "big_screen_cinema_substitution",
+            "anchor_cn": "大屏影音替代影院感",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 90,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "living_room_upgrade_one_step",
+            "anchor_cn": "客厅换新一步到位",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 100,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "family_operation_less_friction",
+            "anchor_cn": "家庭多设备使用更省操作",
+            "anchor_family_code": "operation_convenience",
+            "anchor_rank": 120,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "new_home_aesthetic_fit",
+            "anchor_cn": "新家客厅审美适配",
+            "anchor_family_code": "space_aesthetic",
+            "anchor_rank": 130,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "fact_claim",
+              "semantic_scene"
+            ]
+          }
+        ],
+        "source_refs": [
+          {
+            "module_code": "M03B",
+            "table_name": "core3_sku_param_profile",
+            "record_id": "fixture-1",
+            "extra": {
+              "rule_version": "m03b_tv_param_profile_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_dimension_position",
+            "record_id": "fixture-2",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact",
+            "record_id": "fixture-3",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact_profile",
+            "record_id": "fixture-4",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-5",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_sku_comment_fact_profile",
+            "record_id": "fixture-6",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M07",
+            "table_name": "core3_sku_market_profile",
+            "record_id": "fixture-7",
+            "extra": {
+              "rule_version": "m07_market_profile_v1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m09c_sku_user_task_profile",
+            "record_id": "fixture-8",
+            "extra": {
+              "rule_version": "m09c_tv_user_task_profile_v0.2",
+              "taxonomy_version": "m09c_tv_user_task_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m10c_sku_target_group_profile",
+            "record_id": "fixture-9",
+            "extra": {
+              "rule_version": "m10c_tv_target_group_profile_v0.2",
+              "taxonomy_version": "m10c_tv_target_group_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_sku_value_battlefield_profile",
+            "record_id": "fixture-10",
+            "extra": {
+              "rule_version": "m11c_tv_value_battlefield_profile_v0.3",
+              "taxonomy_version": "m11c_tv_value_battlefield_taxonomy_v0.2"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_allocation",
+            "record_id": "fixture-11",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_sku_contribution",
+            "record_id": "fixture-12",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_contribution_attribution",
+            "record_id": "fixture-13",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_value_quantification",
+            "record_id": "fixture-14",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "lookup_key": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00028829"
+      },
+      "found": true,
+      "consumption_state": "published_degraded",
+      "downstream_action": "degraded_pair_scoring",
+      "profile": {
+        "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+        "category_code": "TV",
+        "batch_id": "m00_20260623014631_c8630747",
+        "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+        "sku_code": "TV00028829",
+        "display_name_cn": "创维 65A6F ULTRA",
+        "status": "ready_degraded",
+        "profile_confidence": "0.5000",
+        "confidence_level": "medium",
+        "core_reasons_cn": [
+          "画质配置解释加价",
+          "同尺寸画质越级获得感",
+          "贵得值的体验升级",
+          "影音用户愿为画质升级付费"
+        ],
+        "core_payment_anchors": [
+          "picture_upgrade_justifies_price",
+          "same_size_picture_step_up",
+          "worth_paying_more_for_experience_upgrade",
+          "av_user_willing_to_pay_for_picture"
+        ],
+        "supporting_anchors": [
+          "same_price_core_config_gain",
+          "gaming_device_fit_reduces_risk",
+          "sports_motion_stability",
+          "big_screen_cinema_substitution",
+          "living_room_upgrade_one_step"
+        ],
+        "weak_expression_anchors": [
+          "family_operation_less_friction",
+          "new_home_aesthetic_fit"
+        ],
+        "risk_drag_anchors": [],
+        "review_required": true,
+        "review_status": "review_required",
+        "review_reasons": [
+          "missing_or_partial_inputs"
+        ],
+        "degradation_reasons": [
+          "review_required",
+          "profile_status_ready_degraded",
+          "missing_or_partial_inputs"
+        ],
+        "source_batch_ids": [
+          "m00_20260623014631_c8630747",
+          "m00_20260619084551_857df63b",
+          "m00_20260613004311_d548f6dc"
+        ],
+        "anchors": [
+          {
+            "anchor_code": "picture_upgrade_justifies_price",
+            "anchor_cn": "画质配置解释加价",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 10,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "same_price_core_config_gain",
+            "anchor_cn": "同价位核心配置获得感",
+            "anchor_family_code": "budget_configuration",
+            "anchor_rank": 30,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "claim_position",
+              "claim_value",
+              "comment_perception",
+              "param_fact"
+            ]
+          },
+          {
+            "anchor_code": "same_size_picture_step_up",
+            "anchor_cn": "同尺寸画质越级获得感",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 40,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "worth_paying_more_for_experience_upgrade",
+            "anchor_cn": "贵得值的体验升级",
+            "anchor_family_code": "premium_upgrade",
+            "anchor_rank": 50,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "av_user_willing_to_pay_for_picture",
+            "anchor_cn": "影音用户愿为画质升级付费",
+            "anchor_family_code": "picture_upgrade",
+            "anchor_rank": 60,
+            "role": "core_payment",
+            "evidence_strength": "strong",
+            "confidence": "0.7500",
+            "evidence_domains": [
+              "claim_value",
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "gaming_device_fit_reduces_risk",
+            "anchor_cn": "游戏设备适配降低踩坑风险",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 70,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "sports_motion_stability",
+            "anchor_cn": "体育/运动画面流畅更稳",
+            "anchor_family_code": "dynamic_stability",
+            "anchor_rank": 80,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "fact_claim",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "big_screen_cinema_substitution",
+            "anchor_cn": "大屏影音替代影院感",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 90,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "living_room_upgrade_one_step",
+            "anchor_cn": "客厅换新一步到位",
+            "anchor_family_code": "living_room_immersion",
+            "anchor_rank": 100,
+            "role": "supporting",
+            "evidence_strength": "medium",
+            "confidence": "0.5500",
+            "evidence_domains": [
+              "comment_perception",
+              "market_acceptance",
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "family_operation_less_friction",
+            "anchor_cn": "家庭多设备使用更省操作",
+            "anchor_family_code": "operation_convenience",
+            "anchor_rank": 120,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "param_fact",
+              "semantic_scene"
+            ]
+          },
+          {
+            "anchor_code": "new_home_aesthetic_fit",
+            "anchor_cn": "新家客厅审美适配",
+            "anchor_family_code": "space_aesthetic",
+            "anchor_rank": 130,
+            "role": "weak_expression",
+            "evidence_strength": "weak",
+            "confidence": "0.3200",
+            "evidence_domains": [
+              "fact_claim",
+              "semantic_scene"
+            ]
+          }
+        ],
+        "source_refs": [
+          {
+            "module_code": "M03B",
+            "table_name": "core3_sku_param_profile",
+            "record_id": "fixture-1",
+            "extra": {
+              "rule_version": "m03b_tv_param_profile_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_dimension_position",
+            "record_id": "fixture-2",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact",
+            "record_id": "fixture-3",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M04C",
+            "table_name": "core3_sku_claim_fact_profile",
+            "record_id": "fixture-4",
+            "extra": {
+              "rule_version": "m04c_tv_claim_fact_profile_v0.1",
+              "taxonomy_version": "tv_claim_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_comment_fact_atom",
+            "record_id": "fixture-5",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M05C",
+            "table_name": "core3_sku_comment_fact_profile",
+            "record_id": "fixture-6",
+            "extra": {
+              "rule_version": "m05c_tv_comment_fact_profile_v0.1",
+              "taxonomy_version": "tv_comment_fact_taxonomy_manual_v0.1"
+            }
+          },
+          {
+            "module_code": "M07",
+            "table_name": "core3_sku_market_profile",
+            "record_id": "fixture-7",
+            "extra": {
+              "rule_version": "m07_market_profile_v1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m09c_sku_user_task_profile",
+            "record_id": "fixture-8",
+            "extra": {
+              "rule_version": "m09c_tv_user_task_profile_v0.2",
+              "taxonomy_version": "m09c_tv_user_task_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_m10c_sku_target_group_profile",
+            "record_id": "fixture-9",
+            "extra": {
+              "rule_version": "m10c_tv_target_group_profile_v0.2",
+              "taxonomy_version": "m10c_tv_target_group_taxonomy_v0.1"
+            }
+          },
+          {
+            "module_code": "M09C_M10C_M11C",
+            "table_name": "core3_sku_value_battlefield_profile",
+            "record_id": "fixture-10",
+            "extra": {
+              "rule_version": "m11c_tv_value_battlefield_profile_v0.3",
+              "taxonomy_version": "m11c_tv_value_battlefield_taxonomy_v0.2"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_allocation",
+            "record_id": "fixture-11",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M11D",
+            "table_name": "core3_semantic_market_sku_contribution",
+            "record_id": "fixture-12",
+            "extra": {
+              "rule_version": "m11d_semantic_market_allocation_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_contribution_attribution",
+            "record_id": "fixture-13",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          },
+          {
+            "module_code": "M12C",
+            "table_name": "core3_sku_claim_value_quantification",
+            "record_id": "fixture-14",
+            "extra": {
+              "rule_version": "m12c_claim_value_quantification_v0.1"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "missing_contract_fixture": {
+    "lookup_key": {
+      "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+      "category_code": "TV",
+      "batch_id": "m00_20260623014631_c8630747",
+      "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft",
+      "sku_code": "TV_M12D_NOT_FOUND"
+    },
+    "found": false,
+    "consumption_state": "not_found",
+    "downstream_action": "block_target_or_drop_candidate"
+  },
+  "unpublished_version_contract_fixture": {
+    "lookup_key": {
+      "project_id": "d8d2245b-358b-4a64-95cc-9d7f2341bd26",
+      "category_code": "TV",
+      "batch_id": "m00_20260623014631_c8630747",
+      "m12d_profile_version": "m12d_tv_purchase_reason_profile_v0_1_draft_unpublished_fixture",
+      "sku_code": "TV00029112"
+    },
+    "found": false,
+    "consumption_state": "not_found",
+    "downstream_action": "block_target_or_drop_candidate"
+  }
+}

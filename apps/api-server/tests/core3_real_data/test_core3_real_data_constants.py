@@ -48,6 +48,7 @@ def test_module_order_matches_sop_sequence():
         "M11.5",
         "M11.6",
         "M11.7",
+        "M12C",
         "M12",
         "M13",
         "M14",
@@ -57,10 +58,13 @@ def test_module_order_matches_sop_sequence():
 
 
 def test_module_dag_edges_only_reference_known_modules():
-    known_modules = set(CORE3_MODULE_ORDER)
+    ordered_modules = set(CORE3_MODULE_ORDER)
+    # M11D is an external semantic input to the ordered M12C pipeline stage.
+    known_modules = ordered_modules | {Core3ModuleCode.M11D}
 
     assert CORE3_MODULE_DAG_EDGES
-    assert all(source in known_modules and target in known_modules for source, target in CORE3_MODULE_DAG_EDGES)
+    assert all(source in known_modules and target in ordered_modules for source, target in CORE3_MODULE_DAG_EDGES)
+    assert (Core3ModuleCode.M11D, Core3ModuleCode.M12C) in CORE3_MODULE_DAG_EDGES
     assert (Core3ModuleCode.M00, Core3ModuleCode.M01) in CORE3_MODULE_DAG_EDGES
     assert (Core3ModuleCode.M02, Core3ModuleCode.M03B) in CORE3_MODULE_DAG_EDGES
     assert (Core3ModuleCode.M03B, Core3ModuleCode.M04A) in CORE3_MODULE_DAG_EDGES

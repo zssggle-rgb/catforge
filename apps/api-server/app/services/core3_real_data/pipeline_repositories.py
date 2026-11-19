@@ -12,6 +12,9 @@ from sqlalchemy import func, select
 from app.models import entities
 from app.services.core3_real_data.constants import (
     CORE3_BUSINESS_DISPLAY_FORBIDDEN_PATTERNS,
+    CORE3_M03_RULE_VERSION,
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_RULE_VERSION,
     CORE3_M16_MODULE_VERSION,
     CORE3_M16_RULE_VERSION,
     CORE3_MODULE_LABEL_CN,
@@ -489,11 +492,17 @@ class PipelineRepository(Core3BaseRepository):
         target_codes: set[str] = set()
         detail: dict[str, int] = {}
         for model_cls, field_name in counts:
-            count = self._count_current_rows(model_cls, batch_id)
+            filters = []
+            if model_cls in (entities.Core3ExtractParamValue, entities.Core3SkuParamProfile):
+                versions = (CORE3_M03_RULE_VERSION,) if module_code == Core3ModuleCode.M03 else (
+                    CORE3_M03B_RULE_VERSION, CORE3_M03B_AC_RULE_VERSION,
+                )
+                filters.append(model_cls.rule_version.in_(versions))
+            count = self._count_current_rows(model_cls, batch_id, *filters)
             detail[model_cls.__tablename__] = count
             output_count += count
             if field_name:
-                target_codes.update(self._distinct_values(model_cls, batch_id, field_name))
+                target_codes.update(self._distinct_values(model_cls, batch_id, field_name, *filters))
         review_issue_count = self._module_review_issue_count(module_code, batch_id)
         warning_count = review_issue_count
         output_hash = stable_hash(
@@ -529,7 +538,7 @@ class PipelineRepository(Core3BaseRepository):
             return 0
         return self._count_current_rows(model_cls, batch_id)
 
-    def _count_current_rows(self, model_cls: Any, batch_id: str) -> int:
+    def _count_current_rows(self, model_cls: Any, batch_id: str, *extra_filters: Any) -> int:
         filters = [
             model_cls.project_id == self.project_id,
             model_cls.category_code == self.category_code.value,
@@ -538,9 +547,9 @@ class PipelineRepository(Core3BaseRepository):
             filters.append(model_cls.batch_id == batch_id)
         if hasattr(model_cls, "is_current"):
             filters.append(model_cls.is_current.is_(True))
-        return self.count_rows(model_cls, *filters)
+        return self.count_rows(model_cls, *filters, *extra_filters)
 
-    def _distinct_values(self, model_cls: Any, batch_id: str, field_name: str) -> set[str]:
+    def _distinct_values(self, model_cls: Any, batch_id: str, field_name: str, *extra_filters: Any) -> set[str]:
         if not hasattr(model_cls, field_name):
             return set()
         filters = [
@@ -552,7 +561,7 @@ class PipelineRepository(Core3BaseRepository):
         if hasattr(model_cls, "is_current"):
             filters.append(model_cls.is_current.is_(True))
         column = getattr(model_cls, field_name)
-        rows = self.db.execute(select(column).where(*filters).distinct()).all()
+        rows = self.db.execute(select(column).where(*filters, *extra_filters).distinct()).all()
         return {str(row[0]) for row in rows if row[0]}
 
     def _current_rows(
@@ -620,6 +629,12 @@ _MODULE_COUNT_SPECS: dict[Core3ModuleCode, tuple[tuple[Any, str | None], ...]] =
         (entities.Core3ParamAliasCandidate, None),
         (entities.Core3ParamValueConflict, "sku_code"),
         (entities.Core3SkuParamProfile, "sku_code"),
+    ),
+    Core3ModuleCode.M03B: (
+        (entities.Core3ExtractParamValue, "sku_code"),
+        (entities.Core3SkuParamProfile, "sku_code"),
+        (entities.Core3SkuParamDimensionTier, "sku_code"),
+        (entities.Core3ParamTierCoverage, None),
     ),
     Core3ModuleCode.M04A: (
         (entities.Core3ExtractClaimHit, "sku_code"),
@@ -714,6 +729,14 @@ _MODULE_COUNT_SPECS: dict[Core3ModuleCode, tuple[tuple[Any, str | None], ...]] =
         (entities.Core3CandidateFeatureSnapshot, "target_sku_code"),
         (entities.Core3CandidateRecallReviewIssue, "target_sku_code"),
     ),
+    Core3ModuleCode.M12C: (
+        (entities.Core3ClaimValueContextPool, None),
+        (entities.Core3ClaimValuePoolMetric, None),
+        (entities.Core3SkuClaimValueQuantification, "sku_code"),
+        (entities.Core3SkuClaimContributionAttribution, "sku_code"),
+        (entities.Core3ClaimValueDimensionSummary, None),
+        (entities.Core3ClaimValueReviewIssue, "sku_code"),
+    ),
     Core3ModuleCode.M13: (
         (entities.Core3CandidateComponentScore, "target_sku_code"),
         (entities.Core3CandidateRoleScore, "target_sku_code"),
@@ -747,6 +770,7 @@ _MODULE_REVIEW_TABLES: dict[Core3ModuleCode, Any] = {
     Core3ModuleCode.M11_6: entities.Core3SkuBusinessProfileReviewIssue,
     Core3ModuleCode.M11_7: entities.Core3BusinessSalesReconciliationIssue,
     Core3ModuleCode.M12: entities.Core3CandidateRecallReviewIssue,
+    Core3ModuleCode.M12C: entities.Core3ClaimValueReviewIssue,
     Core3ModuleCode.M13: entities.Core3CandidateScoreReviewIssue,
     Core3ModuleCode.M14: entities.Core3CompetitorSelectionReviewIssue,
     Core3ModuleCode.M15: entities.Core3ReportReviewIssue,

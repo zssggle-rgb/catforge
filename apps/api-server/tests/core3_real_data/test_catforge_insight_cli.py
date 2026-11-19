@@ -7,7 +7,13 @@ from sqlalchemy.pool import StaticPool
 
 from app.cli import catforge_insight
 from app.models import entities
-from app.services.core3_real_data.constants import CORE3_M03B_AC_RULE_VERSION, CORE3_M03B_AC_TAXONOMY_VERSION, CORE3_M03B_RULE_VERSION, CORE3_M07_RULE_VERSION
+from app.services.core3_real_data.constants import (
+    CORE3_M03B_AC_RULE_VERSION,
+    CORE3_M03B_AC_TAXONOMY_VERSION,
+    CORE3_M03B_RULE_VERSION,
+    CORE3_M03B_TAXONOMY_VERSION,
+    CORE3_M07_RULE_VERSION,
+)
 
 
 PROJECT_ID = "core3_mvp"
@@ -80,7 +86,7 @@ def seed_data(session: Session) -> None:
             evidence_ids=["ev_size", "ev_miniled"],
             quality_summary_json={"review": "param_conflict"},
             profile_hash="sha256:test-profile",
-            seed_version="tv_param_taxonomy_manual_v0.1",
+            seed_version=CORE3_M03B_TAXONOMY_VERSION,
             rule_version=CORE3_M03B_RULE_VERSION,
         )
     )
@@ -119,7 +125,7 @@ def seed_data(session: Session) -> None:
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
-            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            taxonomy_version=CORE3_M03B_TAXONOMY_VERSION,
             sku_code="TV00027354",
             model_name="100A4F",
             dimension_code="display_tech",
@@ -143,7 +149,7 @@ def seed_data(session: Session) -> None:
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
-            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            taxonomy_version=CORE3_M03B_TAXONOMY_VERSION,
             sku_code="TV00027354",
             model_name="100A4F",
             dimension_code="size",
@@ -167,7 +173,7 @@ def seed_data(session: Session) -> None:
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
-            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            taxonomy_version=CORE3_M03B_TAXONOMY_VERSION,
             dimension_code="display_tech",
             tier_code="miniled",
             tier_name="MiniLED",
@@ -188,7 +194,7 @@ def seed_data(session: Session) -> None:
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
-            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            taxonomy_version=CORE3_M03B_TAXONOMY_VERSION,
             dimension_code="display_tech",
             tier_code="lcd_led",
             tier_name="LCD/LED",
@@ -209,7 +215,7 @@ def seed_data(session: Session) -> None:
             project_id=PROJECT_ID,
             category_code="TV",
             batch_id=BATCH_ID,
-            taxonomy_version="tv_param_taxonomy_manual_v0.1",
+            taxonomy_version=CORE3_M03B_TAXONOMY_VERSION,
             dimension_code="picture_overall",
             tier_code="picture_premium",
             tier_name="高端画质",
@@ -451,7 +457,7 @@ def test_query_tv_param_taxonomy_exposes_standard_params_and_raw_mapping():
     result = catforge_insight.query_tv_param_taxonomy(group="picture", search="MINILED")
 
     assert result["status"] == "ok"
-    assert result["taxonomy_version"] == "tv_param_taxonomy_manual_v0.1"
+    assert result["taxonomy_version"] == CORE3_M03B_TAXONOMY_VERSION
     assert any(item["param_code"] == "mini_led_type" for item in result["params"])
     assert "MINILED2" in result["raw_field_mapping"]
 
