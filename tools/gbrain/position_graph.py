@@ -37,9 +37,7 @@ def add_goal(graph, goal, sku, definitions):
     return node
 
 
-def materialize(snapshot, results, stage, goal=None):
-    graph = project(snapshot, stage, render=False)
-    original = set(graph.nodes)
+def add_positions(graph, snapshot, results, goal=None):
     manifest = json.loads((snapshot / "manifest.json").read_text())
     target = manifest["target"]
     by = defaultdict(dict)
@@ -113,6 +111,13 @@ def materialize(snapshot, results, stage, goal=None):
                 graph.edge(node, "uses_cohort", pool)
     if goal:
         published["business-goal"] = add_goal(graph, goal, target_node, by["value-battlefield"])
+    return published
+
+
+def materialize(snapshot, results, stage, goal=None):
+    graph = project(snapshot, stage, render=False)
+    original = set(graph.nodes)
+    published = add_positions(graph, snapshot, results, goal)
     graph.save(set(graph.nodes) - original)
     return published
 
