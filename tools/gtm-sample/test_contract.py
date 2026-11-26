@@ -65,6 +65,10 @@ class GtmContractTest(unittest.TestCase):
         self.assertTrue(scenario["records"]["dailyModels"])
         self.assertTrue(scenario["records"]["premiumVocTop5Data"])
         self.assertTrue(scenario["records"]["smartReports"])
+        inventory = scenario["records"]["valueInventory"]
+        self.assertEqual({r["group"] for r in inventory}, {"high","base","pending","missing"})
+        self.assertEqual(len({r["claim"] for r in inventory}), 10)
+        self.assertTrue(all(r["benefits"] or r["action"] for r in inventory))
         with self.assertRaises(HTTPError) as caught:
             self.call("/projects/another-project" + path)
         self.assertEqual(404, caught.exception.code)

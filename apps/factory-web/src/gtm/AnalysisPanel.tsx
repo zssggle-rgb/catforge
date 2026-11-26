@@ -7,6 +7,13 @@ export function AnalysisPanel({tab, table, open}: {tab:string;table:DataTable;op
   const {columns,rows} = table;
   const field = (r:Row, i:number) => columns[i] ? displayValue(r.cells[columns[i].key],columns[i].unit) : "—";
   if (!rows.length) return <section className="gtm-panel"><h2>{table.title}</h2><p className="gtm-empty">当前范围暂无分析记录</p></section>;
+  if (tab==="value") return <section className="gtm-panel"><header><h2>{table.title}</h2></header>
+    <div className="gtm-matrix-scroll"><table className="gtm-matrix"><thead><tr>
+      {columns.map(c=><th scope="col" key={c.key}>{c.label}</th>)}<th scope="col">操作</th>
+    </tr></thead><tbody>{rows.map(row=><tr key={row.id}>
+      {columns.map((c,i)=><td key={c.key}>{field(row,i)}</td>)}
+      <td><button className="gtm-link" onClick={()=>open(row)}>查看明细</button></td>
+    </tr>)}</tbody></table></div></section>;
   if (tab==="product") return <section className="gtm-panel"><header><h2>{table.title}</h2></header><div className="gtm-matrix-scroll">
     <table className="gtm-matrix"><thead><tr><th>产品参数</th>{rows.map(r=><th key={r.id}><button className="gtm-link" onClick={()=>open(r)}>{field(r,0)}</button></th>)}</tr></thead>
       <tbody>{columns.slice(1).map((c,i)=><tr key={c.key}><th>{c.label}</th>{rows.map(r=><td key={r.id}>{field(r,i+1)}</td>)}</tr>)}</tbody></table></div></section>;

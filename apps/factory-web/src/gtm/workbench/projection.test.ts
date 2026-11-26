@@ -27,4 +27,13 @@ describe("0916 detailed views",()=>{
     const p=make("launch-encyclopedia");p.lists.claims=["低反射","144 Hz"];body.replaceChildren(projectDetail(p,document));
     expect(body.querySelector("#launchModalPoints")?.children).toHaveLength(2);
   });
+  it("labels the previous observed price and renders the returned note without certifying extra evidence",()=>{
+    const data=make("rival-evidence");
+    data.values={prior_price:"¥5,880",gap:"¥-200",snapshot_note:"快照仅含价格文本"};
+    const body=document.createElement("div");body.append(projectDetail(data,document));
+    expect(body.querySelector("#rivalEvidenceSecondLabel")?.textContent).toBe("上次到手价");
+    expect(body.querySelector("#rivalEvidenceSecondValue")?.textContent).toBe("¥5,880");
+    expect(body.querySelector("#rivalEvidenceShot")?.textContent).toBe("快照仅含价格文本");
+    expect(body.textContent).not.toMatch(/页面截图|规则命中/);
+  });
 });

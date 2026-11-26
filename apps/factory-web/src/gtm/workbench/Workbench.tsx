@@ -5,6 +5,8 @@ import { gtm } from "../client";
 import { pages } from "../contract";
 import layout from "./frame.html?raw";
 import css from "./workbench.css?raw";
+import theme from "./catforge.css?raw";
+import inventory from "./value-inventory.js?raw";
 import controller from "./interactions.js?raw";
 import navigation from "./navigation.js?raw";
 import details from "./detail-links.js?raw";
@@ -23,10 +25,16 @@ function buildDocument(records: Record<string, unknown>) {
   const origin = window.location.origin;
   const script = new URL(chartsUrl, origin).href;
   const json = JSON.stringify(records).replace(/</g, "\\u003c");
+  // srcdoc has its own cascade. Pass the same Semi theme tokens used by the React shell.
+  const shell = getComputedStyle(document.body);
+  const tokens = ["primary","primary-light-default","text-0","text-1","text-2","bg-0","border","fill-0","danger"]
+    .map(name => "--semi-color-" + name)
+    .filter(name => shell.getPropertyValue(name).trim())
+    .map(name => name + ":" + shell.getPropertyValue(name)).join(";");
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' ${origin}; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'">
-    <style>${css}</style><script src="${script}"></script></head><body>${body}
-    <script>window.gtmRecords=${json}</script><script>${controller}</script><script>${details}</script><script>${pagination}</script><script>${navigation}</script></body></html>`;
+    <style>:root{${tokens}}${css}\n${theme}</style><script src="${script}"></script></head><body>${body}
+    <script>window.gtmRecords=${json}</script><script>${controller}</script><script>${inventory}</script><script>${details}</script><script>${pagination}</script><script>${navigation}</script></body></html>`;
 }
 
 export default function Workbench({project}: {project: string}) {

@@ -26,9 +26,10 @@
   });
   button("#rivalEvidenceModal .rival-evidence-foot", "调价摘要", () => {
     const r = currentRivalEvidence;
-    textFields({rivalPriceTitle:r.product + " · 调价详情", rivalPriceProduct:r.product,
+    textFields({rivalPriceProduct:r.product,rivalPriceBaseLabel:"原价",
       rivalPriceChannel:r.shop, rivalPriceCurrent:r.price, rivalPriceBase:r.original,
-      rivalPriceChange:r.gap, rivalPriceMeta:r.meta, rivalPriceShot:r.shot});
+      rivalPriceChange:r.gap, rivalPriceMeta:r.meta});
+    showPriceLines("rivalPriceShot",r.shot);
     openModal("rivalPriceModal");
   });
   button("#launchEncyclopediaModal .launch-modal-footer", "产品档案", () => {

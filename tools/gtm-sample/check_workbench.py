@@ -134,12 +134,51 @@ def inspect(frame, save):
     return states
 
 
+def check_inventory(frame, reference):
+    original = reference.locator(".value-tier-card").evaluate_all("""cards => cards.flatMap(card =>
+      [...card.querySelectorAll('.tier-item')].map(item => ({
+        claim: item.querySelector('b').textContent,
+        copy: [...item.querySelectorAll('.benefit-tags span, p')].map(el => el.textContent),
+        source: item.querySelector('.competitor-source')?.textContent.replace(/^来源：/, '') || '',
+        group: [...card.classList].at(-1)
+      })))""")
+    assert len(original) == 10
+    frame.locator(".nav-item[data-page=competitor]").click()
+    frame.locator("#analysisTabs [data-target=value]").click()
+    table = frame.locator("#valueInventoryRows")
+    for group in ("high", "base", "pending", "missing", "all"):
+        button = frame.locator(f".inventory-filters button[data-group={group}]")
+        button.focus()
+        button.press("Enter")
+        expected = [item for item in original if group == "all" or item["group"] == group]
+        assert button.get_attribute("aria-pressed") == "true" and table.locator("tr").count() == len(expected)
+        for row, item in zip(table.locator("tr").all(), expected):
+            assert row.locator("strong").inner_text() == item["claim"]
+            assert all(part in row.inner_text() for part in [*item["copy"], item["source"]])
+    frame.locator(".inventory-guide summary").click()
+    assert frame.locator(".inventory-guide dd:visible").count() == 4
+    frame.locator(".inventory-guide summary").click()
+
+
 def check_actions(page, url):
     page.goto(url+"#/premium/voc-index")
     page.wait_for_selector("iframe")
     frame=page.frames[-1]
     frame.locator("#panel-voc-index").wait_for()
     assert frame.locator("#premiumVocCompare .premium-voc-card").count()>=2
+    frame.locator(".nav-item[data-page=rival-monitor]").click()
+    row = frame.locator("#page-rival-monitor tbody tr:visible").first
+    row.locator("[onclick^=openRivalEvidence]").click()
+    dialog = frame.locator("#rivalEvidenceModal")
+    prices = frame.evaluate("() => currentRivalEvidence")
+    assert dialog.locator("#rivalEvidenceProduct").inner_text() == prices["product"]
+    assert dialog.locator("#rivalEvidencePrice").inner_text() == prices["price"]
+    assert dialog.locator("#rivalEvidenceGap").inner_text() == prices["gap"]
+    lines = dialog.locator("#rivalEvidenceShot dl > div")
+    plain = lambda s: "".join(s.split())
+    assert [plain(s) for s in lines.all_text_contents()] == [plain(s) for s in prices["shot"].split("·")]
+    assert dialog.locator(".fake-shot,.chain-tag,.res-shot").count() == 0
+    dialog.locator(".modal-close").click()
     frame.locator(".nav-item[data-page=own-monitor]").click()
     frame.locator("#page-own-monitor").get_by_role("button",name="2",exact=True).click()
     visible=frame.locator("#page-own-monitor tbody tr:visible")
@@ -182,7 +221,7 @@ def check_actions(page, url):
     frame.locator("#page-reports [onclick*=subscriptionModal]").click()
     frame.locator("#subscriptionModal .primary").click()
     assert int(frame.locator("#reportStatAll").inner_text())==int(before)+1
-    return ["品牌VOC深链接","巡检第二页与同行证据","合规总览往返","上新第二页与匹配百科",
+    return ["品牌VOC深链接","竞品调价证据的型号、价格、幅度和优惠明细与所选记录一致","巡检第二页与同行证据","合规总览往返","上新第二页与匹配百科",
             "报告编辑与阅读","PDF、PPTX、DOCX、XLSX真实下载","报告详情刷新恢复","新建订阅后报告数更新"]
 
 
@@ -215,20 +254,44 @@ def main():
         actual=inspect(frame,opts.out)
         differences={key:{field:[actual[key][field],val] for field,val in record.items()
                          if field not in ("text","content") and actual[key][field]!=val} for key,record in expected.items()}
-        unchanged_content=("竞品洞察-product","竞品洞察-value","竞品洞察-weight","竞品洞察-pricevolume","品牌溢价-value-index",
+        unchanged_content=("竞品洞察-weight","品牌溢价-value-index",
                            "品牌溢价-voc-index","重点产品-管理型号","巡检-底价版本","巡检-活动期间","报告-新建订阅","报告-导出配置","报告-分享配置")
         for key in unchanged_content:
             assert actual[key]["content"]==expected[key]["content"], key+" 子页面正文不一致"
+        check_inventory(frame, original.main_frame)
+        assert actual["竞品洞察-value"]["titles"] == ["卖点分类明细"]
+        assert actual["竞品洞察-value"]["columns"] == ["卖点","分类","用户利益点 / 行动建议"]
+        assert actual["竞品洞察-value"]["rows"] == 10
+        for field in ("titles","columns","rows"):
+            differences["竞品洞察-value"].pop(field,None)
+        for key in ("入口-competitor","入口-premium"):
+            assert actual[key]["rows"] == expected[key]["rows"] + 10
+            differences[key].pop("rows",None)
+        # New section headings replace generic AI labels; all other headings keep their order.
+        headings = {"AI总结与建议":{"产品对比结论","竞品调价概况","量价变化","上新概况"},
+            "AI结论与策略":{"品牌溢价结论"}, "AI智能归因分析":{"重点型号表现分析"},
+            "我品价格巡检智能总结":{"价格巡检概况"}}
+        for key, changes in differences.items():
+            if "titles" in changes:
+                current, prior = changes["titles"]
+                if len(current)==len(prior) and all(a==b or a in headings.get(b,set()) for a,b in zip(current,prior)):
+                    changes.pop("titles")
+        for key, title in (("每日-我品证据","价格巡检证据"),("巡检-单条价格证据","价格巡检证据"),
+                           ("每日-竞品调价证据","竞品调价证据"),("竞品监控-调价证据","竞品调价证据"),
+                           ("保留面板-调价摘要","调价摘要")):
+            assert actual[key]["titles"] == [title+" ×"]
+            differences[key].pop("titles",None)
         assert actual["入口-launch"]["rows"]==12 and expected["入口-launch"]["rows"]==5
         differences["入口-launch"].pop("rows",None)
         # These headers in the source are static placeholders rather than selected-record names.
-        for key in ("巡检-单条价格证据","保留面板-产品档案","保留面板-调价摘要"):
+        for key in ("保留面板-产品档案",):
             differences[key].pop("titles",None)
         differences={key:val for key,val in differences.items() if val}
         ids=lambda f:f.locator(".page,.modal-mask,.tab-panel,.premium-sub-panel").evaluate_all("nodes=>nodes.map(n=>n.id).sort()")
         screen_ids=ids(frame)
         assert screen_ids==ids(original.main_frame)
         actions=check_actions(deployed,opts.url)
+        actions.append("逐条核对终稿的10项卖点、18条用户利益、行动建议与来源，键盘切换全部分类")
         live=tab()
         def live_context(route):
             response=route.fetch()

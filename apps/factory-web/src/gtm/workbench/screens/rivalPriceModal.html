@@ -1,10 +1,23 @@
-<div class="modal-mask" id="rivalPriceModal"><div class="modal"><div class="modal-head"><span id="rivalPriceTitle">竞品调价详情</span><span class="modal-close" onclick="closeModal('rivalPriceModal')">×</span></div><div class="modal-body">
-  <div class="evidence-target"><b id="rivalPriceProduct">TCL 65Q9L PRO</b><span id="rivalPriceChannel">京东 · 自营旗舰店</span></div>
-  <div class="grid cols-3">
-    <div class="kpi"><div class="label">当前到手价</div><div class="value" id="rivalPriceCurrent" style="font-size:20px">¥5,522</div></div>
-    <div class="kpi"><div class="label">原价 / 底价</div><div class="value" id="rivalPriceBase" style="font-size:20px">¥6,299</div></div>
-    <div class="kpi attention"><div class="label">波动幅度</div><div class="value" id="rivalPriceChange" style="font-size:20px">-12.3%</div></div>
-  </div>
-  <div class="evidence"><b style="font-size:12px">页面截图证据</b><p id="rivalPriceMeta" style="font-size:11px;color:var(--muted);margin-top:4px">SKU链接已存档 · 抓取时间 2026-09-10 08:53:12</p><div class="fake-shot" id="rivalPriceShot">电商页面截图存证区域<br>页面价¥6,299 · 限时直降¥777</div></div>
-  <div class="evidence evidence-chain"><b>数据证据</b><span>页面截图</span><span>价格明细</span><span>历史价格对比</span><span>抓取时间戳</span></div>
-</div><div class="modal-foot"><button class="btn" onclick="closeModal('rivalPriceModal')">关闭</button></div></div></div>
+<div class="modal-mask" id="rivalPriceModal">
+  <section class="modal price-record" role="dialog" aria-modal="true" aria-labelledby="rivalPriceHeading">
+    <header class="modal-head price-record-head"><span id="rivalPriceHeading">调价摘要</span>
+      <button class="modal-close" type="button" aria-label="关闭调价摘要" onclick="closeModal('rivalPriceModal')">×</button>
+    </header>
+    <div class="modal-body">
+      <div class="price-record-product"><strong id="rivalPriceProduct"></strong>
+        <span class="record-channel" id="rivalPriceChannel"></span>
+      </div>
+      <dl class="price-record-metrics">
+        <div><dt>当前到手价</dt><dd id="rivalPriceCurrent">—</dd></div>
+        <div><dt id="rivalPriceBaseLabel">上次到手价</dt><dd id="rivalPriceBase">—</dd></div>
+        <div><dt>价格变动</dt><dd id="rivalPriceChange">—</dd></div>
+      </dl>
+      <section class="price-record-observation">
+        <header><b>价格记录</b><span id="rivalPriceMeta"></span></header>
+        <div class="price-lines" id="rivalPriceShot"></div>
+      </section>
+    </div>
+    <footer class="modal-foot"><button class="btn" type="button" onclick="closeModal('rivalPriceModal')">关闭</button>
+    </footer>
+  </section>
+</div>

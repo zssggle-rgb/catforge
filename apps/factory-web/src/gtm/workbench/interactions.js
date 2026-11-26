@@ -17,7 +17,7 @@ function syncAnalysisScope(target){
  const premium=target==='premium',productScope=document.getElementById('productScope'),brandScope=document.getElementById('brandScope'),tabs=document.getElementById('analysisTabs');
  if(productScope)productScope.style.display=premium?'none':'block';if(brandScope)brandScope.classList.toggle('show',premium);if(tabs)tabs.style.display=premium?'none':'flex';
  const title=document.getElementById('analysisTitle'),subtitle=document.getElementById('analysisSubtitle'),period=document.getElementById('analysisPeriod'),label=document.getElementById('generateBtnLabel');
- if(title)title.textContent=premium?'品牌溢价分析':'竞品分析';if(subtitle)subtitle.textContent=premium?'查看品牌整体分规格表现、VOC驱动因素及相对行业的溢价水平':'输入我品型号，AI自动筛选竞品并生成多维对标报告';if(period){period.style.display=premium?'none':'block';period.value='30d';if(document.getElementById('analysisDateRange'))document.getElementById('analysisDateRange').style.display='none'}if(label)label.textContent=analysisReportName(target);
+ if(title)title.textContent=premium?'品牌溢价分析':'竞品分析';if(subtitle)subtitle.textContent=premium?'查看品牌整体分规格表现、VOC驱动因素及相对行业的溢价水平':'按型号比较产品、卖点和量价表现';if(period){period.style.display=premium?'none':'block';period.value='30d';if(document.getElementById('analysisDateRange'))document.getElementById('analysisDateRange').style.display='none'}if(label)label.textContent=analysisReportName(target);
 }
 function analysisReportName(target){return '生成分析报告';}
 document.querySelectorAll('.tabs').forEach(group=>group.addEventListener('click',e=>{const tab=e.target.closest('.tab');if(!tab)return;group.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));tab.classList.add('active');document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));document.getElementById('panel-'+tab.dataset.target).classList.add('active');if(group.dataset.group==='analysis')syncAnalysisScope(tab.dataset.target)}));
@@ -39,6 +39,34 @@ function onAnalysisPeriodChange(val){document.getElementById('analysisDateRange'
 function refreshCompetitors(){showToast('AI已重新筛选3个高匹配竞品')}
 function generateReport(){const b=document.getElementById('generateBtn'),l=document.getElementById('generateLoading');var name=(document.getElementById('generateBtnLabel').textContent||'生成竞品分析报告').replace(/^生成/,'');b.disabled=true;b.style.opacity='.6';l.classList.add('show');setTimeout(()=>{b.disabled=false;b.style.opacity='1';l.classList.remove('show');showToast(name+'已生成')},1100)}
 let currentOwnEvidence={};
+function showPriceLines(id, note) {
+  const target = document.getElementById(id);
+  const parts = (note || '').split(/\s*·\s*|\n/).map(part => part.trim()).filter(Boolean);
+  target.replaceChildren();
+  if (!parts.length) {
+    target.textContent = '暂无价格明细';
+    return;
+  }
+  const list = document.createElement('dl');
+  for (const part of parts) {
+    const match = part.match(/^(.+?)\s*([+-]?[¥￥]\s*[\d,.]+(?:元)?)$/);
+    const row = document.createElement('div'), label = document.createElement('dt');
+    label.textContent = match ? match[1].trim() : part;
+    row.append(label);
+    if (match) {
+      const amount = document.createElement('dd');
+      amount.textContent = match[2];
+      row.append(amount);
+    }
+    list.append(row);
+  }
+  target.append(list);
+}
+function showSeverity(id, level) {
+  const status = document.getElementById(id);
+  status.textContent = level || '';
+  status.dataset.level = level || '';
+}
 function openEvidence(model,channel,gap,shop,price,baseline,meta,level){
   var d;
   if(typeof model==='object' && model!==null){
@@ -52,7 +80,7 @@ function openEvidence(model,channel,gap,shop,price,baseline,meta,level){
   }
   currentOwnEvidence=d;
   // 标题
-  document.getElementById('evidenceModalTitle').textContent=d.level + '·证据链';
+  showSeverity('evidenceLevel', d.level);
   // 型号 + 渠道
   document.getElementById('evidenceProduct').textContent=d.model;
   document.getElementById('evidenceChannel').textContent=d.channel + (d.shop?' · '+d.shop:'');
@@ -72,15 +100,10 @@ function openEvidence(model,channel,gap,shop,price,baseline,meta,level){
   var metaEl=document.getElementById('evidenceMeta');
   if(metaEl){
     if(d.meta) metaEl.textContent=d.meta;
-    else metaEl.textContent=(d.shop||d.channel) + ' · 抓取时间 2026-09-11 09:00:00';
+    else metaEl.textContent=d.shop||d.channel||'';
   }
   // 存证区域
-  var shotEl=document.getElementById('evidenceSnapshot');
-  if(shotEl){
-    if(d.shot){ shotEl.innerHTML='电商页面截图存证区域<br>'+d.shot; }
-    else if(d.price && d.baseline){ shotEl.innerHTML='电商页面截图存证区域<br>页面价 '+d.baseline+' · 促销优惠 · 到手价 '+d.price; }
-    else{ shotEl.innerHTML='电商页面截图存证区域'; }
-  }
+  showPriceLines('evidenceSnapshot',d.shot);
   openModal('evidenceModal');
 }
 function aiAskOwnPrice(){
@@ -261,7 +284,7 @@ function exportMonitorData(){showToast('导出成功，文件已下载')}
 
 /* 竞品调价详情弹窗 */
 function openRivalPriceDetail(brand,model,channel,price,base,change,shot,meta){
-  document.getElementById('rivalPriceTitle').textContent=brand+' '+model+' · 调价详情';
+  document.getElementById('rivalPriceBaseLabel').textContent='原价';
   document.getElementById('rivalPriceProduct').textContent=brand+' '+model;
   document.getElementById('rivalPriceChannel').textContent=channel+' · 官方旗舰店';
   document.getElementById('rivalPriceCurrent').textContent=price;
@@ -269,8 +292,8 @@ function openRivalPriceDetail(brand,model,channel,price,base,change,shot,meta){
   const changeEl=document.getElementById('rivalPriceChange');
   changeEl.textContent=change;
   if(change.startsWith('-')){changeEl.style.color='#e5484d'}else{changeEl.style.color='#1f9254'}
-  document.getElementById('rivalPriceShot').innerHTML='电商页面截图存证区域<br>'+shot;
-  document.getElementById('rivalPriceMeta').textContent='SKU链接已存档 · '+meta;
+  showPriceLines('rivalPriceShot',shot);
+  document.getElementById('rivalPriceMeta').textContent=meta;
   openModal('rivalPriceModal');
 }
 
@@ -771,11 +794,7 @@ function initOwnMonitorRowButtons(){
 let currentRivalEvidence={};
 function openRivalEvidence(level,product,shop,price,original,gap,shot,meta,avgPrice){
   currentRivalEvidence={level,product,shop,price,original,gap,shot,meta,avgPrice};
-  const head=document.querySelector('#rivalEvidenceModal .rival-evidence-level');
-  head.classList.remove('danger','warning','normal','info');
-  const map={严重:'danger',关注:'warning',正常:'normal',一般:'info'};
-  head.classList.add(map[level]||'warning');
-  document.getElementById('rivalEvidenceLevel').textContent=level;
+  showSeverity('rivalEvidenceLevel',level);
   document.getElementById('rivalEvidenceProduct').textContent=product;
   const ch=meta.split('·')[0]?.trim()||'';
   document.getElementById('rivalEvidenceChannel').textContent=ch;
@@ -791,16 +810,13 @@ function openRivalEvidence(level,product,shop,price,original,gap,shot,meta,avgPr
       valEl.textContent=original;
     } else {
       labelEl.textContent='均价';
-      valEl.textContent=avgPrice||original;
+      valEl.textContent=avgPrice||'—';
     }
   }
   const gapEl=document.getElementById('rivalEvidenceGap');
   gapEl.textContent=gap;
-  const kpi=document.querySelector('#rivalEvidenceModal .rek-danger');
-  if(gap.startsWith('-')&&Math.abs(parseFloat(gap))>=8){kpi.style.background='#FFF6F6';kpi.style.borderColor='#FFD1D2';gapEl.style.color='#E5484D';}
-  else if(gap.startsWith('-')){kpi.style.background='#FFF8F0';kpi.style.borderColor='#FFE1C2';gapEl.style.color='#F59E0B';}
-  else{kpi.style.background='#F0FBF4';kpi.style.borderColor='#C7EBD6';gapEl.style.color='#22A06B';}
-  document.getElementById('rivalEvidenceShot').innerHTML=shot.replace(/· /g,'<br>');
+  gapEl.dataset.level=level;
+  showPriceLines('rivalEvidenceShot',shot);
   document.getElementById('rivalEvidenceMeta').textContent=meta;
   openModal('rivalEvidenceModal');
 }
@@ -2210,7 +2226,7 @@ function syncAnalysisScope(target){
  var premium=target==='premium',productScope=document.getElementById('productScope'),brandScope=document.getElementById('brandScope'),tabs=document.getElementById('analysisTabs');
  if(productScope)productScope.style.display=premium?'none':'block';if(brandScope)brandScope.classList.toggle('show',premium);if(tabs)tabs.style.display=premium?'none':'flex';
  var title=document.getElementById('analysisTitle'),subtitle=document.getElementById('analysisSubtitle'),period=document.getElementById('analysisPeriod'),label=document.getElementById('generateBtnLabel'),generate=document.getElementById('generateBtn'),exportBtn=document.getElementById('analysisExportBtn');
- if(title)title.textContent=premium?'品牌溢价分析':'竞品分析';if(subtitle)subtitle.textContent=premium?'对比我方与竞争品牌的价格指数、VOC认同及综合品牌溢价指数':'输入我品型号，AI自动筛选竞品并生成多维对标报告';if(period){period.style.display=premium?'none':'block';period.value='30d';var dr=document.getElementById('analysisDateRange');if(dr)dr.style.display='none'}if(label)label.textContent=analysisReportName(target);if(generate)generate.style.display=premium?'none':'inline-flex';if(exportBtn)exportBtn.style.display=premium?'none':'inline-flex';
+ if(title)title.textContent=premium?'品牌溢价分析':'竞品分析';if(subtitle)subtitle.textContent=premium?'对比我方与竞争品牌的价格指数、VOC认同及综合品牌溢价指数':'按型号比较产品、卖点和量价表现';if(period){period.style.display=premium?'none':'block';period.value='30d';var dr=document.getElementById('analysisDateRange');if(dr)dr.style.display='none'}if(label)label.textContent=analysisReportName(target);if(generate)generate.style.display=premium?'none':'inline-flex';if(exportBtn)exportBtn.style.display=premium?'none':'inline-flex';
 }
 syncPremiumBrandOptions();
 renderSellingPointWeight();

@@ -1,0 +1,148 @@
+/* Shared with the API-backed detail renderer. The preview inherits its palette
+   from the Semi shell, including installations with a customized primary color. */
+:root, :host {
+  --primary: var(--semi-color-primary, #0064fa);
+  --primary-soft: var(--semi-color-primary-light-default, #eaf3ff);
+  --text: var(--semi-color-text-0, #1c1f23);
+  --muted: var(--semi-color-text-1, #545b65);
+  --subtle: var(--semi-color-text-2, #707680);
+  --line: var(--semi-color-border, #e2e4e8);
+  --card: var(--semi-color-bg-0, white);
+  --surface-muted: #f7f8fa;
+  --danger: var(--semi-color-danger, #d83432);
+  --radius: 8px;
+}
+.logo { background:var(--primary); box-shadow:none }
+.model-builder, .brand-scope, .report-center-head, #page-launch .launch-hero,
+.analysis-layer.forecast, .premium-index-card, .weight-kpis .weight-value-main,
+.daily-model-trend, .monitor-ai-summary, .ai-card, .report-ai-head,
+#page-chat :is(.home-scope-bar,.trend-chart-card,.section-block-head,.compliance-chart-box,.compliance-pie-box,.panel-section-title),
+.daily-section-head {
+  background:var(--card); border-color:var(--line); border-radius:var(--radius); box-shadow:none;
+}
+.brand-scope { border-left-width:1px }
+.workspace .model-tag, .workspace .model-tag.add { border-radius:4px; box-shadow:none }
+.workspace .model-tag:not(.own):not(.add) { background:var(--surface-muted); color:var(--text); border-color:var(--line) }
+.model-builder .model-tag.own, .help-nav-item.active, .daily-model-card.active {
+  color:var(--primary); background:var(--primary-soft); box-shadow:none;
+}
+.tabs { border-color:var(--line) }
+.tabs .tab { font-size:13px }
+.monitor-ai-summary:before, .daily-ai-overview:before, .ai-time i { display:none }
+.monitor-ai-head, .daily-ai-head, .ai-card { gap:8px }
+.monitor-ai-icon, .ai-card > .ai-icon {
+  display:block; flex:none; align-self:flex-start; width:3px; height:14px; margin-top:3px;
+  font-size:0; background:var(--primary); border:0; border-radius:2px; box-shadow:none;
+}
+.daily-ai-overview { background:#f5f9ff; border:1px solid #cadefb; border-radius:var(--radius) }
+.daily-ai-icon { background:var(--primary); border-radius:6px; box-shadow:none }
+.daily-ai-card { background:var(--card); border-color:var(--line); box-shadow:none }
+.daily-ai-card:before { width:2px }
+.daily-ai-card.red:before { background:var(--danger) }
+.daily-ai-card.orange:before { background:#d99024 }
+.daily-ai-card.purple:before { background:#7165ae }
+.monitor-ai-head h3, .daily-ai-head h3, .ai-card h3, .section-head h2,
+.comp-insight-head h2, .daily-section-head h2, .premium-index-head h2 { font-size:14px; font-weight:600; color:var(--text) }
+.report-doc-icon, #page-launch .launch-brand-logo, .help-index, .wiki-brand, .launch-ency-logo {
+  background:var(--surface-muted); color:var(--muted); border:1px solid var(--line); border-radius:6px;
+}
+.report-ai-mark, #page-launch .launch-hero-icon { background:var(--primary-soft); color:var(--primary); border-radius:6px }
+.ai-regen-btn, .ai-followup-btn, .daily-ai-followup {
+  color:var(--primary); border-color:transparent; background:transparent; border-radius:4px; font-weight:500; box-shadow:none;
+}
+.ai-regen-btn:hover, .ai-followup-btn:hover, .daily-ai-followup:hover { background:var(--primary-soft); color:var(--primary) }
+.workspace .pill, .modal .pill { border-radius:4px; font-weight:500 }
+.page :is(.kpi,.card,.monitor-section,.comp-insight-section,.premium-voc-section,.report-row-v3,.analysis-layer,.help-side,.help-card),
+.modal .card { border-radius:var(--radius); box-shadow:none }
+.rival-model-title, .comp-collapsible-head { background:var(--card); border-color:var(--line); color:var(--text) }
+.rival-model-title { border-left:0; border-bottom:1px solid var(--line); border-radius:0; padding:8px 0 }
+.rival-model-title span { color:var(--muted); font-size:12px }
+.comp-collapsible-head:hover { background:var(--surface-muted) }
+.workspace .data-source-footer { color:var(--subtle); border:0; background:transparent; padding:9px 2px }
+.data-source-footer svg { color:var(--subtle) }
+.selling-point-card .sp-point { background:var(--card); border:0; border-bottom:1px solid var(--line); border-radius:0 }
+.selling-point-card .sp-num, .selling-point-card .sp-line em { background:var(--surface-muted); color:var(--muted) }
+.weight-method span, .premium-formula, .forecast-assumption { background:var(--surface-muted); color:var(--muted); border-color:var(--line) }
+.weight-bar-row.own .weight-bar-track i { background:var(--primary) }
+.analysis-note { margin-bottom:14px; padding:12px 0; border-block:1px solid var(--line); color:var(--text); font-size:13px }
+.analysis-note p { color:var(--muted); margin-top:4px; font-size:12px; line-height:1.7 }
+.analysis-note p b { color:var(--text); font-weight:600 }
+.forecast-note { display:flex; align-items:center; gap:16px; justify-content:space-between; flex-wrap:wrap }
+.forecast-note > div { flex:1 1 280px }
+.premium-index-item.own, .premium-voc-card.own { border-color:var(--line); box-shadow:none }
+.premium-index-item.own .score { color:var(--primary) }
+#page-chat .msg-ai .insight { border-color:var(--line); background:var(--surface-muted); color:var(--text) }
+.report-preview-kicker { background:var(--primary); height:3px; width:24px }
+.modal-mask { background:rgba(20,25,34,.34) }
+.modal, .kpm-modal { border-radius:10px; box-shadow:0 12px 44px rgba(20,29,46,.16) }
+.modal-head, .kpm-head { padding:16px 20px; color:var(--text); font-size:16px; font-weight:600; border-bottom:1px solid var(--line) }
+.kpm-title, .km-modal-head { font-size:16px }
+.modal-foot, .kpm-foot { gap:8px; padding:12px 20px; border-top:1px solid var(--line) }
+.btn, .modal .btn, .ai-followup-btn { border-radius:6px; box-shadow:none }
+.modal-foot .btn { min-height:32px; font-size:13px; margin:0 }
+.modal-close:focus-visible, button:focus-visible, summary:focus-visible { outline:2px solid var(--primary); outline-offset:2px }
+
+/* Price inspection and competitor adjustments use the same reading order. */
+.price-record { width:min(560px,96vw); padding:0; overflow:auto; max-height:92dvh; background:var(--card) }
+.price-record-head { display:flex; align-items:center; justify-content:space-between; min-height:54px }
+.price-record .modal-close { width:28px; height:28px; border:none; border-radius:4px; background:none; color:var(--subtle); cursor:pointer; font-size:20px; line-height:1 }
+.price-record .modal-close:hover { background:var(--surface-muted); color:var(--text) }
+.price-record .modal-body { padding:18px 20px 8px }
+.price-record-product { display:flex; align-items:baseline; flex-wrap:wrap; gap:9px; margin-bottom:18px }
+.price-record-product strong { font-size:16px; line-height:1.45; font-weight:600; color:var(--text) }
+.record-channel, .record-severity { font-size:12px; color:var(--muted) }
+.record-severity { margin-left:auto }
+.record-severity[data-level="严重"], .price-record-metrics dd[data-level="严重"] { color:var(--danger) }
+.record-severity[data-level="关注"] { color:#95651a }
+.record-severity:not(:empty)::before { content:""; display:inline-block; width:6px; height:6px; margin:0 6px 2px 0; border-radius:50%; background:currentColor }
+.price-record-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 20px; padding:12px 0; border-block:1px solid var(--line) }
+.price-record-metrics > div { padding:0 14px; border-left:1px solid var(--line) }
+.price-record-metrics > div:first-child { padding-left:0; border:0 }
+.price-record-metrics dt { color:var(--muted); font-size:12px }
+.price-record-metrics dd { margin:3px 0 0; font-size:21px; font-weight:600; color:var(--text); font-variant-numeric:tabular-nums; line-height:1.4 }
+.price-record-observation header { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px; margin-bottom:8px }
+.price-record-observation header b { color:var(--text); font-size:13px; font-weight:600 }
+.price-record-observation header span { color:var(--subtle); font-size:12px }
+.price-lines { color:var(--muted); font-size:13px; line-height:1.65; padding-bottom:10px; white-space:pre-line }
+.price-lines dl { margin:0 }
+.price-lines dl > div { display:flex; justify-content:space-between; gap:12px; padding:7px 10px; border-bottom:1px solid var(--line) }
+.price-lines dl > div:nth-child(odd) { background:var(--surface-muted) }
+.price-lines dd { margin:0; color:var(--text); font-variant-numeric:tabular-nums }
+.price-record .modal-foot { display:flex; justify-content:flex-end; gap:8px }
+.price-record .modal-foot > :first-child:nth-last-child(3) { margin-right:auto; color:var(--primary) }
+
+/* Value inventory uses a single table for reading across categories. */
+.value-inventory { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); margin:12px 0 0 }
+.inventory-head { display:flex; justify-content:space-between; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line) }
+.inventory-head h2 { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--text) }
+.inventory-head h2::before { content:""; width:3px; height:13px; background:var(--primary); border-radius:2px }
+.text-action { background:none; border:0; color:var(--primary); font-size:12px; cursor:pointer }
+.text-action:hover { text-decoration:underline }
+.inventory-tools { position:relative; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px 16px }
+.inventory-filters { display:flex; gap:2px; flex-wrap:wrap }
+.inventory-filters button { border:0; border-radius:4px; padding:5px 9px; display:flex; align-items:baseline; gap:5px; color:var(--muted); background:transparent; cursor:pointer; font-size:12px }
+.inventory-filters button span { font-size:11px; font-variant-numeric:tabular-nums }
+.inventory-filters button[aria-pressed="true"] { color:var(--primary); background:var(--primary-soft); font-weight:600 }
+.inventory-filters button:hover { background:var(--surface-muted) }
+.inventory-guide { font-size:12px; color:var(--muted) }
+.inventory-guide summary { cursor:pointer }
+.inventory-guide dl { z-index:2; position:absolute; right:14px; top:calc(100% - 5px); width:min(360px,95%); display:grid; grid-template-columns:auto 1fr; gap:8px 12px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:6px; box-shadow:0 6px 18px rgba(20,29,46,.1) }
+.inventory-guide dt { font-weight:600; color:var(--text) }
+.inventory-guide dd { margin:0 }
+.inventory-scroll { overflow:auto; border-radius:0 0 var(--radius) var(--radius) }
+.inventory-table { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse }
+.inventory-table th, .inventory-table td { padding:10px 16px; border:0; border-bottom:1px solid var(--line); vertical-align:top; white-space:normal; line-height:1.55; text-align:left; color:var(--muted); font-size:13px }
+.inventory-table th { background:var(--surface-muted); font-size:12px; font-weight:500 }
+.inventory-table th:first-child { width:31% }
+.inventory-table th:nth-child(2) { width:86px }
+.inventory-table td strong { font-weight:550; color:var(--text) }
+.inventory-table td small { display:block; font-size:11px; padding-top:3px; color:var(--subtle) }
+.inventory-table tbody tr:last-child td { border-bottom:0 }
+@media (max-width:760px) {
+  .inventory-tools { align-items:flex-start }
+  .inventory-table th, .inventory-table td { padding:8px; font-size:12px; overflow-wrap:anywhere }
+  .inventory-table th:nth-child(2) { width:55px }
+  .price-record .modal-body, .price-record-head, .price-record .modal-foot { padding-inline:14px }
+  .price-record-metrics > div { padding-inline:8px }
+  .price-record-metrics dd { font-size:18px }
+}

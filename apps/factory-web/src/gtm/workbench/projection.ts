@@ -15,7 +15,7 @@ export interface DetailProjection {
 // Each entry names a field in the business contract and its destination in
 // the approved template. A missing value renders as unknown.
 const fields: Partial<Record<DetailKind,Record<string,string>>> = {
-  "own-evidence": {model:"evidenceProduct",channel:"evidenceChannel",paid_price:"evidenceCurrent",
+  "own-evidence": {level:"evidenceLevel",model:"evidenceProduct",channel:"evidenceChannel",paid_price:"evidenceCurrent",
     floor_price:"evidenceBaseline",gap:"evidenceGap",source:"evidenceMeta",snapshot_note:"evidenceSnapshot"},
   "rival-evidence": {level:"rivalEvidenceLevel",model:"rivalEvidenceProduct",channel:"rivalEvidenceChannel",
     paid_price:"rivalEvidencePrice",prior_price:"rivalEvidenceSecondValue",gap:"rivalEvidenceGap",
@@ -35,7 +35,7 @@ const fields: Partial<Record<DetailKind,Record<string,string>>> = {
   report: {title:"detailReportTitle",metadata:"detailReportMeta",monitored_skus:"detailKpiSku",price_changes:"detailKpiChange",
     tasks:"detailKpiAction",summary:"detailReportSummary",versions:"detailVersionTimeline"}
 };
-const fixed = new Set(("当前到手价 月度底价 异常幅度 页面与数据证据 原始价格 上次到手价 价格明细 历史价格对比 产品信息 核心卖点 对我品的影响判断 品牌 产品型号 品类 市场定位 近30天销量 近30天销额 当前均价 上市日期 首发渠道 任务类型 优先级 状态 截止时间 负责人 核心结论 版本记录 监测SKU").split(" "));
+const fixed = new Set(("当前到手价 月度底价 价格偏差 价格变动 价格记录 上次到手价 价格明细 历史价格对比 产品信息 核心卖点 对我品的影响判断 品牌 产品型号 品类 市场定位 近30天销量 近30天销额 当前均价 上市日期 首发渠道 任务类型 优先级 状态 截止时间 负责人 核心结论 版本记录 监测SKU").split(" "));
 export function projectDetail(data: DetailProjection, doc: Document): DocumentFragment {
   const template = doc.createElement("template");
   template.innerHTML = screenMarkup(detailScreens[data.kind][0]);
@@ -66,7 +66,10 @@ export function projectDetail(data: DetailProjection, doc: Document): DocumentFr
         if (rows!==target) target.append(tbl);
       } else if (data.lists[key]) {
         data.lists[key].forEach(value=>{const item=doc.createElement("span");item.className="sell-point";item.textContent=value;target.append(item);});
-      } else target.textContent = displayValue(data.values[key]);
+      } else {
+        target.textContent = displayValue(data.values[key]);
+        if (key==="level") (target as HTMLElement).dataset.level = target.textContent;
+      }
     }
     result.append(...Array.from(body.childNodes));
   }
