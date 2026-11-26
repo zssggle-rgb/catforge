@@ -1,0 +1,24 @@
+<section class="page" id="page-reports">
+        <div class="report-center-head">
+          <div class="report-center-title"><h1>订阅报告</h1><p>统一管理AI生成、人工确认、发布与订阅，推动洞察转化为业务行动</p></div>
+          <div class="report-stats-v3">
+            <button class="report-stat-v3 active" data-stat="" onclick="setSmartReportStatus('',this)"><b id="reportStatAll">0</b>全部报告</button>
+            <button class="report-stat-v3" data-stat="本周更新" onclick="setSmartReportStatus('本周更新',this)"><b id="reportStatWeek">0</b>本周更新</button>
+            <button class="report-stat-v3 attention" data-stat="待人工确认" onclick="setSmartReportStatus('待人工确认',this)"><b id="reportStatPending">0</b>待确认</button>
+            <button class="report-stat-v3" data-stat="已发布" onclick="setSmartReportStatus('已发布',this)"><b id="reportStatPublished">0</b>已发布</button>
+          </div>
+          <div class="report-head-actions"><button class="btn primary" onclick="openModal('subscriptionModal')">＋ 新建报告任务</button></div>
+        </div>
+        <div class="report-toolbar-v3">
+          <div class="report-search-v3"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg><input class="input" id="reportSearch" placeholder="搜索报告名称、型号或结论" oninput="applySmartReportFilters()"></div>
+          <select class="report-filter-v3" id="reportTypeFilter" onchange="applySmartReportFilters()"><option value="">全部类型</option><option>竞品分析</option><option>行业分析</option><option>价格管理</option><option>品牌溢价</option><option>新品洞察</option><option>价量分析</option><option>调价复盘</option><option>卖点价值</option></select>
+          <select class="report-filter-v3" id="reportCycleFilter" onchange="applySmartReportFilters()"><option value="">全部周期</option><option>周报</option><option>月报</option><option>事件触发</option></select>
+          <select class="report-filter-v3" id="reportCategoryFilter" onchange="applySmartReportFilters()"><option value="">全部品类</option><option>电视</option><option>空调</option><option>冰箱</option><option>全品类</option></select>
+          <select class="report-filter-v3" id="reportStatusFilter" onchange="applySmartReportFilters()"><option value="">全部状态</option><option>待人工确认</option><option>数据更新待确认</option><option>已发布</option><option>已归档</option></select>
+          <select class="report-filter-v3" id="reportSort" onchange="applySmartReportFilters()"><option value="recent">最近更新</option><option value="priority">待确认优先</option><option value="title">按名称</option><option value="cycle">按周期</option></select>
+          <div class="report-view-switch"><button class="report-view-btn active" id="reportListViewBtn" onclick="setSmartReportView('list',this)" title="列表视图"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button><button class="report-view-btn" id="reportGridViewBtn" onclick="setSmartReportView('grid',this)" title="卡片视图"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg></button></div>
+        </div>
+        <div class="report-result-bar"><span>共找到 <b id="reportResultCount">0</b> 份报告</span><span id="reportActiveHint"></span><button onclick="resetSmartReportFilters()">清除筛选</button></div>
+        <div id="smartReportContainer"></div>
+        <div class="report-pagination-v3"><span id="reportPageInfo">第1页</span><div class="report-page-controls" id="reportPageControls"></div></div>
+      </section>

@@ -1,0 +1,428 @@
+openapi: 3.1.0
+info:
+  title: CatForge GTM 工作台前端接口
+  version: 1.0.0
+  description: 面向浏览器的 GTM 运行端投影。前端按授权项目、品类、分析范围读取已生成的快照。相对路径经同源网关转发。
+servers:
+  - url: /api/gtm/v1
+paths:
+  /projects/{project_id}/sample-exports:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    post:
+      operationId: exportSampleReport
+      description: 样例环境导出当前可见的报告内容。四种格式均返回可下载文件。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format, title, lines]
+              properties:
+                format: {type: string, enum: [pdf, pptx, docx, xlsx]}
+                title: {type: string, minLength: 1, maxLength: 120}
+                lines: {type: array, maxItems: 1000, items: {type: string, maxLength: 4000}}
+      responses:
+        '200':
+          description: 按选定格式返回文件内容和 MIME 类型
+          content:
+            application/pdf: {}
+            application/vnd.openxmlformats-officedocument.presentationml.presentation: {}
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document: {}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/details/{kind}:
+    parameters:
+      - {$ref: '#/components/parameters/Project'}
+      - {in: path, name: kind, required: true, schema: {$ref: '#/components/schemas/DetailKind'}}
+    get:
+      operationId: readGtmRecordDetail
+      parameters:
+        - {$ref: '#/components/parameters/Category'}
+        - {in: query, name: record_id, required: true, schema: {type: string}}
+        - {in: query, name: snapshot_id, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: 与父记录属于同一快照。values 为具名业务值，lists 为卖点或版本序列，tables 为历史价格或产品规格。links 为该对象可继续访问的下级视图。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, project_id, category_code, snapshot_id, kind, record_id, title, values, lists, tables, evidence, links]
+                properties:
+                  version: {const: '0916'}
+                  project_id: {type: string}
+                  category_code: {type: string}
+                  snapshot_id: {type: string}
+                  kind: {$ref: '#/components/schemas/DetailKind'}
+                  record_id: {type: string}
+                  title: {type: string}
+                  values: {type: object, additionalProperties: {$ref: '#/components/schemas/Cell'}}
+                  lists: {type: object, additionalProperties: {type: array, items: {type: string}}}
+                  tables:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      required: [columns, rows]
+                      properties:
+                        columns: {type: array, items: {type: string}}
+                        rows: {type: array, items: {type: array, items: {$ref: '#/components/schemas/Cell'}}}
+                  evidence: {$ref: '#/components/schemas/EvidenceList'}
+                  links: {type: array, items: {$ref: '#/components/schemas/DetailRef'}}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/sample-scenarios/0916:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    get:
+      operationId: get0916SampleScenario
+      description: 仅供样例环境装载终稿联调数据。正式接口按项目、品类和快照返回业务记录。
+      responses:
+        '200':
+          description: 终稿交互所需的型号、趋势、价格事件、卖点、VOC、报告和会话样例
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, mode, project_id, records]
+                properties:
+                  version: {const: '0916'}
+                  mode: {const: sample}
+                  project_id: {type: string}
+                  records: {type: object, required: [dailyModels, smartReports, premiumVocTop5Data, historyConversations]}
+        default: {$ref: '#/components/responses/Error'}
+  /context:
+    get:
+      operationId: getWorkspaceContext
+      responses:
+        '200':
+          description: 当前登录身份、数据环境与授权项目
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Context'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/views/{page}:
+    parameters:
+      - {$ref: '#/components/parameters/Project'}
+      - {in: path, name: page, required: true, schema: {$ref: '#/components/schemas/Page'}}
+    get:
+      operationId: readWorkspaceView
+      parameters:
+        - {$ref: '#/components/parameters/Category'}
+        - {in: query, name: subcategory, schema: {type: string}}
+        - {in: query, name: channel, schema: {type: string}}
+        - {in: query, name: period, schema: {$ref: '#/components/schemas/Period'}}
+        - {in: query, name: date_from, description: 自定义周期必填（北京时间，含首尾日）, schema: {type: string, format: date}}
+        - {in: query, name: date_to, schema: {type: string, format: date}}
+        - {in: query, name: query, description: 主明细表关键词, schema: {type: string}}
+        - {in: query, name: tab, schema: {type: string, enum: [product, value, weight, price-volume, value-index, voc]}}
+        - {in: query, name: model_id, schema: {type: string}}
+        - {in: query, name: competitor_ids, style: form, explode: true, schema: {type: array, maxItems: 10, items: {type: string}}}
+        - {in: query, name: brand_ids, style: form, explode: true, schema: {type: array, maxItems: 10, items: {type: string}}}
+        - {in: query, name: offset, schema: {type: integer, minimum: 0, default: 0}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {in: query, name: brand, schema: {type: string}}
+        - {in: query, name: severity, schema: {type: string}}
+        - {in: query, name: status, schema: {type: string}}
+        - {in: query, name: owner, schema: {type: string}}
+        - {in: query, name: cadence, schema: {type: string}}
+      responses:
+        '200':
+          description: 页面快照。外部缺源返回 unavailable，部分指标缺源返回 partial 及原因。空结果与接口错误分别处理。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/View'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/catalog:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    get:
+      operationId: listSelectionCandidates
+      parameters:
+        - {$ref: '#/components/parameters/Category'}
+        - {in: query, name: kind, required: true, schema: {enum: [own-model, competitor, brand]}}
+        - {in: query, name: query, schema: {type: string}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200': {$ref: '#/components/responses/Choices'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/conversations:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    get:
+      operationId: listConversations
+      parameters: [{$ref: '#/components/parameters/Category'}]
+      responses:
+        '200': {$ref: '#/components/responses/Choices'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/conversations/{conversation_id}:
+    parameters:
+      - {$ref: '#/components/parameters/Project'}
+      - {in: path, name: conversation_id, required: true, schema: {type: string}}
+    get:
+      operationId: getConversation
+      parameters: [{$ref: '#/components/parameters/Category'}]
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/attachments:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    post:
+      operationId: uploadWorkspaceAttachment
+      parameters:
+        - {$ref: '#/components/parameters/Category'}
+        - {in: query, name: purpose, required: true, schema: {enum: [floor, chat]}}
+        - {in: query, name: filename, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        '201':
+          description: 限本项目、品类、用户及用途引用的附件。底价解析、校验和启用有独立状态。
+          content: {application/json: {schema: {type: object, required: [id, name], properties: {id: {type: string}, name: {type: string}}}}}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/messages:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    post:
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id, conversation_id, question, scope, origin]
+              properties:
+                request_id: {type: string, minLength: 1}
+                conversation_id: {type: [string, 'null']}
+                question: {type: string, minLength: 1, maxLength: 4000}
+                attachment_ids: {type: array, items: {type: string}}
+                scope: {$ref: '#/components/schemas/Filters'}
+                origin:
+                  oneOf:
+                    - {type: 'null'}
+                    - type: object
+                      required: [snapshot_id, page, tab]
+                      properties: {snapshot_id: {type: string}, page: {$ref: '#/components/schemas/Page'}, tab: {type: string}, scope: {$ref: '#/components/schemas/Filters'}}
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        default: {$ref: '#/components/responses/Error'}
+  /projects/{project_id}/actions:
+    parameters: [{$ref: '#/components/parameters/Project'}]
+    post:
+      operationId: executeWorkspaceAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id, snapshot_id, scope, operation, row_id, input]
+              properties:
+                request_id: {type: string, minLength: 1}
+                snapshot_id: {type: string}
+                scope:
+                  allOf:
+                    - {$ref: '#/components/schemas/Filters'}
+                    - type: object
+                      required: [project_id, page, tab, offset, limit]
+                      properties: {project_id: {type: string}, page: {$ref: '#/components/schemas/Page'}, tab: {type: string}, offset: {type: integer}, limit: {type: integer}}
+                operation: {$ref: '#/components/schemas/Operation'}
+                row_id: {type: [string, 'null']}
+                input: {type: string}
+                fields: {type: object, additionalProperties: {type: string}, description: 按可用动作的 fields 提交。文件字段引用 attachment_id。}
+      responses:
+        '200':
+          description: 服务端已提交的回执，前端随后重读快照。相同请求键和内容重试返回原回执。
+          content:
+            application/json:
+              schema: {type: object, required: [id, message], properties: {id: {type: string}, message: {type: string}}}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  parameters:
+    Project: {in: path, name: project_id, required: true, schema: {type: string}}
+    Category: {in: query, name: category_code, required: true, schema: {type: string}}
+  responses:
+    Error:
+      description: HTTP 401/403 鉴权失败、404 对象不存在、409 快照或幂等键冲突、422 非法范围、5xx 暂不可用。
+      content:
+        application/json:
+          schema: {type: object, required: [message], properties: {message: {type: string}, code: {type: string}}}
+    Choices:
+      description: 当前用户可见的对象，id 为稳定标识，label 用于展示
+      content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Choice'}}}}
+    Conversation:
+      description: 当前会话的有序消息和依据
+      content: {application/json: {schema: {$ref: '#/components/schemas/Conversation'}}}
+  schemas:
+    Page: {type: string, enum: [daily, key-model, own-monitor, launch, rival-monitor, competitor, premium, todo-center, reports]}
+    Period: {type: string, enum: [today, yesterday, 7d, 30d, custom], default: today}
+    Filters:
+      type: object
+      required: [category_code, period]
+      properties:
+        category_code: {type: string}
+        period: {$ref: '#/components/schemas/Period'}
+        channel: {type: string}
+        subcategory: {type: string}
+        date_from: {type: string}
+        date_to: {type: string}
+        query: {type: string}
+    Choice: {type: object, required: [id, label], properties: {id: {type: string}, label: {type: string}}}
+    Category:
+      allOf:
+        - {$ref: '#/components/schemas/Choice'}
+        - {type: object, required: [subcategories], properties: {subcategories: {type: array, items: {$ref: '#/components/schemas/Choice'}}}}
+    Context:
+      type: object
+      required: [version, mode, user, projects]
+      properties:
+        version: {const: '1'}
+        mode: {enum: [live, sample]}
+        user: {type: object, required: [name, role], properties: {name: {type: string}, role: {type: string}}}
+        projects:
+          type: array
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/Choice'}
+              - type: object
+                required: [categories, channels]
+                properties:
+                  categories: {type: array, items: {$ref: '#/components/schemas/Category'}}
+                  channels: {type: array, items: {$ref: '#/components/schemas/Choice'}}
+    Cell: {type: [string, number, 'null']}
+    DetailKind: {type: string, enum: [own-evidence, rival-evidence, rival-price-history, rival-price-summary, launch-encyclopedia, product-profile, task, report]}
+    DetailRef:
+      type: object
+      required: [kind, record_id, label]
+      properties:
+        kind: {$ref: '#/components/schemas/DetailKind'}
+        record_id: {type: string}
+        label: {type: string}
+    Evidence:
+      type: object
+      required: [evidence_id, source, observed_at, excerpt]
+      properties:
+        evidence_id: {type: string}
+        source: {type: string}
+        observed_at: {type: [string, 'null']}
+        excerpt: {type: string}
+        source_file_id: {type: [string, 'null']}
+        raw_row_id: {type: [string, 'null']}
+        evidence_url: {type: [string, 'null'], description: 同源 /api/gtm/ 下受权的凭证地址}
+    EvidenceList: {type: array, items: {$ref: '#/components/schemas/Evidence'}}
+    Conversation:
+      allOf:
+        - {$ref: '#/components/schemas/Choice'}
+        - type: object
+          required: [messages]
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                required: [role, text, evidence]
+                properties: {role: {enum: [user, assistant]}, text: {type: string}, evidence: {$ref: '#/components/schemas/EvidenceList'}}
+    Operation: {enum: [complete-task, acknowledge-alert, ignore-alert, subscribe-report, unsubscribe-report, create-report, edit-report, publish-report, import-floor, create-campaign, set-key-models]}
+    Actions:
+      type: array
+      items:
+        type: object
+        required: [operation, label]
+        properties:
+          operation: {$ref: '#/components/schemas/Operation'}
+          label: {type: string}
+          fields:
+            type: array
+            items:
+              type: object
+              required: [key, label, kind, required]
+              properties: {key: {type: string}, label: {type: string}, kind: {enum: [text, textarea, date, file]}, required: {type: boolean}, value: {type: string}}
+    Tone: {enum: [teal, red, orange, purple]}
+    Metric:
+      type: object
+      required: [label, value]
+      properties:
+        label: {type: string}
+        value: {$ref: '#/components/schemas/Cell'}
+        unit: {type: string}
+        hint: {type: string}
+        target: {$ref: '#/components/schemas/Page'}
+        tone: {$ref: '#/components/schemas/Tone'}
+        basis:
+          type: object
+          required: [grain, population, source_batch, coverage_from, coverage_to, synced_at]
+          properties:
+            grain: {type: string}
+            population: {type: string}
+            source_batch: {type: string}
+            coverage_from: {type: string}
+            coverage_to: {type: string}
+            synced_at: {type: [string, 'null']}
+    Insight:
+      type: object
+      required: [label, title, tone, body, bullets, evidence]
+      properties:
+        label: {type: string}
+        title: {type: string}
+        tone: {$ref: '#/components/schemas/Tone'}
+        body: {type: string}
+        bullets: {type: array, items: {type: string}}
+        question: {type: [string, 'null']}
+        evidence: {$ref: '#/components/schemas/EvidenceList'}
+    Chart:
+      type: object
+      required: [title, kind, unit, points]
+      properties:
+        title: {type: string}
+        kind: {enum: [line, distribution]}
+        unit: {type: string}
+        points: {type: array, items: {type: object, required: [label, value], properties: {label: {type: string}, value: {type: [number, 'null']}}}}
+    Row:
+      type: object
+      required: [id, title, cells, detail, evidence, actions]
+      properties:
+        drilldown: {$ref: '#/components/schemas/DetailRef'}
+        id: {type: string}
+        title: {type: string}
+        cells: {type: object, additionalProperties: {$ref: '#/components/schemas/Cell'}}
+        detail: {type: array, items: {type: object, required: [label, value], properties: {label: {type: string}, value: {$ref: '#/components/schemas/Cell'}}}}
+        evidence: {$ref: '#/components/schemas/EvidenceList'}
+        actions: {$ref: '#/components/schemas/Actions'}
+    Table:
+      type: object
+      required: [id, title, columns, rows, total]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        columns: {type: array, items: {type: object, required: [key, label], properties: {key: {type: string}, label: {type: string}, unit: {type: string}}}}
+        rows: {type: array, items: {$ref: '#/components/schemas/Row'}}
+        total: {type: integer, minimum: 0}
+        target: {$ref: '#/components/schemas/Page'}
+    View:
+      type: object
+      required: [version, project_id, category_code, page, tab, snapshot_id, as_of, status, notice, insights, metrics, charts, tables, actions]
+      properties:
+        version: {const: '1'}
+        project_id: {type: string}
+        category_code: {type: string}
+        page: {$ref: '#/components/schemas/Page'}
+        tab: {type: string}
+        snapshot_id: {type: string}
+        as_of: {type: [string, 'null']}
+        status: {enum: [ready, partial, unavailable]}
+        notice: {type: [string, 'null']}
+        method_version: {type: [string, 'null']}
+        review_status: {type: [string, 'null']}
+        confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
+        facets:
+          type: array
+          items:
+            type: object
+            required: [key, label, options]
+            properties:
+              key: {enum: [brand, severity, status, owner, cadence]}
+              label: {type: string}
+              options: {type: array, items: {$ref: '#/components/schemas/Choice'}}
+        insights: {type: array, items: {$ref: '#/components/schemas/Insight'}}
+        metrics: {type: array, items: {$ref: '#/components/schemas/Metric'}}
+        charts: {type: array, items: {$ref: '#/components/schemas/Chart'}}
+        tables: {type: array, items: {$ref: '#/components/schemas/Table'}}
+        actions: {$ref: '#/components/schemas/Actions'}

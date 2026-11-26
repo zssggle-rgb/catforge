@@ -1,0 +1,23 @@
+<div class="modal-mask" id="rivalPriceModal">
+  <section class="modal price-record" role="dialog" aria-modal="true" aria-labelledby="rivalPriceHeading">
+    <header class="modal-head price-record-head"><span id="rivalPriceHeading">调价摘要</span>
+      <button class="modal-close" type="button" aria-label="关闭调价摘要" onclick="closeModal('rivalPriceModal')">×</button>
+    </header>
+    <div class="modal-body">
+      <div class="price-record-product"><strong id="rivalPriceProduct"></strong>
+        <span class="record-channel" id="rivalPriceChannel"></span>
+      </div>
+      <dl class="price-record-metrics">
+        <div><dt>当前到手价</dt><dd id="rivalPriceCurrent">—</dd></div>
+        <div><dt id="rivalPriceBaseLabel">上次到手价</dt><dd id="rivalPriceBase">—</dd></div>
+        <div><dt>价格变动</dt><dd id="rivalPriceChange">—</dd></div>
+      </dl>
+      <section class="price-record-observation">
+        <header><b>价格记录</b><span id="rivalPriceMeta"></span></header>
+        <div class="price-lines" id="rivalPriceShot"></div>
+      </section>
+    </div>
+    <footer class="modal-foot"><button class="btn" type="button" onclick="closeModal('rivalPriceModal')">关闭</button>
+    </footer>
+  </section>
+</div>

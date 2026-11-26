@@ -1,0 +1,104 @@
+
+<div class="app">
+  <button type="button" class="small-nav-trigger" aria-label="打开导航" aria-expanded="false">☰</button>
+  <button type="button" class="small-nav-backdrop" aria-label="关闭导航"></button>
+  <aside class="sidebar">
+    <div class="brand"><img src="{{hunterLockup}}" width="147" height="40" alt="{{productTitle}}"></div>
+    <button class="new-chat" onclick="newChat()"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建对话</button>
+    <div class="sidebar-scroll">
+    <nav class="nav">
+      <div class="nav-item active" data-page="daily" onclick="goPage('daily',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 15h2M9 18h2M14 15h2M14 18h2"/></svg></span><span>每日重点工作</span></div>
+      <div class="nav-item" data-page="key-model" onclick="goPage('key-model',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M5 20V10M10 20V4M15 20v-7M20 20V8" stroke-linecap="round"/></svg></span><span>重点产品表现</span></div>
+      <div class="nav-item" data-page="own-monitor" onclick="goPage('own-monitor',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4" stroke-linecap="round"/></svg></span><span>我品价格巡检</span></div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" data-page="launch" onclick="goPage('launch',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke-linecap="round"/></svg></span><span>竞品上新提醒</span><span class="badge-count">3</span></div>
+      <div class="nav-item" data-page="rival-monitor" onclick="goPage('rival-monitor',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><span>竞品价格监控</span></div>
+      <div class="nav-item" data-page="competitor" onclick="openCompetitor(this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/><path d="M9 10h.01M15 10h.01" stroke-linecap="round"/></svg></span><span>竞品洞察分析</span></div>
+      <div class="nav-item" data-page="premium" onclick="openPremium(this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9h3v3M22 7v5" stroke-linecap="round"/><path d="M2 19h20" stroke-linecap="round"/></svg></span><span>品牌溢价分析</span></div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" data-page="todo-center" onclick="goPage('todo-center',this,event)"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 10l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 15h6" stroke-linecap="round"/></svg></span><span>待办任务中心</span><span class="badge-count">6</span></div>
+      <div class="nav-item" data-page="reports" onclick="goPage('reports',this)"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 012-2h8l4 4v13a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M14 3v4h4"/><path d="M8 13l2 2 5-5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>订阅报告</span></div>
+    </nav>
+    <div class="history" id="sidebarHistory">
+      <div class="history-title"><span>最近对话</span><span onclick="goPage('history',this)">查看更多</span></div>
+      <div class="history-item" data-hid="h_competitor" onclick="loadHistoryById('h_competitor')">65E7Q竞品对标分析</div>
+      <div class="history-item" data-hid="h_selling" onclick="loadHistoryById('h_selling')">高价值卖点量价验证</div>
+      <div class="history-item" data-hid="h_premium" onclick="loadHistoryById('h_premium')">海信品牌溢价趋势</div>
+      <div class="history-item" data-hid="h_pricecut" onclick="loadHistoryById('h_pricecut')">TCL 65Q9L降价影响</div>
+      <div class="history-item" data-hid="h_pdd" onclick="loadHistoryById('h_pdd')">拼多多渠道破价归因</div>
+    </div>
+    </div>
+    <div class="profile"><div class="avatar">张</div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><strong style="font-size:11px">张恩哲</strong><span class="profile-category">平板电视</span></div><small>GTM产品经理</small></div></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar"><div class="crumb">{{productName}} / <strong id="crumbTitle">每日重点工作</strong></div><div class="top-actions"><span class="sample-mode">样例数据</span><button class="btn ghost" onclick="goPage('help')">帮助</button></div></header>
+    <div class="workspace">
+
+      <!-- Page: Home -->
+            <!--screen:page-chat-->
+      <!--screen:page-daily-->
+      <!--screen:page-key-model-->
+
+      <!-- 竞品百科弹窗 -->
+      <!--screen:launchEncyclopediaModal-->
+
+      <!-- 重点产品管理弹窗 -->
+      <!--screen:keyModelModal-->
+
+      <!--screen:page-own-monitor-->
+      <!--screen:page-rival-monitor-->
+
+
+      <!-- 竞品价格明细弹窗 -->
+      <!--screen:rivalPriceDetailModal-->
+
+      <!--screen:page-launch-->
+
+
+      <!--screen:page-competitor-->
+
+      <!--screen:page-dashboard-->
+
+
+
+
+
+
+      <!--screen:page-todo-center-->
+
+      <!--screen:page-reports-->
+
+<!--screen:page-history-->
+
+      <!--screen:page-help-->
+    </div>
+  </main>
+</div>
+
+<!--screen:todoDetailModal-->
+<!--screen:ownParamsModal-->
+<!--screen:competitorModal-->
+<!--screen:competitorWikiModal-->
+<!--screen:evidenceModal-->
+<!--screen:rivalEvidenceModal-->
+<!--screen:handlePriceModal-->
+<!--screen:notifyModal-->
+
+
+<!--screen:reportDetailModal-->
+<!--screen:exportReportModal-->
+
+<!--screen:shareReportModal-->
+
+<!--screen:subscriptionModal-->
+
+<!--screen:basePriceModal-->
+
+<!--screen:activityModal-->
+
+<!--screen:rivalPriceModal-->
+
+<!--screen:keyProductModal-->
+
+<div class="toast" id="toast">操作成功</div>

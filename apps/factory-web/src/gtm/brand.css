@@ -1,0 +1,13 @@
+/* The same colors and report masthead are used in React, the sample iframe
+   and the report detail's shadow root. */
+:root, :host {
+  --hunter-ink: #152c3a;
+  --hunter-paper: #f7f6f0;
+  --hunter-selection: #e9eeed;
+}
+.hunter-letterhead {
+  height: 37px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--hunter-ink);
+  background: url("./assets/rival-hunter-mono.svg?inline") left top / 104px 28px no-repeat;
+}

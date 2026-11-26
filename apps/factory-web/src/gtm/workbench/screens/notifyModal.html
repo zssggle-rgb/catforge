@@ -1,0 +1,9 @@
+<div class="modal-mask" id="notifyModal"><div class="modal" style="width:min(560px,92vw)"><div class="modal-head">发送整改通知单 <span class="modal-close" onclick="closeModal('notifyModal')">×</span></div><div class="modal-body">
+  <p style="font-size:12px;color:var(--muted);margin-bottom:14px">已选中 <b id="notifyAlertCount" style="color:var(--text)">0</b> 条预警，选择接收的群组或人员（可多选）</p>
+  <label style="display:block;font-size:12px;font-weight:650;margin-bottom:8px">接收群组 / 人员</label>
+  <div class="notify-picked" id="notifyPicked"></div>
+  <div class="notify-search">
+    <input class="input" id="notifySearchInput" placeholder="搜索群组或人名，可多选" autocomplete="off" oninput="filterNotifyOptions(this.value)" onfocus="filterNotifyOptions(this.value)">
+    <div class="notify-suggest" id="notifySuggest"></div>
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeModal('notifyModal')">取消</button><button class="btn success" onclick="sendNotice()">确认发送</button></div></div></div>

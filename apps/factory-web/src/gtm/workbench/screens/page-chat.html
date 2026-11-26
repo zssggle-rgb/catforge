@@ -1,0 +1,36 @@
+<section class="page" id="page-chat">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon"><svg viewBox="0 0 32 32"><path d="M16 4l2.2 7.8L26 14l-7.8 2.2L16 24l-2.2-7.8L6 14l7.8-2.2z"/><path d="M25 4l.8 2.2L28 7l-2.2.8L25 10l-.8-2.2L22 7l2.2-.8z"/></svg></div>
+          <div class="chat-welcome-title">思维未竟之处，<span>策略</span>已然成真</div>
+          <div class="chat-welcome-chips" id="chipsRow">
+            <span class="chip" onclick="askQ('海信 65E7Q 的用户卖点价值是什么？')"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>海信 65E7Q 的用户卖点价值是什么？</span>
+            <span class="chip" onclick="askQ('海信 65E7Q 的竞品是谁？')"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>海信 65E7Q 的竞品是谁？</span>
+            <span class="chip" onclick="askQ('当前最紧急的异常是什么，请给出证据和影响分析')"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>当前最紧急的异常是什么？</span>
+            <span class="chip" onclick="askQ('帮我分析今日价格违规趋势及竞品调价影响')"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>今日价格违规趋势及竞品调价影响</span>
+          </div>
+          <div class="chat-welcome-input">
+            <div class="chat-input-box">
+              <div class="attach-wrap" id="attachWrap" style="position:relative">
+                <button class="attach-btn" title="上传文件或图片" onclick="toggleAttachMenu(event)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+                <div class="attach-menu" id="attachMenu">
+                  <button type="button" class="attach-menu-item" onclick="chooseAttach('file')"><svg viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></svg>上传文件</button>
+                  <button type="button" class="attach-menu-item" onclick="chooseAttach('image')"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>上传图片</button>
+                </div>
+              </div>
+              <input type="file" id="mainFileInput" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx" style="display:none" onchange="handleMainFiles(this.files)">
+              <input type="file" id="mainImageInput" multiple accept="image/*" style="display:none" onchange="handleMainFiles(this.files)">
+              <textarea id="mainInput" rows="1" placeholder="描述你想分析的竞品、经营或价格问题..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMain()}"></textarea>
+              <button class="send-btn" onclick="sendMain()">↑</button>
+            </div>
+            <div id="mainAttachList" class="attach-list"></div>
+          </div>
+        </div>
+        <div class="chat-scroll" id="chatScroll" style="display:none"></div>
+        <nav class="q-index" id="qIndex" aria-label="本次对话的问题"></nav>
+        <div class="chat-bottom" id="chatBottom" style="display:none">
+          <div class="input-row">
+            <textarea id="bottomInput" rows="1" placeholder="追问竞品定价问题..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendBottom()}"></textarea>
+            <button class="send-btn" onclick="sendBottom()">↑</button>
+          </div>
+        </div>
+      </section>

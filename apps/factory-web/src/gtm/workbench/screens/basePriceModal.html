@@ -1,0 +1,19 @@
+<div class="modal-mask" id="basePriceModal"><div class="modal" style="width:min(900px,94vw)"><div class="modal-head">底价维护 <span class="modal-close" onclick="closeModal('basePriceModal')">×</span></div><div class="modal-body">
+  <div class="bp-upload-row">
+    <input type="file" id="basePriceFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleBasePriceFile(this)">
+    <button class="btn primary" onclick="document.getElementById('basePriceFileInput').click()"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>上传底价文件</button>
+    <span>支持 Excel / CSV 格式，单次最多上传 1 个文件，上传后将生成新的底价版本</span>
+  </div>
+  <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text)">底价历史版本</div>
+  <div style="border:1px solid var(--line);border-radius:9px;overflow:hidden">
+    <table class="bp-table">
+      <thead><tr><th>版本号</th><th>适用品类</th><th>生效日期</th><th>状态</th><th style="width:200px">操作项</th></tr></thead>
+      <tbody id="basePriceTableBody">
+        <tr data-ver="BP-2026-09" data-status="active"><td><b>BP-2026-09</b></td><td>电视</td><td>2026-09-01</td><td><span class="pill green">启用中</span></td><td><div class="bp-action"><span class="link-btn" onclick="toggleBasePriceStatus(this)">禁用</span><span class="link-btn" onclick="viewBasePrice(this)">查看</span><span class="link-btn danger" onclick="deleteBasePrice(this)">删除</span></div></td></tr>
+        <tr data-ver="BP-2026-08" data-status="disabled"><td><b>BP-2026-08</b></td><td>电视</td><td>2026-08-01</td><td><span class="pill gray">已禁用</span></td><td><div class="bp-action"><span class="link-btn" onclick="toggleBasePriceStatus(this)">启用</span><span class="link-btn" onclick="viewBasePrice(this)">查看</span><span class="link-btn danger" onclick="deleteBasePrice(this)">删除</span></div></td></tr>
+        <tr data-ver="BP-2026-07" data-status="disabled"><td><b>BP-2026-07</b></td><td>电视</td><td>2026-07-01</td><td><span class="pill gray">已禁用</span></td><td><div class="bp-action"><span class="link-btn" onclick="toggleBasePriceStatus(this)">启用</span><span class="link-btn" onclick="viewBasePrice(this)">查看</span><span class="link-btn danger" onclick="deleteBasePrice(this)">删除</span></div></td></tr>
+        <tr data-ver="BP-2026-Q2" data-status="disabled"><td><b>BP-2026-Q2</b></td><td>电视</td><td>2026-04-01</td><td><span class="pill gray">已禁用</span></td><td><div class="bp-action"><span class="link-btn" onclick="toggleBasePriceStatus(this)">启用</span><span class="link-btn" onclick="viewBasePrice(this)">查看</span><span class="link-btn danger" onclick="deleteBasePrice(this)">删除</span></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeModal('basePriceModal')">关闭</button></div></div></div>

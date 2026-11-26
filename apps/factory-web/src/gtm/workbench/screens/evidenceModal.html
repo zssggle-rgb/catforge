@@ -1,0 +1,25 @@
+<div class="modal-mask" id="evidenceModal">
+  <section class="modal price-record" role="dialog" aria-modal="true" aria-labelledby="evidenceHeading">
+    <header class="modal-head price-record-head"><span id="evidenceHeading">价格巡检证据</span>
+      <button class="modal-close" type="button" aria-label="关闭价格巡检证据" onclick="closeModal('evidenceModal')">×</button>
+    </header>
+    <div class="modal-body">
+      <div class="price-record-product"><strong id="evidenceProduct"></strong>
+        <span class="record-channel" id="evidenceChannel"></span>
+        <span class="record-severity" id="evidenceLevel"></span>
+      </div>
+      <dl class="price-record-metrics">
+        <div><dt id="evidenceCurrentLabel">当前到手价</dt><dd id="evidenceCurrent">—</dd></div>
+        <div><dt id="evidenceBaselineLabel">月度底价</dt><dd id="evidenceBaseline">—</dd></div>
+        <div><dt>价格偏差</dt><dd id="evidenceGap">—</dd></div>
+      </dl>
+      <section class="price-record-observation">
+        <header><b>价格记录</b><span id="evidenceMeta"></span></header>
+        <div class="price-lines" id="evidenceSnapshot"></div>
+      </section>
+    </div>
+    <footer class="modal-foot"><button class="btn" type="button" onclick="closeModal('evidenceModal')">关闭</button>
+      <button class="btn primary" type="button" onclick="aiAskOwnPrice()">分析异常原因</button>
+    </footer>
+  </section>
+</div>

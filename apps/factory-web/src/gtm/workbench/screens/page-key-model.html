@@ -1,0 +1,255 @@
+<section class="page" id="page-key-model">
+        <div class="page-head"><div><h1>重点产品表现</h1><p>聚焦核心产品的销量、价格与份额表现，AI智能归因分析</p></div><div class="page-actions"><button class="btn" onclick="openExportModal('重点产品表现')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 21h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>导出报告</button><button class="btn" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div></div>
+
+        <!-- 筛选区 -->
+        <div class="filters">
+           <div class="filter"><label>渠道</label>
+             <select class="select">
+               <option>全渠道</option><option>京东</option><option>淘天</option><option>抖音</option><option>拼多多</option>
+             </select>
+           </div>
+           <div class="filter"><label>品类</label>
+               <select class="select" id="keyModelCategorySelect" onchange="updateKeyModelCoreType(this.value);updateKeyModelSubCategory(this.value)">
+                 <option value="tv">电视</option><option value="ac">空调</option><option value="fridge">冰箱</option><option value="washer">洗衣机</option><option value="kitchen">厨卫</option>
+               </select>
+             </div>
+            <div class="filter"><label>品类细分</label>
+              <select class="select" id="keyModelSubCategorySelect">
+                <option value="全部" selected>全部</option>
+                <option value="平板电视">平板电视</option>
+              </select>
+            </div>
+            <div class="filter"><label>品牌</label>
+               <select class="select" id="keyModelBrandSelect">
+                 <option value="all">全部</option><option value="海信">海信</option><option value="Vidda">Vidda</option><option value="TCL">TCL</option><option value="创维">创维</option><option value="小米">小米</option><option value="华为">华为</option><option value="康佳">康佳</option><option value="长虹">长虹</option>
+               </select>
+             </div>
+            <div class="filter"><label>核心分类</label>
+               <select class="select" id="keyModelCoreTypeSelect">
+                 <option value="all">全部</option><option value="LED">LED</option><option value="Mini LED">Mini LED</option><option value="OLED">OLED</option><option value="Laser">Laser</option>
+               </select>
+             </div>
+           <div class="filter"><label>时间周期</label>
+            <select class="select" id="keyModelPeriodSelect" onchange="toggleKeyModelCustomDate(this.value)">
+              <option value="today">今日</option><option value="yesterday">昨日</option><option value="week7" selected>近7天</option><option value="month">近30天</option><option value="custom">自定义</option>
+            </select>
+          </div>
+          <div class="filter" id="keyModelCustomDate" style="display:none"><label>开始日期</label><input type="date" class="date-input" value="2026-08-20"></div>
+          <div class="filter" id="keyModelCustomDateEnd" style="display:none"><label>结束日期</label><input type="date" class="date-input" value="2026-09-09"></div>
+          <div class="filter"><label></label>
+            <button class="btn" onclick="openKeyProductModal()" style="height:34px;border:1px solid #0064fa"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none"/></svg>管理重点产品 <span id="keyProductBadge" style="background:var(--primary-soft);color:var(--primary);padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px">8</span></button>
+          </div>
+          <button class="btn primary" onclick="showToast('已按筛选条件刷新数据')">查询</button>
+        </div>
+
+        <!-- AI 智能归因分析 -->
+        <div class="monitor-ai-summary">
+          <div class="monitor-ai-head">
+            <div class="monitor-ai-icon">AI</div>
+            <h3>重点型号表现分析</h3>
+            <span class="ai-time"><i></i>基于当前筛选条件生成 · 2026-09-10 09:30</span>
+            <button class="ai-regen-btn" onclick="regenAISummary('key-model')">重新生成</button>
+          </div>
+          <div class="daily-ai-cards" style="margin-bottom:12px">
+            <div class="daily-ai-card red">
+              <div class="daily-ai-card-title"><span class="pill red">重点风险</span>销量下滑归因</div>
+              <div class="daily-ai-card-body">
+                共有 <b style="color:var(--danger)">3 款型号销量下滑</b>：65E7Q、55E5N、65E3N Pro
+                <div class="daily-ai-card-list">
+                  <div><b>65E7Q</b>：-8.6%，65寸价格带竞争加剧，中端分流明显</div>
+                  <div><b>55E5N</b>：-11.5%，拼多多渠道破价引发内耗，主力机型承压</div>
+                  <div><b>趋势</b>：中低端价格带波动加大，高端大屏持续增长</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card orange">
+              <div class="daily-ai-card-title"><span class="pill orange">观察预警</span>价格波动分析</div>
+              <div class="daily-ai-card-body">
+                <b style="color:#b76a00">2 款型号均价波动超5%</b>：65E5N Pro（-6.2%）、55E7H（+5.4%）
+                <div class="daily-ai-card-list">
+                  <div><b>大幅下降</b>：65E5N Pro ¥4,099，降幅6.2%，大促让利拉低均价</div>
+                  <div><b>小幅下降</b>：65E7Q -2.8%、55E5N -1.8%，价格战波及中高端</div>
+                  <div><b>大幅上升</b>：55E7H +5.4%，高端配置升级带动均价上行</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card purple">
+              <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>份额变化归因</div>
+              <div class="daily-ai-card-body">
+                份额变化较大型号：<b>85E8K（+1.2pct）</b>、<b>75E8N Pro（+0.5pct）</b>、<b>65E7Q（-0.8pct）</b>
+                <div class="daily-ai-card-list">
+                  <div><b>上升</b>：85E8K 高端大屏需求旺盛，85寸份额持续扩大</div>
+                  <div><b>下降</b>：65E7Q 价格带竞争分流，65寸份额下滑0.8pct</div>
+                  <div><b>建议</b>：强化65E7Q画质与生态差异化传播，巩固中高端份额</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+          <div class="daily-ai-actions">
+            <span class="daily-ai-followup" onclick="askQ('65E7Q销量下滑的具体原因深度分析')">65E7Q销量下滑深度分析 →</span>
+            <span class="daily-ai-followup" onclick="askQ('竞品降价对我品份额的影响评估')">竞品降价影响评估 →</span>
+            <span class="daily-ai-followup" onclick="askQ('重点产品促销策略优化建议')">促销策略优化建议 →</span>
+          </div>
+        </div>
+
+        <!-- 重点SKU明细表 -->
+        <div class="section">
+          <div class="section-head">
+            <h2 style="font-size:14px">重点产品明细</h2>
+            <p style="font-size:11px;color:var(--muted);margin-left:8px">点击表头可排序 · 共 8 款重点产品</p>
+          </div>
+          <div class="table-wrap">
+            <table class="monitor-table key-model-table" id="keyModelTable" style="min-width:1280px">
+              <thead>
+                <tr>
+                  <th onclick="sortKeyModelTable(0)" style="cursor:pointer">品牌 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(1)" style="cursor:pointer">型号 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(2)" style="cursor:pointer">核心分类 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(3)" style="cursor:pointer;text-align:right">销量 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(4)" style="cursor:pointer;text-align:right">销量环比 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(5)" style="cursor:pointer;text-align:right">销额 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(6)" style="cursor:pointer;text-align:right">销额环比 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(7)" style="cursor:pointer;text-align:right">成交均价 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(8)" style="cursor:pointer;text-align:right">均价环比 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(9)" style="cursor:pointer;text-align:right">市场份额 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(10)" style="cursor:pointer;text-align:right">份额变化 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(11)" style="cursor:pointer;text-align:right">行业排名 <span class="sort-icon">↕</span></th>
+                  <th onclick="sortKeyModelTable(12)" style="cursor:pointer;text-align:right">排名变化 <span class="sort-icon">↕</span></th>
+                </tr>
+              </thead>
+              <tbody id="keyModelTbody">
+                <tr>
+                  <td>Vidda</td>
+                  <td><b>65V5K</b></td>
+                  <td>LED</td>
+                  <td style="text-align:right"><b>1,286</b> 台</td>
+                  <td style="text-align:right"><span class="trend-down">-8.6%</span></td>
+                  <td style="text-align:right"><b>¥682.3</b> 万</td>
+                  <td style="text-align:right"><span class="trend-down">-11.2%</span></td>
+                  <td style="text-align:right">¥5,305</td>
+                  <td style="text-align:right"><span class="trend-down">-2.8%</span></td>
+                  <td style="text-align:right">22.3%</td>
+                  <td style="text-align:right"><span class="trend-down">-0.8pct</span></td>
+                  <td style="text-align:right"><b>第 1</b> 名</td>
+                  <td style="text-align:right"><span class="rank-flat">—</span></td>
+                </tr>
+                <tr>
+                  <td>Vidda</td>
+                  <td><b>65V5K Pro</b></td>
+                  <td>Mini LED</td>
+                  <td style="text-align:right"><b>1,498</b> 台</td>
+                  <td style="text-align:right"><span class="trend-down">-2.3%</span></td>
+                  <td style="text-align:right"><b>¥613.6</b> 万</td>
+                  <td style="text-align:right"><span class="trend-down">-8.3%</span></td>
+                  <td style="text-align:right">¥4,099</td>
+                  <td style="text-align:right"><span class="trend-down">-6.2%</span></td>
+                  <td style="text-align:right">18.7%</td>
+                  <td style="text-align:right"><span class="trend-down">-0.4pct</span></td>
+                  <td style="text-align:right"><b>第 2</b> 名</td>
+                  <td style="text-align:right"><span class="rank-flat">—</span></td>
+                </tr>
+                <tr>
+                  <td>海信</td>
+                  <td><b>75E7K</b></td>
+                  <td>Mini LED</td>
+                  <td style="text-align:right"><b>782</b> 台</td>
+                  <td style="text-align:right"><span class="trend-up">+4.1%</span></td>
+                  <td style="text-align:right"><b>¥546.0</b> 万</td>
+                  <td style="text-align:right"><span class="trend-up">+5.8%</span></td>
+                  <td style="text-align:right">¥6,982</td>
+                  <td style="text-align:right"><span class="trend-up">+1.6%</span></td>
+                  <td style="text-align:right">24.1%</td>
+                  <td style="text-align:right"><span class="trend-up">+0.3pct</span></td>
+                  <td style="text-align:right"><b>第 3</b> 名</td>
+                  <td style="text-align:right"><span class="rank-up">↑1</span></td>
+                </tr>
+                <tr>
+                  <td>海信</td>
+                  <td><b>75E8N Pro</b></td>
+                  <td>Mini LED</td>
+                  <td style="text-align:right"><b>718</b> 台</td>
+                  <td style="text-align:right"><span class="trend-up">+5.2%</span></td>
+                  <td style="text-align:right"><b>¥506.2</b> 万</td>
+                  <td style="text-align:right"><span class="trend-up">+6.7%</span></td>
+                  <td style="text-align:right">¥7,050</td>
+                  <td style="text-align:right"><span class="trend-up">+1.4%</span></td>
+                  <td style="text-align:right">28.5%</td>
+                  <td style="text-align:right"><span class="trend-up">+0.5pct</span></td>
+                  <td style="text-align:right"><b>第 4</b> 名</td>
+                  <td style="text-align:right"><span class="rank-down">↓1</span></td>
+                </tr>
+                <tr>
+                  <td>Vidda</td>
+                  <td><b>55V5K</b></td>
+                  <td>LED</td>
+                  <td style="text-align:right"><b>1,866</b> 台</td>
+                  <td style="text-align:right"><span class="trend-down">-11.5%</span></td>
+                  <td style="text-align:right"><b>¥471.7</b> 万</td>
+                  <td style="text-align:right"><span class="trend-down">-13.1%</span></td>
+                  <td style="text-align:right">¥2,529</td>
+                  <td style="text-align:right"><span class="trend-down">-1.8%</span></td>
+                  <td style="text-align:right">31.2%</td>
+                  <td style="text-align:right"><span class="trend-flat">-0.1pct</span></td>
+                  <td style="text-align:right"><b>第 5</b> 名</td>
+                  <td style="text-align:right"><span class="rank-flat">—</span></td>
+                </tr>
+                <tr>
+                  <td>海信</td>
+                  <td><b>85E8K</b></td>
+                  <td>Mini LED</td>
+                  <td style="text-align:right"><b>342</b> 台</td>
+                  <td style="text-align:right"><span class="trend-up">+3.8%</span></td>
+                  <td style="text-align:right"><b>¥452.9</b> 万</td>
+                  <td style="text-align:right"><span class="trend-up">+4.5%</span></td>
+                  <td style="text-align:right">¥13,243</td>
+                  <td style="text-align:right"><span class="trend-up">+0.7%</span></td>
+                  <td style="text-align:right">35.6%</td>
+                  <td style="text-align:right"><span class="trend-up">+1.2pct</span></td>
+                  <td style="text-align:right"><b>第 6</b> 名</td>
+                  <td style="text-align:right"><span class="rank-flat">—</span></td>
+                </tr>
+                <tr>
+                  <td>海信</td>
+                  <td><b>55E7H</b></td>
+                  <td>LED</td>
+                  <td style="text-align:right"><b>924</b> 台</td>
+                  <td style="text-align:right"><span class="trend-down">-3.7%</span></td>
+                  <td style="text-align:right"><b>¥395.0</b> 万</td>
+                  <td style="text-align:right"><span class="trend-up">+1.5%</span></td>
+                  <td style="text-align:right">¥4,275</td>
+                  <td style="text-align:right"><span class="trend-up">+5.4%</span></td>
+                  <td style="text-align:right">16.8%</td>
+                  <td style="text-align:right"><span class="trend-up">+0.2pct</span></td>
+                  <td style="text-align:right"><b>第 7</b> 名</td>
+                  <td style="text-align:right"><span class="rank-up">↑1</span></td>
+                </tr>
+                <tr>
+                  <td>海信</td>
+                  <td><b>100E8K</b></td>
+                  <td>Laser</td>
+                  <td style="text-align:right"><b>68</b> 台</td>
+                  <td style="text-align:right"><span class="trend-up">+8.3%</span></td>
+                  <td style="text-align:right"><b>¥293.1</b> 万</td>
+                  <td style="text-align:right"><span class="trend-up">+9.6%</span></td>
+                  <td style="text-align:right">¥43,103</td>
+                  <td style="text-align:right"><span class="trend-up">+1.2%</span></td>
+                  <td style="text-align:right">42.1%</td>
+                  <td style="text-align:right"><span class="trend-up">+2.0pct</span></td>
+                  <td style="text-align:right"><b>第 8</b> 名</td>
+                  <td style="text-align:right"><span class="rank-up">↑1</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="el-pagination">
+            <span class="ep-total">共 8 条</span>
+            <span class="ep-size"><select onchange="showToast('每页显示 '+this.value+' 条')"><option>10条/页</option><option>20条/页</option><option>50条/页</option></select></span>
+            <button class="ep-btn disabled" onclick="showToast('已是第一页')">‹</button>
+            <button class="ep-btn active">1</button>
+            <button class="ep-btn disabled" onclick="showToast('已是最后一页')">›</button>
+          </div>
+        </div>
+
+        <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）线上监测数据、全渠道价格巡检数据、竞品商品库　·　每2小时自动扫描更新　·　统计周期：近7天</span></div>
+      </section>

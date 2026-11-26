@@ -1,0 +1,417 @@
+<section class="page" id="page-competitor">
+        <div class="page-head"><div><h1 id="analysisTitle">竞品分析</h1><p id="analysisSubtitle">按型号比较产品、卖点和量价表现</p></div><div class="page-actions"><button class="btn" onclick="openExportModal('竞品分析')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 21h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>导出报告</button><button class="btn" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div></div>
+        <div class="model-builder" id="productScope">
+          <div class="builder-row"><div class="builder-title">我品型号</div><input class="model-input" value="海信 65E7Q" placeholder="请输入我品型号"><button class="btn param-btn" id="ownParamsBtn" onclick="openModal('ownParamsModal')"><b>＋</b> 我品参数</button><span class="param-file-tag" id="ownParamsFileTag" style="display:none"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span id="ownParamsFileName" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">参数文件.xlsx</span><b class="x" onclick="removeOwnParamsFile(event)" title="移除">×</b></span><button class="btn primary" onclick="refreshCompetitors()">确认并智能筛选</button></div>
+          <div class="builder-row"><div class="builder-title">参与对比</div><div class="model-tags" id="modelTags"><span class="model-tag own">我品 · 海信 65E7Q</span><span class="model-tag" onclick="toggleModel(this)">创维 65A7H PRO <b class="x">×</b></span><span class="model-tag" onclick="toggleModel(this)">TCL 65Q9L PRO <b class="x">×</b></span><span class="model-tag" onclick="toggleModel(this)">创维 65A6F ULTRA <b class="x">×</b></span><span class="model-tag add" onclick="openModal('competitorModal')">＋ 自定义竞品</span></div></div>
+          <div class="builder-row"><div class="builder-title">时间周期</div><select class="select" id="analysisPeriod" onchange="onAnalysisPeriodChange(this.value)"><option value="7d" selected>近7天</option><option value="30d">近30天</option><option value="90d">近3个月</option><option value="custom">自定义</option></select><button class="btn primary" id="generateBtn" onclick="generateReport()"><svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span id="generateBtnLabel">生成分析报告</span></button><span class="loading" id="generateLoading"><i class="spin"></i>AI分析中</span><div class="analysis-date-range" id="analysisDateRange" style="display:none"><input type="date" class="select" value="2026-08-10" style="padding:6px 8px;font-size:12px"><span style="color:var(--muted);font-size:11px">至</span><input type="date" class="select" value="2026-09-10" style="padding:6px 8px;font-size:12px"></div><div class="builder-actions"></div></div>
+        </div>
+
+        <div class="brand-scope" id="brandScope">
+          <!-- PREMIUM_SCOPE_V14 -->
+          <div class="scope-filter"><label>品类</label><select class="select" id="premiumCategory" onchange="markPremiumDirty()"><option>电视</option><option>冰箱</option><option>空调</option><option>洗衣机</option><option>厨卫</option></select></div>
+          <div class="scope-filter"><label>我方品牌（单选）</label><select class="select" id="premiumOwnBrand" onchange="syncPremiumBrandOptions();markPremiumDirty()"><option>海信</option><option>TCL</option><option>创维</option><option>小米</option><option>华为</option><option>海尔</option></select></div>
+          <div class="scope-filter premium-competitor-filter"><label>竞争品牌（多选）</label><button class="premium-multi-trigger" id="premiumMultiTrigger" onclick="togglePremiumBrandMenu(event)">TCL、创维 <span>⌄</span></button><div class="premium-multi-menu" id="premiumBrandMenu">
+            <label><input type="checkbox" value="海信" onchange="updatePremiumBrandSelection()">海信</label>
+            <label><input type="checkbox" value="TCL" checked onchange="updatePremiumBrandSelection()">TCL</label>
+            <label><input type="checkbox" value="创维" checked onchange="updatePremiumBrandSelection()">创维</label>
+            <label><input type="checkbox" value="小米" onchange="updatePremiumBrandSelection()">小米</label>
+            <label><input type="checkbox" value="华为" onchange="updatePremiumBrandSelection()">华为</label>
+            <label><input type="checkbox" value="海尔" onchange="updatePremiumBrandSelection()">海尔</label>
+          </div></div>
+          <div class="scope-filter"><label>分析周期</label><select class="select" id="premiumPeriod" onchange="markPremiumDirty()"><option>近3个月</option><option>近30天</option><option>近6个月</option><option>自定义</option></select></div>
+          <button class="btn primary premium-run-btn" id="premiumRunBtn" onclick="runPremiumAnalysis()">生成品牌溢价分析报告</button>
+        </div>
+<div class="tabs" data-group="analysis" id="analysisTabs"><div class="tab active" data-target="product">产品对比</div><div class="tab" data-target="value">用户价值分析</div><div class="tab" data-target="weight">卖点称重</div><div class="tab" data-target="pricevolume">价量联动分析</div></div>
+
+        <div class="tab-panel active" id="panel-product">
+          <div class="monitor-ai-summary">
+            <div class="monitor-ai-head">
+              <div class="monitor-ai-icon">AI</div>
+              <h3>产品对比结论</h3>
+              <span class="ai-time"><i></i>基于海信 65E7Q 与创维/TCL 竞品对标生成 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('competitor')">重新生成</button>
+            </div>
+            <div class="daily-ai-cards" style="margin-bottom:12px">
+              <div class="daily-ai-card red">
+                <div class="daily-ai-card-title"><span class="pill red">重点风险</span>核心威胁</div>
+                <div class="daily-ai-card-body">
+                  创维 65A7H PRO 在 <b style="color:var(--danger)">销量与用户口碑</b> 上对我品形成直接压力。
+                  <div class="daily-ai-card-list">
+                    <div><b>创维 65A7H PRO</b>：销量 2,431 台（高于我品），好评率领先，超薄贴墙体验突出</div>
+                    <div><b>价格劣势</b>：我品均价 ¥5,305，比创维高 ¥366，用户感知价差明显</div>
+                    <div><b>趋势</b>：创维以外观设计+口碑驱动，持续蚕食中高端份额</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card orange">
+                <div class="daily-ai-card-title"><span class="pill orange">观察预警</span>关注项</div>
+                <div class="daily-ai-card-body">
+                  <b>2 个维度</b>需持续跟踪竞争态势变化。
+                  <div class="daily-ai-card-list">
+                    <div><b>TCL 65Q9L PRO</b>：Mini LED 配置更强，均价仅 ¥3,965，虽当前销量低但潜力大</div>
+                    <div><b>创维 65A6F ULTRA</b>：销量 4,763 台（品类领先），低价走量策略向上渗透</div>
+                    <div><b>HDMI 参数</b>：我品仅 HDMI 2.1，竞品多为多接口组合，影音用户存顾虑</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card purple">
+                <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>GTM 决策</div>
+                <div class="daily-ai-card-body">
+                  按优先级排序的竞品应对策略。
+                  <div class="daily-ai-card-list">
+                    <div><b>差异化传播</b>：主推「亮度+分区背光+独立音响」硬件优势，强调影院级体验</div>
+                    <div><b>口碑运营</b>：针对创维好评率优势，强化真实用户晒单与画质对比内容投放</div>
+                    <div><b>产品迭代</b>：下一代产品考虑增加 HDMI 2.1 接口数量与超薄机身设计</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+            <div class="daily-ai-actions">
+              <span class="daily-ai-followup" onclick="askQ('创维 65A7H PRO 对海信 65E7Q 的销量影响评估')">创维竞品影响评估 →</span>
+              <span class="daily-ai-followup" onclick="askQ('海信 65E7Q 差异化卖点传播策略建议')">差异化传播策略 →</span>
+              <span class="daily-ai-followup" onclick="askQ('竞品 Mini LED 趋势下我品产品迭代建议')">产品迭代建议 →</span>
+            </div>
+          </div>
+          <div class="product-cards">
+            <article class="product-card own"><div class="eyebrow">我品</div><h3>海信 65E7Q</h3><dl><dt>上市时间</dt><dd>2025年9月</dd><dt>销量排名</dt><dd>第260名</dd><dt>周期均价</dt><dd>¥5,305</dd></dl></article>
+            <article class="product-card"><div class="eyebrow">推荐竞品</div><h3>创维 65A7H PRO</h3><dl><dt>上市时间</dt><dd>2025年11月</dd><dt>销量排名</dt><dd>第256名</dd><dt>周期均价</dt><dd>¥4,939</dd></dl></article>
+            <article class="product-card"><div class="eyebrow">推荐竞品</div><h3>TCL 65Q9L PRO</h3><dl><dt>上市时间</dt><dd>2025年</dd><dt>销量排名</dt><dd>第904名</dd><dt>周期均价</dt><dd>¥3,965</dd></dl></article>
+            <article class="product-card"><div class="eyebrow">推荐竞品</div><h3>创维 65A6F ULTRA</h3><dl><dt>上市时间</dt><dd>2025年8月</dd><dt>销量排名</dt><dd>第188名</dd><dt>周期均价</dt><dd>¥3,798</dd></dl></article>
+          </div>
+          <div class="section"><div class="section-head"><h2>销售对比</h2><p>统计周期：近30天</p></div><div class="table-wrap"><table><thead><tr><th>指标</th><th class="own-col">海信 65E7Q</th><th>创维 65A7H PRO</th><th>TCL 65Q9L PRO</th><th>创维 65A6F ULTRA</th></tr></thead><tbody><tr><td>销量</td><td class="own-col"><b>2,332台</b></td><td>2,431台</td><td>102台</td><td class="best">4,763台</td></tr><tr><td>销额</td><td class="own-col best">603万元</td><td>540万元</td><td>64万元</td><td>33万元</td></tr><tr><td>均价</td><td class="own-col best">¥5,305</td><td>¥4,939</td><td>¥3,965</td><td>¥3,798</td></tr></tbody></table></div></div>
+<!-- COMPETITOR_WEEK_TREND_V12 -->
+          <div class="competitive-trend-section" id="competitiveTrendSection">
+            <div class="comp-collapsible-head" id="compTrendHead" onclick="toggleCompetitorTrend()">
+              <span class="comp-caret">▼</span><h2>销售趋势对比</h2><small id="compTrendFoldText">点击收起</small>
+            </div>
+            <div class="comp-trend-body" id="compTrendBody">
+              <div class="comp-metric-tabs" role="tablist" aria-label="销售指标切换">
+                <button class="comp-metric-tab active" data-metric="units" onclick="switchCompetitorMetric('units',this)">销量</button>
+                <button class="comp-metric-tab" data-metric="revenue" onclick="switchCompetitorMetric('revenue',this)">销额</button>
+                <button class="comp-metric-tab" data-metric="price" onclick="switchCompetitorMetric('price',this)">均价</button>
+              </div>
+              <div class="comp-chart-card">
+                <div class="comp-chart-top"><span class="comp-axis-title" id="compAxisTitle">销量（台）</span><div class="comp-chart-legend" id="compTrendLegend"></div></div>
+                <div class="comp-trend-chart" id="competitorTrendChart"></div>
+                <div class="comp-trend-tooltip" id="compTrendTooltip"></div>
+              </div>
+            </div>
+          </div>
+          <div class="section"><div class="section-head"><h2>属性对比</h2><p>红色为我品单一最优项，蓝色为我品非最优项</p></div><div class="table-wrap"><table><thead><tr><th>对比项</th><th class="own-col">海信 65E7Q</th><th>创维 65A7H PRO</th><th>TCL 65Q9L PRO</th><th>创维 65A6F ULTRA</th></tr></thead><tbody><tr><td>AI大模型</td><td class="own-col">海信星海</td><td>酷开AI智能体</td><td>伏羲</td><td>酷开AI智能体</td></tr><tr><td>CPU核数</td><td class="own-col">四核</td><td>四核</td><td>四核</td><td>四核</td></tr><tr><td>GPU核数</td><td class="own-col best">双核</td><td>-</td><td>-</td><td>-</td></tr><tr><td>HDMI参数</td><td class="own-col weak">HDMI 2.1</td><td>HDMI 2.0×2 + HDMI 2.1</td><td>HDMI 2.1</td><td>HDMI 2.1</td></tr></tbody></table></div></div>
+<!-- COMPETITOR_SELLING_STEP_V14 -->
+          <section class="comp-insight-section selling-point-section" id="sellingPointSection">
+            <div class="comp-insight-head"><h2>卖点对比</h2><div class="selling-step-legend"><span class="lg-core">核心定位</span><span class="lg-diff">差异化定位</span><span class="lg-industry">行业地位</span><span class="lg-top">商详TOP5</span><span class="lg-other">其余卖点</span></div></div>
+            <div class="comp-compare-scroll"><div class="selling-point-grid"><article class="selling-point-card"><h3 class="comp-model-name">海信 65E7Q</h3><div class="sp-point sp-core"><span class="sp-num">1</span><div class="sp-copy"><div class="sp-line"><em>核心定位</em><h4>【旗舰画质与沉浸影音标杆】</h4></div><p>面向追求高画质、强声场与完整客厅影院体验的中高端家庭。</p></div></div><div class="sp-point sp-diff"><span class="sp-num">2</span><div class="sp-copy"><div class="sp-line"><em>差异化定位</em><h4>【亮场画质＋独立音响双旗舰】</h4></div><p>以高亮Mini LED和6单元独立音响形成“音画双旗舰”差异化。</p></div></div><div class="sp-point sp-industry"><span class="sp-num">3</span><div class="sp-copy"><div class="sp-line"><em>行业地位</em><h4>【65英寸高端Mini LED销量TOP3】</h4></div><p>奥维线上监测26W25口径，高端价格带销量排名前三。</p></div></div><div class="sp-point sp-top"><span class="sp-num">4</span><div class="sp-copy"><div class="sp-line"><em>商详TOP1</em><h4>【XDR Pro 5200nits峰值亮度】</h4></div><p>强光客厅画面依然通透，暗部层次清晰。</p></div></div><div class="sp-point sp-top"><span class="sp-num">5</span><div class="sp-copy"><div class="sp-line"><em>商详TOP2</em><h4>【信芯AI画质芯片＋1920物理分区】</h4></div><p>实时识别内容并精细控光，减少光晕。</p></div></div><div class="sp-point sp-top"><span class="sp-num">6</span><div class="sp-copy"><div class="sp-line"><em>商详TOP3</em><h4>【6单元60W独立音响系统】</h4></div><p>增强对白清晰度与低频包围感。</p></div></div><div class="sp-point sp-top"><span class="sp-num">7</span><div class="sp-copy"><div class="sp-line"><em>商详TOP4</em><h4>【潘通＋杜比双冠色彩认证】</h4></div><p>提供自然准确的色彩还原。</p></div></div><div class="sp-point sp-top"><span class="sp-num">8</span><div class="sp-copy"><div class="sp-line"><em>商详TOP5</em><h4>【4K 170Hz＋四路HDMI 2.1】</h4></div><p>覆盖主机游戏与多设备高带宽接入。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">9</span><div class="sp-copy"><div class="sp-line"><em>情感价值</em><h4>【影院沉浸感、专业画质信赖】</h4></div><p>让用户在家获得专业影院般的沉浸体验，并建立对高端画质的持续认同。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">10</span><div class="sp-copy"><div class="sp-line"><em>便捷体验</em><h4>【强光免拉帘、场景自动适配】</h4></div><p>白天无需反复调节窗帘，系统随环境与内容自动优化观看参数。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">11</span><div class="sp-copy"><div class="sp-line"><em>专业级色准</em><h4>【10.7亿色＋98% DCI-P3广色域】</h4></div><p>降低偏色与色阶断层，更准确还原影片和创作内容。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">12</span><div class="sp-copy"><div class="sp-line"><em>智感调光</em><h4>【智感调光＋20000Hz无屏闪】</h4></div><p>根据环境光自动调节亮度，同时降低长时间观看疲劳。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">13</span><div class="sp-copy"><div class="sp-line"><em>黑曜屏 Pro</em><h4>【高对比低反射屏】</h4></div><p>强光环境下减少倒影，让暗场细节与黑位表现更稳定。</p></div></div></article><article class="selling-point-card"><h3 class="comp-model-name">创维 65A7H PRO</h3><div class="sp-point sp-core"><span class="sp-num">1</span><div class="sp-copy"><div class="sp-line"><em>核心定位</em><h4>【超薄壁纸电视与空间美学】</h4></div><p>面向注重家装融合和艺术氛围的中高端家庭。</p></div></div><div class="sp-point sp-diff"><span class="sp-num">2</span><div class="sp-copy"><div class="sp-line"><em>差异化定位</em><h4>【3.9cm真超薄＋100%无缝贴墙】</h4></div><p>突出薄、平、贴的家装一体化优势。</p></div></div><div class="sp-point sp-industry"><span class="sp-num">3</span><div class="sp-copy"><div class="sp-line"><em>行业地位</em><h4>【壁纸电视细分市场销量TOP2】</h4></div><p>奥维线上监测26W25口径，超薄贴墙品类位居前列。</p></div></div><div class="sp-point sp-top"><span class="sp-num">4</span><div class="sp-copy"><div class="sp-line"><em>商详TOP1</em><h4>【3.9cm真超薄机身】</h4></div><p>弱化电视体积感，提升墙面整体性。</p></div></div><div class="sp-point sp-top"><span class="sp-num">5</span><div class="sp-copy"><div class="sp-line"><em>商详TOP2</em><h4>【100%无缝贴墙设计】</h4></div><p>减少墙体缝隙，接近壁画观感。</p></div></div><div class="sp-point sp-top"><span class="sp-num">6</span><div class="sp-copy"><div class="sp-line"><em>商详TOP3</em><h4>【AI原画显示2.0】</h4></div><p>针对片源自动优化色彩、清晰度与动态。</p></div></div><div class="sp-point sp-top"><span class="sp-num">7</span><div class="sp-copy"><div class="sp-line"><em>商详TOP4</em><h4>【四层哑光屏】</h4></div><p>降低环境反光，提升白天观看舒适度。</p></div></div><div class="sp-point sp-top"><span class="sp-num">8</span><div class="sp-copy"><div class="sp-line"><em>商详TOP5</em><h4>【4K超高清广色域】</h4></div><p>兼顾清晰度和色彩层次。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">9</span><div class="sp-copy"><div class="sp-line"><em>情感价值</em><h4>【美术馆级艺术观赏体验】</h4></div><p>电视融入家装陈设，满足用户对空间审美和生活仪式感的期待。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">10</span><div class="sp-copy"><div class="sp-line"><em>便捷体验</em><h4>【无缝贴墙安装＋四层哑光屏】</h4></div><p>减少安装缝隙与环境反光，日常观看和空间维护更省心。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">11</span><div class="sp-copy"><div class="sp-line"><em>AI原画增强</em><h4>【AI原画显示2.0】</h4></div><p>自动识别片源并优化清晰度、色彩和动态表现。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">12</span><div class="sp-copy"><div class="sp-line"><em>无眩高对比</em><h4>【超微距OD10控光＋3800nits】</h4></div><p>兼顾超薄机身与亮场对比度，降低反光对画面的干扰。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">13</span><div class="sp-copy"><div class="sp-line"><em>超薄画框机身</em><h4>【薄如画框、贴墙一体】</h4></div><p>强化壁画式外观，让电视成为家居空间的一部分。</p></div></div></article><article class="selling-point-card"><h3 class="comp-model-name">TCL 65Q9L PRO</h3><div class="sp-point sp-core"><span class="sp-num">1</span><div class="sp-copy"><div class="sp-line"><em>核心定位</em><h4>【影院级视听体验与品质家庭】</h4></div><p>面向追求高亮、精细控光和专业画质背书的用户。</p></div></div><div class="sp-point sp-diff"><span class="sp-num">2</span><div class="sp-copy"><div class="sp-line"><em>差异化定位</em><h4>【蝶翼星曜屏＋万象分区】</h4></div><p>以屏幕结构和系统级控光形成QD-Mini LED技术差异。</p></div></div><div class="sp-point sp-industry"><span class="sp-num">3</span><div class="sp-copy"><div class="sp-line"><em>行业地位</em><h4>【QD-Mini LED中高端市场销额TOP2】</h4></div><p>奥维线上监测26W25口径，核心尺寸段保持领先。</p></div></div><div class="sp-point sp-top"><span class="sp-num">4</span><div class="sp-copy"><div class="sp-line"><em>商详TOP1</em><h4>【XDR 4500nits峰值亮度】</h4></div><p>提升高光细节与强光环境可视性。</p></div></div><div class="sp-point sp-top"><span class="sp-num">5</span><div class="sp-copy"><div class="sp-line"><em>商详TOP2</em><h4>【万象分区控光系统】</h4></div><p>提升暗场对比度并控制光晕。</p></div></div><div class="sp-point sp-top"><span class="sp-num">6</span><div class="sp-copy"><div class="sp-line"><em>商详TOP3</em><h4>【蝶翼星曜屏】</h4></div><p>改善低反射、对比度与可视角表现。</p></div></div><div class="sp-point sp-top"><span class="sp-num">7</span><div class="sp-copy"><div class="sp-line"><em>商详TOP4</em><h4>【TSR AI画质芯片】</h4></div><p>根据内容和场景进行画质优化。</p></div></div><div class="sp-point sp-top"><span class="sp-num">8</span><div class="sp-copy"><div class="sp-line"><em>商详TOP5</em><h4>【真贴墙设计＋无开机广告】</h4></div><p>兼顾空间融合与开机体验。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">9</span><div class="sp-copy"><div class="sp-line"><em>情感价值</em><h4>【视听尊严感、科技自豪感】</h4></div><p>通过旗舰画质背书和技术标签，强化用户的品质认同与科技满足感。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">10</span><div class="sp-copy"><div class="sp-line"><em>便捷体验</em><h4>【真贴墙安装＋无开机广告】</h4></div><p>降低安装与开机等待成本，让日常观看链路更直接。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">11</span><div class="sp-copy"><div class="sp-line"><em>蓝光画质</em><h4>【130Mbps蓝光级视听还原】</h4></div><p>针对高码率片源保留更多画面与声音细节。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">12</span><div class="sp-copy"><div class="sp-line"><em>蝶翼星曜屏</em><h4>【低反射、高对比显示】</h4></div><p>在侧光和亮场环境下维持更稳定的黑位与层次。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">13</span><div class="sp-copy"><div class="sp-line"><em>超感高刷</em><h4>【288Hz动态刷新】</h4></div><p>改善体育赛事与游戏高速运动画面的拖影。</p></div></div></article><article class="selling-point-card"><h3 class="comp-model-name">创维 65A6F ULTRA</h3><div class="sp-point sp-core"><span class="sp-num">1</span><div class="sp-copy"><div class="sp-line"><em>核心定位</em><h4>【影音发烧友旗舰级彩电】</h4></div><p>面向关注影像本真、色准与智能音画调校的发烧用户。</p></div></div><div class="sp-point sp-diff"><span class="sp-num">2</span><div class="sp-copy"><div class="sp-line"><em>差异化定位</em><h4>【极黑万象纸屏＋2016分区QD-Mini LED】</h4></div><p>融合低反纸屏和高分区控光，强化“极黑不光晕”。</p></div></div><div class="sp-point sp-industry"><span class="sp-num">3</span><div class="sp-copy"><div class="sp-line"><em>行业地位</em><h4>【高端Mini LED画质口碑TOP5】</h4></div><p>奥维VOC与线上监测26W25口径，画质口碑位居前列。</p></div></div><div class="sp-point sp-top"><span class="sp-num">4</span><div class="sp-copy"><div class="sp-line"><em>商详TOP1</em><h4>【极黑万象纸屏】</h4></div><p>降低反射并保持暗场黑位。</p></div></div><div class="sp-point sp-top"><span class="sp-num">5</span><div class="sp-copy"><div class="sp-line"><em>商详TOP2</em><h4>【2016分区QD-Mini LED】</h4></div><p>精细控制明暗区域，提高画面对比度。</p></div></div><div class="sp-point sp-top"><span class="sp-num">6</span><div class="sp-copy"><div class="sp-line"><em>商详TOP3</em><h4>【监视器级色准ΔE≤0.7】</h4></div><p>强调专业内容的真实还原。</p></div></div><div class="sp-point sp-top"><span class="sp-num">7</span><div class="sp-copy"><div class="sp-line"><em>商详TOP4</em><h4>【全链路AI控光】</h4></div><p>根据环境和内容动态优化亮度。</p></div></div><div class="sp-point sp-top"><span class="sp-num">8</span><div class="sp-copy"><div class="sp-line"><em>商详TOP5</em><h4>【影院级声场系统】</h4></div><p>提供更具包围感的观影体验。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">9</span><div class="sp-copy"><div class="sp-line"><em>情感价值</em><h4>【影像本真、专业敬畏感】</h4></div><p>以专业监视器级色准建立用户对真实影像的信任。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">10</span><div class="sp-copy"><div class="sp-line"><em>便捷体验</em><h4>【全链路AI、自动适配】</h4></div><p>根据环境光和内容类型自动完成音画调校，减少手动设置。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">11</span><div class="sp-copy"><div class="sp-line"><em>蓝光影院</em><h4>【蓝光原盘级4K＋7000+原帧大片】</h4></div><p>提供高码率片源与影院内容，强化家庭观影体验。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">12</span><div class="sp-copy"><div class="sp-line"><em>超感高刷</em><h4>【6300Hz超感级高刷】</h4></div><p>提升竞技游戏和高速运动内容的流畅度。</p></div></div><div class="sp-point sp-other extra"><span class="sp-num">13</span><div class="sp-copy"><div class="sp-line"><em>AI感光优化</em><h4>【环境光识别与动态控光】</h4></div><p>自动适配不同光照条件，兼顾亮度、对比度与观看舒适度。</p></div></div></article></div></div>
+            <button class="comp-expand-btn" id="sellingPointExpandBtn" onclick="toggleSellingPoints()">展开其余卖点</button>
+          </section>
+<section class="comp-insight-section review-compare-section">
+            <div class="comp-insight-head"><h2>评论对比</h2></div>
+            <div class="comp-compare-scroll"><div class="review-grid"><article class="review-card"><h3 class="comp-model-name">海信 65E7Q</h3><div class="review-rates"><div class="rate-row good"><span>👍 好评率</span><div class="rate-track"><i style="width:88%"></i></div><strong>88%</strong></div><div class="rate-row bad"><span>👎 差评率</span><div class="rate-track"><i style="width:12%"></i></div><strong>12%</strong></div></div><div class="review-block"><div class="review-block-title"><span>👍 好评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>屏幕尺寸</span><b>47%</b></div><div class="review-mini-track"><i style="width:47%"></i></div></div><div class="review-item"><div class="review-item-head"><span>外观整体评价</span><b>18%</b></div><div class="review-mini-track"><i style="width:18%"></i></div></div><div class="review-item"><div class="review-item-head"><span>多设备互联</span><b>12%</b></div><div class="review-mini-track"><i style="width:12%"></i></div></div></div><div class="review-block negative"><div class="review-block-title"><span>👎 差评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>屏幕尺寸</span><b>6%</b></div><div class="review-mini-track"><i style="width:6%"></i></div></div><div class="review-item"><div class="review-item-head"><span>机身厚度</span><b>6%</b></div><div class="review-mini-track"><i style="width:6%"></i></div></div><div class="review-item"><div class="review-item-head"><span>安装体验</span><b>4%</b></div><div class="review-mini-track"><i style="width:4%"></i></div></div></div></article><article class="review-card"><h3 class="comp-model-name">创维 65A7H PRO</h3><div class="review-rates"><div class="rate-row good"><span>👍 好评率</span><div class="rate-track"><i style="width:97%"></i></div><strong>97%</strong></div><div class="rate-row bad"><span>👎 差评率</span><div class="rate-track"><i style="width:3%"></i></div><strong>3%</strong></div></div><div class="review-block"><div class="review-block-title"><span>👍 好评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>外观整体评价</span><b>59%</b></div><div class="review-mini-track"><i style="width:59%"></i></div></div><div class="review-item"><div class="review-item-head"><span>机身厚度</span><b>26%</b></div><div class="review-mini-track"><i style="width:26%"></i></div></div><div class="review-item"><div class="review-item-head"><span>壁挂贴合度</span><b>21%</b></div><div class="review-mini-track"><i style="width:21%"></i></div></div></div><div class="review-block negative"><div class="review-block-title"><span>👎 差评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>壁挂贴合度</span><b>3%</b></div><div class="review-mini-track"><i style="width:3%"></i></div></div><div class="review-item"><div class="review-item-head"><span>屏幕反光</span><b>2%</b></div><div class="review-mini-track"><i style="width:2%"></i></div></div><div class="review-item"><div class="review-item-head"><span>系统流畅度</span><b>1%</b></div><div class="review-mini-track"><i style="width:1%"></i></div></div></div></article><article class="review-card"><h3 class="comp-model-name">TCL 65Q9L PRO</h3><div class="review-rates"><div class="rate-row good"><span>👍 好评率</span><div class="rate-track"><i style="width:96%"></i></div><strong>96%</strong></div><div class="rate-row bad"><span>👎 差评率</span><div class="rate-track"><i style="width:4%"></i></div><strong>4%</strong></div></div><div class="review-block"><div class="review-block-title"><span>👍 好评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>屏幕尺寸</span><b>47%</b></div><div class="review-mini-track"><i style="width:47%"></i></div></div><div class="review-item"><div class="review-item-head"><span>外观整体评价</span><b>25%</b></div><div class="review-mini-track"><i style="width:25%"></i></div></div><div class="review-item"><div class="review-item-head"><span>操控便捷性</span><b>11%</b></div><div class="review-mini-track"><i style="width:11%"></i></div></div></div><div class="review-block negative"><div class="review-block-title"><span>👎 差评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>屏幕尺寸</span><b>3%</b></div><div class="review-mini-track"><i style="width:3%"></i></div></div><div class="review-item"><div class="review-item-head"><span>语音操控</span><b>1%</b></div><div class="review-mini-track"><i style="width:1%"></i></div></div><div class="review-item"><div class="review-item-head"><span>开机体验</span><b>1%</b></div><div class="review-mini-track"><i style="width:1%"></i></div></div></div></article><article class="review-card"><h3 class="comp-model-name">创维 65A6F ULTRA</h3><div class="review-rates"><div class="rate-row good"><span>👍 好评率</span><div class="rate-track"><i style="width:95%"></i></div><strong>95%</strong></div><div class="rate-row bad"><span>👎 差评率</span><div class="rate-track"><i style="width:5%"></i></div><strong>5%</strong></div></div><div class="review-block"><div class="review-block-title"><span>👍 好评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>外观整体评价</span><b>46%</b></div><div class="review-mini-track"><i style="width:46%"></i></div></div><div class="review-item"><div class="review-item-head"><span>屏幕尺寸</span><b>25%</b></div><div class="review-mini-track"><i style="width:25%"></i></div></div><div class="review-item"><div class="review-item-head"><span>操控便捷性</span><b>25%</b></div><div class="review-mini-track"><i style="width:25%"></i></div></div></div><div class="review-block negative"><div class="review-block-title"><span>👎 差评TOP3</span><span>提及率</span></div><div class="review-item"><div class="review-item-head"><span>底座设计</span><b>3%</b></div><div class="review-mini-track"><i style="width:3%"></i></div></div><div class="review-item"><div class="review-item-head"><span>外观整体评价</span><b>1%</b></div><div class="review-mini-track"><i style="width:1%"></i></div></div><div class="review-item"><div class="review-item-head"><span>接口位置</span><b>1%</b></div><div class="review-mini-track"><i style="width:1%"></i></div></div></div></article></div></div>
+          </section>
+          <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）线上监测数据、京东/天猫商详与VOC评论　·　统计周期：近30天　·　数据粒度：年周（YYWww）</span></div>
+        </div>
+
+
+        <div class="tab-panel" id="panel-value">
+          <section class="value-inventory" aria-labelledby="value-inventory-title">
+            <header class="inventory-head">
+              <h2 id="value-inventory-title">卖点分类明细</h2>
+              <button class="text-action" type="button" onclick="askQ('请进一步分析用户价值差异的核心原因')">追问价值差异</button>
+            </header>
+            <div class="inventory-tools">
+              <div class="inventory-filters" role="group" aria-label="按卖点分类筛选"></div>
+              <details class="inventory-guide"><summary>分类口径</summary>
+                <dl><dt>高价值</dt><dd>我品独有或表现更优，且已获用户认可。</dd><dt>门槛</dt><dd>行业通用标配，缺少时会影响购买决策。</dd>
+                  <dt>待激活</dt><dd>我品已具备，但用户尚未认可。</dd><dt>缺失</dt><dd>竞品已获用户认可，而我品尚未具备。</dd></dl>
+              </details>
+            </div>
+            <div class="inventory-scroll"><table class="inventory-table" aria-label="卖点分类明细">
+              <thead><tr><th scope="col">卖点</th><th scope="col">分类</th><th scope="col">用户利益点 / 行动建议</th></tr></thead>
+              <tbody id="valueInventoryRows"></tbody>
+            </table></div>
+          </section>
+          <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>京东/天猫等电商平台VOC评论、商详卖点，结合奥维云网（AVC）量价监测交叉验证　·　统计周期：近30天</span></div>
+        </div>
+        <div class="tab-panel" id="panel-weight">
+          <!-- SELLING_POINT_WEIGHT_V14 -->
+          <div class="ai-card"><div class="ai-icon">AI</div><div><h3>卖点价值评估</h3><p>选择用户价值分析中的高价值或门槛卖点，估算该卖点对我品的实际价值，并同时对比行业平均及全部选中竞品的同类卖点参数。价值判断综合参考市场销量、品牌溢价指数和官方定价；当前为展示口径，最终计算模型以奥维专业规则为准。</p></div><div class="ai-actions"><button class="ai-followup-btn" onclick="askQ('请详细解读各卖点权重的变化趋势')"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>追问</button></div></div>
+          <div class="weight-toolbar">
+            <div><label>选择我品卖点</label><select class="select" id="weightPointSelect" onchange="renderSellingPointWeight()"><optgroup label="高价值卖点"><option value="brightness">XDR Pro 5200nits＋1920物理分区</option><option value="audio">6单元60W独立音响</option><option value="color">潘通＋杜比双冠色彩认证</option></optgroup><optgroup label="门槛卖点"><option value="screen">65英寸4K超高清大屏</option><option value="ai">AI画质芯片</option><option value="halo">U＋Mini LED光晕控制</option></optgroup></select></div>
+            <div class="weight-method"><b>价值判断口径</b><span>销量验证 40%</span><span>品牌溢价指数 35%</span><span>官方定价与参数差异 25%</span><em>具体公式待与奥维确认</em></div>
+          </div>
+          <div class="kpis weight-kpis">
+            <div class="kpi weight-value-main"><div class="label">我品卖点估算价值<span class="pill purple" id="weightTypePill">高价值</span></div><div class="value" id="weightOwnValue">¥--</div><div class="hint" id="weightValueHint">相对行业同类配置</div></div>
+            <div class="kpi"><div class="label">品牌溢价指数</div><div class="value" id="weightBrandIndex">--</div><div class="hint">价格指数与品牌VOC共同计算</div></div>
+            <div class="kpi"><div class="label">周销量验证</div><div class="value" id="weightSalesLift">--</div><div class="hint">具备该卖点型号相对行业变化</div></div>
+            <div class="kpi"><div class="label">估算可信度</div><div class="value" id="weightConfidence">--</div><div class="hint">样本覆盖与参数可比性</div></div>
+          </div>
+          <div class="card weight-detail-card"><div class="card-title">卖点参数与价值明细 <small>我品、行业平均及所选竞品</small></div><div class="table-wrap"><table class="weight-compare-table" id="weightCompareTable"></table></div></div>
+          <div class="forecast-assumption">说明：卖点估算价值用于判断定价贡献，不等同于可直接加价金额；同一产品的多个卖点可能存在价值重叠，业务定价时需结合产品整体定位去重校准。</div>
+          <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）销量与品牌溢价指数、品牌官方定价与参数库　·　价值口径：销量验证40%＋品牌溢价指数35%＋定价与参数差异25%（最终以奥维专业规则为准）</span></div>
+        </div>
+        <div class="tab-panel" id="panel-premium">
+          <!-- PREMIUM_ANALYSIS_V15 -->
+
+          <!-- 1. AI结论与策略（页面顶部） -->
+          <div class="monitor-ai-summary" style="margin-bottom:16px">
+            <div class="monitor-ai-head">
+              <div class="monitor-ai-icon">AI</div>
+              <h3>品牌溢价结论</h3>
+              <span class="ai-time"><i></i>基于海信与创维/TCL/小米品牌溢价指数、价格指数及VOC数据生成 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('premium')">重新生成</button>
+            </div>
+            <div class="daily-ai-cards" style="margin-bottom:12px">
+              <div class="daily-ai-card red">
+                <div class="daily-ai-card-title"><span class="pill red">重点风险</span>溢价承压</div>
+                <div class="daily-ai-card-body">
+                  <b style="color:var(--danger)">中低尺寸段溢价能力偏弱</b>，拉低整体加权溢价水平。
+                  <div class="daily-ai-card-list">
+                    <div><b>55寸及以下</b>：价格指数仅 1.05-1.08，与竞品价差不足 10%，溢价感知模糊</div>
+                    <div><b>服务类VOC</b>：安装服务、售后响应满意度低于行业均值 8-12pct，侵蚀品牌认同</div>
+                    <div><b>系统广告</b>：开机广告与内置广告负向提及率 23%，影响高端用户品牌好感</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card orange">
+                <div class="daily-ai-card-title"><span class="pill orange">观察预警</span>关注项</div>
+                <div class="daily-ai-card-body">
+                  <b>2 个趋势信号</b>值得持续跟踪，可能影响中期溢价格局。
+                  <div class="daily-ai-card-list">
+                    <div><b>TCL 上行</b>：TCL 品牌 VOC 认同指数连续 3 个月环比提升，中高端份额扩大</div>
+                    <div><b>小米价格下压</b>：小米以性价比策略加速渗透 65 寸段，间接压缩溢价空间</div>
+                    <div><b>换新周期</b>：行业进入存量换新期，用户对价格敏感度下降，对品质与服务要求提升</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card purple">
+                <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>溢价策略</div>
+                <div class="daily-ai-card-body">
+                  建议采取 <b>「稳住大屏＋修复服务」</b> 组合策略巩固溢价。
+                  <div class="daily-ai-card-list">
+                    <div><b>核心盘</b>：75寸+ 大屏为溢价核心贡献段，建议维持价格带，强化 XDR/音质心智</div>
+                    <div><b>补短板</b>：推进安装服务标准化升级、推出广告会员免打扰选项，修复 VOC 短板</div>
+                    <div><b>价值放大</b>：以「画质+独立音响+超薄工艺」组合传播，支撑中高端价位溢价能力</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+            <div class="daily-ai-actions">
+              <span class="daily-ai-followup" onclick="askQ('海信品牌溢价核心驱动因素分析')">溢价驱动因素分析 →</span>
+              <span class="daily-ai-followup" onclick="askQ('如何提升中小尺寸段品牌溢价')">中小尺寸溢价提升 →</span>
+              <span class="daily-ai-followup" onclick="askQ('服务类VOC负向归因与改进建议')">服务VOC改进方案 →</span>
+            </div>
+          </div>
+
+          <!-- 2. 品牌溢价指数对比 -->
+          <section class="premium-index-card" style="margin-bottom:16px">
+            <div class="premium-index-head"><div><h2>品牌溢价指数对比</h2><p>综合反映消费者对品牌的支付意愿与认可程度</p></div><span class="premium-formula">品牌溢价指数 = 价格指数 × 70% ＋ VOC品牌认同指数 × 30%</span></div>
+            <div class="premium-index-compare" id="premiumIndexCompare"></div>
+          </section>
+
+          <!-- 3. Tab切换：价值指数 | VOC指数 -->
+          <div class="tabs premium-subtabs" data-group="premium-sub" style="margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:0">
+            <div class="tab active" data-target="value-index" onclick="switchPremiumSubTab(this,event)">价值指数</div>
+            <div class="tab" data-target="voc-index" onclick="switchPremiumSubTab(this,event)">VOC指数</div>
+          </div>
+
+          <!-- Tab1: 价值指数 -->
+          <div class="premium-sub-panel active" id="panel-value-index">
+            <!-- 价值指数 AI总结 -->
+            <div class="monitor-ai-summary" style="margin-bottom:16px">
+              <div class="monitor-ai-head">
+                <div class="monitor-ai-icon">AI</div>
+                <h3>价值指数结论与建议</h3>
+                <span class="ai-time"><i></i>基于近3个月7个尺寸段价格指数与销量加权计算 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="showToast('价值指数分析重新生成中')">重新生成</button>
+              </div>
+              <div class="daily-ai-cards" style="margin-bottom:12px">
+                <div class="daily-ai-card green">
+                  <div class="daily-ai-card-title"><span class="pill green">分析结论</span>整体溢价定位</div>
+                  <div class="daily-ai-card-body">
+                    海信相对行业处于<b>溢价定位</b>，近3个月线上彩电市场7个尺寸段中6个具备优势。
+                    <div class="daily-ai-card-list">
+                      <div><b>整体加权溢价比例</b>：+25.0%</div>
+                      <div><b>加权平均溢价金额</b>：约 ¥1,060</div>
+                      <div><b>销额最高尺寸段</b>：≥70寸段，销额市占达 23.6%</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="daily-ai-card orange">
+                  <div class="daily-ai-card-title"><span class="pill orange">溢价段位分布</span>6段优势 / 1段收窄</div>
+                  <div class="daily-ai-card-body">
+                    <b>明显溢价优势段</b>（溢价 > 5%）共 6 段：
+                    <div class="daily-ai-card-list">
+                      <div>[32-40寸) +515.6% / +¥3,744　[40-46寸) +35.4% / +¥369</div>
+                      <div>[46-51寸) +46.4% / +¥651　[51-60寸) +22.4% / +¥429</div>
+                      <div>[60-70寸) +24.6% / +¥712　≥70寸 +22.6% / +¥1,294</div>
+                    </div>
+                    <div style="margin-top:8px"><b>溢价收窄段</b>（1%~5%）：&lt;32寸 +3.9% / +¥137</div>
+                  </div>
+                </div>
+                <div class="daily-ai-card purple">
+                  <div class="daily-ai-card-title"><span class="pill purple">策略建议</span>定价优化方向</div>
+                  <div class="daily-ai-card-body">
+                    建议采取 <b>「巩固大屏＋调整小尺寸＋拓展中段」</b> 三层策略。
+                    <div class="daily-ai-card-list">
+                      <div><b>巩固核心</b>：≥70寸为溢价核心贡献段，维持价格带，强化高端画质心智</div>
+                      <div><b>调整定价</b>：[32-40寸) 段溢价偏高但销量小，重新评估定价逻辑与渠道策略</div>
+                      <div><b>拓展布局</b>：[40-46寸) 段溢价健康，建议加大产品布局与市场投入</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 四个指标卡 -->
+            <div class="kpis premium-kpis-above-chart" style="margin-bottom:16px">
+              <div class="kpi"><div class="label">整体溢价比例</div><div class="value" id="premiumKpiRatio">+25.0%</div><div class="hint">相对所选竞品均价</div></div>
+              <div class="kpi"><div class="label">加权溢价金额</div><div class="value" id="premiumKpiAmount">+¥1,060</div><div class="hint">按各段位销量加权</div></div>
+              <div class="kpi"><div class="label">优势尺寸段数</div><div class="value" id="premiumKpiSegments">6 / 7</div><div class="hint">品牌溢价指数领先竞品均值</div></div>
+              <div class="kpi"><div class="label">≥70寸销额市占</div><div class="value" id="premiumKpiShare">23.6%</div><div class="hint"><span class="trend">核心优势段位</span></div></div>
+            </div>
+
+            <!-- 价格指数趋势图 + 溢价段位分布 -->
+            <div class="grid cols-2 premium-price-grid" style="margin-bottom:16px">
+              <!-- 品牌价格指数趋势图 -->
+              <div class="card"><div class="card-title">品牌价格指数趋势 <small>行业均价 = 1.00</small></div><div class="premium-price-chart" id="premiumPriceIndexChart"></div><div class="comp-data-source">数据来源：奥维云网（AVC）价格指数</div></div>
+              <!-- 溢价段位分布 -->
+              <div class="card"><div class="card-title">溢价段位分布 <small>随所选品牌刷新</small></div><div class="table-wrap"><table id="premiumSegmentTable" style="min-width:0"></table></div></div>
+            </div>
+
+            <!-- 价格指数明细表格 -->
+            <div class="section"><div class="section-head"><h2>价格指数明细</h2><p>我方品牌与选择竞争品牌横向对比</p></div><div class="table-wrap"><table id="premiumDetailTable"></table></div></div>
+          </div>
+
+          <!-- Tab2: VOC指数 -->
+          <div class="premium-sub-panel" id="panel-voc-index">
+            <!-- VOC AI总结 -->
+            <div class="monitor-ai-summary" style="margin-bottom:16px">
+              <div class="monitor-ai-head">
+                <div class="monitor-ai-icon">AI</div>
+                <h3>VOC指数结论与建议</h3>
+                <span class="ai-time"><i></i>基于全渠道用户评价与口碑数据生成 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="showToast('VOC分析重新生成中')">重新生成</button>
+              </div>
+              <div class="daily-ai-cards" style="margin-bottom:12px">
+                <div class="daily-ai-card green">
+                  <div class="daily-ai-card-title"><span class="pill green">正面评价</span>画质与音响领先</div>
+                  <div class="daily-ai-card-body">
+                    海信品牌整体好评率 <b>92.3%</b>，位居行业前列。画质与音响体验是核心口碑优势。
+                    <div class="daily-ai-card-list">
+                      <div><b>画质清晰</b>：正面提及率 78%，XDR 亮度与分区背光获用户高度认可</div>
+                      <div><b>音响效果</b>：正面提及率 65%，独立音响系统被认为"省了回音壁的钱"</div>
+                      <div><b>外观工艺</b>：正面提及率 58%，超薄机身与全面屏设计获好评</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="daily-ai-card red">
+                  <div class="daily-ai-card-title"><span class="pill red">负面问题</span>服务与系统体验</div>
+                  <div class="daily-ai-card-body">
+                    服务类与系统体验类负向评价占比较高，<b style="color:var(--danger)">拉低整体 VOC 指数约 5-8pct</b>。
+                    <div class="daily-ai-card-list">
+                      <div><b>安装服务</b>：负向提及率 18%，收费不透明、预约等待长是主要槽点</div>
+                      <div><b>系统广告</b>：负向提及率 23%，开机广告与内置广告影响高端用户体验</div>
+                      <div><b>售后响应</b>：负向提及率 12%，售后维修周期长、配件供应慢</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="daily-ai-card purple">
+                  <div class="daily-ai-card-title"><span class="pill purple">改进建议</span>口碑提升路径</div>
+                  <div class="daily-ai-card-body">
+                    建议从 <b>「服务标准化 + 系统体验升级」</b> 两方面入手提升 VOC 表现。
+                    <div class="daily-ai-card-list">
+                      <div><b>安装服务升级</b>：推出"透明安装"服务，收费标准公示，24h内上门承诺</div>
+                      <div><b>广告体验优化</b>：推出会员免广告选项，缩短开机广告时长至 5s 内</div>
+                      <div><b>售后提速</b>：建立核心城市备件仓，常见故障 48h 内修复闭环</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+              <div class="daily-ai-actions">
+                <span class="daily-ai-followup" onclick="askQ('海信品牌VOC负向评价深度归因分析')">VOC负向归因分析 →</span>
+                <span class="daily-ai-followup" onclick="askQ('竞品品牌VOC口碑对比分析')">竞品VOC对比 →</span>
+                <span class="daily-ai-followup" onclick="askQ('如何通过服务升级提升品牌口碑')">服务提升方案 →</span>
+              </div>
+            </div>
+
+            <!-- 品牌VOC TOP5横向对比（三卡片） -->
+            <div class="premium-voc-section">
+              <div class="comp-insight-head"><h2>品牌VOC TOP5横向对比</h2><small>我方品牌与当前选择的竞争品牌</small></div>
+              <div class="premium-voc-scroll"><div class="premium-voc-grid" id="premiumVocCompare"></div></div>
+            </div>
+          </div>
+
+          <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）价格指数与线上监测数据、品牌VOC认同指数　·　溢价指数 = 价格指数×70% ＋ VOC品牌认同指数×30%　·　统计周期：近3个月</span></div>
+        </div><div class="tab-panel" id="panel-pricevolume">
+          <div class="monitor-ai-summary">
+            <div class="monitor-ai-head">
+              <div class="monitor-ai-icon">AI</div>
+              <h3>量价变化</h3>
+              <span class="ai-time"><i></i>基于海信 65E7Q 价量弹性与竞品调价模型生成 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('pv')">重新生成</button>
+            </div>
+            <div class="daily-ai-cards" style="margin-bottom:12px">
+              <div class="daily-ai-card red">
+                <div class="daily-ai-card-title"><span class="pill red">重点风险</span>利润承压</div>
+                <div class="daily-ai-card-body">
+                  继续降价将快速逼近利润底线，需警惕 <b style="color:var(--danger)">价格战风险</b>。
+                  <div class="daily-ai-card-list">
+                    <div><b>进取方案</b>：到手价 ¥4,899，利润安全垫仅 ¥45/台，毛利风险高</div>
+                    <div><b>竞品威胁</b>：TCL 65Q9L PRO 以 ¥3,965 低价渗透，若跟进利润空间不足</div>
+                    <div><b>销量弹性</b>：价格下降 7.7% 仅拉动销量提升 33%-43%，价降毛利损失大于量增贡献</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card orange">
+                <div class="daily-ai-card-title"><span class="pill orange">观察预警</span>关注项</div>
+                <div class="daily-ai-card-body">
+                  <b>2 个关键变量</b>可能显著影响预测结果有效性。
+                  <div class="daily-ai-card-list">
+                    <div><b>竞品降价</b>：若竞品跟进新一轮降价，我品销量提升幅度将被压缩 40%-50%</div>
+                    <div><b>促销资源</b>：预测假设渠道曝光与促销资源稳定，资源倾斜可能拉高弹性</div>
+                    <div><b>库存约束</b>：若备货不足，销量提升可能受限于产能与渠道补货速度</div>
+                  </div>
+                </div>
+              </div>
+              <div class="daily-ai-card purple">
+                <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>定价策略</div>
+                <div class="daily-ai-card-body">
+                  建议采用 <b>推荐方案</b>，并配套差异化传播放大价值感知。
+                  <div class="daily-ai-card-list">
+                    <div><b>价格策略</b>：建议到手价 ¥5,099（-3.9%），保持 ¥164/台利润安全垫</div>
+                    <div><b>价值放大</b>：配合「XDR 画质+独立音响」内容投放，降低用户对价格敏感度</div>
+                    <div><b>动态调整</b>：执行后 2 周复盘实际销量响应，根据竞品反应决定是否进入下一轮</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+            <div class="daily-ai-actions">
+              <span class="daily-ai-followup" onclick="askQ('请分析价量联动关系对定价策略的启示')">价量联动定价启示 →</span>
+              <span class="daily-ai-followup" onclick="askQ('竞品降价背景下我品最优定价策略')">竞品降价应对策略 →</span>
+              <span class="daily-ai-followup" onclick="askQ('如何通过价值营销降低用户价格敏感度')">价值营销建议 →</span>
+            </div>
+          </div>
+          <div class="analysis-layer">
+            <div class="layer-head"><span class="layer-number">1</span><div><h2>实际量价关系</h2><p>基于近30天真实成交价、销量和竞品调价事件，仅呈现已发生的事实</p></div><span class="pill green">实际监测数据</span></div>
+            <section class="analysis-note"><b>成交表现</b><p>海信65E7Q近30天实际到手均价为 <b>¥5,305</b>，周均销量 <b>46台</b>。我品价格小幅下降3.5%后销量提升约15%；同期TCL 65Q9L PRO降价12.3%、销量增长33%，我品在竞品降价窗口出现约 <b>6%</b> 的短期销量回落，说明当前销量同时受自身价格与竞品促销影响。</p></section>
+            <div class="kpis" style="margin-bottom:14px"><div class="kpi"><div class="label">实际到手均价</div><div class="value">¥5,305</div><div class="hint">近30天成交数据</div></div><div class="kpi"><div class="label">实际销量</div><div class="value">46台</div><div class="hint">较同期 <span class="trend">+15%</span></div></div><div class="kpi"><div class="label">实际销额</div><div class="value">¥97.6万</div><div class="hint">成交价 × 实际销量</div></div><div class="kpi attention"><div class="label">竞品降价冲击</div><div class="value">-6.0%</div><div class="hint">降价窗口我品销量变化</div></div></div>
+            <div class="price-volume-combined-card">
+              <div style="display:flex;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:6px"><div style="flex:1;min-width:0"><b style="font-size:12px;color:var(--text)">实际均价 / 销量 / 销额组合趋势</b><p style="font-size:10px;color:var(--muted);margin-top:3px">全部已选我品与竞品，共享年周横轴</p></div><span class="pv-highlight-tip">点击型号高亮，再次点击恢复全部</span></div>
+              <div class="pv-product-legend" id="actualPVProductLegend"></div>
+              <div class="pv-metric-legend"><span><i></i>均价（元）</span><span><i class="units"></i>销量（台）</span><span><i class="revenue"></i>销额（万元）</span></div>
+              <div class="price-volume-combined-chart" id="actualPVCombinedChart" style="position:relative"><div class="comp-tooltip" id="actualPVTooltip"></div></div>
+              <div style="text-align:right;font-size:9px;color:#9aa1ad;margin-top:4px">数据来源：奥维云网（AVC）线上监测数据　　数据粒度：年周（YYWww）</div>
+            </div>
+          </div>
+          <div class="analysis-layer forecast">
+            <div class="layer-head"><span class="layer-number">2</span><div><h2>调价建议及效果预测</h2><p>在实际量价关系之上生成策略，预测值与历史事实分开展示</p></div><span class="pill purple">模型预测</span></div>
+            <section class="analysis-note forecast-note">
+              <div><b>推荐方案</b><p>建议标价保持不变，通过限时券将到手价由¥5,305调整至 <b>¥5,099</b>。中性场景下预计周销量提升至 <b>54-58台</b>、周销额约 <b>¥28.6万</b>，并保留约 <b>¥164</b> 的单台利润安全垫。若竞品继续降价，应先复核实际销量响应再进入下一轮调整。</p></div>
+              <button class="btn primary" onclick="showToast('调价建议书生成中...')">生成调价建议书</button>
+            </section>
+            <div class="kpis"><div class="kpi"><div class="label">推荐到手价</div><div class="value">¥5,099</div><div class="hint">较当前价 -3.9%</div></div><div class="kpi"><div class="label">预测周销量</div><div class="value">54-58台</div><div class="hint"><span class="trend">预计提升17%-26%</span></div></div><div class="kpi"><div class="label">预测周销额</div><div class="value">¥28.6万</div><div class="hint">中性场景</div></div><div class="kpi"><div class="label">利润安全垫</div><div class="value">¥164</div><div class="hint">预测单台贡献利润</div></div></div>
+            <div class="table-wrap"><table><thead><tr><th>方案</th><th>建议到手价</th><th>价格变化</th><th>预测周销量</th><th>预测周销额</th><th>利润安全垫</th><th>风险判断</th></tr></thead><tbody><tr><td>保守方案</td><td>¥5,299</td><td>-0.1%</td><td>48-50台</td><td>约¥26.0万</td><td>¥260/台</td><td><span class="pill green">低风险</span></td></tr><tr class="own-col"><td><b>推荐方案</b></td><td class="best">¥5,099</td><td>-3.9%</td><td class="best">54-58台</td><td class="best">约¥28.6万</td><td>¥164/台</td><td><span class="pill purple">收益均衡</span></td></tr><tr><td>进取方案</td><td>¥4,899</td><td>-7.7%</td><td>61-66台</td><td>约¥31.1万</td><td>¥45/台</td><td><span class="pill red">利润风险高</span></td></tr></tbody></table></div>
+            <div class="forecast-assumption">预测前提：渠道曝光、促销资源和库存保持稳定，竞品价格不发生新一轮大幅变化。预测结果用于辅助决策，执行后需用实际销量复盘并校准模型。</div>
+          </div>
+          <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）线上成交价与销量监测数据、竞品调价事件库，预测值经价量弹性模型测算　·　数据粒度：年周（YYWww）　·　统计周期：近30天</span></div>
+        </div>
+      </section>

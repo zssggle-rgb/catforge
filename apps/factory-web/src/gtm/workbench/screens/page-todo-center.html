@@ -1,0 +1,47 @@
+<section class="page" id="page-todo-center">
+        <div class="page-head"><div><h1>待办任务中心</h1><p>集中管理价格整改、竞品分析、策略调整等GTM待办事项</p></div><div class="page-actions"><button class="btn" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div></div>
+
+        <!-- 统计卡片 -->
+        <div class="kpis">
+          <div class="kpi attention"><div class="label">紧急待整改<span class="trend" style="color:var(--danger)">需今日处理</span></div><div class="value">2</div><div class="hint">较昨日 +1 项</div></div>
+          <div class="kpi"><div class="label">整改进行中</div><div class="value">3</div><div class="hint">本周新增 2 项</div></div>
+          <div class="kpi"><div class="label">本周已整改</div><div class="value">8</div><div class="hint"><span class="trend">+33%</span> 环比上周</div></div>
+          <div class="kpi"><div class="label">逾期未整改</div><div class="value">1</div><div class="hint" style="color:var(--danger)">最长逾期 2 天</div></div>
+        </div>
+
+        <!-- 筛选 -->
+        <div class="filters">
+          <div class="filter"><label>任务类型</label>
+            <select class="select"><option selected>价格整改</option><option>全部类型</option><option>竞品分析</option><option>策略调整</option><option>报告确认</option></select>
+          </div>
+          <div class="filter"><label>优先级</label>
+            <select class="select"><option>全部优先级</option><option>紧急</option><option>高</option><option>中</option><option>低</option></select>
+          </div>
+          <div class="filter"><label>状态</label>
+            <select class="select"><option>全部状态</option><option>待处理</option><option>进行中</option><option>已完成</option><option>已逾期</option></select>
+          </div>
+          <div class="filter"><label>负责人</label>
+            <select class="select"><option>全部</option><option>张恩哲</option><option>李伟</option><option>王敏</option><option>赵宁</option></select>
+          </div>
+          <button class="btn primary" onclick="showToast('已按筛选条件刷新数据')">查询</button>
+        </div>
+
+        <!-- 待办列表 -->
+        <div class="table-wrap">
+          <table style="min-width:960px">
+            <thead><tr><th>任务标题</th><th style="width:100px">类型</th><th style="width:100px">状态</th><th style="width:90px">截止时间</th><th style="width:100px">负责人</th><th style="width:150px">操作</th></tr></thead>
+            <tbody>
+                <tr data-priority="紧急"><td><b>拼多多渠道65WS8Q严重破价整改</b><div style="font-size:11px;color:var(--muted);margin-top:2px">券后到手价¥4,899，低于月度底价¥300，违规比例-5.8%</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill red">待处理</span></td><td style="color:var(--danger);font-weight:600">今天 18:00</td><td>陈晨</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="紧急"><td><b>拼多多渠道55E5N破价整改</b><div style="font-size:11px;color:var(--muted);margin-top:2px">到手价¥2,299，低于月度底价¥300，违规比例-11.5%</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill red">待处理</span></td><td style="color:var(--danger);font-weight:600">今天 18:00</td><td>陈晨</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="高"><td><b>抖音渠道75E8N Pro促销合规核查</b><div style="font-size:11px;color:var(--muted);margin-top:2px">抖音直播间到手价¥6,299，低于月度底价-2.9%，需确认是否合规</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill orange">进行中</span></td><td>09-12 18:00</td><td>王敏</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="高"><td><b>65E5N Pro京东渠道底价维护</b><div style="font-size:11px;color:var(--muted);margin-top:2px">新品上市后底价调整，京东自营页面价需同步至¥4,299</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill orange">进行中</span></td><td>09-13 12:00</td><td>赵宁</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="中"><td><b>85E8K淘天渠道促销价调整</b><div style="font-size:11px;color:var(--muted);margin-top:2px">淘天百亿补贴价¥7,999超出授权底价范围，需下调或取消补贴</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill orange">进行中</span></td><td>09-14 18:00</td><td>李伟</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="中"><td><b>55E5N拼多多渠道串货价格核查</b><div style="font-size:11px;color:var(--muted);margin-top:2px">拼多多第三方店铺低价销售¥2,199，疑似跨区域串货，需核查货源</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill gray">待处理</span></td><td>09-15 18:00</td><td>张恩哲</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+                <tr data-priority="紧急"><td><b>65WS8Q抖音直播间价格违规整改</b><div style="font-size:11px;color:var(--muted);margin-top:2px">达人直播间到手价¥4,799，低于月度底价-4.8%，已逾期2天</div></td><td><span class="pill red">价格整改</span></td><td><span class="pill red">已逾期</span></td><td style="color:var(--danger);font-weight:600">已逾期 2 天</td><td>陈晨</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" style="background:#1f9d6e;border-color:#1f9d6e" onclick="markTodoDone(this)">已处理</button><button class="btn sm" onclick="showTodoDetail(this)">查看</button></div></td></tr>
+             </tbody>
+          </table>
+        </div>
+        <div class="el-pagination"><span class="ep-total">共 7 条</span><span class="ep-size"><select onchange="showToast('每页显示 '+this.value+' 条')"><option>10条/页</option><option>20条/页</option><option>50条/页</option></select></span><button class="ep-btn disabled" onclick="showToast('已是第一页')">‹</button><button class="ep-btn active">1</button><button class="ep-btn disabled" onclick="showToast('已是最后一页')">›</button></div>
+
+        <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>全渠道价格巡检数据、AI分析结论、人工录入任务　·　任务状态实时同步</span></div>
+      </section>
