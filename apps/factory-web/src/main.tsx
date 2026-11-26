@@ -1,7 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { productTitle } from "./gtm/brand";
 const pathname = window.location.pathname;
 const isGtm = ["/", "/gtm", "/gtm/"].includes(pathname);
+if (isGtm) document.title = productTitle;
 const App = isGtm ? React.lazy(() => import("./gtm/GtmApp")) : React.lazy(() => import("./FactoryRoot"));
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

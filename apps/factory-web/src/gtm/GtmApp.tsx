@@ -20,6 +20,7 @@ import IconSend from "@douyinfe/semi-icons/lib/es/icons/IconSend";
 import { BusinessView } from "./BusinessView";
 import { Dialog, Sources } from "./DetailDialog";
 import { gtm } from "./client";
+import { productDescription, productName } from "./brand";
 import { defaultFilters, displayValue, pages, pageTabs, readRoute, type Action, type Choice, type Context,
   type Attachment, type Conversation, type FacetKey, type Filters, type Origin, type Page, type Route, type Row, type Scope, type Selection, type View, type Workspace } from "./contract";
 import "./gtm.css";
@@ -136,7 +137,7 @@ function Chat({project, filters, id, seed, origin, updateHistory}: {project: str
   }
   if (id && !current) return <Status error={chat.error} retry={() => setReload(v => v + 1)}/>;
   return <section className="gtm-chat"><h2>{current?.label || "想分析什么经营问题？"}</h2>
-    {current?.messages.map((m, i) => <article className={m.role} key={i}><b>{m.role === "user" ? "我的问题" : "GTM 助手"}</b><p>{m.text}</p>
+    {current?.messages.map((m, i) => <article className={m.role} key={i}><b>{m.role === "user" ? "我的问题" : productName}</b><p>{m.text}</p>
       {m.evidence.length > 0 && <details><summary>查看依据</summary><Sources items={m.evidence}/></details>}</article>)}
     <label className="gtm-upload">添加附件 <input type="file" aria-label="对话附件" disabled={busy} accept=".csv,.xlsx,.pdf,.txt,.png,.jpg,.jpeg" onChange={async e => {
       const file = e.target.files?.[0]; e.target.value = ""; if (!file) return;
@@ -175,7 +176,7 @@ export default function GtmApp() {
   const context = useRead("context:" + reload, gtm.context);
   const [projectId, setProjectId] = useState("");
   const project = context.data?.projects.find(p => p.id === projectId) ?? context.data?.projects[0];
-  if (!context.data || !project || !project.categories.length) return <main className="gtm gtm-boot"><h1>GTM竞价策略助手</h1>
+  if (!context.data || !project || !project.categories.length) return <main className="gtm gtm-boot"><h1>{productName}</h1>
     <Status error={context.error || (context.data ? "当前账号暂无可用品类或项目" : undefined)} retry={() => setReload(v => v + 1)}/>
     <p><a href="/core3">三竞品研判台</a>　<a href="/factory">品类资产工作台</a></p></main>;
   if (context.data.mode === "sample" && !new URLSearchParams(window.location.search).has("api")) {
@@ -204,7 +205,7 @@ function WorkspaceApp({context, project, changeProject}: {context: Context; proj
     const change = () => {setLocation(readRoute(window.location.hash)); setTabKey(""); setFacets({}); setSelection(emptySelection); setOffset(0); setSidebar(false); setAction(null); setMessage(""); main.current?.scrollTo(0, 0);};
     window.addEventListener("hashchange", change); return () => window.removeEventListener("hashchange", change);
   }, []);
-  useEffect(() => {document.title = titles[route] + " · GTM竞价策略助手";}, [route]);
+  useEffect(() => {document.title = titles[route] + " · " + productName;}, [route]);
   const scope: Scope = {...filters, query: page === "daily" ? "" : filters.query, project_id: project.id, page: page ?? "daily", tab, offset, limit: 20};
   const hasSelection = page === "competitor" || page === "rival-monitor" || page === "premium";
   const viewScope = {...scope, ...facets, ...(hasSelection ? (page === "premium" ? {brand_ids: selection.brand_ids} : {model_id: selection.model_id, competitor_ids: selection.competitor_ids}) : {})};
@@ -215,7 +216,7 @@ function WorkspaceApp({context, project, changeProject}: {context: Context; proj
   const startChat = (q = "") => {setSeed(q); setOrigin(q && page && result.data ? {page, tab, snapshot_id: result.data.snapshot_id, scope:viewScope} : null); setChatKey(n => n + 1); setSidebar(false); navigate("chat");};
   return <div className="gtm">
     {sidebar && <button className="gtm-backdrop" aria-label="关闭菜单" onClick={() => setSidebar(false)}/>}
-    <aside className={"gtm-sidebar" + (sidebar ? " open" : "")}><div className="gtm-brand"><i><IconHistogram/></i><div><b>GTM竞价策略助手</b><small>CatForge · 智能决策工作台</small></div></div>
+    <aside className={"gtm-sidebar" + (sidebar ? " open" : "")}><div className="gtm-brand"><i><IconHistogram/></i><div><b>{productName}</b><small>{productDescription}</small></div></div>
       <button className="gtm-new primary" onClick={() => startChat()}><IconPlus/> 新建对话</button>
       <div className="gtm-side-scroll"><nav>{(Object.keys(pages) as Page[]).map(p => <a key={p} href={"#/" + p} aria-current={route === p ? "page" : undefined}
         className={["launch", "todo-center"].includes(p) ? "gtm-divider" : ""}>{icons[p]}{pages[p]}</a>)}</nav>
@@ -225,7 +226,7 @@ function WorkspaceApp({context, project, changeProject}: {context: Context; proj
       <div className="gtm-profile"><i>{context.user.name.slice(0, 1)}</i><div><b>{context.user.name}</b><small>{context.user.role}</small></div>
         {context.projects.length > 1 ? <select aria-label="切换项目" value={project.id} onChange={e => changeProject(e.target.value)}>{options(context.projects)}</select> : <span>{project.label}</span>}</div>
     </aside><div className="gtm-main"><header className="gtm-top"><button className="gtm-menu" aria-label="打开菜单" onClick={() => setSidebar(true)}><IconMenu/></button>
-      <span>GTM竞价策略助手 / <b>{titles[route]}</b></span>{context.mode === "sample" && <small>样例数据</small>}<a href="#/help">帮助</a></header>
+      <span>{productName} / <b>{titles[route]}</b></span>{context.mode === "sample" && <small>样例数据</small>}<a href="#/help">帮助</a></header>
       <main ref={main} className="gtm-work"><header className="gtm-heading"><h1>{titles[route]}</h1>
         {result.data?.as_of && <time>{result.data.as_of.slice(0, 10)}</time>}
         {page && <div className="gtm-tools">{result.data && <button className="primary" onClick={() => exportView(result.data!)}><IconDownload/> {page === "daily" ? "日报导出" : "导出当前页"}</button>}

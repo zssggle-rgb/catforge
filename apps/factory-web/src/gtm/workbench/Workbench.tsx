@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Button from "@douyinfe/semi-ui/lib/es/button";
 import chartsUrl from "echarts/dist/echarts.min.js?url";
 import { gtm } from "../client";
+import { productDescription, productName, productTitle } from "../brand";
 import { pages } from "../contract";
 import layout from "./frame.html?raw";
 import css from "./workbench.css?raw";
@@ -13,7 +14,9 @@ import details from "./detail-links.js?raw";
 import pagination from "./pagination.js?raw";
 import { screenMarkup } from "./screens";
 
-const body = layout.replace(/<!--screen:([\w-]+)-->/g, (_, id: string) => screenMarkup(id));
+const body = layout.replace(/<!--screen:([\w-]+)-->/g, (_, id: string) => screenMarkup(id))
+  .replaceAll("{{productName}}", productName)
+  .replaceAll("{{productDescription}}", productDescription);
 const extraPages = {help: "帮助中心", chat: "新建对话", history: "历史记录", dashboard: "经营看板"};
 const titles: Record<string,string> = {...pages, ...extraPages};
 function route(value: unknown) {
@@ -78,7 +81,7 @@ export default function Workbench({project}: {project: string}) {
       }
       if (event.data?.type === "gtm:route") {
         const next = route(event.data.route);
-        document.title = titles[next.split("/")[0]] + " · CatForge";
+        document.title = titles[next.split("/")[0]] + " · " + productName;
         if (next !== locationRoute()) window.history.pushState(null, "", "#/" + next);
       }
     }
@@ -86,8 +89,8 @@ export default function Workbench({project}: {project: string}) {
     window.addEventListener("hashchange", restore);
     return () => {window.removeEventListener("message", receive); window.removeEventListener("hashchange", restore);};
   }, [project]);
-  if (!documentHtml) return <main className="gtm gtm-boot" role="status"><h1>GTM竞价策略助手</h1>
+  if (!documentHtml) return <main className="gtm gtm-boot" role="status"><h1>{productName}</h1>
     {error || "正在读取工作台样例…"} {error && <Button onClick={() => setRevision(n => n + 1)}>重试</Button>}</main>;
-  return <iframe ref={frame} title="GTM竞价策略助手" sandbox="allow-scripts allow-downloads"
+  return <iframe ref={frame} title={productTitle} sandbox="allow-scripts allow-downloads"
     style={{position:"fixed",inset:0,width:"100%",height:"100%",border:0,background:"#f5f6f8"}} srcDoc={documentHtml}/>;
 }
