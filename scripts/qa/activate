@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export CATFORGE_REVISION=$1 CATFORGE_WEB_PORT=$2
+printf 'CATFORGE_REVISION=%s\nCATFORGE_WEB_PORT=%s\n' "$1" "$2" > compose.env
 tools=$PWD/tools
 src=$PWD/src
 bash "$tools/scripts/qa/ensure-compose"
 docker=(docker)
 if ! docker info >/dev/null 2>&1; then docker=(sudo -n docker); fi
 compose=("${docker[@]}" compose --project-name catforge-qa --project-directory "$src"
-         --env-file /dev/null -f "$tools/docker-compose.yml" -f "$tools/scripts/qa/compose.yaml")
+         --env-file "$PWD/compose.env" -f "$tools/docker-compose.yml" -f "$tools/scripts/qa/compose.yaml")
 
 # On networks without Docker Hub, cache the same Docker Official Images
 # under their original names using their public ECR distribution.

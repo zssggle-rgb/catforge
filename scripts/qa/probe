@@ -14,7 +14,15 @@ def running_revision():
     remote = """
 set -eu
 command -v docker >/dev/null || exit 0
-if docker info >/dev/null 2>&1; then set -- docker; else set -- sudo -n docker; fi
+if docker info >/dev/null 2>&1; then
+    set -- docker
+elif sudo -n docker info >/dev/null 2>&1; then
+    set -- sudo -n docker
+elif ! systemctl is-active --quiet docker; then
+    exit 0
+else
+    exit 1
+fi
 for service in api web; do
     ids=$("$@" ps -q --filter label=com.docker.compose.project=catforge-qa \
         --filter label=com.docker.compose.service="$service" --filter label=com.docker.compose.oneoff=False)
@@ -41,7 +49,7 @@ def ready(url):
             return False
     with client.open(urljoin(url, "/api/readyz"), timeout=4) as response:
         result = json.load(response)
-        return result.get("status") == "ready" and result.get("database") == "ok"
+        return isinstance(result, dict) and result.get("status") == "ready" and result.get("database") == "ok"
 
 
 if __name__ == "__main__":
