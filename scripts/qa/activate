@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export CATFORGE_REVISION=$1 CATFORGE_WEB_PORT=$2
+tools=$PWD/tools
+src=$PWD/src
+bash "$tools/scripts/qa/ensure-compose"
+docker=(docker)
+if ! docker info >/dev/null 2>&1; then docker=(sudo -n docker); fi
+compose=("${docker[@]}" compose --project-name catforge-qa --project-directory "$src"
+         --env-file /dev/null -f "$tools/docker-compose.yml" -f "$tools/scripts/qa/compose.yaml")
+
+# On networks without Docker Hub, cache the same Docker Official Images
+# under their original names using their public ECR distribution.
+if ! curl -sS --connect-timeout 3 --max-time 5 -o /dev/null https://registry-1.docker.io/v2/; then
+  {
+    "${compose[@]}" config --format json | python3 -c 'import json,sys; print(*(s["image"] for s in json.load(sys.stdin)["services"].values() if "image" in s and "build" not in s), sep="\n")'
+    awk 'toupper($1)=="FROM" {print $2}' "$src/apps/api-server/Dockerfile" "$src/apps/factory-web/Dockerfile"
+  } | sort -u | while read -r image; do
+    [[ $image =~ ^[a-z0-9_-]+:[a-zA-Z0-9._-]+$ ]] || continue
+    if ! "${docker[@]}" image inspect "$image" >/dev/null 2>&1; then
+      mirror=public.ecr.aws/docker/library/$image
+      "${docker[@]}" pull -q "$mirror"
+      "${docker[@]}" tag "$mirror" "$image"
+    fi
+  done
+fi
+bash "$tools/scripts/compose-apply.sh" qa "${compose[@]}"

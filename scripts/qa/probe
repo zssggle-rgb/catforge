@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Read the revision labels of the two running images and test the paired web URL."""
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from urllib.parse import urljoin
+
+
+def running_revision():
+    remote = """
+set -eu
+command -v docker >/dev/null || exit 0
+if docker info >/dev/null 2>&1; then set -- docker; else set -- sudo -n docker; fi
+for service in api web; do
+    ids=$("$@" ps -q --filter label=com.docker.compose.project=catforge-qa \
+        --filter label=com.docker.compose.service="$service" --filter label=com.docker.compose.oneoff=False)
+    [ "$(printf '%s\n' "$ids" | wc -w)" -eq 1 ] || exit 0
+    image=$("$@" inspect --format '{{.Image}}' "$ids")
+    "$@" image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image"
+done
+"""
+    result = subprocess.run(
+        ["ssh", "-F", os.environ["FM_QA_SSH_CONFIG"], "-oBatchMode=yes", "-oConnectTimeout=5",
+         "--", os.environ["FM_QA_HOST"], "sh", "-s"],
+        input=remote, capture_output=True, text=True, timeout=18, check=True,
+    )
+    labels = result.stdout.splitlines()
+    if len(labels) == 2 and labels[0] == labels[1] and re.fullmatch("[0-9a-f]{40}", labels[0]):
+        return labels[0]
+    return None
+
+
+def ready(url):
+    client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with client.open(url, timeout=4) as response:
+        if b'id="root"' not in response.read(65536):
+            return False
+    with client.open(urljoin(url, "/api/readyz"), timeout=4) as response:
+        result = json.load(response)
+        return result.get("status") == "ready" and result.get("database") == "ok"
+
+
+if __name__ == "__main__":
+    try:
+        sha = running_revision()
+    except (OSError, subprocess.SubprocessError):
+        sys.exit("Unable to inspect the paired test machine")
+    try:
+        healthy = bool(sha) and ready(os.environ["FM_QA_URL"])
+    except (OSError, ValueError, urllib.error.URLError):
+        healthy = False
+    print(json.dumps({"healthy": healthy, "deploy_sha": sha}))

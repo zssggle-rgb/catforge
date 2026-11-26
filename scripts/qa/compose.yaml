@@ -1,0 +1,23 @@
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+  api:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${CATFORGE_REVISION:?}
+    ports: !reset []
+    volumes: !override [qa_data:/data]
+    restart: unless-stopped
+  web:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${CATFORGE_REVISION:?}
+    ports: !override ["${CATFORGE_WEB_PORT:?}:5173"]
+    restart: unless-stopped
+
+volumes:
+  qa_data: {}
