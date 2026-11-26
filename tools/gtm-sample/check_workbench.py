@@ -25,6 +25,11 @@ def inspect(frame, save):
         assert info["text"] > 1, label
         states[label] = info
         if save:
+            gradient_surfaces = view.locator(
+                ":is(.model-builder,.monitor-ai-summary,.ai-card,.premium-index-card,.price-record,"
+                ".inventory-head,.report-ai-head,.rival-model-title,.chat-analysis-title,.chat-value-item):visible"
+            ).evaluate_all("nodes => nodes.filter(n=>getComputedStyle(n).backgroundImage.includes('gradient')).map(n=>n.className)")
+            assert not gradient_surfaces, (label, gradient_surfaces)
             if not selector.startswith("#page-") and not selector.endswith("Modal"):
                 view.evaluate("el=>el.scrollIntoView({block:'start',behavior:'instant'})")
             frame.page.screenshot(path=save / (label + ".png"), animations="disabled")
@@ -258,6 +263,15 @@ def main():
                            "品牌溢价-voc-index","重点产品-管理型号","巡检-底价版本","巡检-活动期间","报告-新建订阅","报告-导出配置","报告-分享配置")
         for key in unchanged_content:
             assert actual[key]["content"]==expected[key]["content"], key+" 子页面正文不一致"
+        renamed_copy = {
+            "竞品洞察-product": [("AI总结与建议","产品对比结论"),("AI推荐竞品","推荐竞品")],
+            "竞品洞察-pricevolume": [("AI总结与建议","量价变化"),("AI AI解读","成交表现"),("模型预测 AI 推荐方案","模型预测 推荐方案")],
+        }
+        for key, labels in renamed_copy.items():
+            updated = expected[key]["content"]
+            for old, new in labels:
+                updated = updated.replace(old, new)
+            assert actual[key]["content"] == updated, key+" 业务内容被改变"
         check_inventory(frame, original.main_frame)
         assert actual["竞品洞察-value"]["titles"] == ["卖点分类明细"]
         assert actual["竞品洞察-value"]["columns"] == ["卖点","分类","用户利益点 / 行动建议"]
@@ -311,6 +325,14 @@ def main():
         assert any("/details/rival-price-history" in x for x in requests)
         assert not any("sample-scenarios" in x for x in requests)
         actions.append("真实模式契约模拟：竞品监控→选中记录证据→同一记录的历史价格")
+        live.goto(opts.url+"#/competitor")
+        live.get_by_role("button",name="用户价值分析",exact=True).click()
+        value_table = live.locator(".gtm-matrix")
+        value_table.get_by_text("四路 HDMI 2.1",exact=True).wait_for()
+        assert value_table.locator("th").all_text_contents() == ["型号","用户任务","卖点","反馈","操作"]
+        value_table.get_by_role("button",name="查看明细").first.click()
+        live.get_by_role("dialog").wait_for()
+        actions.append("真实模式契约模拟：用户价值表格读取接口字段并打开行明细")
         phone=browser.new_page(viewport={"width":390,"height":844},locale="zh-CN")
         phone.goto(opts.url);phone.wait_for_selector("iframe")
         handheld=phone.frames[-1];handheld.get_by_role("button",name="打开导航").click()
@@ -318,6 +340,15 @@ def main():
         handheld.locator("#page-reports").wait_for()
         assert handheld.evaluate("document.documentElement.scrollWidth<=window.innerWidth")
         actions.append("390px 宽度打开导航并进入订阅报告")
+        phone.goto(opts.url+"#/competitor/value")
+        handheld=phone.frames[-1]
+        inventory=handheld.locator(".value-inventory")
+        inventory.wait_for()
+        inventory.evaluate("n=>n.scrollIntoView({block:'start'})")
+        assert inventory.evaluate("n=>n.scrollWidth<=window.innerWidth && n.getBoundingClientRect().top>=document.querySelector('.topbar').getBoundingClientRect().bottom-1")
+        handheld.locator(".inventory-filters button[data-group=missing]").click()
+        assert handheld.locator("#valueInventoryRows tr").count()==2
+        actions.append("390px 宽度查看卖点表格并筛选缺失项")
         report={"reference_sha256":hashlib.sha256(opts.reference.read_bytes()).hexdigest(),
                 "url":opts.url,"screen_ids":screen_ids,"states":list(actual),"matching_body_text":list(unchanged_content),
                 "actions":actions,"differences":differences,"errors":errors}
