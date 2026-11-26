@@ -1,10 +1,12 @@
-# GTM 竞价策略助手前端联调
+# 竞品猎手 · GTM 竞价策略助手前端联调
 
 参考稿为 `cankao/终稿/GTM竞价策略助手0916.html`。CatForge Web 的 `/` 和 `/gtm/` 打开每日重点工作，九个业务入口共享侧栏、当前项目、品类、数据范围和证据明细。可直接打开 `/gtm/#/competitor` 等页面。原三竞品研判台入口为 `/core3`，真实数据报告为 `/core3-real-data`，工厂为 `/factory`。
 
 ## 后台交付边界
 
-界面采用 React、TypeScript、Vite 和 Semi Design 2.102.0。筛选、表格、弹窗和图标复用与 AdPilot 同版本的 Semi 组件，主蓝与状态色来自默认浅色主题。业务布局以 0916 终稿为基准，旧工厂入口独立按需加载。
+界面采用 React、TypeScript、Vite 和 Semi Design 2.102.0。业务布局以 0916 终稿为基准，旧工厂入口独立按需加载。
+
+竞品猎手的猎隼标志、标题和当前导航使用墨蓝 `#152C3A`，眼部使用琥珀色 `#F2A73C`，工作区以纸白 `#F7F6F0` 衬托白色数据卡片。新建对话、查询、链接和业务状态沿用 Semi 浅色主题的操作色与状态色。桌面及手机侧栏使用 147 × 40 px 双语横标，浏览器使用独立图标，报告阅读与编辑界面使用 104 × 28 px 单色横标。[可编辑母版](brand/rival-hunter-master.svg) · [界面使用的 SVG](../apps/factory-web/src/gtm/assets)
 
 浏览器只调用 [GTM OpenAPI](../contracts/gtm-workspace.openapi.yaml)。[TypeScript 类型](../apps/factory-web/src/gtm/contract.ts)与[请求客户端](../apps/factory-web/src/gtm/client.ts)定义前端实际消费的字段。生产构建默认使用同源 `/api/gtm/v1`。如运行端网关路径不同，可在构建时设置 `VITE_GTM_API_BASE`。Vite 和原 Nginx 配置均会剥掉第一层 `/api`，因此上游收到 `/gtm/v1/...`。登录与项目授权由运行端执行。
 

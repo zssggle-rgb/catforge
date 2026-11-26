@@ -20,10 +20,12 @@ import IconSend from "@douyinfe/semi-icons/lib/es/icons/IconSend";
 import { BusinessView } from "./BusinessView";
 import { Dialog, Sources } from "./DetailDialog";
 import { gtm } from "./client";
-import { productDescription, productName } from "./brand";
+import { productName, productTitle } from "./brand";
+import hunterLockup from "./assets/rival-hunter.svg?inline";
 import { defaultFilters, displayValue, pages, pageTabs, readRoute, type Action, type Choice, type Context,
   type Attachment, type Conversation, type FacetKey, type Filters, type Origin, type Page, type Route, type Row, type Scope, type Selection, type View, type Workspace } from "./contract";
 import "./gtm.css";
+import "./brand.css";
 const Workbench = lazy(() => import("./workbench/Workbench"));
 
 const titles = {...pages, chat: "新建对话", history: "历史记录", help: "帮助中心"};
@@ -176,7 +178,7 @@ export default function GtmApp() {
   const context = useRead("context:" + reload, gtm.context);
   const [projectId, setProjectId] = useState("");
   const project = context.data?.projects.find(p => p.id === projectId) ?? context.data?.projects[0];
-  if (!context.data || !project || !project.categories.length) return <main className="gtm gtm-boot"><h1>{productName}</h1>
+  if (!context.data || !project || !project.categories.length) return <main className="gtm gtm-boot"><h1><img src={hunterLockup} width="147" height="40" alt={productTitle}/></h1>
     <Status error={context.error || (context.data ? "当前账号暂无可用品类或项目" : undefined)} retry={() => setReload(v => v + 1)}/>
     <p><a href="/core3">三竞品研判台</a>　<a href="/factory">品类资产工作台</a></p></main>;
   if (context.data.mode === "sample" && !new URLSearchParams(window.location.search).has("api")) {
@@ -216,7 +218,7 @@ function WorkspaceApp({context, project, changeProject}: {context: Context; proj
   const startChat = (q = "") => {setSeed(q); setOrigin(q && page && result.data ? {page, tab, snapshot_id: result.data.snapshot_id, scope:viewScope} : null); setChatKey(n => n + 1); setSidebar(false); navigate("chat");};
   return <div className="gtm">
     {sidebar && <button className="gtm-backdrop" aria-label="关闭菜单" onClick={() => setSidebar(false)}/>}
-    <aside className={"gtm-sidebar" + (sidebar ? " open" : "")}><div className="gtm-brand"><i><IconHistogram/></i><div><b>{productName}</b><small>{productDescription}</small></div></div>
+    <aside className={"gtm-sidebar" + (sidebar ? " open" : "")}><div className="gtm-brand"><img src={hunterLockup} width="147" height="40" alt={productTitle}/></div>
       <button className="gtm-new primary" onClick={() => startChat()}><IconPlus/> 新建对话</button>
       <div className="gtm-side-scroll"><nav>{(Object.keys(pages) as Page[]).map(p => <a key={p} href={"#/" + p} aria-current={route === p ? "page" : undefined}
         className={["launch", "todo-center"].includes(p) ? "gtm-divider" : ""}>{icons[p]}{pages[p]}</a>)}</nav>

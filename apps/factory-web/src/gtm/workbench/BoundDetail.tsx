@@ -5,13 +5,15 @@ import type { Action, Row, Scope } from "../contract";
 import { projectDetail, type DetailProjection, type DetailRef } from "./projection";
 import css from "./workbench.css?raw";
 import theme from "./catforge.css?raw";
+import brandStyles from "../brand.css?inline";
 
 function Body({data}: {data: DetailProjection}) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const shadow = host.current!.shadowRoot || host.current!.attachShadow({mode:"open"});
     const style = document.createElement("style");
-    style.textContent = css + "\n" + theme + "\n:host{display:block;color:var(--text)} .modal-body :empty{display:none} .modal-body{padding:0}";
+    style.textContent = css + "\n" + theme + "\n" + brandStyles +
+      "\n:host{display:block;color:var(--text)} .modal-body :empty:not(.hunter-letterhead){display:none} .modal-body{padding:0}";
     const el = document.createElement("div"); el.className = "modal-body";
     el.append(projectDetail(data, document)); shadow.replaceChildren(style,el);
   },[data]);

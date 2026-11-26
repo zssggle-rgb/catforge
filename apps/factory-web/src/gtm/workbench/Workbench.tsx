@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import Button from "@douyinfe/semi-ui/lib/es/button";
 import chartsUrl from "echarts/dist/echarts.min.js?url";
 import { gtm } from "../client";
-import { productDescription, productName, productTitle } from "../brand";
+import { productName, productTitle } from "../brand";
+import hunterLockup from "../assets/rival-hunter.svg?inline";
+import brandStyles from "../brand.css?inline";
 import { pages } from "../contract";
 import layout from "./frame.html?raw";
 import css from "./workbench.css?raw";
@@ -16,7 +18,8 @@ import { screenMarkup } from "./screens";
 
 const body = layout.replace(/<!--screen:([\w-]+)-->/g, (_, id: string) => screenMarkup(id))
   .replaceAll("{{productName}}", productName)
-  .replaceAll("{{productDescription}}", productDescription);
+  .replace("{{productTitle}}", productTitle)
+  .replace("{{hunterLockup}}", () => hunterLockup);
 const extraPages = {help: "帮助中心", chat: "新建对话", history: "历史记录", dashboard: "经营看板"};
 const titles: Record<string,string> = {...pages, ...extraPages};
 function route(value: unknown) {
@@ -36,7 +39,7 @@ function buildDocument(records: Record<string, unknown>) {
     .map(name => name + ":" + shell.getPropertyValue(name)).join(";");
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' ${origin}; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'">
-    <style>:root{${tokens}}${css}\n${theme}</style><script src="${script}"></script></head><body>${body}
+    <style>:root{${tokens}}${css}\n${theme}\n${brandStyles}</style><script src="${script}"></script></head><body>${body}
     <script>window.gtmRecords=${json}</script><script>${controller}</script><script>${inventory}</script><script>${details}</script><script>${pagination}</script><script>${navigation}</script></body></html>`;
 }
 
@@ -89,8 +92,8 @@ export default function Workbench({project}: {project: string}) {
     window.addEventListener("hashchange", restore);
     return () => {window.removeEventListener("message", receive); window.removeEventListener("hashchange", restore);};
   }, [project]);
-  if (!documentHtml) return <main className="gtm gtm-boot" role="status"><h1>{productName}</h1>
+  if (!documentHtml) return <main className="gtm gtm-boot" role="status"><h1><img src={hunterLockup} width="147" height="40" alt={productTitle}/></h1>
     {error || "正在读取工作台样例…"} {error && <Button onClick={() => setRevision(n => n + 1)}>重试</Button>}</main>;
   return <iframe ref={frame} title={productTitle} sandbox="allow-scripts allow-downloads"
-    style={{position:"fixed",inset:0,width:"100%",height:"100%",border:0,background:"#f5f6f8"}} srcDoc={documentHtml}/>;
+    style={{position:"fixed",inset:0,width:"100%",height:"100%",border:0,background:"var(--hunter-paper)"}} srcDoc={documentHtml}/>;
 }

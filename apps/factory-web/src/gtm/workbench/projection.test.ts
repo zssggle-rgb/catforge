@@ -20,6 +20,11 @@ describe("0916 detailed views",()=>{
     expect(body.querySelector("#evidenceCurrent")?.textContent).toBe("0");
     expect(body.querySelector("#evidenceBaseline")?.textContent).toBe("—");
   });
+  it("keeps the report masthead when replacing the sample content",()=>{
+    const report = projectDetail(make("report"), document);
+    expect(report.querySelector(".hunter-letterhead")?.getAttribute("aria-label")).toBe("竞品猎手");
+    expect(projectDetail(make("task"), document).querySelector(".hunter-letterhead")).toBeNull();
+  });
   it("repeats history records and product claims from a returned snapshot",()=>{
     const data=make("rival-price-history");data.tables.history={columns:["时间","到手价"],rows:[["周一",3200],["周二",null]]};
     const body=document.createElement("div");body.append(projectDetail(data,document));

@@ -12,7 +12,7 @@
   document.querySelector(".small-nav-backdrop").addEventListener("click",()=>setMenu(false));
   document.querySelector(".sidebar").addEventListener("click",e=>{
     if(e.target.closest(".nav-item,.history-item,.new-chat,.history-title")) setMenu(false);
-  });
+  }, {capture:true}); // Some page handlers stop the click from bubbling.
   function selectedRoute() {
     const page = document.querySelector(".page.active")?.id.slice(5) || "daily";
     if (page === "competitor") {

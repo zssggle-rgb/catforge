@@ -336,6 +336,11 @@ def main():
         phone=browser.new_page(viewport={"width":390,"height":844},locale="zh-CN")
         phone.goto(opts.url);phone.wait_for_selector("iframe")
         handheld=phone.frames[-1];handheld.get_by_role("button",name="打开导航").click()
+        assert handheld.locator(".sidebar .brand img").evaluate("el => el.complete && el.naturalWidth > 0")
+        handheld.locator(".nav-item[data-page=competitor]").click()
+        handheld.locator("#page-competitor").wait_for()
+        assert handheld.locator(".small-nav-trigger").get_attribute("aria-expanded") == "false"
+        handheld.get_by_role("button",name="打开导航").click()
         handheld.locator(".nav-item[data-page=reports]").click()
         handheld.locator("#page-reports").wait_for()
         assert handheld.evaluate("document.documentElement.scrollWidth<=window.innerWidth")

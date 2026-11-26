@@ -3,7 +3,8 @@
 :root, :host {
   --primary: var(--semi-color-primary, #0064fa);
   --primary-soft: var(--semi-color-primary-light-default, #eaf3ff);
-  --text: var(--semi-color-text-0, #1c1f23);
+  --text: var(--hunter-ink);
+  --bg: var(--hunter-paper);
   --muted: var(--semi-color-text-1, #545b65);
   --subtle: var(--semi-color-text-2, #707680);
   --line: var(--semi-color-border, #e2e4e8);
@@ -12,7 +13,9 @@
   --danger: var(--semi-color-danger, #d83432);
   --radius: 8px;
 }
-.logo { background:var(--primary); box-shadow:none }
+.workspace, #page-daily, #page-chat.active, .report-workspace-shell .report-canvas-v4 { background:var(--bg) }
+.sidebar .nav-item.active { background:var(--hunter-selection); color:var(--text) }
+.page-head h1, .report-preview-title { color:var(--text) }
 .model-builder, .brand-scope, .report-center-head, #page-launch .launch-hero,
 .analysis-layer.forecast, .premium-index-card, .weight-kpis .weight-value-main,
 .daily-model-trend, .monitor-ai-summary, .ai-card, .report-ai-head,
@@ -34,8 +37,8 @@
   display:block; flex:none; align-self:flex-start; width:3px; height:14px; margin-top:3px;
   font-size:0; background:var(--primary); border:0; border-radius:2px; box-shadow:none;
 }
-.daily-ai-overview { background:#f5f9ff; border:1px solid #cadefb; border-radius:var(--radius) }
-.daily-ai-icon { background:var(--primary); border-radius:6px; box-shadow:none }
+.daily-ai-overview { background:var(--card); border:1px solid var(--line); border-radius:var(--radius) }
+.daily-ai-icon { background:var(--text); border-radius:6px; box-shadow:none }
 .daily-ai-card { background:var(--card); border-color:var(--line); box-shadow:none }
 .daily-ai-card:before { width:2px }
 .daily-ai-card.red:before { background:var(--danger) }
@@ -78,7 +81,6 @@
 .premium-index-item.own, .premium-voc-card.own { border-color:var(--line); box-shadow:none }
 .premium-index-item.own .score { color:var(--primary) }
 #page-chat .msg-ai .insight { border-color:var(--line); background:var(--surface-muted); color:var(--text) }
-.report-preview-kicker { background:var(--primary); height:3px; width:24px }
 .modal-mask { background:rgba(20,25,34,.34) }
 .modal, .kpm-modal { border-radius:10px; box-shadow:0 12px 44px rgba(20,29,46,.16) }
 .modal-head, .kpm-head { padding:16px 20px; color:var(--text); font-size:16px; font-weight:600; border-bottom:1px solid var(--line) }

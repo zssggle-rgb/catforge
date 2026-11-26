@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { displayValue, type Action, type Cell, type Row } from "./contract";
 import { Dialog, Sources } from "./DetailDialog";
+import { productName } from "./brand";
 
 type Group = {title: string; keys: string[]};
 // The detail pages use their own business vocabulary. Unknown fields, evidence
@@ -43,6 +44,7 @@ export function RecordDetail({table, row, close, act}: {
   const extra = Object.keys(fields).filter(k => !used.has(k));
   if (extra.length) sections.push({title:"明细", keys:extra});
   return <Dialog title={titles[table] || row.title} close={close}><div className="gtm-record-detail">
+    {table === "reports" && <div className="hunter-letterhead" role="img" aria-label={productName}/>}
     <h2>{row.title}</h2>
     <div className="gtm-tabs"><button aria-pressed={tab==="record"} onClick={() => setTab("record")}>业务详情</button>
       <button aria-pressed={tab==="evidence"} onClick={() => setTab("evidence")}>原始证据（{row.evidence.length}）</button></div>
