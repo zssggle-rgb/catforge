@@ -52,6 +52,7 @@ export interface Action { operation: Operation; label: string; fields?: InputFie
 export interface Attachment { id: string; name: string }
 export interface Row {
   id: string; title: string; cells: Record<string, Cell>; evidence: Evidence[];
+  drilldown?: import("./workbench/projection").DetailRef;
   detail: {label: string; value: Cell}[]; actions: Action[];
 }
 export interface DataTable { id: string; title: string; columns: Column[]; rows: Row[]; total: number; target?: Page }

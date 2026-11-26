@@ -1,0 +1,313 @@
+<section class="page active" id="page-daily">
+        <div class="daily-page-head">
+          <h1>每日重点工作</h1>
+          <span class="daily-date">2026-09-04 周五</span>
+          <div class="daily-live"><i></i>数据实时更新 · 聚焦当日需决策事项</div>
+          <div class="daily-head-actions"><button class="btn primary sm" onclick="openExportModal('GTM每日重点工作')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 21h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>日报导出</button><button class="btn sm" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div>
+        </div>
+        <!-- 顶部筛选 -->
+        <div class="daily-filters">
+          <div class="filter"><label>渠道</label><select class="select"><option>全渠道</option><option>京东</option><option>天猫</option><option>抖音</option><option>拼多多</option></select></div>
+          <div class="filter"><label>品类</label><select class="select" id="dailyCategorySelect" onchange="updateDailySubCategory(this.value)"><option value="tv">电视</option><option value="ac">空调</option><option value="fridge">冰箱</option><option value="washer">洗衣机</option><option value="kitchen">厨卫</option></select></div>
+          <div class="filter"><label>品类细分</label><select class="select" id="dailySubCategorySelect"><option value="全部">全部</option><option value="平板电视">平板电视</option></select></div>
+          <div class="filter"><label>时间周期</label><select class="select" id="dailyPeriodSelect" onchange="switchDailyPeriod(this.value)"><option value="today">今日</option><option value="yesterday">昨日</option><option value="week7">近7天</option><option value="month">近30天</option><option>自定义</option></select></div>
+          <button class="btn primary" onclick="showToast('已按筛选条件刷新数据')">查询</button>
+        </div>
+        <!-- 顶部AI总结 -->
+        <div class="daily-ai-overview">
+          <div class="daily-ai-head">
+            <div class="daily-ai-icon">AI</div>
+            <h3>工作总览</h3>
+            <span class="ai-time">基于当前筛选条件生成 · 2026-09-04 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('daily')">重新生成</button>
+          </div>
+          <div class="daily-ai-cards">
+            <div class="daily-ai-card red">
+              <div class="daily-ai-card-title"><span class="pill red">重点关注</span>价格异常</div>
+              <div class="daily-ai-card-body">
+                今日全渠道价格巡检完成率<b>98.7%</b>，发现价格异常<b>12项</b>，其中严重违规<b>3项</b>集中在拼多多渠道。<br>
+                <div class="daily-ai-card-list">
+                  <div><b>拼多多</b>：5 项违规，2 项严重破价</div>
+                  <div><b>京东</b>：3 项违规，1 项促销价差过大</div>
+                  <div><b>天猫</b>：2 项违规，均为优惠券叠用</div>
+                  <div><b>抖音</b>：2 项违规，直播间补贴超范围</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card orange">
+              <div class="daily-ai-card-title"><span class="pill orange">市场动态</span>竞品调价</div>
+              <div class="daily-ai-card-body">
+                <span class="highlight">TCL 65Q9L PRO降价12.3%</span>需重点关注，与我品65E7Q价差缩小至¥217。近3日TCL销量环比上升23.4%，我品对应型号销量下滑8.6%。<br>
+                <div class="daily-ai-card-list">
+                  <div><b>降价幅度最大</b>：TCL 65Q9L PRO（-12.3%）</div>
+                  <div><b>对我冲击最强</b>：65E7Q（销量 -8.6%）</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card purple">
+              <div class="daily-ai-card-title"><span class="pill purple">新品监测</span>竞品上新</div>
+              <div class="daily-ai-card-body">
+                竞品新品上架<b>3款</b>，核心传播集中于超薄嵌入与净味除菌。电视品类2款、冰箱1款，均瞄准中高端价格带。<br>
+                <div class="daily-ai-card-list">
+                  <div><b>TCL 65Q9L PRO</b>：Mini LED · 首发 ¥5,522</div>
+                  <div><b>美的 鲜净感508 Ultra</b>：超薄嵌入 · 首发 ¥8,999</div>
+                  <div><b>小米 S Pro 65 2026款</b>：性价比 · 首发 ¥4,199</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+          <div class="daily-ai-actions">
+            <span class="daily-ai-followup" onclick="askQ('拼多多渠道破价的具体原因和处理方案是什么')">拼多多破价处理方案 →</span>
+            <span class="daily-ai-followup" onclick="askQ('TCL降价对我品销量的影响评估')">TCL降价影响评估 →</span>
+            <span class="daily-ai-followup" onclick="askQ('今日新品上新的竞品卖点对比分析')">新品竞品卖点对比 →</span>
+          </div>
+        </div>
+        <!-- 第一部分：核心指标 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>核心指标</h3>
+            <span class="ds-sub">经营核心数据一览· 今日</span>
+          </div>
+          <div class="daily-section-body">
+            <div class="daily-kpi-grid">
+              <div class="daily-kpi-card" onclick="goPage('own-monitor',document.querySelector('[data-page=own-monitor]'))">
+                <div class="dk-label">巡检SKU数 <span class="dk-more">详情 ›</span></div>
+                <div class="dk-value">2,486<span style="font-size:12px;color:var(--subtle);font-weight:400"> / 2,520</span></div>
+                <div class="dk-hint">完成率 98.7%</div>
+              </div>
+              <div class="daily-kpi-card alert" onclick="goPage('own-monitor',document.querySelector('[data-page=own-monitor]'))">
+                <div class="dk-label">价格异常数 <span class="dk-more">处理 ›</span></div>
+                <div class="dk-value">12</div>
+                <div class="dk-hint">严重 3 · 一般 7 · 提示 2</div>
+              </div>
+              <div class="daily-kpi-card">
+                <div class="dk-label">违规率</div>
+                <div class="dk-value">0.48%</div>
+                <div class="dk-hint"><span class="up">较昨日 -0.08pct</span></div>
+              </div>
+              <div class="daily-kpi-card">
+                <div class="dk-label">涉及渠道数</div>
+                <div class="dk-value">4</div>
+                <div class="dk-hint">京东 / 天猫 / 抖音 / 拼多多</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 第二部分：价格违规趋势 + 异常渠道分布 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>价格违规概览</h3>
+            <span class="ds-sub">违规走势与异常渠道占比 · 今日</span>
+            <div class="ds-actions"><button class="btn sm ghost" onclick="goPage('own-monitor',document.querySelector('[data-page=own-monitor]'))">查看全部 ›</button></div>
+          </div>
+          <div class="daily-section-body">
+            <div class="daily-chart-grid">
+              <div class="daily-chart-box">
+                <h4>价格违规趋势</h4>
+                <div class="daily-trend-chart-wrap" id="dailyTrendChartWrap">
+                  <div id="dailyTrendChart" style="width:100%;height:100%"></div>
+                  <div class="empty-state" id="dailyTrendEmpty" style="display:none"><svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true"><path d="M3 3v18h18" fill="none" stroke="#c9cdd6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14l4-4 3 3 5-6" fill="none" stroke="#c9cdd6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><p>暂无数据</p></div>
+                </div>
+              </div>
+              <div class="daily-pie-box">
+                <h4>异常渠道分布</h4>
+                <div class="daily-pie" id="dailyChannelPie" style="background:conic-gradient(#0064fa 0 42%,#58BFBC 42% 67%,#f59e0b 67% 84%,#e5484d 84%)" onmousemove="showPieTooltip(event)" onmouseleave="hidePieTooltip()">
+                  <div class="daily-pie-inner"><b>12</b><small>异常SKU</small></div>
+                </div>
+                <div class="daily-pie-legend" id="dailyPieLegend">
+                  <span class="pie-legend-item" data-idx="0" onmouseenter="hoverPieSlice(0)" onmouseleave="unhoverPieSlice()"><i style="background:#0064fa"></i>拼多多 42%</span>
+                  <span class="pie-legend-item" data-idx="1" onmouseenter="hoverPieSlice(1)" onmouseleave="unhoverPieSlice()"><i style="background:#58BFBC"></i>京东 25%</span>
+                  <span class="pie-legend-item" data-idx="2" onmouseenter="hoverPieSlice(2)" onmouseleave="unhoverPieSlice()"><i style="background:#f59e0b"></i>天猫 17%</span>
+                  <span class="pie-legend-item" data-idx="3" onmouseenter="hoverPieSlice(3)" onmouseleave="unhoverPieSlice()"><i style="background:#e5484d"></i>抖音 16%</span>
+                </div>
+                <div class="daily-pie-tooltip" id="dailyPieTooltip"><b id="dailyPieTipName"></b><div>违规数：<strong id="dailyPieTipCount"></strong></div><div>占比：<span id="dailyPieTipPct"></span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 第三部分：重点机型销额销量均价趋势 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>重点产品销额·销量·均价</h3>
+            <span class="ds-sub">TOP3核心型号经营指标 · 点击机型切换查看 · 今日</span>
+            <div class="ds-actions"><button class="btn sm" onclick="openDailyTop3Modal()"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg> 重点产品型号</button><button class="btn sm" onclick="goPage('key-model',document.querySelector('[data-page=key-model]'))">查看全部 ›</button></div>
+          </div>
+          <div class="daily-section-body">
+            <div class="daily-model-trend">
+              <div class="daily-model-cards" id="dailyModelCards">
+                <div class="daily-model-card active" onclick="switchDailyModel(0,this)">
+                  <div class="dm-name">海信 65E7Q</div>
+                  <div class="dm-tag">主力走量 · 65寸</div>
+                </div>
+                <div class="daily-model-card" onclick="switchDailyModel(1,this)">
+                  <div class="dm-name">海信 75E8N Pro</div>
+                  <div class="dm-tag">高端大屏 · 75寸</div>
+                </div>
+                <div class="daily-model-card" onclick="switchDailyModel(2,this)">
+                  <div class="dm-name">海信 55E5N</div>
+                  <div class="dm-tag">入门爆款 · 55寸</div>
+                </div>
+              </div>
+              <div class="daily-model-detail" id="dailyModelDetail">
+                <div class="daily-model-detail-head">
+                  <h4 id="dailyModelTitle">海信 65E7Q · 销售趋势</h4>
+                  <span class="dm-detail-sub">销量 / 销额 / 均价走势</span>
+                </div>
+                <div class="daily-model-metrics-row" id="dailyModelMetrics">
+                  <div class="daily-model-metric"><span id="dailyMetricUnitsLabel">销量</span><b id="dailyMetricUnits">1,286 台</b><em id="dailyMetricUnitsTrend" style="color:var(--success)">+12.4%</em></div>
+                  <div class="daily-model-metric"><span id="dailyMetricRevenueLabel">销额</span><b id="dailyMetricRevenue">¥682.3 万</b><em id="dailyMetricRevenueTrend" style="color:var(--success)">+8.7%</em></div>
+                  <div class="daily-model-metric"><span id="dailyMetricPriceLabel">均价</span><b id="dailyMetricPrice">¥5,305</b><em id="dailyMetricPriceTrend" style="color:var(--danger)">-1.2%</em></div>
+                </div>
+                <div class="daily-model-chart" id="dailyModelChart" style="padding:0 4px">
+                  <div class="dm-chart-legend" id="dmChartLegend"><span><i style="background:#0aa9a1"></i>销量</span><span><i style="background:#F59E0B;opacity:.9"></i>均价</span></div>
+                  <div class="dm-chart-wrap" id="dmChartWrap" style="width:100%;height:100%"></div>
+                  <div class="dm-chart-tooltip" id="dmChartTooltip"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 第四部分：我品价格预警 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>我品价格预警</h3>
+            <span class="ds-sub">严重等级预警明细 · 今日共 5 条</span>
+            <div class="ds-actions">
+              <span class="pill red">严重 5</span>
+              <span class="pill orange">紧急 8</span>
+              <span class="pill cyan">一般 12</span>
+              <button class="btn sm" onclick="goPage('own-monitor',document.querySelector('[data-page=own-monitor]'))">查看全部 ›</button>
+            </div>
+          </div>
+          <div class="daily-section-body" style="padding:0">
+            <div class="daily-alert-table-wrap">
+              <table class="daily-alert-table">
+                <colgroup>
+                  <col style="width:78px">
+                  <col style="width:100px">
+                  <col style="width:65px">
+                  <col>
+                  <col style="width:70px">
+                  <col style="width:78px">
+                  <col style="width:170px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>预警等级</th>
+                    <th>型号</th>
+                    <th>渠道</th>
+                    <th>异常描述</th>
+                    <th>触发时间</th>
+                    <th>处理状态</th>
+                    <th style="text-align:right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyAlertList">
+                  <tr class="danger">
+                    <td class="level-cell"><span class="alert-level-tag danger">严重</span></td>
+                    <td class="model-cell"><b>65E55N</b></td>
+                    <td class="channel-cell">拼多多</td>
+                    <td class="desc-cell">券后价¥2,899，低于月度底价12.1%</td>
+                    <td class="time-cell">09:18</td>
+                    <td class="status-cell"><span class="status-tag pending">待处理</span></td>
+                    <td class="action-cell"><button class="btn sm btn-detail" onclick="openEvidence()">详情</button><button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button><button class="btn-ignore" onclick="ignoreAlertItem(this)">忽略</button></td>
+                  </tr>
+                  <tr class="danger">
+                    <td class="level-cell"><span class="alert-level-tag danger">严重</span></td>
+                    <td class="model-cell"><b>65E7Q</b></td>
+                    <td class="channel-cell">拼多多</td>
+                    <td class="desc-cell">券后到手价¥4,899，低于月度底价¥300，违规比例-5.8%</td>
+                    <td class="time-cell">09:12</td>
+                    <td class="status-cell"><span class="status-tag processing">处理中</span></td>
+                    <td class="action-cell"><button class="btn sm btn-detail" onclick="openEvidence()">详情</button><button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button><button class="btn-ignore" onclick="ignoreAlertItem(this)">忽略</button></td>
+                  </tr>
+                  <tr class="danger">
+                    <td class="level-cell"><span class="alert-level-tag danger">严重</span></td>
+                    <td class="model-cell"><b>55E5N</b></td>
+                    <td class="channel-cell">拼多多</td>
+                    <td class="desc-cell">到手价¥2,299，低于月度底价¥300，违规比例-11.5%</td>
+                    <td class="time-cell">08:49</td>
+                    <td class="status-cell"><span class="status-tag pending">待处理</span></td>
+                    <td class="action-cell"><button class="btn sm btn-detail" onclick="openEvidence()">详情</button><button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button><button class="btn-ignore" onclick="ignoreAlertItem(this)">忽略</button></td>
+                  </tr>
+                  <tr class="danger">
+                    <td class="level-cell"><span class="alert-level-tag danger">严重</span></td>
+                    <td class="model-cell"><b>75E8N Pro</b></td>
+                    <td class="channel-cell">抖音</td>
+                    <td class="desc-cell">直播间价格半小时内下降6.7%，需核查活动配置</td>
+                    <td class="time-cell">08:15</td>
+                    <td class="status-cell"><span class="status-tag pending">待处理</span></td>
+                    <td class="action-cell"><button class="btn sm btn-detail" onclick="openEvidence()">详情</button><button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button><button class="btn-ignore" onclick="ignoreAlertItem(this)">忽略</button></td>
+                  </tr>
+                  <tr class="danger">
+                    <td class="level-cell"><span class="alert-level-tag danger">严重</span></td>
+                    <td class="model-cell"><b>65E7Q</b></td>
+                    <td class="channel-cell">京东</td>
+                    <td class="desc-cell">TCL 65Q9L PRO到手价下调12.3%，价差缩小至¥217</td>
+                    <td class="time-cell">08:53</td>
+                    <td class="status-cell"><span class="status-tag processing">处理中</span></td>
+                    <td class="action-cell"><button class="btn sm btn-detail" onclick="openEvidence()">详情</button><button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button><button class="btn-ignore" onclick="ignoreAlertItem(this)">忽略</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 第五部分：竞品调价提醒 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>竞品调价提醒</h3>
+            <span class="ds-sub">波动幅度大于5%的竞品调价 · <span id="rivalPriceAlertCount">今日共 7 条</span></span>
+            <div class="ds-actions">
+              <span class="pill red">降价 13</span>
+              <span class="pill green">涨价 5</span>
+              <button class="btn sm" onclick="goPage('rival-monitor',document.querySelector('[data-page=rival-monitor]'))">查看全部 ›</button>
+            </div>
+          </div>
+          <div class="daily-section-body" style="padding:0">
+            <div class="daily-table-wrap">
+              <table class="daily-list-table" id="rivalPriceAlertTable">
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 第六部分：竞品上新提醒 -->
+        <div class="daily-section">
+          <div class="daily-section-head">
+            <h3>竞品上新提醒</h3>
+            <span class="ds-sub">竞品新品上架监测 · 每2小时自动扫描· · 今日共3条</span>
+            <div class="ds-actions"><span class="pill purple">新增 3 款</span><button class="btn sm" onclick="goPage('launch',document.querySelector('[data-page=launch]'))">查看全部 ›</button></div>
+          </div>
+          <div class="daily-section-body" style="padding:0">
+            <div class="daily-table-wrap">
+              <table class="daily-list-table">
+                <thead><tr><th>品牌</th><th>型号</th><th>上架时间</th><th>首发价</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td class="brand-cell">TCL</td>
+                    <td class="model-cell"><b>65Q9L PRO</b><span>Mini LED · 120Hz · 4+64GB</span></td>
+                    <td>2026-09-02</td>
+                    <td class="price-cell">¥5,522</td>
+                    <td><button class="btn sm" style="padding:5px 10px;font-size:10px" onclick="openLaunchEncyclopedia('TCL','65Q9L PRO','Mini LED电视 · 中高端价格带','1,286 台','¥709.8 万','¥5,522','2026-09-02','京东','平板电视','Mini LED电视 · 中高端价格带',['Mini LED','120Hz刷新率','4+64GB','量子点','杜比视界'],'与海信 65E7Q 价格带高度重叠，配置对标高，TCL降价后价差缩小至 ¥217，建议强化画质调校与系统生态优势的传播。')">竞品百科</button></td>
+                  </tr>
+                  <tr>
+                    <td class="brand-cell">美的</td>
+                    <td class="model-cell"><b>鲜净感508 Ultra</b><span>超薄嵌入 · 净味除菌 · 508L</span></td>
+                    <td>2026-09-01</td>
+                    <td class="price-cell">¥8,999</td>
+                    <td><button class="btn sm" style="padding:5px 10px;font-size:10px" onclick="openLaunchEncyclopedia('美的','鲜净感508 Ultra','超薄嵌入冰箱 · 高端价格带','892 台','¥802.9 万','¥8,999','2026-09-01','天猫','冰箱','超薄嵌入冰箱 · 高端价格带',['超薄嵌入','净味除菌','508L','一级能效','AI智能温控'],'与海信 BCD-508WTDGVBP 直接对标，美的在嵌入工艺和净味技术上有品牌积累，建议强化我品养鲜技术与能耗表现。')">竞品百科</button></td>
+                  </tr>
+                  <tr>
+                    <td class="brand-cell">小米</td>
+                    <td class="model-cell"><b>S Pro 65 2026款</b><span>Mini LED · 1200nits · 4+64GB</span></td>
+                    <td>2026-08-31</td>
+                    <td class="price-cell">¥4,199</td>
+                    <td><button class="btn sm" style="padding:5px 10px;font-size:10px" onclick="openLaunchEncyclopedia('小米','S Pro 65 2026款','Mini LED电视 · 性价比价格带','1,523 台','¥639.5 万','¥4,199','2026-08-31','全渠道','平板电视','Mini LED电视 · 性价比价格带',['Mini LED','1200nits','4+64GB','120Hz','小米澎湃OS'],'价格低于我品 55E5N，但尺寸更大，存在降维打击风险。需关注其向上渗透情况，当前对 65E7Q 影响有限。')">竞品百科</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>奥维云网（AVC）线上监测数据、全渠道价格巡检数据、竞品商品库　·　每2小时自动扫描更新　·　统计周期：今日</span></div>
+      </section>

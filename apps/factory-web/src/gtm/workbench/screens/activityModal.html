@@ -1,0 +1,9 @@
+<div class="modal-mask" id="activityModal"><div class="modal" style="width:min(520px,92vw)"><div class="modal-head">新建活动期间 <span class="modal-close" onclick="closeModal('activityModal')">×</span></div><div class="modal-body">
+  <div class="form-row"><label>活动名称</label><input type="text" id="activityName" placeholder="请输入活动名称，如：99大促"></div>
+  <div class="form-row"><label>品类</label><select class="select" id="activityCategory"><option>电视</option><option>空调</option><option>冰箱</option><option>洗衣机</option></select></div>
+  <div class="form-row"><label>型号</label><select class="select" id="activityModel"><option>全部型号</option><option>65E7Q</option><option>75E8N Pro</option><option>55E5N</option></select></div>
+  <div class="form-row-inline">
+    <div class="form-row"><label>开始日期</label><input type="date" id="activityStart"></div>
+    <div class="form-row"><label>结束日期</label><input type="date" id="activityEnd"></div>
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeModal('activityModal')">取消</button><button class="btn primary" onclick="createActivity()">创建</button></div></div></div>

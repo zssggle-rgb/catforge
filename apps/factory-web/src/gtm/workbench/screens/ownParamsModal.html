@@ -1,0 +1,17 @@
+<div class="modal-mask" id="ownParamsModal"><div class="modal" style="width:min(560px,92vw)"><div class="modal-head">我品参数上传 <span class="modal-close" onclick="closeModal('ownParamsModal')">×</span></div><div class="modal-body" style="padding:24px 22px">
+  <div id="paramUploadSection">
+    <div class="param-upload-area" id="paramUploadArea" onclick="document.getElementById('paramFileInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');simulateParamUpload(event.dataTransfer.files[0]?.name||'拖拽文件.xlsx')">
+      <input type="file" id="paramFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="simulateParamUpload(this.files[0]?.name)">
+      <div class="param-upload-icon"><svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" fill="none" stroke="var(--primary)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="param-upload-text"><b>拖拽文件到此处，或 <span style="color:var(--primary)">点击选择文件</span></b><p>支持 Excel（.xlsx/.xls）、CSV 格式，单文件不超过 20MB</p></div>
+    </div>
+  </div>
+  <div id="paramUploadedSection" style="display:none">
+    <div style="text-align:center;padding:10px 0 6px"><div style="width:52px;height:52px;margin:0 auto 12px;background:#EDF9F8;border-radius:14px;display:grid;place-items:center"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"/><path d="M9 15l2 2 4-4" fill="none" stroke="#19b159" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><b style="font-size:14px;color:var(--text);display:block;margin-bottom:4px">文件已上传</b><p style="font-size:12px;color:var(--muted);margin:0">确认后将同步至分析模型</p></div>
+    <div class="param-uploaded-file" id="paramUploadedFile" style="margin-top:18px;display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f7f8fa;border:1px solid var(--line);border-radius:10px">
+      <svg viewBox="0 0 24 24" width="18" height="18" class="param-file-icon" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span id="paramUploadedFileName" style="flex:1;font-size:13px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">参数文件.xlsx</span>
+      <button class="param-op-btn danger" onclick="removeUploadedParamFile()" style="font-size:12px;padding:4px 8px;border-radius:6px">删除</button>
+    </div>
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeModal('ownParamsModal')">取消</button><button class="btn primary" onclick="confirmParamUpload()">确认上传</button></div></div></div>

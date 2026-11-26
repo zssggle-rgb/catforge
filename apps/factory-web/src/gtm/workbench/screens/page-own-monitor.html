@@ -1,0 +1,97 @@
+<section class="page" id="page-own-monitor">
+        <div class="page-head"><div><h1>我品价格巡检</h1><p>按渠道巡检我品成交价格，AI智能识别违规风险</p></div><div class="page-actions"><button class="btn" onclick="openModal('basePriceModal')" style="border:1px solid #0064fa"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>底价维护</button><button class="btn" onclick="openExportModal('我品价格巡检')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 21h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>导出报告</button><button class="btn" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div></div>
+
+        <!-- 核心指标 -->
+
+        <!-- 状态判定规则 -->
+        <div class="monitor-rule-note"><b>状态判定：</b><span class="pill red">严重</span> 到手价≤月度底价×95%　<span class="pill orange">紧急</span> 95%＜到手价≤98%　<span class="pill purple">一般</span> 98%＜到手价＜月度底价　<span class="pill green">正常</span> 到手价≥月度底价</div>
+        <!-- 筛选栏 -->
+        <div class="filters"><div class="filter"><label>渠道</label><select class="select"><option>全渠道</option><option>京东</option><option>淘天</option><option>抖音</option><option>拼多多</option></select></div><div class="filter"><label>区域</label><select class="select"><option>全部</option><option>北京市</option><option>天津市</option><option>河北省</option><option>山西省</option><option>内蒙古自治区</option><option>辽宁省</option><option>吉林省</option><option>黑龙江省</option><option>上海市</option><option>江苏省</option><option>浙江省</option><option>安徽省</option><option>福建省</option><option>江西省</option><option>山东省</option><option>河南省</option><option>湖北省</option><option>湖南省</option><option>广东省</option><option>广西壮族自治区</option><option>海南省</option><option>重庆市</option><option>四川省</option><option>贵州省</option><option>云南省</option><option>西藏自治区</option><option>陕西省</option><option>甘肃省</option><option>青海省</option><option>宁夏回族自治区</option><option>新疆维吾尔自治区</option></select></div><div class="filter"><label>品类</label><select class="select" id="ownCategorySelect" onchange="updateOwnSubCategory(this.value)"><option value="tv">电视</option><option value="ac">空调</option><option value="fridge">冰箱</option><option value="washer">洗衣机</option><option value="kitchen">厨卫</option></select></div><div class="filter"><label>品类细分</label><select class="select" id="ownSubCategorySelect"><option value="全部">全部</option><option value="平板电视">平板电视</option></select></div><div class="filter"><label>活动期间</label><div style="display:flex;gap:6px;align-items:center"><select class="select" id="activityFilter" style="flex:1;min-width:120px"><option value="">全部活动</option><option>618大促</option><option>双11狂欢</option><option>品牌会员日</option><option>百亿补贴专场</option></select><button class="btn sm new-activity-btn" onclick="openModal('activityModal')" style="flex-shrink:0;white-space:nowrap"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true" style="color:#00A38A"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>新建活动</button></div></div><div class="filter"><label>抓取时间</label><select class="select" id="ownPeriodSelect" onchange="toggleOwnCustomDate(this.value)"><option value="today">今日</option><option value="yesterday">昨日</option><option value="week7">近7天</option><option value="month">近30天</option><option value="custom">自定义</option></select></div><div class="filter" id="ownCustomDateStart" style="display:none"><label>开始日期</label><input type="date" class="date-input" value="2026-08-20"></div><div class="filter" id="ownCustomDateEnd" style="display:none"><label>结束日期</label><input type="date" class="date-input" value="2026-09-09"></div><div class="filter"><label>预警等级</label><select class="select" id="ownAlertLevelSelect"><option value="all">全部</option><option value="serious">严重</option><option value="urgent">紧急</option><option value="normal">一般</option></select></div><div class="filter"><label>处理状态</label><select class="select" id="ownHandleStatusSelect" onchange="filterOwnMonitorByHandleStatus(this.value)"><option value="all">全部</option><option value="pending">待处理</option><option value="processing">处理中</option><option value="done">已处理</option><option value="ignored">已忽略</option></select></div><button class="btn primary" onclick="showToast('已按筛选条件刷新价格数据')">查询</button></div>
+        <!-- AI智能总结 -->
+        <div class="monitor-ai-summary">
+          <div class="monitor-ai-head">
+            <div class="monitor-ai-icon">AI</div>
+            <h3>我品价格巡检智能总结</h3>
+            <span class="ai-time"><i></i>基于当前筛选条件生成 · 2026-09-04 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('own')">重新生成</button>
+          </div>
+
+          <div class="daily-ai-cards" style="margin-bottom:10px">
+             <div class="daily-ai-card red">
+               <div class="daily-ai-card-title"><span class="pill red">重点风险</span>严重破价</div>
+               <div class="daily-ai-card-body">
+                 今日发现<b style="color:var(--danger)">2 项严重破价</b>，集中于拼多多与抖音渠道。
+                 <div class="daily-ai-card-list">
+                   <div><b>65E7Q 拼多多官旗</b>：券后 ¥4,899，低于底价 ¥300（-5.8%）</div>
+                   <div><b>65E7Q 抖音商家直播间</b>：到手 ¥4,899，低于底价 ¥300（-5.8%）</div>
+                   <div><b>趋势</b>：严重违规数较昨日 +1，需立即响应</div>
+                 </div>
+               </div>
+             </div>
+             <div class="daily-ai-card orange">
+               <div class="daily-ai-card-title"><span class="pill orange">紧急风险</span>紧急违规</div>
+               <div class="daily-ai-card-body">
+                 <b>3 项紧急违规</b>，需 24h 内核查处理。
+                 <div class="daily-ai-card-list">
+                   <div><b>65E7Q 抖音官旗</b>：直播间 ¥5,050，低于底价 ¥149（-2.9%）</div>
+                   <div><b>65E7Q 淘天商家专营店</b>：到手 ¥5,049，低于底价 ¥150（-2.9%）</div>
+                   <div><b>75E8N Pro 抖音官旗</b>：¥6,750，低于底价 ¥249（-3.6%）</div>
+                 </div>
+               </div>
+             </div>
+             <div class="daily-ai-card purple">
+               <div class="daily-ai-card-title"><span class="pill purple">一般风险</span>价格预警</div>
+               <div class="daily-ai-card-body">
+                 <b>4 项一般/提示</b>，需持续观察。
+                 <div class="daily-ai-card-list">
+                   <div><b>65E7Q 淘天官旗</b>：-¥49（-0.9%），优惠券叠用</div>
+                   <div><b>65E7Q 拼多多品旗</b>：-¥100（-1.9%），平台补贴叠加</div>
+                   <div><b>整体违规率</b>：0.52%，较昨日 +0.05pct</div>
+                 </div>
+               </div>
+             </div>
+           </div>
+           <div class="daily-ai-card purple" style="margin-bottom:12px">
+             <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>GTM 决策</div>
+             <div class="daily-ai-card-body" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+               <div style="display:flex;flex-direction:column;gap:4px"><div style="font-weight:700;color:var(--danger)">立即处理</div><div style="color:var(--muted);font-size:11px">联系拼多多渠道商，24h 内恢复官旗合规价格</div></div>
+               <div style="display:flex;flex-direction:column;gap:4px"><div style="font-weight:700;color:#b76a00">重点核查</div><div style="color:var(--muted);font-size:11px">抖音渠道促销活动合规性，排查商家直播间授权</div></div>
+               <div style="display:flex;flex-direction:column;gap:4px"><div style="font-weight:700;color:var(--primary)">策略调整</div><div style="color:var(--muted);font-size:11px">评估 65E7Q 月度底价是否需下调应对竞品降价</div></div>
+               <div style="display:flex;flex-direction:column;gap:4px"><div style="font-weight:700;color:var(--success)">长期优化</div><div style="color:var(--muted);font-size:11px">完善商家价格监控体系，建立分级预警机制</div></div>
+             </div>
+           </div>
+          <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+          <div class="daily-ai-actions">
+            <span class="daily-ai-followup" onclick="askQ('拼多多渠道破价的具体原因和处理方案是什么')">拼多多破价处理方案 →</span>
+            <span class="daily-ai-followup" onclick="askQ('抖音渠道促销价格合规性核查建议')">抖音促销合规核查 →</span>
+            <span class="daily-ai-followup" onclick="askQ('65E7Q月度底价调整的影响评估')">底价调整影响评估 →</span>
+          </div>
+        </div>
+        <!-- 巡检明细表格 -->
+        <div class="monitor-section-title"><h3>我品价格巡检明细</h3><span class="monitor-title-summary" id="ownMonitorSummary"></span></div>
+        <div class="table-wrap"><table class="monitor-table own-monitor-table" style="min-width:1400px"><thead><tr><th>型号</th><th>渠道</th><th>店铺类型</th><th>店铺名称</th><th>当前售价</th><th>到手价</th><th>月度底价</th><th>价差/违规比例</th><th>预警等级</th><th>处理状态</th><th>销量</th><th>销额</th><th>操作</th></tr></thead><tbody>
+              <!-- 65E7Q 京东 -->
+              <tr class="group-start"><td class="model-cell" rowspan="9"><b>65E7Q</b></td><td class="channel-cell" rowspan="3" style="background:#f7f9fc;font-weight:700">京东</td><td>自营</td><td>海信京东自营旗舰店</td><td>¥5,949</td><td>¥5,305</td><td class="base-cell">¥5,199</td><td class="normal-price">+¥106 / +2.0%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>428</b> 台</td><td><b>¥227.1</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td>官旗</td><td>海信电视京东官方旗舰店</td><td>¥5,899</td><td>¥5,249</td><td class="base-cell">¥5,199</td><td class="normal-price">+¥50 / +1.0%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>312</b> 台</td><td><b>¥163.8</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 65E7Q 京东 品旗 已删除 -->
+              <tr><td>商家</td><td>智享电器专营店</td><td>¥5,599</td><td class="danger-price">¥4,999</td><td class="base-cell">¥5,199</td><td class="danger-price">-¥200 / -3.8%</td><td><span class="pill red">严重</span></td><td><span class="pill red">待处理</span></td><td><b>96</b> 台</td><td><b>¥48.0</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 65E7Q 淘天 自营 已删除 -->
+              <tr><td class="channel-cell" rowspan="3" style="background:#f7f9fc;font-weight:700">淘天</td><td>官旗</td><td>海信官方旗舰店</td><td>¥5,899</td><td>¥5,150</td><td class="base-cell">¥5,199</td><td>-¥49 / -0.9%</td><td><span class="pill purple">一般</span></td><td><span class="pill orange">处理中</span></td><td><b>356</b> 台</td><td><b>¥183.3</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td>品旗</td><td>海信品牌旗舰店（天猫）</td><td>¥5,799</td><td>¥5,249</td><td class="base-cell">¥5,199</td><td class="normal-price">+¥50 / +1.0%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>178</b> 台</td><td><b>¥93.4</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td>商家</td><td>优品家电专营店</td><td>¥5,699</td><td class="urgent-price">¥5,049</td><td class="base-cell">¥5,199</td><td class="urgent-price">-¥150 / -2.9%</td><td><span class="pill orange">紧急</span></td><td><span class="pill red">待处理</span></td><td><b>124</b> 台</td><td><b>¥62.6</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 65E7Q 抖音 自营/官旗 已删除 -->
+              <tr><td class="channel-cell" rowspan="2" style="background:#f7f9fc;font-weight:700">抖音</td><td>品旗</td><td>海信品牌旗舰店（抖音）</td><td>¥5,799</td><td>¥5,249</td><td class="base-cell">¥5,199</td><td class="normal-price">+¥50 / +1.0%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>156</b> 台</td><td><b>¥81.9</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td>商家</td><td>甄选家电商城直播间</td><td>¥5,599</td><td class="danger-price">¥4,899</td><td class="base-cell">¥5,199</td><td class="danger-price">-¥300 / -5.8%</td><td><span class="pill red">严重</span></td><td><span class="pill orange">处理中</span></td><td><b>182</b> 台</td><td><b>¥89.2</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 65E7Q 拼多多 自营/品旗 已删除 -->
+              <tr><td class="channel-cell" rowspan="1" style="background:#f7f9fc;font-weight:700">拼多多</td><td>官旗</td><td>海信官方旗舰店</td><td>¥5,699</td><td class="danger-price">¥4,899</td><td class="base-cell">¥5,199</td><td class="danger-price">-¥300 / -5.8%</td><td><span class="pill red">严重</span></td><td><span class="pill red">待处理</span></td><td><b>204</b> 台</td><td><b>¥99.9</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 75E8N Pro -->
+              <tr class="group-start"><td class="model-cell" rowspan="3"><b>75E8N Pro</b></td><td class="channel-cell" style="background:#f7f9fc;font-weight:700">京东</td><td>自营</td><td>海信京东自营旗舰店</td><td>¥7,999</td><td>¥7,050</td><td class="base-cell">¥6,999</td><td class="normal-price">+¥51 / +0.7%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>286</b> 台</td><td><b>¥201.6</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td class="channel-cell" style="background:#f7f9fc;font-weight:700">淘天</td><td>官旗</td><td>海信官方旗舰店</td><td>¥7,299</td><td>¥6,909</td><td class="base-cell">¥6,999</td><td>-¥90 / -1.3%</td><td><span class="pill purple">一般</span></td><td><span class="pill orange">处理中</span></td><td><b>234</b> 台</td><td><b>¥161.7</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td class="channel-cell" style="background:#f7f9fc;font-weight:700">抖音</td><td>官旗</td><td>海信电视旗舰店</td><td>¥7,199</td><td class="urgent-price">¥6,750</td><td class="base-cell">¥6,999</td><td class="urgent-price">-¥249 / -3.6%</td><td><span class="pill orange">紧急</span></td><td><span class="pill red">待处理</span></td><td><b>198</b> 台</td><td><b>¥133.7</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <!-- 55E5N -->
+              <tr class="group-start"><td class="model-cell" rowspan="3"><b>55E5N</b></td><td class="channel-cell" style="background:#f7f9fc;font-weight:700">京东</td><td>自营</td><td>海信京东自营旗舰店</td><td>¥2,899</td><td>¥2,650</td><td class="base-cell">¥2,599</td><td class="normal-price">+¥51 / +2.0%</td><td><span class="pill green">正常</span></td><td><span class="pill gray">已处理</span></td><td><b>756</b> 台</td><td><b>¥200.3</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td class="channel-cell" style="background:#f7f9fc;font-weight:700">淘天</td><td>官旗</td><td>海信官方旗舰店</td><td>¥2,799</td><td>¥2,560</td><td class="base-cell">¥2,599</td><td>-¥39 / -1.5%</td><td><span class="pill purple">一般</span></td><td><span class="pill orange">处理中</span></td><td><b>623</b> 台</td><td><b>¥159.5</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+              <tr><td class="channel-cell" style="background:#f7f9fc;font-weight:700">拼多多</td><td>官旗</td><td>海信官方旗舰店</td><td>¥2,699</td><td class="danger-price">¥2,299</td><td class="base-cell">¥2,599</td><td class="danger-price">-¥300 / -11.5%</td><td><span class="pill red">严重</span></td><td><span class="pill red">待处理</span></td><td><b>487</b> 台</td><td><b>¥111.9</b> 万</td><td><button class="btn sm btn-detail" onclick="openEvidence()">详情</button> <button class="btn sm btn-handle" onclick="openHandleModal(this)">处理</button> <button class="btn sm btn-ignore" onclick="ignoreMonitorRow(this)">忽略</button></td></tr>
+            </tbody></table></div>
+         <div class="el-pagination"><span class="ep-total">共 15 条</span><span class="ep-size"><select onchange="showToast('每页显示 '+this.value+' 条')"><option>10条/页</option><option>20条/页</option><option>50条/页</option></select></span><button class="ep-btn disabled" onclick="showToast('已是第一页')">‹</button><button class="ep-btn active">1</button><button class="ep-btn" onclick="showToast('已翻到第 2 页')">2</button><button class="ep-btn" onclick="showToast('已翻到下一页')">›</button></div>
+        <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>京东/淘天/抖音/拼多多等电商平台价格抓取数据　·　每2小时自动巡检更新　·　统计周期：今日</span></div>
+      </section>

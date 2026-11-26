@@ -1,0 +1,470 @@
+<section class="page" id="page-help">
+        <div class="page-head help-page-head">
+          <div>
+            <h1>帮助中心</h1>
+            <p>GTM竞价策略助手使用指南 · 快速掌握各模块功能与指标含义</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn" onclick="goBackFromHelp()"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>返回</button>
+          </div>
+        </div>
+
+        <div class="help-layout">
+          <aside class="help-side">
+            <div class="help-side-title">功能模块</div>
+            <div class="help-nav">
+              <a href="#help-daily" class="help-nav-item" onclick="scrollHelp('help-daily')">每日重点工作</a>
+              <a href="#help-keymodel" class="help-nav-item" onclick="scrollHelp('help-keymodel')">重点产品表现</a>
+              <a href="#help-own" class="help-nav-item" onclick="scrollHelp('help-own')">我品价格巡检</a>
+              <a href="#help-launch" class="help-nav-item" onclick="scrollHelp('help-launch')">竞品上新提醒</a>
+              <a href="#help-rival" class="help-nav-item" onclick="scrollHelp('help-rival')">竞品价格监控</a>
+              <a href="#help-competitor" class="help-nav-item" onclick="scrollHelp('help-competitor')">竞品洞察分析</a>
+              <a href="#help-premium" class="help-nav-item" onclick="scrollHelp('help-premium')">品牌溢价分析</a>
+              <a href="#help-todo" class="help-nav-item" onclick="scrollHelp('help-todo')">待办任务中心</a>
+              <a href="#help-chat" class="help-nav-item" onclick="scrollHelp('help-chat')">AI对话助手</a>
+            </div>
+          </aside>
+
+          <div class="help-content">
+
+            <div class="help-section" id="help-daily">
+              <div class="help-section-head">
+                <span class="help-index">01</span>
+                <div>
+                  <h2>每日重点工作</h2>
+                  <p>GTM每日经营驾驶舱，一屏掌握当日关键异常、核心指标异动和AI生成的优先工作建议</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>顶部日期区</b>：显示当前日期、实时数据状态，可切换日期查看历史快照</li>
+                  <li><b>异常预警卡片</b>：价格违规、竞品调价、销量异动三类核心异常，按优先级排序</li>
+                  <li><b>AI洞察区域</b>：当日AI生成的经营摘要、核心结论和推荐优先动作</li>
+                  <li><b>核心指标趋势</b>：销量、均价、销额三大核心指标的近7/30天走势</li>
+                  <li><b>工作任务列表</b>：今日待办、进行中、已完成任务的汇总展示</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>每日早晨 8:00 自动刷新当日数据与 AI 洞察</li>
+                  <li>点击异常卡片可直接跳转至对应功能页查看详情</li>
+                  <li>AI洞察支持一键生成报告、追问详情、指派任务</li>
+                  <li>核心指标趋势支持切换时间范围（近7天 / 近30天 / 自定义）</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>销量环比</td><td class="formula">(今日销量 - 昨日销量) / 昨日销量 × 100%</td><td>正数为上升，负数为下降</td></tr>
+                    <tr><td>销额环比</td><td class="formula">(今日销额 - 昨日销额) / 昨日销额 × 100%</td><td>销额 = 销量 × 成交均价</td></tr>
+                    <tr><td>均价波动</td><td class="formula">今日均价 - 昨日均价</td><td>单位：元，正数表示涨价</td></tr>
+                    <tr><td>异常总数</td><td class="formula">价格违规数 + 竞品调加数 + 销量异常数</td><td>按严重程度加权统计</td></tr>
+                    <tr><td>价格违规率</td><td class="formula">违规SKU数 / 监控SKU总数 × 100%</td><td>含低于底价和高于指导价两类</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>价格数据</b>：京东、天猫、拼多多、抖音四大主流电商平台公开成交价，每日 03:00 抓取</li>
+                  <li><b>销量数据</b>：电商平台销量估算 + 内部销售系统对账，每日 06:00 更新</li>
+                  <li><b>AI洞察</b>：基于当日数据自动生成，每日 08:00 刷新</li>
+                  <li><b>更新频率</b>：每日更新一次，支持手动即时刷新</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-keymodel">
+              <div class="help-section-head">
+                <span class="help-index">02</span>
+                <div>
+                  <h2>重点产品表现</h2>
+                  <p>聚焦核心SKU的销量、价格、份额表现，AI智能归因分析异动原因</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>产品选择器</b>：支持按品牌、尺寸、价位段筛选重点产品</li>
+                  <li><b>KPI指标卡</b>：销量、均价、销额、市场份额、环比变化核心指标一览</li>
+                  <li><b>趋势图表</b>：销量、价格、销额多维度折线趋势，支持悬停查看每日数据</li>
+                  <li><b>AI归因分析</b>：自动识别异动并给出原因拆解（竞品、促销、渠道等）</li>
+                  <li><b>产品对比表</b>：多款重点产品横向对比</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持单产品深度分析和多产品对比两种模式</li>
+                  <li>点击趋势图上的异常点，AI自动弹出归因分析</li>
+                  <li>可导出产品表现报告（Excel / PDF格式）</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>市场份额</td><td class="formula">本品销量 / 同价位段总销量 × 100%</td><td>按价格带+尺寸段双重切分</td></tr>
+                    <tr><td>销量同比</td><td class="formula">(本期销量 - 去年同期销量) / 去年同期销量 × 100%</td><td>周/月维度均支持</td></tr>
+                    <tr><td>份额变化</td><td class="formula">本期份额 - 上期份额</td><td>单位：百分点</td></tr>
+                    <tr><td>均价</td><td class="formula">成交总额 / 成交总件数</td><td>按渠道加权平均</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>销售数据</b>：京东商智、天猫生意参谋、拼多多商家后台、抖音电商罗盘</li>
+                  <li><b>市场规模</b>：行业第三方数据（奥维云网线上推总），月度更新</li>
+                  <li><b>更新频率</b>：每日更新销量/价格，每月更新市场份额基准</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-own">
+              <div class="help-section-head">
+                <span class="help-index">03</span>
+                <div>
+                  <h2>我品价格巡检</h2>
+                  <p>按渠道巡检我品各SKU成交价格，自动识别低于底价/高于指导价的违规风险</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>价格健康度总览</b>：合规率、违规SKU数、违规渠道分布</li>
+                  <li><b>渠道巡检列表</b>：按渠道分类展示各SKU价格与底价/指导价对比</li>
+                  <li><b>违规详情表</b>：违规SKU明细，含店铺、价格、违规类型、严重程度</li>
+                  <li><b>趋势分析</b>：近7天/30天价格违规趋势图</li>
+                  <li><b>底价维护入口</b>：支持设置和调整各SKU底价标准</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持按渠道、尺寸段、价格带、违规等级筛选</li>
+                  <li>点击违规记录可查看违规店铺详情和价格证据截图</li>
+                  <li>支持一键生成价格违规整改任务，派发至对应渠道负责人</li>
+                  <li>底价维护支持批量导入和单条修改</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>价格合规率</td><td class="formula">合规SKU数 / 监控SKU总数 × 100%</td><td>高于底价且低于指导价判定为合规</td></tr>
+                    <tr><td>破价幅度</td><td class="formula">(底价 - 成交价) / 底价 × 100%</td><td>低于底价时计算，正数为破价</td></tr>
+                    <tr><td>违规严重等级</td><td class="formula">综合破价幅度、违规店铺数、销量占比判定</td><td>分为一般 / 重要 / 紧急三级</td></tr>
+                    <tr><td>渠道违规率</td><td class="formula">该渠道违规SKU数 / 该渠道监控SKU数 × 100%</td><td>分渠道独立计算</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>价格数据</b>：京东、天猫、拼多多、抖音等渠道商品页实时抓取</li>
+                  <li><b>底价数据</b>：内部价格管理系统，由价格管理员维护</li>
+                  <li><b>更新频率</b>：每日 03:00、10:00、18:00 三次巡检，支持手动即时巡检</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-launch">
+              <div class="help-section-head">
+                <span class="help-index">04</span>
+                <div>
+                  <h2>竞品上新提醒</h2>
+                  <p>竞品新品上架监测与卖点对标，辅助GTM团队快速响应市场变化</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>上新总览</b>：近7天/30天竞品上新数量、重点品牌分布</li>
+                  <li><b>新品列表</b>：按品牌、上市时间、价位段展示竞品新品</li>
+                  <li><b>卖点对标卡片</b>：新品与我品同价位产品的卖点对比</li>
+                  <li><b>影响评估</b>：AI评估新品对我品的潜在冲击程度</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>系统自动监测竞品品牌的新品上架，24小时内生成提醒</li>
+                  <li>支持设置关注品牌和价位段，仅推送相关上新</li>
+                  <li>点击新品可查看详细参数、卖点分析和与我品对标报告</li>
+                  <li>支持生成新品应对策略建议并派发为待办任务</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>新品重合度</td><td class="formula">匹配卖点数量 / 总卖点数量 × 100%</td><td>衡量新品与我品卖点重叠程度</td></tr>
+                    <tr><td>冲击等级</td><td class="formula">综合价位重合度、卖点重合度、品牌势能判定</td><td>分为低 / 中 / 高 / 极高四级</td></tr>
+                    <tr><td>价位差</td><td class="formula">(竞品新品价 - 我品对应SKU价) / 我品价 × 100%</td><td>正数表示竞品定价更高</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>新品数据</b>：主流电商平台新品上架监测 + 品牌官网上新信息</li>
+                  <li><b>参数与卖点</b>：商品详情页自动提取 + 人工审核修正</li>
+                  <li><b>更新频率</b>：每日监测，新发现24小时内入库</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-rival">
+              <div class="help-section-head">
+                <span class="help-index">05</span>
+                <div>
+                  <h2>竞品价格监控</h2>
+                  <p>追踪重点竞品价格变化，分析价差变动对我品销量的潜在影响</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>竞品列表</b>：展示重点竞品SKU当前价格、价格变动、与我品价差</li>
+                  <li><b>价格走势图</b>：我品 vs 竞品 近7/30天价格对比折线图</li>
+                  <li><b>调价记录</b>：近期竞品调价历史明细，含调价时间、幅度、原因推测</li>
+                  <li><b>影响分析</b>：AI预测竞品调价对我品销量的影响程度</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持自定义重点竞品列表和对标SKU</li>
+                  <li>竞品调价超阈值时自动推送提醒（可配置阈值）</li>
+                  <li>点击调价记录可查看竞品全渠道价格对比</li>
+                  <li>支持导出竞品价格监控周报/月报</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>价差比例</td><td class="formula">(我品价格 - 竞品价格) / 我品价格 × 100%</td><td>正数表示我品更贵</td></tr>
+                    <tr><td>调价幅度</td><td class="formula">(新价 - 旧价) / 旧价 × 100%</td><td>负数为降价，正数为涨价</td></tr>
+                    <tr><td>销量影响预估</td><td class="formula">基于历史价格弹性系数 × 价差变化</td><td>仅供参考，实际受多因素影响</td></tr>
+                    <tr><td>价格竞争力指数</td><td class="formula">竞品均价 / 我品均价 × 价格权重</td><td>指数越高我品价格越有竞争力</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>竞品价格</b>：京东、天猫、拼多多、抖音四大平台实时抓取</li>
+                  <li><b>价格弹性</b>：基于历史销量-价格回归分析得出，季度更新</li>
+                  <li><b>更新频率</b>：每日 10:00、16:00、22:00 三次更新</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-competitor">
+              <div class="help-section-head">
+                <span class="help-index">06</span>
+                <div>
+                  <h2>竞品洞察分析</h2>
+                  <p>输入我品型号，AI自动识别核心竞品并生成多维度深度对标报告</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>竞品搜索区</b>：输入我品型号，AI自动筛选匹配竞品</li>
+                  <li><b>竞品雷达图</b>：价值战场、目标客群、价格带、市场验证、价值锚点、用户任务六维对比</li>
+                  <li><b>价值战场重合结构</b>：各竞品与我品在主战场/辅战场/机会战场的重合度</li>
+                  <li><b>市场验证表格</b>：竞品定位、均价、销量等核心指标对比</li>
+                  <li><b>卖点对比</b>：产品核心参数、卖点、用户评价的详细对标</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持输入任意我品SKU，30秒内生成完整竞品分析报告</li>
+                  <li>自动从配置、价格、客群、市场表现多维度匹配竞品</li>
+                  <li>点击"查看分析依据"可追溯竞品匹配逻辑和数据来源</li>
+                  <li>支持导出完整竞品洞察分析报告</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>价值战场重合度</td><td class="formula">同战场卖点匹配数 / 总卖点数 × 权重</td><td>主战场权重最高</td></tr>
+                    <tr><td>综合竞争指数</td><td class="formula">价格接近度×0.3 + 卖点重合度×0.3 + 客群重合度×0.2 + 市场重合度×0.2</td><td>0~100分，越高竞争越强</td></tr>
+                    <tr><td>配置对标得分</td><td class="formula">各核心参数对标得分的加权平均</td><td>含画质、音响、智能、外观等维度</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>产品参数</b>：品牌官网、电商详情页、产品白皮书</li>
+                  <li><b>市场数据</b>：奥维云网、中怡康线上推总数据</li>
+                  <li><b>用户反馈</b>：电商平台评论VOC分析、社媒口碑数据</li>
+                  <li><b>更新频率</b>：产品库月度更新，市场数据季度校准</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-premium">
+              <div class="help-section-head">
+                <span class="help-index">07</span>
+                <div>
+                  <h2>品牌溢价分析</h2>
+                  <p>对比我方与竞争品牌的价格指数、VOC认同及综合品牌溢价指数</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>综合溢价指数</b>：品牌溢价综合得分与竞品对比</li>
+                  <li><b>价格指数趋势</b>：近12个月各品牌价格指数走势</li>
+                  <li><b>VOC认同度</b>：用户评论中品牌正面提及率分析</li>
+                  <li><b>分维度溢价拆解</b>：按产品线、价位段、渠道拆解溢价构成</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持多品牌横向对比和单品牌纵向趋势分析</li>
+                  <li>溢价变化可下钻到具体产品线和价位段</li>
+                  <li>VOC数据支持按卖点维度查看用户提及率和情感倾向</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>品牌溢价比例</td><td class="formula">(本品均价 - 行业均价) / 行业均价 × 100%</td><td>正数表示品牌有溢价</td></tr>
+                    <tr><td>价格指数</td><td class="formula">本品均价 / 基准期均价 × 100</td><td>基准期=100，反映价格变动</td></tr>
+                    <tr><td>VOC正面提及率</td><td class="formula">品牌正面评论数 / 品牌总评论数 × 100%</td><td>基于评论情感分析</td></tr>
+                    <tr><td>综合溢价指数</td><td class="formula">价格溢价×0.5 + VOC溢价×0.3 + 渠道溢价×0.2</td><td>0~100分，综合衡量品牌力</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>价格数据</b>：主流电商平台全量SKU成交价加权计算</li>
+                  <li><b>VOC数据</b>：京东/天猫/抖音评论区语义分析，月度处理评论量 500万+</li>
+                  <li><b>行业基准</b>：奥维云网线上市场均价，月度校准</li>
+                  <li><b>更新频率</b>：价格指数周更，VOC月更，综合指数月度校准</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-todo">
+              <div class="help-section-head">
+                <span class="help-index">08</span>
+                <div>
+                  <h2>待办任务中心</h2>
+                  <p>集中管理价格整改、竞品分析、策略调整等GTM待办事项，追踪处理进度</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>任务概览</b>：待处理、进行中、已完成、已逾期任务数量统计</li>
+                  <li><b>任务列表</b>：按优先级、截止时间、负责人等多维度展示</li>
+                  <li><b>任务详情</b>：任务描述、处理记录、相关数据证据、协作人员</li>
+                  <li><b>筛选与搜索</b>：支持按类型、状态、优先级、负责人筛选</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>系统自动生成价格违规整改任务，也支持手动创建任务</li>
+                  <li>任务支持指派、转交、备注、附件上传等协作功能</li>
+                  <li>逾期任务自动标红提醒，可设置任务提醒方式</li>
+                  <li>支持任务处理完成后的数据验证和效果复盘</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>任务完成率</td><td class="formula">已完成任务数 / 总任务数 × 100%</td><td>按周期（周/月）统计</td></tr>
+                    <tr><td>按时完成率</td><td class="formula">按时完成任务数 / 应完成任务数 × 100%</td><td>衡量团队执行力</td></tr>
+                    <tr><td>平均处理时长</td><td class="formula">Σ(完成时间 - 创建时间) / 完成任务数</td><td>按任务类型分别统计</td></tr>
+                    <tr><td>逾期率</td><td class="formula">逾期任务数 / 总任务数 × 100%</td><td>超过截止时间未完成即逾期</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>任务数据</b>：系统内部任务管理模块</li>
+                  <li><b>自动任务</b>：价格巡检、竞品监控等模块自动触发生成</li>
+                  <li><b>更新频率</b>：实时更新，任务状态变化即时同步</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="help-section" id="help-chat">
+              <div class="help-section-head">
+                <span class="help-index">09</span>
+                <div>
+                  <h2>AI对话助手</h2>
+                  <p>以自然语言对话方式进行竞品分析、价格查询、策略建议等智能交互</p>
+                </div>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">页面布局</div>
+                <ul class="help-list">
+                  <li><b>欢迎页</b>：快捷预设问题 + 输入框，支持上传文件/图片</li>
+                  <li><b>对话区</b>：用户消息与AI回复的流式展示，支持结构化内容</li>
+                  <li><b>底部输入区</b>：持续对话输入框，支持多轮追问</li>
+                  <li><b>对话索引</b>：右侧快速定位本轮对话中的问题节点</li>
+                  <li><b>历史对话</b>：左侧边栏展示最近对话记录，支持切换和继续</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">功能说明</div>
+                <ul class="help-list">
+                  <li>支持文字输入和文件/图片上传，基于上传内容进行分析</li>
+                  <li>预设问题一键发起分析，涵盖竞品、卖点、价格、异常等常用场景</li>
+                  <li>AI回复包含结构化卡片、表格、图表等可视化内容</li>
+                  <li>支持划词引用，选中文本即可基于该内容追问</li>
+                  <li>每条AI回复底部提供反馈按钮（有用/没用/复制/生成报告）</li>
+                </ul>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">关键指标计算逻辑</div>
+                <table>
+                  <thead><tr><th>指标</th><th>计算公式</th><th>说明</th></tr></thead>
+                  <tbody>
+                    <tr><td>问题理解准确率</td><td class="formula">用户反馈"有用"数 / 总反馈数 × 100%</td><td>基于用户反馈统计</td></tr>
+                    <tr><td>平均响应时长</td><td class="formula">Σ(回复时间 - 提问时间) / 对话轮数</td><td>反映AI处理速度</td></tr>
+                    <tr><td>对话深度</td><td class="formula">单场对话的总消息轮数</td><td>衡量问题深入程度</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card help-card">
+                <div class="help-sub-title">数据来源</div>
+                <ul class="help-list">
+                  <li><b>知识库</b>：产品库、价格库、市场数据、品牌数据等全量业务数据</li>
+                  <li><b>分析模型</b>：基于价格弹性、竞品对标、量价验证等算法模型</li>
+                  <li><b>对话数据</b>：用户对话记录用于模型优化，数据严格脱敏</li>
+                  <li><b>更新频率</b>：知识库与业务数据同步更新（日更/周更/月更）</li>
+                </ul>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>

@@ -13,10 +13,13 @@ from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 import fixtures as f
+import details
+import report_export
 
 BASE = "/api/gtm/v1"
 SESSIONS = {}
 LOCK = threading.Lock()
+SAMPLE_RECORDS = json.loads(Path(__file__).with_name("workbench-records.json").read_text(encoding="utf-8"))
 
 
 class RequestError(Exception):
@@ -189,6 +192,9 @@ class Handler(BaseHTTPRequestHandler):
                 state = self.session()
                 if path.path == BASE + "/context":
                     result = f.context()
+                elif self.resource(path.path) == "sample-scenarios/0916":
+                    result = {"version": "0916", "mode": "sample", "project_id": f.PROJECT,
+                              "records": SAMPLE_RECORDS}
                 else:
                     resource = self.resource(path.path)
                     pairs = parse_qsl(path.query)
@@ -201,6 +207,13 @@ class Handler(BaseHTTPRequestHandler):
                         page = resource[6:]
                         validate_view(page, query)
                         result = f.business_view(page, query, state)
+                    elif resource.startswith("details/"):
+                        try:
+                            result = details.read(resource[8:], query.get("record_id"), query["category_code"], query.get("snapshot_id"), state)
+                        except ValueError as error:
+                            raise RequestError(409, str(error)) from None
+                        if result is None:
+                            raise RequestError(404, "当前范围没有该记录")
                     elif resource == "catalog":
                         kind = query.get("kind")
                         if kind not in f.CATALOG:
@@ -227,14 +240,16 @@ class Handler(BaseHTTPRequestHandler):
             endpoint = self.resource(urlsplit(self.path).path)
             if endpoint == "attachments":
                 return self.upload()
-            if endpoint not in ("messages", "actions"):
+            if endpoint not in ("messages", "actions", "sample-exports"):
                 raise RequestError(404, "接口不存在")
             if self.headers.get_content_type() != "application/json":
                 raise RequestError(415, "需要 JSON 请求")
             size = int(self.headers.get("Content-Length", "0"))
-            if not 0 < size <= 32768:
+            if not 0 < size <= (262144 if endpoint == "sample-exports" else 32768):
                 raise RequestError(413, "请求大小无效")
             body = json.loads(self.rfile.read(size))
+            if endpoint == "sample-exports":
+                return self.export_sample(body)
             key = body.get("request_id") if isinstance(body, dict) else None
             if not isinstance(key, str) or not 1 <= len(key) <= 100:
                 raise RequestError(422, "缺少幂等键")
@@ -273,6 +288,28 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             self.session()["uploads"][aid] = {"name": name, "size": size, "category": query["category_code"], "purpose": purpose}
         self.respond(201, {"id": aid, "name": name})
+
+    def export_sample(self, body):
+        if not isinstance(body,dict):
+            raise RequestError(422, "导出内容无效")
+        fmt, title, lines = body.get("format"), body.get("title"), body.get("lines")
+        mime = {"pdf":"application/pdf","docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "pptx":"application/vnd.openxmlformats-officedocument.presentationml.presentation"}
+        if not isinstance(fmt,str) or fmt not in mime or not isinstance(title,str) or not title.strip() or len(title)>120 or not isinstance(lines,list) or len(lines)>1000:
+            raise RequestError(422,"报告格式、标题或行数无效")
+        if not all(isinstance(line,str) and len(line)<=4000 and not re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]",line) for line in [title,*lines]):
+            raise RequestError(422,"报告内容无效")
+        try:
+            content = report_export.render(fmt,title,["CatForge · 样例数据",*lines])
+        except ImportError:
+            raise RequestError(503,"样例导出服务缺少文档组件") from None
+        self.send_response(200)
+        self.send_header("Content-Type",mime[fmt])
+        self.send_header("Content-Length",str(len(content)))
+        self.send_header("Cache-Control","no-store")
+        self.end_headers()
+        self.wfile.write(content)
 
     def static(self, path):
         root = self.server.static_root

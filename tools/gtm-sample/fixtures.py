@@ -248,6 +248,12 @@ def business_view(page, scope, state):
         v["actions"] = [action("create-report", "新建报告任务")]
         v["tables"] = [table("reports", "报告档案", items, ["报告名称", "品类", "周期", "状态", "订阅", "更新时间"], scope)]
     for idx, section in enumerate(v["tables"]):
+        detail_templates = {"own-monitor": ("own-evidence", "价格异常证据链"), "rival-monitor": ("rival-evidence", "竞品调价证据"),
+                            "launch": ("launch-encyclopedia", "竞品百科"), "reports": ("report", "报告详情"), "todo-center": ("task", "待办任务详情")}
+        if section["id"] in detail_templates:
+            kind, label = detail_templates[section["id"]]
+            for item in section["rows"]:
+                item["drilldown"] = {"kind": kind, "record_id": item["id"], "label": label}
         facets = section.pop("_facets", [])
         if idx == 0 and page != "daily":
             v["facets"] = facets

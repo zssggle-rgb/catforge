@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
 import "@douyinfe/semi-ui/lib/es/_base/base.css";
 import Button from "@douyinfe/semi-ui/lib/es/button";
@@ -17,11 +17,13 @@ import IconPlus from "@douyinfe/semi-icons/lib/es/icons/IconPlus";
 import IconRefresh from "@douyinfe/semi-icons/lib/es/icons/IconRefresh";
 import IconSearch from "@douyinfe/semi-icons/lib/es/icons/IconSearch";
 import IconSend from "@douyinfe/semi-icons/lib/es/icons/IconSend";
-import { BusinessView, Dialog, Sources } from "./BusinessView";
+import { BusinessView } from "./BusinessView";
+import { Dialog, Sources } from "./DetailDialog";
 import { gtm } from "./client";
 import { defaultFilters, displayValue, pages, pageTabs, readRoute, type Action, type Choice, type Context,
   type Attachment, type Conversation, type FacetKey, type Filters, type Origin, type Page, type Route, type Row, type Scope, type Selection, type View, type Workspace } from "./contract";
 import "./gtm.css";
+const Workbench = lazy(() => import("./workbench/Workbench"));
 
 const titles = {...pages, chat: "新建对话", history: "历史记录", help: "帮助中心"};
 const icons: Record<Page, ReactNode> = {
@@ -176,6 +178,9 @@ export default function GtmApp() {
   if (!context.data || !project || !project.categories.length) return <main className="gtm gtm-boot"><h1>GTM竞价策略助手</h1>
     <Status error={context.error || (context.data ? "当前账号暂无可用品类或项目" : undefined)} retry={() => setReload(v => v + 1)}/>
     <p><a href="/core3">三竞品研判台</a>　<a href="/factory">品类资产工作台</a></p></main>;
+  if (context.data.mode === "sample" && !new URLSearchParams(window.location.search).has("api")) {
+    return <Suspense fallback={<Status retry={() => setReload(v => v + 1)}/>}><Workbench project={project.id}/></Suspense>;
+  }
   return <WorkspaceApp key={project.id} project={project} context={context.data} changeProject={id => {navigate("daily"); setProjectId(id);}}/>;
 }
 function WorkspaceApp({context, project, changeProject}: {context: Context; project: Workspace; changeProject: (id: string) => void}) {
@@ -229,7 +234,7 @@ function WorkspaceApp({context, project, changeProject}: {context: Context; proj
           {!!result.data?.facets?.length && <div className="gtm-filters">{result.data.facets.map(f => <label key={f.key}>{f.label}<select value={facets[f.key] || ""} onChange={e => {setFacets({...facets,[f.key]:e.target.value});setOffset(0);}}><option value="">全部</option>{options(f.options)}</select></label>)}</div>}
           {hasSelection && <AnalysisScope key={page + filters.category_code} project={project.id} category={filters.category_code} page={page} value={selection} change={s => {setSelection(s);setOffset(0);}}/>}
           {tabs && <div className="gtm-tabs" aria-label={titles[route]}>{tabs.map(([k, label]) => <button key={k} aria-pressed={tab === k} onClick={() => {setTabKey(k);setOffset(0);}}>{label}</button>)}</div>}
-          {message && <p role="status" className="gtm-notice">{message}</p>}{result.data ? <BusinessView key={viewKey} data={result.data} navigate={navigate} ask={startChat}
+          {message && <p role="status" className="gtm-notice">{message}</p>}{result.data ? <BusinessView key={viewKey} data={result.data} scope={viewScope} navigate={navigate} ask={startChat}
             act={(a, row) => setAction({action: a, row})} refresh={refresh} offset={offset} limit={scope.limit} setOffset={setOffset}/> : <Status error={result.error} retry={refresh}/>}</>}
         {route === "chat" && <Chat key={[filters.category_code, conversation, chatKey].join(":")} project={project.id} filters={filters} id={conversation} seed={conversation ? "" : seed} origin={origin} updateHistory={() => setHistoryRev(n => n + 1)}/>}
         {route === "history" && <section className="gtm-panel gtm-list">{history.data ? history.data.length ? history.data.map(h => <a key={h.id} href={"#/chat/" + encodeURIComponent(h.id)}>{h.label}<span>继续对话 ›</span></a>) : <p>暂无历史对话</p> : <Status error={history.error} retry={() => setHistoryRev(n => n + 1)}/>}</section>}

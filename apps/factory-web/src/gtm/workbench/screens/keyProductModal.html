@@ -1,0 +1,12 @@
+<div class="modal-mask" id="keyProductModal"><div class="modal" style="width:min(560px,92vw)"><div class="modal-head">TOP3重点产品型号 <span class="modal-close" onclick="closeKeyProductModal()">×</span></div><div class="modal-body" style="padding:20px 22px">
+  <div class="kp-row"><label class="kp-label">品类</label><select class="select kp-select" id="kpCategory" onchange="onKpCategoryChange()"><option>电视</option><option>冰箱</option><option>空调</option><option>洗衣机</option><option>厨卫</option></select></div>
+  <div class="kp-row kp-search-row"><label class="kp-label">型号搜索</label>
+    <div class="kp-search-wrap">
+      <input type="text" class="select kp-search-input" id="kpSearchInput" placeholder="搜索型号名称，如 65E7Q" oninput="onKpSearchInput()" onfocus="onKpSearchFocus()" onblur="setTimeout(hideKpSearchResults,200)">
+      <div class="kp-search-results" id="kpSearchResults"></div>
+    </div>
+  </div>
+  <div class="kp-row"><label class="kp-label">已选型号 <span style="color:var(--muted);font-weight:400">（3个）</span></label>
+    <div class="kp-selected-list" id="kpSelectedList"></div>
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeKeyProductModal()">取消</button><button class="btn primary" onclick="confirmKeyProduct()">确认</button></div></div></div>

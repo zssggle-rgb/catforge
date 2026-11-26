@@ -58,12 +58,44 @@ class GtmContractTest(unittest.TestCase):
                             self.assertTrue(set(fields) <= row["cells"].keys())
                             self.assertTrue(row["evidence"])
 
+    def test_workbench_scenario_is_scoped_and_sample_only(self):
+        path = "/sample-scenarios/0916"
+        scenario = self.call(self.project + path)
+        self.assertEqual(("0916", "sample", f.PROJECT), (scenario["version"], scenario["mode"], scenario["project_id"]))
+        self.assertTrue(scenario["records"]["dailyModels"])
+        self.assertTrue(scenario["records"]["premiumVocTop5Data"])
+        self.assertTrue(scenario["records"]["smartReports"])
+        with self.assertRaises(HTTPError) as caught:
+            self.call("/projects/another-project" + path)
+        self.assertEqual(404, caught.exception.code)
+
     def test_weekly_population_and_missing_daily_value(self):
         dates = {"period": "custom", "date_from": "2026-06-08", "date_to": "2026-06-14"}
         self.assertEqual(392, self.view("key-model", **dates)["tables"][0]["rows"][0]["cells"]["sales_volume_units"])
         self.assertEqual(110, self.view("key-model", channel="jd", **dates)["tables"][0]["rows"][0]["cells"]["sales_volume_units"])
         self.assertIsNone(self.view("key-model")["tables"][0]["rows"][0]["cells"]["sales_volume_units"])
         self.assertEqual("unavailable", self.view("daily", category_code="AC")["status"])
+
+    def test_linked_details_match_parent_entity_scope_and_snapshot(self):
+        visited = set()
+        for page in ("own-monitor","rival-monitor","launch","todo-center","reports"):
+            view = self.view(page)
+            row = view["tables"][0]["rows"][0]
+            queue = [row["drilldown"]]
+            while queue:
+                ref = queue.pop()
+                params = {"category_code":"TV", "snapshot_id":view["snapshot_id"], "record_id":ref["record_id"]}
+                path = self.project + "/details/" + ref["kind"] + "?"
+                detail = self.call(path+urlencode(params))
+                self.assertEqual((ref["kind"],row["id"],view["snapshot_id"]), (detail["kind"],detail["record_id"],detail["snapshot_id"]))
+                self.assertEqual(row["evidence"], detail["evidence"])
+                visited.add(ref["kind"])
+                queue.extend(detail["links"])
+                for changes,status in [({"record_id":"missing"},404),({"category_code":"AC"},404),({"snapshot_id":"old"},409)]:
+                    with self.assertRaises(HTTPError) as caught:
+                        self.call(path+urlencode({**params,**changes}))
+                    self.assertEqual(status,caught.exception.code)
+        self.assertEqual(len(visited),8)
 
     def test_filters_catalog_and_pagination(self):
         options = self.call(self.project + "/catalog?category_code=TV&kind=competitor&query=TCL")

@@ -1,0 +1,109 @@
+<section class="page" id="page-launch">
+        <div class="page-head"><div><h1>竞品上新提醒</h1><p>竞品新品上架监测与卖点对标，辅助GTM快速响应市场变化</p></div><div class="page-actions"><button class="btn" onclick="openExportModal('竞品上新提醒')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 21h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>导出报告</button><button class="btn" onclick="showToast('数据刷新完成')"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 11-2.3-5.7"/><path d="M20 4v7h-7"/></svg>刷新</button></div></div>
+        <div class="filters"><div class="filter"><label>品类</label><select class="select" id="launch-category-filter" onchange="onLaunchCategoryChange(this.value)"><option value="全部">全部</option><option value="电视">电视</option><option value="空调">空调</option><option value="冰箱">冰箱</option><option value="洗衣机">洗衣机</option><option value="厨电">厨卫</option></select></div><div class="filter"><label>品类细分</label><select class="select" id="launch-subcategory-filter"><option value="全部">全部</option></select></div><div class="filter"><label>品牌</label><select class="select"><option>全部</option><option>TCL</option><option>创维</option><option>小米</option><option>华为</option><option>美的</option></select></div><div class="filter"><label>上市日期</label><select class="select" id="launch-date-filter" onchange="onLaunchDateFilterChange(this.value)"><option value="today">今日</option><option value="yesterday">昨日</option><option value="7d" selected>近7日</option><option value="30d">近30天</option><option value="custom">自定义</option></select></div><div class="filter launch-date-range" id="launchDateRange" style="display:none"><label>日期范围</label><div style="display:flex;gap:6px;align-items:center"><input type="date" class="select" value="2026-09-01" style="padding:6px 8px;font-size:12px"><span style="color:var(--muted);font-size:11px">至</span><input type="date" class="select" value="2026-09-10" style="padding:6px 8px;font-size:12px"></div></div><button class="btn primary" onclick="showToast('已按筛选条件刷新新品数据')">查询</button></div>
+        <!-- AI总结与建议 -->
+        <div class="monitor-ai-summary">
+          <div class="monitor-ai-head">
+            <div class="monitor-ai-icon">AI</div>
+            <h3>AI总结与建议</h3>
+            <span class="ai-time"><i></i>基于当前筛选条件生成 · 2026-09-10 09:30</span><button class="ai-regen-btn" onclick="regenAISummary('launch')">重新生成</button>
+          </div>
+
+          <div class="daily-ai-cards" style="margin-bottom:12px">
+            <div class="daily-ai-card red">
+              <div class="daily-ai-card-title"><span class="pill red">重点风险</span>高影响新品</div>
+              <div class="daily-ai-card-body">
+                本月发现<b style="color:var(--danger)">2 款高影响竞品新品</b>，与我品主力型号直接对标。
+                <div class="daily-ai-card-list">
+                  <div><b>TCL 65Q9L PRO</b>：Mini LED + 120Hz，到手 ¥5,522，直接对标 65E7Q</div>
+                  <div><b>创维 65A7H PRO</b>：4K + 120Hz，到手 ¥4,939，直接对标 55E5N</div>
+                  <div><b>趋势</b>：头部竞品加速新品迭代，中端价格带竞争加剧</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card orange">
+              <div class="daily-ai-card-title"><span class="pill orange">观察预警</span>值得关注</div>
+              <div class="daily-ai-card-body">
+                <b>3 款新品</b>需持续观察市场表现与销量走势。
+                <div class="daily-ai-card-list">
+                  <div><b>美的 鲜净感508 Ultra</b>：嵌入冰箱首发热销，892 台/月，对标我品 508 系列</div>
+                  <div><b>华为 VISION 5 PRO 65</b>：鸿蒙生态加持，对中低端形成分流</div>
+                  <div><b>小米 S Pro 65 2026</b>：低价走量（1,523 台/月），存在向上渗透风险</div>
+                </div>
+              </div>
+            </div>
+            <div class="daily-ai-card purple">
+              <div class="daily-ai-card-title"><span class="pill purple">行动建议</span>GTM 决策</div>
+              <div class="daily-ai-card-body">
+                按优先级排序的新品应对策略。
+                <div class="daily-ai-card-list">
+                  <div><b>TCL 新品应对</b>：强化 65E7Q 画质调校与系统生态优势的传播</div>
+                  <div><b>美的嵌入冰箱</b>：加快我品 508 系列终端推广节奏，突出养鲜技术</div>
+                  <div><b>小米低价策略</b>：在画质与内容生态上做差异化传播，避免直接价格战</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="daily-ai-action-title">💡 我可以继续帮你：</div>
+          <div class="daily-ai-actions">
+            <span class="daily-ai-followup" onclick="askQ('TCL 65Q9L PRO 新品对我品的影响评估')">TCL 新品影响评估 →</span>
+            <span class="daily-ai-followup" onclick="askQ('竞品新品卖点对比与差异化建议')">竞品新品卖点对比 →</span>
+            <span class="daily-ai-followup" onclick="askQ('美的嵌入冰箱竞品应对策略')">美的冰箱应对策略 →</span>
+          </div>
+        </div>
+        <div class="monitor-section-title"><h3>竞品上新明细</h3></div>
+        <div class="launch-table-wrap">
+          <table class="launch-table">
+            <thead><tr><th>品牌</th><th>型号</th><th>核心规格</th><th>上市日期</th><th>当前均价</th><th>对我品影响</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="launch-brand-cell"><div class="launch-brand-logo">T</div>TCL</div></td>
+                <td><div class="launch-model-cell"><b>65Q9L PRO</b></div></td>
+                <td><span class="launch-spec-tag">65寸</span><span class="launch-spec-tag">Mini LED</span><span class="launch-spec-tag">120Hz</span><span class="launch-spec-tag">4+64GB</span></td>
+                <td>2026-09-02</td>
+                <td><div class="launch-price-cell"><b>¥5,522</b><span>首发价 ¥6,299</span></div></td>
+                <td><div class="launch-impact"><div class="launch-impact-bar"><i style="width:85%;background:#e5484d"></i></div><span>高影响 · 直接对标65E7Q</span></div></td>
+                <td><button class="btn sm" onclick="openLaunchEncyclopedia('TCL','65Q9L PRO','Mini LED电视 · 中高端价格带','1,286 台','¥709.8 万','¥5,522','2026-09-02','京东','平板电视','Mini LED电视 · 中高端价格带',['Mini LED','120Hz刷新率','4+64GB','量子点','杜比视界'],'与海信 65E7Q 价格带高度重叠，配置对标高，TCL降价后价差缩小至 ¥217，建议强化画质调校与系统生态优势的传播。')">竞品百科</button></td>
+              </tr>
+              <tr>
+                <td><div class="launch-brand-cell"><div class="launch-brand-logo">M</div>美的</div></td>
+                <td><div class="launch-model-cell"><b>鲜净感508 Ultra</b></div></td>
+                <td><span class="launch-spec-tag">508L</span><span class="launch-spec-tag">超薄嵌入</span><span class="launch-spec-tag">净味除菌</span><span class="launch-spec-tag">一级能效</span></td>
+                <td>2026-09-01</td>
+                <td><div class="launch-price-cell"><b>¥8,999</b><span>首发价 ¥9,999</span></div></td>
+                <td><div class="launch-impact"><div class="launch-impact-bar"><i style="width:60%;background:#f59e0b"></i></div><span>中影响 · 冰箱品类需关注</span></div></td>
+                <td><button class="btn sm" onclick="openLaunchEncyclopedia('美的','鲜净感508 Ultra','超薄嵌入冰箱 · 高端价格带','892 台','¥802.9 万','¥8,999','2026-09-01','天猫','冰箱','超薄嵌入冰箱 · 高端价格带',['超薄嵌入','净味除菌','508L','一级能效','AI智能温控'],'与海信 BCD-508WTDGVBP 直接对标，美的在嵌入工艺和净味技术上有品牌积累，建议强化我品养鲜技术与能耗表现。')">竞品百科</button></td>
+              </tr>
+              <tr>
+                <td><div class="launch-brand-cell"><div class="launch-brand-logo">X</div>小米</div></td>
+                <td><div class="launch-model-cell"><b>S Pro 65 2026款</b></div></td>
+                <td><span class="launch-spec-tag">65寸</span><span class="launch-spec-tag">Mini LED</span><span class="launch-spec-tag">1200nits</span><span class="launch-spec-tag">4+64GB</span></td>
+                <td>2026-08-31</td>
+                <td><div class="launch-price-cell"><b>¥4,199</b><span>首发价 ¥4,499</span></div></td>
+                <td><div class="launch-impact"><div class="launch-impact-bar"><i style="width:40%;background:#0064fa"></i></div><span>低影响 · 价格带不同</span></div></td>
+                <td><button class="btn sm" onclick="openLaunchEncyclopedia('小米','S Pro 65 2026款','Mini LED电视 · 性价比价格带','1,523 台','¥639.5 万','¥4,199','2026-08-31','全渠道','平板电视','Mini LED电视 · 性价比价格带',['Mini LED','1200nits','4+64GB','120Hz','小米澎湃OS'],'价格低于我品 55E5N，但尺寸更大，存在降维打击风险。需关注其向上渗透情况，当前对 65E7Q 影响有限。')">竞品百科</button></td>
+              </tr>
+              <tr>
+                <td><div class="launch-brand-cell"><div class="launch-brand-logo">H</div>华为</div></td>
+                <td><div class="launch-model-cell"><b>VISION 5 PRO 65</b></div></td>
+                <td><span class="launch-spec-tag">65寸</span><span class="launch-spec-tag">4K</span><span class="launch-spec-tag">鸿蒙系统</span><span class="launch-spec-tag">3+32GB</span></td>
+                <td>2026-08-28</td>
+                <td><div class="launch-price-cell"><b>¥4,704</b><span>首发价 ¥4,999</span></div></td>
+                <td><div class="launch-impact"><div class="launch-impact-bar"><i style="width:55%;background:#f59e0b"></i></div><span>中影响 · 中低端价格带</span></div></td>
+                <td><button class="btn sm" onclick="openLaunchEncyclopedia('华为','VISION 5 PRO 65','智慧屏电视 · 中高端价格带','623 台','¥293.1 万','¥4,704','2026-08-28','京东','平板电视','智慧屏电视 · 鸿蒙生态',['4K超高清','鸿蒙系统','3+32GB','智慧投屏','鸿鹄画质引擎'],'凭借鸿蒙生态吸引华为手机用户群体，对中低端价格带形成一定分流，建议强化我品画质参数与内容生态的对比传播。')">竞品百科</button></td>
+              </tr>
+              <tr>
+                <td><div class="launch-brand-cell"><div class="launch-brand-logo">C</div>创维</div></td>
+                <td><div class="launch-model-cell"><b>65A7H PRO</b></div></td>
+                <td><span class="launch-spec-tag">65寸</span><span class="launch-spec-tag">4K</span><span class="launch-spec-tag">120Hz</span><span class="launch-spec-tag">3+64GB</span></td>
+                <td>2026-08-25</td>
+                <td><div class="launch-price-cell"><b>¥4,939</b><span>首发价 ¥5,299</span></div></td>
+                <td><div class="launch-impact"><div class="launch-impact-bar"><i style="width:70%;background:#e5484d"></i></div><span>高影响 · 直接对标55E5N</span></div></td>
+                <td><button class="btn sm" onclick="openLaunchEncyclopedia('创维','65A7H PRO','4K智能电视 · 中端价格带','986 台','¥487.2 万','¥4,939','2026-08-25','京东','平板电视','4K智能电视 · 中端价格带',['4K超清','120Hz刷新率','3+64GB','防蓝光','AI画质调校'],'直接对标海信 55E5N/65E3N 系列，价格接近但品牌力稍弱，建议通过音质与内容生态差异化竞争。')">竞品百科</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="el-pagination"><span class="ep-total">共 12 条</span><span class="ep-size"><select onchange="showToast('每页显示 '+this.value+' 条')"><option>10条/页</option><option>20条/页</option><option>50条/页</option></select></span><button class="ep-btn disabled" onclick="showToast('已是第一页')">‹</button><button class="ep-btn active">1</button><button class="ep-btn" onclick="showToast('已翻到第 2 页')">2</button><button class="ep-btn" onclick="showToast('已翻到下一页')">›</button></div>
+        <div class="data-source-footer"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span><b>数据来源：</b>京东/天猫/抖音等电商平台竞品商品库　·　每2小时自动扫描更新　·　AI自动提取核心卖点与定价策略</span></div>
+      </section>

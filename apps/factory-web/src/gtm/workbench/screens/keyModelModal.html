@@ -1,0 +1,40 @@
+<div class="modal-mask" id="keyModelModal">
+        <div class="modal kpm-modal">
+          <div class="kpm-head">
+            <div class="kpm-title">管理重点产品</div>
+            <span class="kpm-close" onclick="closeModal('keyModelModal')">×</span>
+          </div>
+          <div class="kpm-body" onclick="handleKpmBodyClick(event)">
+            <div class="kpm-category-row">
+              <label class="kpm-category-label">品类</label>
+              <select class="kpm-category-select" id="kpmCategorySelect" onchange="filterKpmByCategory(this.value)">
+                <option value="all">全部</option>
+                <option value="电视">电视</option>
+                <option value="冰箱">冰箱</option>
+                <option value="空调">空调</option>
+                <option value="洗衣机">洗衣机</option>
+                <option value="厨卫">厨卫</option>
+              </select>
+            </div>
+            <div class="kpm-search-wrap">
+              <label class="kpm-search-label">型号</label>
+              <div class="kpm-search-input-wrap">
+                <svg class="kpm-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <input type="text" id="keyModelSearchInput" class="kpm-search-input" placeholder="搜索型号，如 65E7Q" oninput="showModelDropdown(this.value)" onfocus="showModelDropdown(this.value)">
+                <div id="keyModelDropdown" class="km-dropdown" style="display:none"></div>
+              </div>
+            </div>
+            <div class="kpm-count-row">
+              <span class="kpm-count-label">已选型号 <b id="keyModelSelectedCount">8</b>/100</span>
+              <span class="kpm-count-hint">点击删除按钮可移除</span>
+            </div>
+            <div class="kpm-list-wrap">
+              <div id="keyModelSelectedList" class="kpm-selected-list"></div>
+            </div>
+          </div>
+          <div class="kpm-foot">
+            <button class="kpm-btn kpm-btn-default" onclick="closeModal('keyModelModal')">取消</button>
+            <button class="kpm-btn kpm-btn-primary" onclick="confirmKeyProducts()">确认</button>
+          </div>
+        </div>
+      </div>
