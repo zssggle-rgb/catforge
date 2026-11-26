@@ -64,6 +64,12 @@
 .selling-point-card .sp-num, .selling-point-card .sp-line em { background:var(--surface-muted); color:var(--muted) }
 .weight-method span, .premium-formula, .forecast-assumption { background:var(--surface-muted); color:var(--muted); border-color:var(--line) }
 .weight-bar-row.own .weight-bar-track i { background:var(--primary) }
+.own-col { background:#f4f8fd; color:var(--text) }
+.wiki-impact, .launch-ency-impact, .voc-risk { background:var(--surface-muted); border-color:var(--line); color:var(--muted) }
+.builder-row + .builder-row { border-top-color:var(--line) }
+.chat-analysis-title { margin-bottom:14px; padding:0 0 12px; border-bottom:1px solid var(--line) }
+.chat-value-item { padding:12px; border:1px solid var(--line); border-radius:6px }
+.chat-value-kind { font-size:11px; color:var(--muted); font-weight:500 }
 .analysis-note { margin-bottom:14px; padding:12px 0; border-block:1px solid var(--line); color:var(--text); font-size:13px }
 .analysis-note p { color:var(--muted); margin-top:4px; font-size:12px; line-height:1.7 }
 .analysis-note p b { color:var(--text); font-weight:600 }
@@ -139,6 +145,10 @@
 .inventory-table td small { display:block; font-size:11px; padding-top:3px; color:var(--subtle) }
 .inventory-table tbody tr:last-child td { border-bottom:0 }
 @media (max-width:760px) {
+  body { overflow:hidden }
+  .app { height:100dvh; min-height:0 }
+  .app .main { height:100%; overflow:hidden }
+  .app .workspace { min-height:0 }
   .inventory-tools { align-items:flex-start }
   .inventory-table th, .inventory-table td { padding:8px; font-size:12px; overflow-wrap:anywhere }
   .inventory-table th:nth-child(2) { width:55px }
