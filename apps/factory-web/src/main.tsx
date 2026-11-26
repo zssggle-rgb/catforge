@@ -1,15 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ConfigProvider } from "antd";
-import zhCN from "antd/locale/zh_CN";
-import App from "./App";
-import "./styles.css";
+const pathname = window.location.pathname;
+const isGtm = ["/", "/gtm", "/gtm/"].includes(pathname);
+const App = isGtm ? React.lazy(() => import("./gtm/GtmApp")) : React.lazy(() => import("./FactoryRoot"));
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ConfigProvider locale={zhCN}>
+    <React.Suspense fallback={<p role="status">正在打开工作台…</p>}>
       <App />
-    </ConfigProvider>
+    </React.Suspense>
   </React.StrictMode>
 );
 
