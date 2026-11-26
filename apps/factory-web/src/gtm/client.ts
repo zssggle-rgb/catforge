@@ -18,6 +18,32 @@ async function request<T>(path: string, signal?: AbortSignal, payload?: object, 
 const projectPath = (id: string) => "/projects/" + encodeURIComponent(id);
 
 export const gtm = {
+  async exportSample(project: string, format: string, title: string, lines: string[]) {
+    const res = await fetch(base + projectPath(project) + "/sample-exports", {method:"POST",credentials:"same-origin",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({format,title,lines})});
+    if (!res.ok) throw new Error("导出失败（" + res.status + "）");
+    return res.blob();
+  },
+  async detail(scope: Scope, snapshot: string, ref: import("./workbench/projection").DetailRef, signal: AbortSignal) {
+    const params = new URLSearchParams({category_code:scope.category_code, snapshot_id:snapshot, record_id:ref.record_id});
+    const data = await request<import("./workbench/projection").DetailProjection>(
+      projectPath(scope.project_id) + "/details/" + encodeURIComponent(ref.kind) + "?" + params, signal);
+    if (data?.version !== "0916" || data.kind !== ref.kind || data.record_id !== ref.record_id ||
+        data.project_id !== scope.project_id || data.category_code !== scope.category_code || data.snapshot_id !== snapshot ||
+        !data.values || !data.lists || !data.tables || !Array.isArray(data.evidence) || !Array.isArray(data.links)) {
+      throw new Error("详情与当前记录或快照不一致");
+    }
+    return data;
+  },
+  async sampleScenario(id: string, signal: AbortSignal) {
+    const scenario = await request<{version: string; mode: string; project_id: string; records: Record<string, unknown>}>(
+      projectPath(id) + "/sample-scenarios/0916", signal);
+    if (scenario?.mode !== "sample" || scenario.version !== "0916" || scenario.project_id !== id ||
+        !Array.isArray(scenario.records?.dailyModels) || !Array.isArray(scenario.records?.smartReports)) {
+      throw new Error("工作台样例版本与接口不一致");
+    }
+    return scenario.records;
+  },
   async context(signal: AbortSignal) {
     const data = await request<Context>("/context", signal);
     if (data?.version !== "1" || !["live", "sample"].includes(data.mode) || typeof data.user?.name !== "string" || !Array.isArray(data.projects) ||

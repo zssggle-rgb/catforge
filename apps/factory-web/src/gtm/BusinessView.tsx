@@ -1,23 +1,15 @@
-import { useState, type ReactNode } from "react";
-import Modal from "@douyinfe/semi-ui/lib/es/modal";
+import { lazy, Suspense, useState } from "react";
+import { Dialog, Sources } from "./DetailDialog";
 import Table from "@douyinfe/semi-ui/lib/es/table";
 import IconArrowRight from "@douyinfe/semi-icons/lib/es/icons/IconArrowRight";
 import IconBulb from "@douyinfe/semi-icons/lib/es/icons/IconBulb";
 import IconChevronRight from "@douyinfe/semi-icons/lib/es/icons/IconChevronRight";
+import { RecordDetail } from "./RecordDetail";
+import { AnalysisPanel } from "./AnalysisPanel";
+import type { Scope } from "./contract";
+const BoundDetail = lazy(() => import("./workbench/BoundDetail"));
 import { displayValue, type Action, type Chart, type DataTable, type Evidence, type Page, type Row, type View } from "./contract";
 
-export function Dialog({title, close, children}: {title: string; close: () => void; children: ReactNode}) {
-  return <Modal visible title={title} footer={null} onCancel={close} width="min(540px, 94vw)"
-    className="gtm-modal" getPopupContainer={() => document.querySelector<HTMLElement>(".gtm") ?? document.body}>
-    <div className="gtm-dialog">{children}</div></Modal>;
-}
-export function Sources({items}: {items: Evidence[]}) {
-  return <div className="gtm-sources"><h3>数据依据</h3>{items.length ? items.map(item =>
-    <article key={item.evidence_id}><strong>{item.source}</strong><small>{item.observed_at || "时间未知"} · {item.evidence_id}</small>
-      <p>{item.excerpt}</p>{item.source_file_id && <small>来源文件 {item.source_file_id}　原始行 {item.raw_row_id || "—"}</small>}
-      {item.evidence_url?.startsWith("/api/gtm/") && <a href={item.evidence_url} target="_blank" rel="noreferrer">查看原始凭证</a>}</article>
-  ) : <p>暂无可追溯证据</p>}</div>;
-}
 
 function Plot({chart}: {chart: Chart}) {
   const colors = ["var(--semi-color-primary)", "var(--semi-color-warning)", "var(--semi-color-danger)", "var(--semi-color-success)", "rgb(var(--semi-violet-5))"];
@@ -74,11 +66,12 @@ function Results({table, open, navigate, pageIndex, pageSize, paginate}: {
   </section>;
 }
 
-export function BusinessView({data, navigate, ask, act, refresh, offset, limit, setOffset}: {
+export function BusinessView({data, scope, navigate, ask, act, refresh, offset, limit, setOffset}: {
+  scope: Scope;
   data: View; navigate: (page: Page) => void; ask: (q: string) => void; act: (action: Action, row: Row | null) => void;
   refresh: () => void; offset: number; limit: number; setOffset: (value: number) => void;
 }) {
-  const [selected, setSelected] = useState<Row | null>(null);
+  const [selected, setSelected] = useState<{table: string; row: Row} | null>(null);
   const [sources, setSources] = useState<Evidence[] | null>(null);
   return <>
     {data.notice && <p className="gtm-notice" role="status">{data.notice}</p>}
@@ -98,13 +91,17 @@ export function BusinessView({data, navigate, ask, act, refresh, offset, limit, 
         {m.basis && <details><summary>统计口径</summary><small>{m.basis.grain} · {m.basis.population}<br/>{m.basis.coverage_from} 至 {m.basis.coverage_to}<br/>批次 {m.basis.source_batch} · 同步 {m.basis.synced_at || "未知"}</small></details>}</div>)}</div></section>}
     {data.charts.length > 0 && <section className="gtm-panel"><header><h2>{data.page === "daily" ? "价格违规概览" : "趋势与分布"}</h2></header>
       <div className="gtm-plots">{data.charts.map(chart => <article key={chart.title}><h3>{chart.title}</h3><Plot chart={chart}/></article>)}</div></section>}
-    {data.tables.map((table, index) => <Results key={table.id} table={table} open={setSelected} navigate={navigate}
+    {data.tables.map((table, index) => index===0 && (data.page==="competitor" || data.page==="premium") ?
+      <div key={table.id}><AnalysisPanel tab={data.tab} table={table} open={row=>setSelected({table:table.id,row})}/>
+        {table.total>limit && <div className="gtm-tabs"><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-limit))}>上一页</button>
+          <button disabled={offset+limit>=table.total} onClick={()=>setOffset(offset+limit)}>下一页</button></div>}</div>
+      : <Results key={table.id} table={table} open={row => setSelected({table:table.target || table.id, row})} navigate={navigate}
       pageIndex={Math.floor(offset / limit)} pageSize={limit} paginate={data.page !== "daily" && index === 0 ? n => setOffset(n * limit) : undefined}/>)}
     {!data.tables.length && !data.insights.length && !data.metrics.length && !data.charts.length && <p className="gtm-empty">当前范围暂无业务数据</p>}
     <small className="gtm-snapshot">数据快照 {data.snapshot_id}{data.method_version && " · 方法 " + data.method_version}{data.review_status && " · " + data.review_status}{data.confidence != null && " · 置信度 " + displayValue(data.confidence)}</small>
-    {selected && <Dialog title={selected.title} close={() => setSelected(null)}>
-      <dl>{selected.detail.map((field, i) => <div key={i}><dt>{field.label}</dt><dd>{displayValue(field.value)}</dd></div>)}</dl><Sources items={selected.evidence}/>
-      {selected.actions.length > 0 && <footer>{selected.actions.map(a => <button className="primary" key={a.operation} onClick={() => {act(a, selected); setSelected(null);}}>{a.label}</button>)}</footer>}</Dialog>}
+    {selected && (selected.row.drilldown ? <Suspense fallback={<p role="status">正在打开详情…</p>}>
+      <BoundDetail row={selected.row} scope={scope} snapshot={data.snapshot_id} close={()=>setSelected(null)} act={(a,row)=>{act(a,row);setSelected(null);}}/>
+    </Suspense> : <RecordDetail {...selected} close={() => setSelected(null)} act={(a,row) => {act(a,row);setSelected(null);}}/>)}
     {sources && <Dialog title="分析依据" close={() => setSources(null)}><Sources items={sources}/></Dialog>}
   </>;
 }

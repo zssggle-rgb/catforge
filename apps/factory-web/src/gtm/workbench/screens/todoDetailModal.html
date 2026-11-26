@@ -1,0 +1,17 @@
+<div class="modal-mask" id="todoDetailModal"><div class="modal" style="width:min(640px,92vw)"><div class="modal-head"><span>待办任务详情</span><span class="modal-close" onclick="closeModal('todoDetailModal')">×</span></div><div class="modal-body" style="padding:20px 24px">
+  <h3 id="todoDetailTitle" style="font-size:16px;margin-bottom:6px"></h3>
+  <p id="todoDetailDesc" style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6"></p>
+  <div class="grid cols-3" style="gap:12px;margin-bottom:18px">
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">任务类型</div><div id="todoDetailType" style="font-size:13px;font-weight:650"></div></div>
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">优先级</div><div id="todoDetailPriority" style="font-size:13px;font-weight:650"></div></div>
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">状态</div><div id="todoDetailStatus" style="font-size:13px;font-weight:650"></div></div>
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">截止时间</div><div id="todoDetailDeadline" style="font-size:13px;font-weight:650"></div></div>
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">负责人</div><div id="todoDetailOwner" style="font-size:13px;font-weight:650"></div></div>
+    <div style="padding:10px 12px;background:#f7f8fa;border-radius:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">创建时间</div><div style="font-size:13px;font-weight:650">2026-09-10 09:00</div></div>
+  </div>
+  <div style="font-size:12px;font-weight:650;margin-bottom:8px">处理记录</div>
+  <div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.8">
+    · 2026-09-10 09:00　系统自动巡检发现价格异常，生成整改任务<br>
+    · 2026-09-10 09:05　已分配至负责人
+  </div>
+</div><div class="modal-foot"><button class="btn" onclick="closeModal('todoDetailModal')">关闭</button><button class="btn primary" onclick="closeModal('todoDetailModal');showToast('已进入处理流程')">立即处理</button></div></div></div>

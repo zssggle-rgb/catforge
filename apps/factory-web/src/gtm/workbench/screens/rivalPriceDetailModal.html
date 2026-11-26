@@ -1,0 +1,15 @@
+<div class="modal-mask" id="rivalPriceDetailModal" onclick="if(event.target===this)closeModal('rivalPriceDetailModal')">
+        <div class="modal" style="width:min(860px,94vw)">
+          <div class="modal-head" style="font-size:16px;padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;font-weight:700"><span id="rivalDetailTitle">价格明细</span><span class="modal-close" onclick="closeModal('rivalPriceDetailModal')">×</span></div>
+          <div class="modal-body" style="padding:16px 22px 0;max-height:65vh;overflow-y:auto">
+            <div class="table-wrap" id="rivalPriceDetailTableWrap"></div>
+          </div>
+          <div class="modal-foot" style="padding:14px 22px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+            <div class="data-source-footer" style="margin:0">
+              <svg viewBox="0 0 24 24" width="14" height="14"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+              <span style="font-size:11px;color:var(--muted)"><b>数据来源：</b>京东/淘天/抖音等电商平台价格抓取 · 每2小时更新</span>
+            </div>
+            <button class="btn sm" onclick="closeModal('rivalPriceDetailModal')">关闭</button>
+          </div>
+        </div>
+      </div>

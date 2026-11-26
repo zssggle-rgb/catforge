@@ -1,0 +1,28 @@
+<div class="modal-mask" id="handlePriceModal"><div class="modal handle-modal" style="width:min(560px,92vw)">
+  <div class="modal-head">价格异常处理 <span class="modal-close" onclick="closeModal('handlePriceModal')">×</span></div>
+  <div class="modal-body" style="padding:20px 24px">
+    <div class="handle-form-row">
+      <label class="handle-form-label">处理联系人 <span class="required">*</span></label>
+      <select class="handle-form-select">
+        <option value="">请选择联系人</option>
+        <option>张伟（渠道运营）</option>
+        <option>李娜（电商经理）</option>
+        <option>王强（GTM 负责人）</option>
+        <option>刘洋（价格专员）</option>
+        <option>陈明（拼多多渠道对接）</option>
+      </select>
+    </div>
+    <div class="handle-form-row">
+      <label class="handle-form-label">处理意见 <span class="required">*</span></label>
+      <textarea class="handle-form-textarea" placeholder="请填写具体处理意见和跟进要求..."></textarea>
+    </div>
+    <div class="handle-form-row">
+      <label class="handle-form-label">跟进截止时间</label>
+      <input type="datetime-local" class="handle-form-date" value="2026-09-16T18:00">
+    </div>
+  </div>
+  <div class="modal-foot handle-modal-foot">
+    <button class="btn" onclick="closeModal('handlePriceModal')">取消</button>
+    <button class="btn primary" onclick="submitHandleTask(this)">生成跟进任务</button>
+  </div>
+</div></div>

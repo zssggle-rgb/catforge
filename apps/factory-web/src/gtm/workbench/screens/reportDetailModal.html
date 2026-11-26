@@ -1,0 +1,33 @@
+<div class="modal-mask report-modal-wide" id="reportDetailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="report-detail-head"><div><b id="detailModalTitle">订阅报告</b><small id="detailModalSub">报告详情</small></div><span class="report-save-state-v4" id="reportSaveState">已自动保存</span></div>
+      <div class="detail-mode-switch"><button class="detail-mode-btn active" id="detailViewBtn" onclick="setReportDetailMode('view')">◉ 查看</button><button class="detail-mode-btn" id="detailEditBtn" onclick="setReportDetailMode('edit')">✎ 编辑</button></div>
+      <span class="modal-close" onclick="closeModal('reportDetailModal')">×</span>
+    </div>
+    <div class="modal-body">
+      <div class="report-workspace-shell view" id="reportWorkspaceShell">
+        <main class="report-canvas-v4">
+          <article class="report-preview-sheet" id="reportPreviewSheet">
+            <div class="report-edit-tip-v4">编辑模式已开启：点击浅绿色区域直接修改；也可以在右侧描述要求，让AI协助精简、补充或重组内容。</div>
+            <div class="report-preview-kicker"></div>
+            <h2 class="report-preview-title" id="detailReportTitle" data-report-editable="true" oninput="queueReportAutoSave()"></h2>
+            <div class="report-preview-meta" id="detailReportMeta"></div>
+            <div class="report-detail-kpis"><div class="report-detail-kpi"><span>监测SKU</span><b id="detailKpiSku">--</b><em>数据覆盖率 98.6%</em></div><div class="report-detail-kpi"><span>关键变化</span><b id="detailKpiChange">--</b><em>较上周期</em></div><div class="report-detail-kpi"><span>待执行建议</span><b id="detailKpiAction">--</b><em>已明确责任人</em></div></div>
+            <div class="report-preview-section"><h3>核心结论</h3><p id="detailReportSummary" data-report-editable="true" oninput="queueReportAutoSave()"></p></div>
+            <div class="report-preview-section"><h3>建议行动与闭环状态</h3><div class="table-wrap" style="border-radius:7px"><div class="decision-action"><b>行动建议</b><b>责任角色 / 截止时间</b><b>状态</b></div><div class="decision-action"><span data-report-editable="true" oninput="queueReportAutoSave()">针对重点降价竞品完成价格影响测算，输出跟价边界</span><span data-report-editable="true" oninput="queueReportAutoSave()">GTM经理 · 08-25</span><strong>待采纳</strong></div><div class="decision-action"><span data-report-editable="true" oninput="queueReportAutoSave()">更新新品卖点对阵表，强化高价值卖点差异化表达</span><span data-report-editable="true" oninput="queueReportAutoSave()">产品营销 · 08-27</span><strong>执行中</strong></div><div class="decision-action"><span data-report-editable="true" oninput="queueReportAutoSave()">将高风险SKU纳入小时级价格监控</span><span>电商运营 · 已完成</span><strong style="color:var(--success)">已闭环</strong></div></div></div>
+            <div class="report-preview-section"><h3>数据依据与可信度</h3><div class="report-data-proof"><span class="proof-chip"><b>奥维数据</b> 更新至08-23</span><span class="proof-chip"><b>全渠道价格</b> 2,486个SKU</span><span class="proof-chip"><b>VOC评论</b> 12,680条</span><span class="proof-chip"><b>规则版本</b> GTM-R3.2</span><span class="proof-chip"><b>结论可信度</b> 92%</span></div></div>
+            <div class="report-preview-section"><h3>版本记录</h3><div class="version-timeline" id="detailVersionTimeline"><div class="version-item"><b>V1.3</b><span>底层价格数据刷新，AI重新生成量价结论</span><span>今天 09:12</span></div><div class="version-item"><b>V1.2</b><span>人工确认并补充跟价边界说明</span><span>昨天 17:40</span></div><div class="version-item"><b>V1.0</b><span>报告首次自动生成</span><span>08-19 09:00</span></div></div></div>
+          </article>
+        </main>
+        <aside class="report-ai-assistant" id="reportAiAssistant">
+          <div class="report-ai-head"><div class="report-ai-title"><span class="report-ai-mark">AI</span>报告修改助手</div><p>描述修改要求，AI会在保留原版本的基础上更新左侧报告</p></div>
+          <div class="report-ai-body" id="reportAiBody"><div class="report-ai-msg ai"><b>想怎么调整这份报告？</b>你可以直接修改左侧浅绿色区域，也可以告诉我需要精简、补充或重组的内容。</div></div>
+          <div class="report-ai-quick"><button onclick="askReportAssistant('精简核心结论')">精简核心结论</button><button onclick="askReportAssistant('补充价格风险')">补充价格风险</button><button onclick="askReportAssistant('强化行动建议')">强化行动建议</button><button onclick="askReportAssistant('增加数据依据')">增加数据依据</button></div>
+          <div class="report-ai-composer"><textarea id="reportAssistantInput" placeholder="输入修改要求…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReportAssistant()}"></textarea><div class="report-ai-composer-foot"><span>Enter发送 · Shift+Enter换行</span><button class="btn primary sm" onclick="sendReportAssistant()">发送 ↑</button></div></div>
+        </aside>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="openModal('exportReportModal')">导出 ▾</button><button class="btn" onclick="openModal('shareReportModal')">分享 ▾</button><button class="btn" id="detailSaveBtn" style="display:none" onclick="saveSmartReportEdit()">保存新版本</button><button class="btn primary" id="detailConfirmBtn" onclick="confirmSmartReport()">确认并发布</button></div>
+  </div>
+</div>
