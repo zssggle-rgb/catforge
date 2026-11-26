@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${FM_QA_WORKSPACE:?}" "${FM_QA_SHA:?}" "${FM_QA_SSH_CONFIG:?}" "${FM_QA_HOST:?}" "${FM_QA_URL:?}"
+tools=$(cd "$(dirname "$0")/../.." && pwd)
+[[ $FM_QA_SHA =~ ^[a-f0-9]{40}$ && $(git -C "$FM_QA_WORKSPACE" rev-parse HEAD) == "$FM_QA_SHA" ]]
+port=$(python3 - "$FM_QA_URL" <<'PY'
+import sys
+from urllib.parse import urlsplit
+url = urlsplit(sys.argv[1])
+if url.scheme != "http" or not url.hostname or url.username or url.password or url.query or url.fragment:
+    sys.exit("Expected the paired test VM's HTTP URL")
+print(url.port or 80)
+PY
+)
+peer=(ssh -F "$FM_QA_SSH_CONFIG" -o BatchMode=yes -- "$FM_QA_HOST")
+stage=$("${peer[@]}" 'umask 077; mkdir -p ~/.local/share/catforge-qa; mktemp -d ~/.local/share/catforge-qa/build.XXXXXXXX' </dev/null)
+[[ $stage =~ ^/[A-Za-z0-9._/-]+/build\.[A-Za-z0-9]+$ ]]
+trap '"${peer[@]}" "rm -rf -- $stage" </dev/null' EXIT
+"${peer[@]}" "mkdir '$stage/src' '$stage/tools'" </dev/null
+git -C "$FM_QA_WORKSPACE" archive --format=tar.gz "$FM_QA_SHA" | "${peer[@]}" "tar xzf - -C '$stage/src'"
+# Keep deployment definitions on ForgeMind's trusted scripts revision while
+# building the application from the exact candidate checkout.
+tar -C "$tools" -czf - docker-compose.yml scripts/compose-apply.sh scripts/qa/compose.yaml scripts/qa/ensure-compose scripts/qa/activate | \
+  "${peer[@]}" "tar xzf - -C '$stage/tools'"
+"${peer[@]}" "cd '$stage' && flock -w 60 ../deploy.lock bash tools/scripts/qa/activate '$FM_QA_SHA' '$port'" </dev/null

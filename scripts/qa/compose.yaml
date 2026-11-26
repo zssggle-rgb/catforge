@@ -1,0 +1,28 @@
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+  api:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${CATFORGE_REVISION:?}
+    ports: !reset []
+    volumes: !override [qa_data:/data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3).close()"]
+      interval: 3s
+      timeout: 4s
+      retries: 20
+    restart: unless-stopped
+  web:
+    build:
+      labels:
+        org.opencontainers.image.revision: ${CATFORGE_REVISION:?}
+    ports: !override ["${CATFORGE_WEB_PORT:?}:5173"]
+    restart: unless-stopped
+
+volumes:
+  qa_data: {}

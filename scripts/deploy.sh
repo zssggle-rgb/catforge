@@ -133,21 +133,9 @@ if [[ -n "${runtime_env_file}" ]]; then
   ssh "${ssh_opts[@]}" "${remote}" "chmod 600 '${app_dir}/.env'"
 fi
 
-ssh "${ssh_opts[@]}" "${remote}" "APP_DIR='${app_dir}' COMPOSE_FILE='${compose_file}' bash -s" <<'REMOTE'
-set -euo pipefail
-cd "${APP_DIR}"
-
-if [[ ! -f ".env" ]]; then
-  echo "Missing remote runtime env: ${APP_DIR}/.env" >&2
-  exit 2
-fi
-
-docker compose -f "${COMPOSE_FILE}" --env-file .env build
-docker compose -f "${COMPOSE_FILE}" --env-file .env run --rm -T api python -m alembic upgrade head </dev/null
-docker compose -f "${COMPOSE_FILE}" --env-file .env rm -sf api web
-docker compose -f "${COMPOSE_FILE}" --env-file .env up -d --remove-orphans --force-recreate
-docker compose -f "${COMPOSE_FILE}" --env-file .env ps
-REMOTE
+ssh "${ssh_opts[@]}" "${remote}" \
+  "cd '${app_dir}' && bash -s -- cloud docker compose -f '${compose_file}' --env-file .env" \
+  < "$(dirname -- "$0")/compose-apply.sh"
 
 health_url="${CATFORGE_APP_URL:-http://${CATFORGE_DEPLOY_HOST}:${api_port}}"
 if command -v curl >/dev/null 2>&1; then

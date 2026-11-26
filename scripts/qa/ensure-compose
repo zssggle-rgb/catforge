@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# The Ubuntu QA VM image provides apt and passwordless administration.
+set -euo pipefail
+if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1 || ! docker buildx version >/dev/null 2>&1; then
+  sudo -n apt-get -q -o Acquire::Retries=2 update
+  sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -qy -o Acquire::Retries=2 \
+    install --no-install-recommends docker.io docker-compose-v2 docker-buildx
+fi
+if ! docker info >/dev/null 2>&1 && ! sudo -n docker info >/dev/null 2>&1; then
+  sudo -n systemctl start docker
+fi
