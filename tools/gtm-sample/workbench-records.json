@@ -1,4 +1,16 @@
 {
+  "valueInventory": [
+    {"group":"high","claim":"XDR Pro 5200nits＋1920物理分区","benefits":["白天不拉帘也清楚","暗场细节更完整","字幕边缘少光晕"],"action":"","source":""},
+    {"group":"high","claim":"6单元60W独立音响","benefits":["对白更清楚","无需另购回音壁","客厅声场更有包围感"],"action":"","source":""},
+    {"group":"high","claim":"潘通＋杜比双冠色彩认证","benefits":["肤色更自然","画面还原更真实","专业认证更放心"],"action":"","source":""},
+    {"group":"base","claim":"65英寸4K超高清大屏","benefits":["客厅观看尺寸合适","文字与细节清晰","主流片源完整适配"],"action":"","source":""},
+    {"group":"base","claim":"AI画质芯片","benefits":["低清片源更清楚","场景自动优化","减少手动调节"],"action":"","source":""},
+    {"group":"base","claim":"U＋Mini LED光晕控制","benefits":["高光边缘更干净","暗场层次稳定","夜间观看不刺眼"],"action":"","source":""},
+    {"group":"pending","claim":"4K 170Hz＋四路HDMI 2.1","benefits":[],"action":"减少参数堆叠，转译为“多台游戏设备不用反复拔线”；增加主机游戏实测、延迟对比和用户体验证言。","source":""},
+    {"group":"pending","claim":"智感调光＋20000Hz无屏闪","benefits":[],"action":"用长时观影眼疲劳测试和有/无智感调光对照视频建立可感知证据，验证用户是否真正接受。","source":""},
+    {"group":"missing","claim":"真超薄100%无缝贴墙","benefits":[],"action":"评估下一代结构减薄与贴墙安装方案；当前产品可先用超薄挂架和免费勘测缩小体验差距。","source":"创维 65A7H PRO"},
+    {"group":"missing","claim":"无开机广告＋低反纸屏","benefits":[],"action":"推动系统体验策略调整，并评估低反射屏幕方案；短期以极速开机和环境光实测内容进行防守。","source":"TCL 65Q9L PRO / 创维 65A6F ULTRA"}
+  ],
   "rivalCategoryTree": {
     "电视": {
       "sub": [

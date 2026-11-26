@@ -4,13 +4,14 @@ import { gtm } from "../client";
 import type { Action, Row, Scope } from "../contract";
 import { projectDetail, type DetailProjection, type DetailRef } from "./projection";
 import css from "./workbench.css?raw";
+import theme from "./catforge.css?raw";
 
 function Body({data}: {data: DetailProjection}) {
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const shadow = host.current!.shadowRoot || host.current!.attachShadow({mode:"open"});
     const style = document.createElement("style");
-    style.textContent = css + "\n:host{display:block;color:#1d2129;--text:#1d2129;--muted:#697386;--primary:#0064fa;--line:#e7e9ee} .modal-body :empty{display:none} .modal-body{padding:0}";
+    style.textContent = css + "\n" + theme + "\n:host{display:block;color:var(--text)} .modal-body :empty{display:none} .modal-body{padding:0}";
     const el = document.createElement("div"); el.className = "modal-body";
     el.append(projectDetail(data, document)); shadow.replaceChildren(style,el);
   },[data]);

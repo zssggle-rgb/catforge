@@ -1,44 +1,25 @@
-<div class="modal-mask" id="rivalEvidenceModal"><div class="modal rival-evidence-modal" style="width:min(640px,92vw)">
-  <div class="rival-evidence-head">
-    <span class="rival-evidence-level danger"><span class="rival-level-dot"></span><span id="rivalEvidenceLevel">严重</span>· 证据链</span>
-    <span class="modal-close" onclick="closeModal('rivalEvidenceModal')">×</span>
-  </div>
-  <div class="rival-evidence-body">
-    <div class="rival-evidence-product">
-      <b id="rivalEvidenceProduct">TCL 65Q9L PRO</b>
-      <span id="rivalEvidenceChannel">京东</span>
-    </div>
-    <div class="rival-evidence-kpis">
-      <div class="rival-evidence-kpi">
-        <div class="rek-label">当前到手价</div>
-        <div class="rek-value" id="rivalEvidencePrice">¥5,522</div>
+<div class="modal-mask" id="rivalEvidenceModal">
+  <section class="modal price-record" role="dialog" aria-modal="true" aria-labelledby="rivalEvidenceHeading">
+    <header class="modal-head price-record-head"><span id="rivalEvidenceHeading">竞品调价证据</span>
+      <button class="modal-close" type="button" aria-label="关闭竞品调价证据" onclick="closeModal('rivalEvidenceModal')">×</button>
+    </header>
+    <div class="modal-body rival-evidence-body">
+      <div class="price-record-product"><strong id="rivalEvidenceProduct"></strong>
+        <span class="record-channel" id="rivalEvidenceChannel"></span>
+        <span class="record-severity" id="rivalEvidenceLevel"></span>
       </div>
-      <div class="rival-evidence-kpi">
-        <div class="rek-label" id="rivalEvidenceSecondLabel">页面原价</div>
-        <div class="rek-value" id="rivalEvidenceSecondValue">¥6,299</div>
-      </div>
-      <div class="rival-evidence-kpi rek-danger">
-        <div class="rek-label">波动幅度</div>
-        <div class="rek-value" id="rivalEvidenceGap">-12.3%</div>
-      </div>
+      <dl class="price-record-metrics">
+        <div><dt>当前到手价</dt><dd id="rivalEvidencePrice">—</dd></div>
+        <div><dt id="rivalEvidenceSecondLabel">上次到手价</dt><dd id="rivalEvidenceSecondValue">—</dd></div>
+        <div><dt>价格变动</dt><dd id="rivalEvidenceGap">—</dd></div>
+      </dl>
+      <section class="price-record-observation">
+        <header><b>价格记录</b><span id="rivalEvidenceMeta"></span></header>
+        <div class="price-lines" id="rivalEvidenceShot"></div>
+      </section>
     </div>
-    <div class="rival-evidence-section">
-      <div class="res-title">页面与数据证据</div>
-      <div class="res-meta" id="rivalEvidenceMeta">京东自营旗舰店 · 2026-09-10 08:53:12</div>
-      <div class="res-shot" id="rivalEvidenceShot">数据与页面存证区域<br>页面价¥6,299 · 限时直降¥777 · 到手价¥5,522</div>
-    </div>
-    <div class="rival-evidence-section rival-evidence-chain">
-      <div class="res-title">证据链完整性</div>
-      <div class="chain-tags">
-        <span class="chain-tag ok"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>页面截图</span>
-        <span class="chain-tag ok"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>数据明细</span>
-        <span class="chain-tag ok"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>规则命中</span>
-        <span class="chain-tag ok"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>抓取时间戳</span>
-      </div>
-    </div>
-  </div>
-  <div class="rival-evidence-foot">
-    <button class="btn primary" onclick="aiAskRivalPrice()"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>AI追问</button>
-    <button class="btn" onclick="closeModal('rivalEvidenceModal')">关闭</button>
-  </div>
-</div></div>
+    <footer class="modal-foot rival-evidence-foot"><button class="btn" type="button" onclick="closeModal('rivalEvidenceModal')">关闭</button>
+      <button class="btn primary" type="button" onclick="aiAskRivalPrice()">分析调价原因</button>
+    </footer>
+  </section>
+</div>

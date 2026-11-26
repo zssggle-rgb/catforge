@@ -28,6 +28,8 @@
 
 样例专用的 `GET .../sample-scenarios/0916` 返回版本化记录集。`POST .../sample-exports` 将当前报告内容导出为 PDF、PPTX、DOCX 或 XLSX。导出依赖列在 `tools/gtm-sample/requirements-export.txt`，安装在调试机的隔离 Python 环境中。源文件与部署站点的逐项浏览器对照脚本为 `tools/gtm-sample/check_workbench.py`，可生成每个状态的截图、结果 JSON 和图册。
 
+卖点分类明细在样例接口的 `records.valueInventory` 中，每条包含 `group`（high、base、pending、missing）、`claim`、`benefits: string[]`、`action` 和 `source`。分类计数随返回记录计算。正式接口的用户价值页按 `view.tables[].columns/rows` 展示后台已有字段，通过行详情查看依据。价格证据详情使用 `values.source`、`values.snapshot_note` 和 `evidence[]` 呈现当前记录的来源。
+
 下表是页面投影与后台会话拟议数据产品的映射。后台可在投影层组装多份领域结果，前端不负责关联原表或计算经营结论。
 
 | 页面键 | 前端展示与交互 | 后台供给 |
