@@ -10,6 +10,6 @@ if [[ $mode == cloud ]]; then
   "${compose[@]}" rm -sf api web
   "${compose[@]}" up -d --remove-orphans --force-recreate
 else
-  "${compose[@]}" up -d
+  "${compose[@]}" up -d --wait --wait-timeout 90
 fi
 "${compose[@]}" ps

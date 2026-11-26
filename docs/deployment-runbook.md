@@ -1,6 +1,12 @@
 # CatForge deployment runbook
 
-This runbook defines the first development chain for CatForge:
+## BiSheng paired QA
+
+BiSheng runs `scripts/qa/deploy` on the member's development machine with the candidate checkout, Git SHA, test URL and pinned SSH configuration. The script starts CatForge on that member's test VM and preserves its database and uploads across deployments. `scripts/qa/probe` checks the web page, API readiness and the revisions of the two running images. Aowei Server A is the separate online release target.
+
+## Original cloud environment
+
+The following sections document the original development chain for CatForge:
 
 - Local workstation: code, unit tests, frontend iteration, and small deterministic fixtures.
 - Server A: development integration environment for frequent deploys and later small-batch SKU import.
